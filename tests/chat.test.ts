@@ -11,6 +11,8 @@ import type { ApiErrorCode, ChatEvent, ChatMessage, Session } from "../src/share
 const config: AppConfig = {
   host: "127.0.0.1",
   port: 0, // 空きポートを OS に選ばせる
+  configDir: ".",
+  configPath: "./config.json",
   dataDir: ".",
   dbPath: ":memory:",
   model: "mock/model",
