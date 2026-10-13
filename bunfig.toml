@@ -1,0 +1,6 @@
+# Bun.serve の静的配信（HTML を import してバンドルする経路）で使うプラグイン。
+# ここに書くと開発サーバがこのプラグインを使う。
+# bun build の CLI はこの設定を読まないため、本番ビルドは scripts/build.ts で
+# プラグインを明示して渡している。
+[serve.static]
+plugins = ["bun-plugin-tailwind"]

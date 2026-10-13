@@ -1,0 +1,36 @@
+@import "tailwindcss";
+
+/*
+ * ベーススタイルは Tailwind のユーティリティ解決に依存させず、素の CSS で書く。
+ * ダークモードは OS 設定に追従する（テーマ切替 UI は持たない）。
+ */
+:root {
+  color-scheme: light dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background-color: var(--color-neutral-50);
+  color: var(--color-neutral-900);
+  font-family:
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    "Noto Sans JP",
+    "Hiragino Sans",
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+@media (prefers-color-scheme: dark) {
+  body {
+    background-color: var(--color-neutral-950);
+    color: var(--color-neutral-100);
+  }
+}
