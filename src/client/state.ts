@@ -23,6 +23,14 @@ export const activeSession = computed(
   () => sessions.value.find((session) => session.id === activeSessionId.value) ?? null,
 );
 
+/** 削除の確認ダイアログが対象にしている会話の id。null ならダイアログは閉じている。 */
+const pendingDeleteSessionId = signal<string | null>(null);
+
+/** 確認ダイアログに出す会話。一覧から消えた id なら null になり、ダイアログも閉じる。 */
+export const pendingDeleteSession = computed(
+  () => sessions.value.find((session) => session.id === pendingDeleteSessionId.value) ?? null,
+);
+
 let controller: AbortController | null = null;
 
 export async function bootstrap(): Promise<void> {
@@ -107,7 +115,27 @@ export function stopStreaming(): void {
   controller = null;
 }
 
-export async function removeSession(id: string): Promise<void> {
+/** 削除の確認ダイアログを開く。削除そのものは confirmDeleteSession で行う。 */
+export function requestDeleteSession(id: string): void {
+  pendingDeleteSessionId.value = id;
+}
+
+/** 削除の確認ダイアログを閉じる。 */
+export function cancelDeleteSession(): void {
+  pendingDeleteSessionId.value = null;
+}
+
+/** 確認ダイアログで「削除する」を選んだときの削除実行。 */
+export async function confirmDeleteSession(): Promise<void> {
+  const target = pendingDeleteSession.value;
+  if (target === null) return;
+
+  // 削除の成否にかかわらずダイアログは閉じる。失敗は reportError が画面に出す。
+  cancelDeleteSession();
+  await removeSession(target.id);
+}
+
+async function removeSession(id: string): Promise<void> {
   try {
     await api.deleteSession(id);
     await refreshSessions();

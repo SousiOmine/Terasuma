@@ -9,7 +9,10 @@ export const ja: Record<MessageKey, string> = {
   "sidebar.empty": "まだ会話がありません",
   "sidebar.rename": "会話の名前を変更",
   "sidebar.renameHint": "ダブルクリックで名前を変更",
-  "sidebar.delete": "会話を削除",
+  "sidebar.menu": "会話のメニュー",
+  "sidebar.delete": "削除",
+  "sidebar.deleteTitle": "会話を削除しますか？",
+  "sidebar.deleteMessage": "この操作は取り消せません。",
   "sidebar.confirmDelete": "削除する",
   "sidebar.cancel": "やめる",
 

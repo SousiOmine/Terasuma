@@ -10,7 +10,10 @@ export const en = {
   "sidebar.empty": "No conversations yet",
   "sidebar.rename": "Rename conversation",
   "sidebar.renameHint": "Double-click to rename",
-  "sidebar.delete": "Delete conversation",
+  "sidebar.menu": "Conversation menu",
+  "sidebar.delete": "Delete",
+  "sidebar.deleteTitle": "Delete this conversation?",
+  "sidebar.deleteMessage": "This cannot be undone.",
   "sidebar.confirmDelete": "Delete",
   "sidebar.cancel": "Cancel",
 

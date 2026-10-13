@@ -3,16 +3,34 @@ import type { Session } from "../../shared/types";
 import { t } from "../i18n";
 import {
   activeSessionId,
+  cancelDeleteSession,
+  confirmDeleteSession,
   openSession,
   openSettings,
-  removeSession,
+  pendingDeleteSession,
   renameSession,
+  requestDeleteSession,
   sessions,
   startNewChat,
 } from "../state";
+import { ConfirmDialog } from "./ConfirmDialog";
 
 export function Sidebar() {
   const items = sessions.value;
+  const [menu, setMenu] = useState<OpenMenu | null>(null);
+
+  /** 半端に見えている行でもメニューが画面内に収まるよう、先にボタンを表示域へ入れてから位置を測る。 */
+  const openMenu = (session: Session, button: HTMLButtonElement) => {
+    button.scrollIntoView({ block: "nearest" });
+    setMenu({ session, button });
+  };
+
+  /** メニューを閉じ、フォーカスを開いたボタンへ戻す。 */
+  const closeMenu = () => {
+    const button = menu?.button;
+    setMenu(null);
+    button?.focus();
+  };
 
   return (
     <aside class="flex w-64 shrink-0 flex-col border-r border-neutral-200 bg-neutral-100/70 dark:border-neutral-800 dark:bg-neutral-900/40">
@@ -37,7 +55,11 @@ export function Sidebar() {
           <ul class="space-y-0.5 pb-2">
             {items.map((session) => (
               <li key={session.id}>
-                <SessionRow session={session} />
+                <SessionRow
+                  session={session}
+                  menuOpen={menu?.session.id === session.id}
+                  onOpenMenu={openMenu}
+                />
               </li>
             ))}
           </ul>
@@ -45,7 +67,28 @@ export function Sidebar() {
       </nav>
 
       <SettingsButton />
+
+      {menu !== null && <SessionMenu session={menu.session} button={menu.button} onClose={closeMenu} />}
     </aside>
+  );
+}
+
+/** 会話の削除は取り消せないため、画面の中央にダイアログを出して確認する。 */
+export function DeleteSessionDialog() {
+  const session = pendingDeleteSession.value;
+  if (session === null) return null;
+
+  return (
+    <ConfirmDialog
+      title={t("sidebar.deleteTitle")}
+      subject={session.title ?? t("sidebar.untitled")}
+      message={t("sidebar.deleteMessage")}
+      confirmLabel={t("sidebar.confirmDelete")}
+      cancelLabel={t("sidebar.cancel")}
+      danger
+      onConfirm={() => void confirmDeleteSession()}
+      onCancel={cancelDeleteSession}
+    />
   );
 }
 
@@ -81,28 +124,42 @@ function GearIcon() {
   );
 }
 
-/**
- * 削除と改名はこの行の中だけで完結させる。
- * window.confirm / prompt は埋め込み WebView の権限設定で使えないことがあるため、
- * ネイティブダイアログに依存しない。
- */
-type RowMode = "idle" | "confirm-delete" | "rename";
+function MoreIcon() {
+  return (
+    <svg viewBox="0 0 16 16" class="size-4 shrink-0" fill="currentColor" aria-hidden="true">
+      <circle cx="3.4" cy="8" r="1.3" />
+      <circle cx="8" cy="8" r="1.3" />
+      <circle cx="12.6" cy="8" r="1.3" />
+    </svg>
+  );
+}
 
-function SessionRow({ session }: { session: Session }) {
-  const [mode, setMode] = useState<RowMode>("idle");
+/**
+ * 改名は行の中だけで完結させる。
+ * window.prompt は埋め込み WebView の権限設定で使えないことがあるため、ネイティブダイアログに依存しない。
+ */
+type SessionRowProps = {
+  session: Session;
+  /** この行のメニューが開いているか。 */
+  menuOpen: boolean;
+  onOpenMenu: (session: Session, button: HTMLButtonElement) => void;
+};
+
+function SessionRow({ session, menuOpen, onOpenMenu }: SessionRowProps) {
+  const [renaming, setRenaming] = useState(false);
   const [draft, setDraft] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (mode === "rename") inputRef.current?.select();
-  }, [mode]);
+    if (renaming) inputRef.current?.select();
+  }, [renaming]);
 
   const title = session.title ?? t("sidebar.untitled");
 
-  if (mode === "rename") {
+  if (renaming) {
     const commit = () => {
       const next = draft.trim();
-      setMode("idle");
+      setRenaming(false);
       if (next.length > 0 && next !== session.title) void renameSession(session.id, next);
     };
 
@@ -120,33 +177,12 @@ function SessionRow({ session }: { session: Session }) {
               commit();
             } else if (event.key === "Escape") {
               event.preventDefault();
-              setMode("idle");
+              setRenaming(false);
             }
           }}
           // Enter 以外で抜けた場合は取り消す（意図しない改名を防ぐ）。
-          onBlur={() => setMode("idle")}
+          onBlur={() => setRenaming(false)}
         />
-      </div>
-    );
-  }
-
-  if (mode === "confirm-delete") {
-    return (
-      <div class="flex items-center gap-1 rounded-lg bg-red-50 px-2 py-1.5 text-sm dark:bg-red-950/40">
-        <button
-          type="button"
-          class="min-w-0 flex-1 truncate text-left text-red-700 dark:text-red-300"
-          onClick={() => void removeSession(session.id)}
-        >
-          {t("sidebar.confirmDelete")}
-        </button>
-        <button
-          type="button"
-          class="shrink-0 rounded px-1 text-xs text-neutral-500 transition hover:text-neutral-800 dark:hover:text-neutral-200"
-          onClick={() => setMode("idle")}
-        >
-          {t("sidebar.cancel")}
-        </button>
       </div>
     );
   }
@@ -168,20 +204,87 @@ function SessionRow({ session }: { session: Session }) {
         onClick={() => void openSession(session.id)}
         onDblClick={() => {
           setDraft(session.title ?? "");
-          setMode("rename");
+          setRenaming(true);
         }}
       >
         {title}
       </button>
       <button
         type="button"
-        class="shrink-0 rounded px-1 text-xs text-neutral-400 opacity-0 transition group-hover:opacity-100 hover:text-red-500 focus:opacity-100"
-        title={t("sidebar.delete")}
-        aria-label={t("sidebar.delete")}
-        onClick={() => setMode("confirm-delete")}
+        class={`shrink-0 rounded px-1 py-0.5 text-neutral-400 transition hover:text-neutral-700 focus:opacity-100 group-hover:opacity-100 dark:hover:text-neutral-200 ${
+          menuOpen ? "opacity-100" : "opacity-0"
+        }`}
+        title={t("sidebar.menu")}
+        aria-label={t("sidebar.menu")}
+        aria-haspopup="menu"
+        aria-expanded={menuOpen}
+        onClick={(event) => onOpenMenu(session, event.currentTarget)}
       >
-        ✕
+        <MoreIcon />
       </button>
     </div>
+  );
+}
+
+/** メニューを開いた状態。位置決めと、閉じたときのフォーカス戻しにボタンを使う。 */
+type OpenMenu = {
+  session: Session;
+  button: HTMLButtonElement;
+};
+
+/** ボタンとメニューの間隔。一覧の下端にボタンがあっても、設定ボタンの分だけ下に余地がある。 */
+const MENU_GAP = 4;
+
+type SessionMenuProps = {
+  session: Session;
+  button: HTMLButtonElement;
+  onClose: () => void;
+};
+
+/**
+ * 会話ごとの操作メニュー。
+ * 行の中に置くと一覧のスクロールで切れるため、画面座標で位置を決めて前面に出す。
+ */
+function SessionMenu({ session, button, onClose }: SessionMenuProps) {
+  const itemRef = useRef<HTMLButtonElement>(null);
+  const anchor = button.getBoundingClientRect();
+
+  useEffect(() => {
+    // 開いた直後は項目へフォーカスを移し、キー操作をここで受ける。
+    itemRef.current?.focus();
+  }, []);
+
+  return (
+    <>
+      {/* 外側のクリックで閉じる。 */}
+      <div class="fixed inset-0 z-30" aria-hidden="true" onClick={onClose} />
+
+      <div
+        role="menu"
+        aria-label={t("sidebar.menu")}
+        class="fixed z-40 min-w-28 rounded-lg border border-neutral-200 bg-white py-1 shadow-lg dark:border-neutral-700 dark:bg-neutral-800"
+        style={{ top: `${anchor.bottom + MENU_GAP}px`, right: `${window.innerWidth - anchor.right}px` }}
+        onKeyDown={(event) => {
+          // Tab で背景へ抜けると、メニューが残ったまま後ろの要素を操作できてしまう。
+          if (event.key === "Escape" || event.key === "Tab") {
+            event.preventDefault();
+            onClose();
+          }
+        }}
+      >
+        <button
+          ref={itemRef}
+          type="button"
+          role="menuitem"
+          class="block w-full px-3 py-1.5 text-left text-sm text-red-600 transition hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
+          onClick={() => {
+            onClose();
+            requestDeleteSession(session.id);
+          }}
+        >
+          {t("sidebar.delete")}
+        </button>
+      </div>
+    </>
   );
 }

@@ -110,7 +110,7 @@ src/
     state.ts          signals による状態と操作
     api.ts            REST と SSE の受信
     i18n/             日本語・英語の辞書
-    components/       App / Sidebar / ChatView / MessageBubble / Composer / SettingsView
+    components/       App / Sidebar / ConfirmDialog / ChatView / MessageBubble / Composer / SettingsView
 tests/               store / SSE / i18n / パス解決 / 設定 / チャット API
 ```
 
