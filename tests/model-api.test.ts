@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { CONFIG_FILE_NAME, readSettingsFile, type FileSettings } from "../src/config";
 import { createMockEngine } from "../src/server/engine";
 import { ProviderRequestError, type ProviderAccess, type ProviderModelLister } from "../src/server/provider-models";
-import { createServer } from "../src/server/server";
+import { startServer } from "../src/server/server";
 import { createSettingsStore, type SettingsStore } from "../src/server/settings";
 import { createStore } from "../src/server/store";
 import type { ModelSettingsView, ProviderView } from "../src/shared/types";
@@ -59,7 +59,7 @@ async function withModelServer<T>(
 
   const settings = createSettingsStore(path);
   const lister = createStubLister();
-  const server = createServer({
+  const { server } = startServer({
     config: {
       host: "127.0.0.1",
       port: 0,

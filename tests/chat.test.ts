@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { AppConfig } from "../src/config";
 import type { AgentEngine, EngineInput, EngineStream } from "../src/server/engine";
 import { createMockEngine } from "../src/server/engine";
-import { createServer } from "../src/server/server";
+import { startServer } from "../src/server/server";
 import { createStore } from "../src/server/store";
 import type { Store } from "../src/server/store";
 import { decodeChatEvents } from "../src/shared/sse";
@@ -40,7 +40,7 @@ type Harness = {
 async function withServer<T>(engine: AgentEngine, run: (harness: Harness) => Promise<T>): Promise<T> {
   return withTempSettings(TEST_SETTINGS, async (settings) => {
     const store = createStore(":memory:");
-    const server = createServer({ config, store, engine, settings });
+    const { server } = startServer({ config, store, engine, settings });
     const base = server.url;
 
     const request = (path: string, init?: RequestInit) => fetch(new URL(path, base), init);
