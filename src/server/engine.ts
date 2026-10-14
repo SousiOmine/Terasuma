@@ -1,5 +1,7 @@
 import { Agent } from "@mastra/core/agent";
-import type { AppConfig } from "../config";
+import type { OpenAICompatibleConfig } from "@mastra/core/llm";
+import type { AppConfig, ModelSettings } from "../config";
+import { modelProvider, type ModelId } from "../shared/model";
 import type { ChatMessage, TokenUsage } from "../shared/types";
 import { SYSTEM_PROMPT } from "./prompt";
 
@@ -31,36 +33,100 @@ export interface AgentEngine {
   stream(input: EngineInput): Promise<EngineStream>;
 }
 
-export function createEngine(config: AppConfig): AgentEngine {
-  if (config.engine === "mock") return createMockEngine();
-  return createMastraEngine(config);
+/** 設定を読む口。設定画面から変わるので、呼び出しのたびに読む。 */
+export type SettingsReader = {
+  read(): ModelSettings;
+};
+
+/** モデルの呼び出し方。既知のプロバイダは Mastra のモデルルーターに任せ、独自エンドポイントは URL を渡す。 */
+export type ResolvedModel =
+  | { kind: "builtin"; id: ModelId; apiKey: string }
+  | { kind: "endpoint"; id: ModelId; url: string; apiKey: string | null };
+
+/** 呼び出せるかどうかの判定。呼び出せないときは理由を添える。 */
+export type ModelResolution =
+  | { ok: true; model: ResolvedModel }
+  | { ok: false; detail: string };
+
+/**
+ * 既定のモデルとプロバイダの設定から、モデルの呼び出し方を決める。
+ *
+ * 設定が揃っていない状態は、モデルを呼ぶ前に理由付きで止める。
+ * 既定値で埋め合わせると「設定したつもりで応答が来ない」状態になり、原因が分からなくなる。
+ */
+export function resolveModel(settings: ModelSettings): ModelResolution {
+  const model = settings.model;
+  if (model === null) {
+    return { ok: false, detail: "既定のモデルが設定されていません（画面の「設定 > モデル」から追加してください）" };
+  }
+
+  const providerId = modelProvider(model);
+  const provider = settings.providers[providerId];
+  if (provider === undefined) {
+    return {
+      ok: false,
+      detail: `既定のモデル ${model} のプロバイダ ${providerId} が設定されていません（画面の「設定 > モデル」から追加してください）`,
+    };
+  }
+
+  // baseUrl があるものは OpenAI 互換の独自エンドポイント。
+  if (provider.baseUrl !== undefined) {
+    return {
+      ok: true,
+      model: { kind: "endpoint", id: model, url: provider.baseUrl, apiKey: provider.apiKey ?? null },
+    };
+  }
+
+  if (provider.apiKey === undefined) {
+    return { ok: false, detail: `プロバイダ ${providerId} の API キーが設定されていません` };
+  }
+
+  return { ok: true, model: { kind: "builtin", id: model, apiKey: provider.apiKey } };
 }
 
-export function createMastraEngine(config: AppConfig): AgentEngine {
+export function createEngine(options: { config: AppConfig; settings: SettingsReader }): AgentEngine {
+  if (options.config.engine === "mock") return createMockEngine();
+  return createMastraEngine(options.settings);
+}
+
+export function createMastraEngine(settings: SettingsReader): AgentEngine {
   // モデル一覧の定期再取得は常駐アプリには不要（既定で 1 時間ごとに通信する）。
   // Mastra が初期化時に読むため、Agent を作る前に必ず設定する。
   process.env.MASTRA_AUTO_REFRESH_PROVIDERS ??= "false";
 
-  const agent = new Agent({
-    id: "terasuma",
-    name: "Terasuma",
-    // system プロンプトはこの定数 1 つだけ。buildModelInput() と同じ前置きになる。
-    instructions: SYSTEM_PROMPT,
-    model: config.baseUrl
-      ? { url: config.baseUrl, id: config.model, apiKey: config.apiKey ?? undefined }
-      : config.model,
-  });
+  let cached: { key: string; agent: Agent } | null = null;
+
+  /** 設定が変わったら作り直す。同じ設定の間は使い回す。 */
+  function agentFor(model: ResolvedModel): Agent {
+    const key = JSON.stringify(model);
+    if (cached !== null && cached.key === key) return cached.agent;
+
+    const agent = new Agent({
+      id: "terasuma",
+      name: "Terasuma",
+      // system プロンプトはこの定数 1 つだけ。buildModelInput() と同じ前置きになる。
+      instructions: SYSTEM_PROMPT,
+      model: toModelConfig(model),
+    });
+
+    cached = { key, agent };
+    return agent;
+  }
 
   return {
     name: "mastra",
     async stream({ history, signal }) {
+      // 設定は設定画面から変わるので、ターンのたびに読み直す。
+      const resolution = resolveModel(settings.read());
+      if (!resolution.ok) throw new Error(resolution.detail);
+
       const messages: EngineMessage[] = history.map((message) =>
         message.role === "user"
           ? { role: "user", content: message.content }
           : { role: "assistant", content: message.content },
       );
 
-      const result = await agent.stream(messages, { abortSignal: signal });
+      const result = await agentFor(resolution.model).stream(messages, { abortSignal: signal });
 
       return {
         textStream: result.textStream,
@@ -68,6 +134,14 @@ export function createMastraEngine(config: AppConfig): AgentEngine {
       };
     },
   };
+}
+
+/** Mastra（AI SDK）へ渡すモデルの指定。 */
+function toModelConfig(model: ResolvedModel): OpenAICompatibleConfig {
+  if (model.kind === "endpoint") {
+    return { id: model.id, url: model.url, apiKey: model.apiKey ?? undefined };
+  }
+  return { id: model.id, apiKey: model.apiKey };
 }
 
 type RawUsage = {

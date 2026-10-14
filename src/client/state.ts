@@ -1,14 +1,20 @@
 import { computed, signal } from "@preact/signals";
 import type { ChatEvent, ChatMessage, Session } from "../shared/types";
 import * as api from "./api";
+import { toErrorState } from "./errors";
 import { locale, setLocale } from "./i18n";
+import { loadModelSettings } from "./modelSettings";
 
 export type ClientErrorCode = api.ClientErrorCode;
 
 /** 表示中の画面。設定は全画面で開く。 */
 export type View = "chat" | "settings";
 
+/** 設定画面のカテゴリ。導線から特定のカテゴリを直接開くために signal で持つ。 */
+export type SettingsCategory = "general" | "model";
+
 export const view = signal<View>("chat");
+export const settingsCategory = signal<SettingsCategory>("general");
 export const sessions = signal<readonly Session[]>([]);
 export const activeSessionId = signal<string | null>(null);
 export const messages = signal<readonly ChatMessage[]>([]);
@@ -37,6 +43,8 @@ export async function bootstrap(): Promise<void> {
   setLocale(locale.value);
 
   try {
+    // モデル設定は、チャット画面の「使うモデルがありません」の案内にも使う。
+    await loadModelSettings();
     await refreshSessions();
     const latest = sessions.value[0];
     if (latest === undefined) {
@@ -164,7 +172,9 @@ export function clearError(): void {
   errorDetail.value = null;
 }
 
-export function openSettings(): void {
+/** 設定画面を開く。導線に合わせて、開くカテゴリを指定できる。 */
+export function openSettings(category: SettingsCategory = "general"): void {
+  settingsCategory.value = category;
   view.value = "settings";
 }
 
@@ -195,12 +205,7 @@ function applyEvent(event: ChatEvent): void {
 }
 
 function reportError(error: unknown): void {
-  if (error instanceof api.ApiError) {
-    errorCode.value = error.code;
-    errorDetail.value = error.detail;
-    return;
-  }
-
-  errorCode.value = "internal_error";
-  errorDetail.value = error instanceof Error ? error.message : String(error);
+  const state = toErrorState(error);
+  errorCode.value = state.code;
+  errorDetail.value = state.detail;
 }

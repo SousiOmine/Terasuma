@@ -1,20 +1,20 @@
-import { useState } from "preact/hooks";
 import type { Locale, MessageKey } from "../i18n";
 import { LOCALES, locale, setLocale, t } from "../i18n";
-import { closeSettings } from "../state";
+import { closeSettings, settingsCategory, type SettingsCategory } from "../state";
+import { ModelSettingsView } from "./ModelSettingsView";
 
 /** 左ペインに並べるカテゴリ。増やすときはここに足す。 */
-type CategoryId = "general";
-
-const CATEGORIES: readonly { id: CategoryId; labelKey: MessageKey }[] = [
+const CATEGORIES: readonly { id: SettingsCategory; labelKey: MessageKey }[] = [
   { id: "general", labelKey: "settings.general" },
+  { id: "model", labelKey: "settings.model" },
 ];
 
 /** 言語名はその言語自身で書く（どの言語で表示していても読めるように）。 */
 const LOCALE_LABELS: Record<Locale, string> = { ja: "日本語", en: "English" };
 
 export function SettingsView() {
-  const [category, setCategory] = useState<CategoryId>("general");
+  // カテゴリは signal で持つ。チャット画面の案内から「モデル」を直接開けるようにするため。
+  const category = settingsCategory.value;
 
   return (
     <div class="flex h-full flex-col">
@@ -39,7 +39,9 @@ export function SettingsView() {
                   <button
                     type="button"
                     aria-current={active ? "true" : undefined}
-                    onClick={() => setCategory(item.id)}
+                    onClick={() => {
+                      settingsCategory.value = item.id;
+                    }}
                     class={`w-full rounded-lg px-3 py-2 text-left text-sm transition ${
                       active
                         ? "bg-white shadow-sm dark:bg-neutral-800"
@@ -55,7 +57,7 @@ export function SettingsView() {
         </nav>
 
         <section class="min-w-0 flex-1 overflow-y-auto px-6 py-8">
-          {category === "general" && <GeneralSettings />}
+          {category === "general" ? <GeneralSettings /> : <ModelSettingsView />}
         </section>
       </div>
     </div>

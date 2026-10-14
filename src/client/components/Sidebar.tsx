@@ -97,7 +97,7 @@ function SettingsButton() {
     <div class="shrink-0 border-t border-neutral-200 p-2 dark:border-neutral-800">
       <button
         type="button"
-        onClick={openSettings}
+        onClick={() => openSettings()}
         class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-neutral-600 transition hover:bg-neutral-200/60 dark:text-neutral-300 dark:hover:bg-neutral-800/60"
       >
         <GearIcon />

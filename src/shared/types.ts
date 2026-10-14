@@ -3,6 +3,8 @@
  * バンドルすると別々のファイルになるため、実行時のコードは置かず型だけにする。
  */
 
+import type { ModelId } from "./model";
+
 export type MessageRole = "user" | "assistant";
 
 /** モデル呼び出し 1 回分のトークン消費。cachedInputTokens はプロンプトキャッシュのヒット分。 */
@@ -33,12 +35,60 @@ export type Session = {
   updatedAt: number;
 };
 
-/** API が返す機械可読なコード。画面に出す文言はクライアント側の i18n で解決する。 */
+/**
+ * API が返す機械可読なコード。画面に出す文言はクライアント側の i18n で解決する。
+ * provider_* は、プロバイダの設定と接続確認で起きる失敗。
+ */
 export type ApiErrorCode =
   | "invalid_request"
   | "session_not_found"
   | "model_error"
+  | "model_not_configured"
+  | "provider_not_found"
+  | "provider_exists"
+  | "provider_auth_failed"
+  | "provider_unreachable"
+  | "provider_no_models"
+  | "settings_write_failed"
   | "internal_error";
+
+/** 設定画面に出すプロバイダ 1 件。API キーそのものは返さず、設定済みかどうかだけを返す。 */
+export type ProviderView = {
+  /** config.json の providers のキー。モデル ID の先頭部分と一致する。 */
+  id: string;
+  /** 画面に出す名前。既知のプロバイダはカタログの名前、独自エンドポイントは label。 */
+  name: string;
+  /** OpenAI 互換の独自エンドポイントのときだけ入る。 */
+  baseUrl: string | null;
+  hasApiKey: boolean;
+};
+
+/** モデル設定の現在の状態。設定を変える API はすべてこの形を返す。 */
+export type ModelSettingsView = {
+  /** 既定のモデル。未設定なら null。 */
+  model: ModelId | null;
+  providers: ProviderView[];
+};
+
+/** プロバイダに接続するための入力。接続確認と追加・変更で同じ形を使う。 */
+export type ProviderCredentials = {
+  apiKey: string | null;
+  /** OpenAI 互換の独自エンドポイントのときだけ。 */
+  baseUrl: string | null;
+  /** 独自エンドポイントの表示名。既知のプロバイダでは使わない。 */
+  label: string | null;
+};
+
+/** 接続確認の入力。 */
+export type ProviderForm = ProviderCredentials & {
+  id: string;
+};
+
+/** プロバイダの追加。追加と同時に既定のモデルを決められる。 */
+export type AddProviderForm = ProviderForm & {
+  /** 既定にするモデル。決めない場合は null。 */
+  defaultModel: ModelId | null;
+};
 
 /**
  * 1 ターン分のストリーミングで流れるイベント。

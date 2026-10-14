@@ -7,6 +7,7 @@ import { createStore } from "../src/server/store";
 import type { Store } from "../src/server/store";
 import { decodeChatEvents } from "../src/shared/sse";
 import type { ApiErrorCode, ChatEvent, ChatMessage, Session } from "../src/shared/types";
+import { TEST_SETTINGS, withTempSettings } from "./support";
 
 const config: AppConfig = {
   host: "127.0.0.1",
@@ -15,9 +16,6 @@ const config: AppConfig = {
   configPath: "./config.json",
   dataDir: ".",
   dbPath: ":memory:",
-  model: "mock/model",
-  baseUrl: null,
-  apiKey: null,
   engine: "mock",
   isDevelopment: false,
 };
@@ -40,42 +38,44 @@ type Harness = {
  * ストレージはメモリ上、ポートは自動割り当てなのでテスト同士が干渉しない。
  */
 async function withServer<T>(engine: AgentEngine, run: (harness: Harness) => Promise<T>): Promise<T> {
-  const store = createStore(":memory:");
-  const server = createServer({ config, store, engine });
-  const base = server.url;
+  return withTempSettings(TEST_SETTINGS, async (settings) => {
+    const store = createStore(":memory:");
+    const server = createServer({ config, store, engine, settings });
+    const base = server.url;
 
-  const request = (path: string, init?: RequestInit) => fetch(new URL(path, base), init);
+    const request = (path: string, init?: RequestInit) => fetch(new URL(path, base), init);
 
-  const harness: Harness = {
-    store,
-    request,
-    async send(sessionId, content) {
-      const response = await request(`/api/sessions/${sessionId}/messages`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content }),
-      });
-      expect(response.status, "送信が失敗した").toBe(200);
+    const harness: Harness = {
+      store,
+      request,
+      async send(sessionId, content) {
+        const response = await request(`/api/sessions/${sessionId}/messages`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ content }),
+        });
+        expect(response.status, "送信が失敗した").toBe(200);
 
-      const decoded = decodeChatEvents(await response.text());
-      expect(decoded.rest).toBe("");
-      return decoded.events;
-    },
-    async sessions() {
-      const response = await request("/api/sessions");
-      return ((await response.json()) as { sessions: Session[] }).sessions;
-    },
-    async messages(sessionId) {
-      const response = await request(`/api/sessions/${sessionId}/messages`);
-      return ((await response.json()) as { messages: ChatMessage[] }).messages;
-    },
-  };
+        const decoded = decodeChatEvents(await response.text());
+        expect(decoded.rest).toBe("");
+        return decoded.events;
+      },
+      async sessions() {
+        const response = await request("/api/sessions");
+        return ((await response.json()) as { sessions: Session[] }).sessions;
+      },
+      async messages(sessionId) {
+        const response = await request(`/api/sessions/${sessionId}/messages`);
+        return ((await response.json()) as { messages: ChatMessage[] }).messages;
+      },
+    };
 
-  try {
-    return await run(harness);
-  } finally {
-    await server.stop(true);
-  }
+    try {
+      return await run(harness);
+    } finally {
+      await server.stop(true);
+    }
+  });
 }
 
 function joinedDeltas(events: ChatEvent[]): string {

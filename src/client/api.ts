@@ -1,5 +1,15 @@
 import { decodeChatEvents } from "../shared/sse";
-import type { ApiErrorCode, ChatEvent, ChatMessage, Session } from "../shared/types";
+import type { ModelId } from "../shared/model";
+import type {
+  AddProviderForm,
+  ApiErrorCode,
+  ChatEvent,
+  ChatMessage,
+  ModelSettingsView,
+  ProviderCredentials,
+  ProviderForm,
+  Session,
+} from "../shared/types";
 
 /** サーバが返すコードに、クライアント側だけで発生する "network" を足したもの。 */
 export type ClientErrorCode = ApiErrorCode | "network";
@@ -8,8 +18,18 @@ const API_ERROR_CODES: readonly ApiErrorCode[] = [
   "invalid_request",
   "session_not_found",
   "model_error",
+  "model_not_configured",
+  "provider_not_found",
+  "provider_exists",
+  "provider_auth_failed",
+  "provider_unreachable",
+  "provider_no_models",
+  "settings_write_failed",
   "internal_error",
 ];
+
+/** モデルとプロバイダの設定。 */
+const MODEL_PATH = "/api/model";
 
 export class ApiError extends Error {
   readonly code: ClientErrorCode;
@@ -34,11 +54,7 @@ export async function listMessages(sessionId: string): Promise<readonly ChatMess
 }
 
 export async function renameSession(sessionId: string, title: string): Promise<void> {
-  await request<unknown>(sessionPath(sessionId), {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ title }),
-  });
+  await request<unknown>(sessionPath(sessionId), jsonRequest("PATCH", { title }));
 }
 
 export async function deleteSession(sessionId: string): Promise<void> {
@@ -105,6 +121,59 @@ function sessionPath(sessionId: string): string {
 
 function messagesPath(sessionId: string): string {
   return `${sessionPath(sessionId)}/messages`;
+}
+
+/**
+ * モデル設定の全体を読む。書き換える API も同じ形を返すので、
+ * 画面は返ってきた値をそのまま状態に置き直せる。
+ */
+export async function fetchModelSettings(): Promise<ModelSettingsView> {
+  return request<ModelSettingsView>(MODEL_PATH);
+}
+
+export async function saveDefaultModel(model: ModelId): Promise<ModelSettingsView> {
+  return request<ModelSettingsView>(MODEL_PATH, jsonRequest("PUT", { model }));
+}
+
+/** 保存せずに接続だけを確かめ、そのプロバイダで使えるモデルの一覧を返す。 */
+export async function checkProvider(form: ProviderForm): Promise<readonly string[]> {
+  const body = await request<{ models: string[] }>(`${MODEL_PATH}/check`, jsonRequest("POST", form));
+  return body.models;
+}
+
+export async function addProvider(form: AddProviderForm): Promise<ModelSettingsView> {
+  return request<ModelSettingsView>(`${MODEL_PATH}/providers`, jsonRequest("POST", form));
+}
+
+/** apiKey に null を渡すと、保存済みのキーをそのまま使う。 */
+export async function updateProvider(
+  providerId: string,
+  credentials: ProviderCredentials,
+): Promise<ModelSettingsView> {
+  return request<ModelSettingsView>(providerPath(providerId), jsonRequest("PATCH", credentials));
+}
+
+export async function deleteProvider(providerId: string): Promise<ModelSettingsView> {
+  return request<ModelSettingsView>(providerPath(providerId), { method: "DELETE" });
+}
+
+/** 設定済みのプロバイダで使えるモデルの一覧。 */
+export async function listProviderModels(providerId: string): Promise<readonly string[]> {
+  const body = await request<{ models: string[] }>(`${providerPath(providerId)}/models`);
+  return body.models;
+}
+
+function providerPath(providerId: string): string {
+  return `${MODEL_PATH}/providers/${encodeURIComponent(providerId)}`;
+}
+
+/** JSON を送るリクエストの共通部分。 */
+function jsonRequest(method: string, body: unknown): RequestInit {
+  return {
+    method,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  };
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
