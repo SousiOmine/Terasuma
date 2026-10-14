@@ -27,7 +27,6 @@ export type Store = {
   getSession(id: string): Session | null;
   /** 無ければ作る。既にあればタイトルも作成日時も変えない。 */
   ensureSession(id: string, titleSource: string | null): Session;
-  renameSession(id: string, title: string): boolean;
   deleteSession(id: string): boolean;
   listMessages(sessionId: string): ChatMessage[];
   /** 履歴の末尾に追記する。セッション行が先に存在している必要がある。 */
@@ -128,9 +127,6 @@ export function createStore(dbPath: string, options: CreateStoreOptions = {}): S
      VALUES (?, ?, ?, ?)
      ON CONFLICT (id) DO NOTHING`,
   );
-  const updateSessionTitle = db.query<unknown, [string, number, string]>(
-    "UPDATE sessions SET title = ?, updated_at = ? WHERE id = ?",
-  );
   const setSessionTitleIfEmpty = db.query<unknown, [string, number, string]>(
     "UPDATE sessions SET title = ?, updated_at = ? WHERE id = ? AND title IS NULL",
   );
@@ -206,12 +202,6 @@ export function createStore(dbPath: string, options: CreateStoreOptions = {}): S
       const row = selectSession.get(id);
       if (row === null) throw new Error(`セッションを作成できなかった: ${id}`);
       return toSession(row);
-    },
-
-    renameSession(id, title) {
-      const trimmed = title.trim();
-      if (trimmed.length === 0) return false;
-      return updateSessionTitle.run(trimmed, now(), id).changes > 0;
     },
 
     deleteSession(id) {

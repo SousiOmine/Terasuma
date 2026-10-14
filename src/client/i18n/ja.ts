@@ -7,8 +7,6 @@ export const ja: Record<MessageKey, string> = {
   "sidebar.new": "新しいチャット",
   "sidebar.untitled": "新しいチャット",
   "sidebar.empty": "まだ会話がありません",
-  "sidebar.rename": "会話の名前を変更",
-  "sidebar.renameHint": "ダブルクリックで名前を変更",
   "sidebar.menu": "会話のメニュー",
   "sidebar.delete": "削除",
   "sidebar.deleteTitle": "会話を削除しますか？",
@@ -17,7 +15,6 @@ export const ja: Record<MessageKey, string> = {
   "sidebar.cancel": "やめる",
 
   "chat.empty.title": "何をお手伝いしましょうか",
-  "chat.empty.hint": "会話はこの端末の中だけに保存されます。",
   "chat.loading": "読み込み中…",
   "chat.replying": "応答を生成しています…",
 
@@ -28,7 +25,6 @@ export const ja: Record<MessageKey, string> = {
   "composer.placeholder": "メッセージを入力",
   "composer.send": "送信",
   "composer.stop": "停止",
-  "composer.hint": "Enter で送信、Shift + Enter で改行",
 
   "settings.title": "設定",
   "settings.back": "チャットに戻る",
@@ -61,6 +57,9 @@ export const ja: Record<MessageKey, string> = {
   "settings.model.noMatch": "一致するモデルがありません。",
   "settings.model.loadingModels": "モデルを読み込んでいます…",
   "settings.model.current": "現在の既定",
+  "settings.model.reasoning.label": "思考強度",
+  "settings.model.reasoning.description": "モデルの思考強度",
+  "settings.model.reasoning.default": "既定",
 
   "settings.model.picker.title": "既定のモデルを選ぶ",
   "settings.model.picker.confirm": "このモデルにする",
@@ -72,6 +71,12 @@ export const ja: Record<MessageKey, string> = {
   "settings.wizard.step.connect": "接続",
   "settings.wizard.step.model": "モデル",
   "settings.wizard.chooseDescription": "接続するプロバイダを選んでください。",
+  "settings.wizard.search": "プロバイダを絞り込む",
+  "settings.wizard.noMatch": "一致するプロバイダがありません。",
+  "settings.wizard.catalogHint":
+    "このプロバイダで使えるモデルは models.dev のカタログから取得します。",
+  "settings.wizard.checkSkipped":
+    "このプロバイダは接続確認に使う一覧（/models）を公開していないため、確認せずに追加します。",
   "settings.wizard.keyUrl": "API キーを取得する",
   "settings.wizard.apiKey.label": "API キー",
   "settings.wizard.apiKey.placeholder": "API キーを貼り付け",
@@ -83,7 +88,7 @@ export const ja: Record<MessageKey, string> = {
   "settings.wizard.baseUrl.description":
     "OpenAI 互換のエンドポイントの URL（例: http://127.0.0.1:11434/v1）",
   "settings.wizard.name.label": "名前",
-  "settings.wizard.name.description": "この設定画面に出す名前",
+  "settings.wizard.name.description": "設定画面に表示されるプロバイダ名を入力",
   "settings.wizard.name.placeholder": "社内ゲートウェイ",
   "settings.wizard.back": "戻る",
   "settings.wizard.connect": "接続を確認",
@@ -109,6 +114,7 @@ export const ja: Record<MessageKey, string> = {
   "error.provider_auth_failed": "API キーが受け付けられませんでした。",
   "error.provider_unreachable": "プロバイダに接続できませんでした。",
   "error.provider_no_models": "使えるモデルが見つかりませんでした。",
+  "error.catalog_unavailable": "モデルの一覧（models.dev）を取得できませんでした。",
   "error.settings_write_failed": "設定を保存できませんでした。",
   "error.internal_error": "問題が発生しました。",
   "error.network": "サーバーに接続できません。",

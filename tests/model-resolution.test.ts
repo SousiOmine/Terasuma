@@ -3,7 +3,7 @@ import type { ModelSettings } from "../src/config";
 import { resolveModel, type ModelResolution } from "../src/server/engine";
 
 function settings(model: ModelSettings["model"], providers: ModelSettings["providers"] = {}): ModelSettings {
-  return { model, providers };
+  return { model, providers, modelOptions: {} };
 }
 
 function failureOf(resolution: ModelResolution): string {
@@ -25,8 +25,18 @@ describe("モデルの解決", () => {
 
     expect(resolution).toEqual({
       ok: true,
-      model: { kind: "builtin", id: "deepseek/deepseek-flash", apiKey: "sk-1" },
+      model: { kind: "builtin", id: "deepseek/deepseek-flash", apiKey: "sk-1", reasoningEffort: null },
     });
+  });
+
+  test("モデルごとの思考強度を添えて返す", () => {
+    const resolution = resolveModel({
+      model: "deepseek/deepseek-flash",
+      providers: { deepseek: { apiKey: "sk-1" } },
+      modelOptions: { "deepseek/deepseek-flash": { reasoningEffort: "high" } },
+    });
+
+    expect(resolution.ok && resolution.model.reasoningEffort).toBe("high");
   });
 
   test("baseUrl があるものは独自エンドポイントとして扱う", () => {
@@ -38,7 +48,13 @@ describe("モデルの解決", () => {
 
     expect(resolution).toEqual({
       ok: true,
-      model: { kind: "endpoint", id: "custom-1/qwen3-max", url: "https://gateway.example.test/v1", apiKey: "sk-2" },
+      model: {
+        kind: "endpoint",
+        id: "custom-1/qwen3-max",
+        url: "https://gateway.example.test/v1",
+        apiKey: "sk-2",
+        reasoningEffort: null,
+      },
     });
   });
 
@@ -47,7 +63,13 @@ describe("モデルの解決", () => {
 
     expect(resolution).toEqual({
       ok: true,
-      model: { kind: "endpoint", id: "ollama/llama3.1", url: "http://127.0.0.1:11434/v1", apiKey: null },
+      model: {
+        kind: "endpoint",
+        id: "ollama/llama3.1",
+        url: "http://127.0.0.1:11434/v1",
+        apiKey: null,
+        reasoningEffort: null,
+      },
     });
   });
 

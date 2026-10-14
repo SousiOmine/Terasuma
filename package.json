@@ -15,6 +15,7 @@
   "dependencies": {
     "@mastra/core": "^1.76.0",
     "@preact/signals": "^2.11.3",
+    "@tabler/icons-preact": "^3.49.0",
     "preact": "^11.0.1",
     "zod": "^4.6.7"
   },

@@ -8,8 +8,6 @@ export const en = {
   "sidebar.new": "New chat",
   "sidebar.untitled": "New chat",
   "sidebar.empty": "No conversations yet",
-  "sidebar.rename": "Rename conversation",
-  "sidebar.renameHint": "Double-click to rename",
   "sidebar.menu": "Conversation menu",
   "sidebar.delete": "Delete",
   "sidebar.deleteTitle": "Delete this conversation?",
@@ -18,7 +16,6 @@ export const en = {
   "sidebar.cancel": "Cancel",
 
   "chat.empty.title": "What can I help you with?",
-  "chat.empty.hint": "Your conversations are stored only on this machine.",
   "chat.loading": "Loading…",
   "chat.replying": "Replying…",
 
@@ -29,7 +26,6 @@ export const en = {
   "composer.placeholder": "Send a message",
   "composer.send": "Send",
   "composer.stop": "Stop",
-  "composer.hint": "Enter to send, Shift + Enter for a new line",
 
   "settings.title": "Settings",
   "settings.back": "Back to chat",
@@ -62,6 +58,9 @@ export const en = {
   "settings.model.noMatch": "No model matches.",
   "settings.model.loadingModels": "Loading models…",
   "settings.model.current": "Current default",
+  "settings.model.reasoning.label": "Reasoning effort",
+  "settings.model.reasoning.description": "Reasoning effort of the model",
+  "settings.model.reasoning.default": "Default",
 
   "settings.model.picker.title": "Choose the default model",
   "settings.model.picker.confirm": "Use this model",
@@ -73,6 +72,11 @@ export const en = {
   "settings.wizard.step.connect": "Connection",
   "settings.wizard.step.model": "Model",
   "settings.wizard.chooseDescription": "Choose the provider to connect to.",
+  "settings.wizard.search": "Filter providers",
+  "settings.wizard.noMatch": "No provider matches.",
+  "settings.wizard.catalogHint": "Models for this provider come from the models.dev catalog.",
+  "settings.wizard.checkSkipped":
+    "This provider does not expose /models, so the connection was not checked before adding.",
   "settings.wizard.keyUrl": "Get an API key",
   "settings.wizard.apiKey.label": "API key",
   "settings.wizard.apiKey.placeholder": "Paste your API key",
@@ -84,7 +88,7 @@ export const en = {
   "settings.wizard.baseUrl.description":
     "The URL of the OpenAI-compatible endpoint (for example http://127.0.0.1:11434/v1).",
   "settings.wizard.name.label": "Name",
-  "settings.wizard.name.description": "Shown in this settings screen.",
+  "settings.wizard.name.description": "Enter the provider name shown in the settings screen.",
   "settings.wizard.name.placeholder": "Internal gateway",
   "settings.wizard.back": "Back",
   "settings.wizard.connect": "Check connection",
@@ -110,6 +114,7 @@ export const en = {
   "error.provider_auth_failed": "The API key was not accepted.",
   "error.provider_unreachable": "The provider could not be reached.",
   "error.provider_no_models": "No usable model was found.",
+  "error.catalog_unavailable": "The model catalog (models.dev) could not be fetched.",
   "error.settings_write_failed": "The settings could not be saved.",
   "error.internal_error": "Something went wrong.",
   "error.network": "The server is not reachable.",

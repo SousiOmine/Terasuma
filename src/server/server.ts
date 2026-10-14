@@ -1,9 +1,16 @@
 import type { Server } from "bun";
+import { join } from "node:path";
 import index from "../client/index.html";
 import type { AppConfig } from "../config";
 import type { AgentEngine } from "./engine";
 import { describeError } from "./errors";
-import { createProviderModelLister, type ProviderModelLister } from "./provider-models";
+import { CATALOG_FILE_NAME, createCatalog, type Catalog } from "./models-dev";
+import {
+  createConnectionChecker,
+  createModelLister,
+  type ConnectionChecker,
+  type ProviderModelLister,
+} from "./provider-models";
 import { createApiHandlers } from "./routes";
 import type { SettingsStore } from "./settings";
 import type { Store } from "./store";
@@ -14,7 +21,11 @@ export type ServerOptions = {
   engine: AgentEngine;
   /** モデルとプロバイダの設定。 */
   settings: SettingsStore;
-  /** プロバイダのモデル一覧を取ってくる関数。テストで差し替える。 */
+  /** models.dev のカタログ。テストで差し替える。 */
+  catalog?: Catalog;
+  /** プロバイダへ接続できるかの確認。テストで差し替える。 */
+  checkConnection?: ConnectionChecker;
+  /** 独自エンドポイントのモデル一覧。テストで差し替える。 */
   listModels?: ProviderModelLister;
 };
 
@@ -43,7 +54,9 @@ export function startServer(options: ServerOptions): StartedServer {
     store,
     engine,
     settings,
-    listModels: options.listModels ?? createProviderModelLister(),
+    catalog: options.catalog ?? createCatalog({ cachePath: join(config.dataDir, CATALOG_FILE_NAME) }),
+    checkConnection: options.checkConnection ?? createConnectionChecker(),
+    listModels: options.listModels ?? createModelLister(),
   });
 
   const serve = (port: number) =>
@@ -57,7 +70,6 @@ export function startServer(options: ServerOptions): StartedServer {
           GET: api.listSessions,
         },
         "/api/sessions/:id": {
-          PATCH: api.renameSession,
           DELETE: api.deleteSession,
         },
         "/api/sessions/:id/messages": {
@@ -67,6 +79,16 @@ export function startServer(options: ServerOptions): StartedServer {
         "/api/model": {
           GET: api.readModelSettings,
           PUT: api.setDefaultModel,
+        },
+        "/api/model/reasoning": {
+          GET: api.readReasoning,
+          PUT: api.setReasoning,
+        },
+        "/api/model/catalog": {
+          GET: api.listCatalogProviders,
+        },
+        "/api/model/catalog/:id/models": {
+          GET: api.listCatalogModels,
         },
         "/api/model/check": {
           POST: api.checkProvider,

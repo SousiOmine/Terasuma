@@ -3,7 +3,7 @@ import { modelProvider, type ModelId } from "../../shared/model";
 import * as api from "../api";
 import { toErrorState, type ErrorState } from "../errors";
 import { t } from "../i18n";
-import { modelSettings, providers, saveDefaultModel } from "../modelSettings";
+import { modelSettings, providerName, providers, saveDefaultModel } from "../modelSettings";
 import { Button } from "./Button";
 import { ErrorNotice } from "./ErrorNotice";
 import { Modal } from "./Modal";
@@ -110,7 +110,7 @@ export function ModelPickerDialog({ onClose }: ModelPickerDialogProps) {
                     : "text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
                 }`}
               >
-                {provider.name}
+                {providerName(provider)}
               </button>
             );
           })}

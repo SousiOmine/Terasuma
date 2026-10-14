@@ -3,11 +3,14 @@ import type { ModelId } from "../shared/model";
 import type {
   AddProviderForm,
   ApiErrorCode,
+  CatalogProviderView,
   ChatEvent,
   ChatMessage,
   ModelSettingsView,
+  ProviderCheckResult,
   ProviderCredentials,
   ProviderForm,
+  ReasoningView,
   Session,
 } from "../shared/types";
 
@@ -24,6 +27,7 @@ const API_ERROR_CODES: readonly ApiErrorCode[] = [
   "provider_auth_failed",
   "provider_unreachable",
   "provider_no_models",
+  "catalog_unavailable",
   "settings_write_failed",
   "internal_error",
 ];
@@ -51,10 +55,6 @@ export async function listSessions(): Promise<readonly Session[]> {
 export async function listMessages(sessionId: string): Promise<readonly ChatMessage[]> {
   const body = await request<{ messages: ChatMessage[] }>(messagesPath(sessionId));
   return body.messages;
-}
-
-export async function renameSession(sessionId: string, title: string): Promise<void> {
-  await request<unknown>(sessionPath(sessionId), jsonRequest("PATCH", { title }));
 }
 
 export async function deleteSession(sessionId: string): Promise<void> {
@@ -135,9 +135,41 @@ export async function saveDefaultModel(model: ModelId): Promise<ModelSettingsVie
   return request<ModelSettingsView>(MODEL_PATH, jsonRequest("PUT", { model }));
 }
 
-/** 保存せずに接続だけを確かめ、そのプロバイダで使えるモデルの一覧を返す。 */
-export async function checkProvider(form: ProviderForm): Promise<readonly string[]> {
-  const body = await request<{ models: string[] }>(`${MODEL_PATH}/check`, jsonRequest("POST", form));
+/** 既定のモデルの思考強度と、選べる値。 */
+export async function fetchReasoning(): Promise<ReasoningView> {
+  return request<ReasoningView>(`${MODEL_PATH}/reasoning`);
+}
+
+/** 思考強度を null にすると未設定へ戻す。 */
+export async function saveReasoning(reasoningEffort: string | null): Promise<ReasoningView> {
+  return request<ReasoningView>(`${MODEL_PATH}/reasoning`, jsonRequest("PUT", { reasoningEffort }));
+}
+
+/** models.dev のカタログにあるプロバイダの一覧。 */
+export async function fetchCatalog(): Promise<readonly CatalogProviderView[]> {
+  const body = await request<{ providers: CatalogProviderView[] }>(`${MODEL_PATH}/catalog`);
+  return body.providers;
+}
+
+/** カタログのプロバイダで使えるモデルの一覧。 */
+export async function fetchCatalogModels(providerId: string): Promise<readonly string[]> {
+  const body = await request<{ models: string[] }>(
+    `${MODEL_PATH}/catalog/${encodeURIComponent(providerId)}/models`,
+  );
+  return body.models;
+}
+
+/** 保存せずに接続だけを確かめる。確認する手段が無い場合は verified: false が返る。 */
+export async function checkProvider(form: ProviderForm): Promise<ProviderCheckResult> {
+  return request<ProviderCheckResult>(`${MODEL_PATH}/check`, jsonRequest("POST", form));
+}
+
+/**
+ * 設定済みのプロバイダで使えるモデルの一覧。
+ * カタログのプロバイダはカタログから、独自エンドポイントは /models から取る。
+ */
+export async function listProviderModels(providerId: string): Promise<readonly string[]> {
+  const body = await request<{ models: string[] }>(`${providerPath(providerId)}/models`);
   return body.models;
 }
 
@@ -155,12 +187,6 @@ export async function updateProvider(
 
 export async function deleteProvider(providerId: string): Promise<ModelSettingsView> {
   return request<ModelSettingsView>(providerPath(providerId), { method: "DELETE" });
-}
-
-/** 設定済みのプロバイダで使えるモデルの一覧。 */
-export async function listProviderModels(providerId: string): Promise<readonly string[]> {
-  const body = await request<{ models: string[] }>(`${providerPath(providerId)}/models`);
-  return body.models;
 }
 
 function providerPath(providerId: string): string {

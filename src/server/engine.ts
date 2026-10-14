@@ -1,9 +1,11 @@
 import { Agent } from "@mastra/core/agent";
+import { getProviderConfig } from "@mastra/core/llm";
 import type { OpenAICompatibleConfig } from "@mastra/core/llm";
 import type { AppConfig, ModelSettings } from "../config";
 import { modelProvider, type ModelId } from "../shared/model";
 import type { ChatMessage, TokenUsage } from "../shared/types";
 import { SYSTEM_PROMPT } from "./prompt";
+import { reasoningProviderOptions } from "./reasoning";
 
 /** モデルへ渡す会話 1 件分。role ごとに分けた union にしてある（Mastra 側の型がこの形を要求する）。 */
 export type EngineMessage =
@@ -38,10 +40,10 @@ export type SettingsReader = {
   read(): ModelSettings;
 };
 
-/** モデルの呼び出し方。既知のプロバイダは Mastra のモデルルーターに任せ、独自エンドポイントは URL を渡す。 */
+/** モデルの呼び出し方。カタログのプロバイダは Mastra のモデルルーターに任せ、独自エンドポイントは URL を渡す。 */
 export type ResolvedModel =
-  | { kind: "builtin"; id: ModelId; apiKey: string }
-  | { kind: "endpoint"; id: ModelId; url: string; apiKey: string | null };
+  | { kind: "builtin"; id: ModelId; apiKey: string; reasoningEffort: string | null }
+  | { kind: "endpoint"; id: ModelId; url: string; apiKey: string | null; reasoningEffort: string | null };
 
 /** 呼び出せるかどうかの判定。呼び出せないときは理由を添える。 */
 export type ModelResolution =
@@ -50,6 +52,10 @@ export type ModelResolution =
 
 /**
  * 既定のモデルとプロバイダの設定から、モデルの呼び出し方を決める。
+ *
+ * baseUrl を持つものは OpenAI 互換の独自エンドポイントとして URL を渡し、
+ * 持たないものは models.dev のカタログのプロバイダとして Mastra のモデルルーターに任せる。
+ * 思考強度はモデルごとの設定から取り出す。
  *
  * 設定が揃っていない状態は、モデルを呼ぶ前に理由付きで止める。
  * 既定値で埋め合わせると「設定したつもりで応答が来ない」状態になり、原因が分からなくなる。
@@ -69,11 +75,19 @@ export function resolveModel(settings: ModelSettings): ModelResolution {
     };
   }
 
+  const reasoningEffort = settings.modelOptions[model]?.reasoningEffort ?? null;
+
   // baseUrl があるものは OpenAI 互換の独自エンドポイント。
   if (provider.baseUrl !== undefined) {
     return {
       ok: true,
-      model: { kind: "endpoint", id: model, url: provider.baseUrl, apiKey: provider.apiKey ?? null },
+      model: {
+        kind: "endpoint",
+        id: model,
+        url: provider.baseUrl,
+        apiKey: provider.apiKey ?? null,
+        reasoningEffort,
+      },
     };
   }
 
@@ -81,7 +95,15 @@ export function resolveModel(settings: ModelSettings): ModelResolution {
     return { ok: false, detail: `プロバイダ ${providerId} の API キーが設定されていません` };
   }
 
-  return { ok: true, model: { kind: "builtin", id: model, apiKey: provider.apiKey } };
+  // 接続先を自分で決めないものは、Mastra のモデルルーターが URL を解決できる必要がある。
+  if (getProviderConfig(providerId) === undefined) {
+    return {
+      ok: false,
+      detail: `プロバイダ ${providerId} を models.dev のカタログに見つけられません（画面の「設定 > モデル」から選び直してください）`,
+    };
+  }
+
+  return { ok: true, model: { kind: "builtin", id: model, apiKey: provider.apiKey, reasoningEffort } };
 }
 
 export function createEngine(options: { config: AppConfig; settings: SettingsReader }): AgentEngine {
@@ -96,9 +118,9 @@ export function createMastraEngine(settings: SettingsReader): AgentEngine {
 
   let cached: { key: string; agent: Agent } | null = null;
 
-  /** 設定が変わったら作り直す。同じ設定の間は使い回す。 */
+  /** 設定が変わったら作り直す。同じ設定の間は使い回す。思考強度は呼び出しごとに渡すので鍵に含めない。 */
   function agentFor(model: ResolvedModel): Agent {
-    const key = JSON.stringify(model);
+    const key = JSON.stringify(toModelConfig(model));
     if (cached !== null && cached.key === key) return cached.agent;
 
     const agent = new Agent({
@@ -126,7 +148,16 @@ export function createMastraEngine(settings: SettingsReader): AgentEngine {
           : { role: "assistant", content: message.content },
       );
 
-      const result = await agentFor(resolution.model).stream(messages, { abortSignal: signal });
+      // 思考強度はプロバイダごとに渡し方が違うので、ここで組み立てて呼び出しごとに渡す。
+      const providerOptions = reasoningProviderOptions(
+        modelProvider(resolution.model.id),
+        resolution.model.reasoningEffort,
+      );
+
+      const result = await agentFor(resolution.model).stream(messages, {
+        abortSignal: signal,
+        ...(providerOptions === null ? {} : { providerOptions }),
+      });
 
       return {
         textStream: result.textStream,

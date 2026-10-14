@@ -8,7 +8,11 @@ describe("設定ストア", () => {
     await withTempSettings({ port: 4567 }, async (store, path) => {
       store.putProvider("deepseek", { apiKey: "sk-1" });
 
-      expect(store.read()).toEqual({ model: null, providers: { deepseek: { apiKey: "sk-1" } } });
+      expect(store.read()).toEqual({
+        model: null,
+        providers: { deepseek: { apiKey: "sk-1" } },
+        modelOptions: {},
+      });
       expect(readSettingsFile(path)).toEqual({ port: 4567, providers: { deepseek: { apiKey: "sk-1" } } });
     });
   });
@@ -42,6 +46,33 @@ describe("設定ストア", () => {
     });
   });
 
+  test("思考強度はモデルごとに残る", async () => {
+    await withTempSettings({ model: "deepseek/deepseek-flash" }, async (store, path) => {
+      store.setReasoningEffort("deepseek/deepseek-flash", "medium");
+      store.setReasoningEffort("deepseek/deepseek-v4-pro", "high");
+
+      // モデルを切り替えても、それぞれの値が残っている。
+      expect(store.read().modelOptions["deepseek/deepseek-flash"]).toEqual({ reasoningEffort: "medium" });
+      expect(store.read().modelOptions["deepseek/deepseek-v4-pro"]).toEqual({ reasoningEffort: "high" });
+      expect(readSettingsFile(path).modelOptions).toEqual({
+        "deepseek/deepseek-flash": { reasoningEffort: "medium" },
+        "deepseek/deepseek-v4-pro": { reasoningEffort: "high" },
+      });
+
+      // null で未設定に戻すと、書くものが無くなった項目は消える。
+      store.setReasoningEffort("deepseek/deepseek-flash", null);
+      expect(store.read().modelOptions["deepseek/deepseek-flash"]).toBeUndefined();
+      expect(readSettingsFile(path).modelOptions).toEqual({
+        "deepseek/deepseek-v4-pro": { reasoningEffort: "high" },
+      });
+
+      // 既に未設定のものを戻しても、ファイルには触らない。
+      const before = readFileSync(path, "utf8");
+      store.setReasoningEffort("deepseek/deepseek-flash", null);
+      expect(readFileSync(path, "utf8")).toBe(before);
+    });
+  });
+
   test("起動中に手で編集した内容を消さない", async () => {
     await withTempSettings({ port: 4567, providers: { deepseek: { apiKey: "sk-1" } } }, async (store, path) => {
       // アプリが動いている間に、手で openai を足したとする。
@@ -56,6 +87,7 @@ describe("設定ストア", () => {
       expect(store.read()).toEqual({
         model: "openai/gpt-5.6-sol",
         providers: { deepseek: { apiKey: "sk-1" }, openai: { apiKey: "sk-2" } },
+        modelOptions: {},
       });
       expect(readSettingsFile(path).providers?.["openai"]).toEqual({ apiKey: "sk-2" });
     });

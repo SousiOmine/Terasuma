@@ -24,6 +24,11 @@ export type SettingsStore = {
   deleteProvider(id: string): boolean;
   /** 既定のモデルを変える。 */
   setModel(model: ModelId): void;
+  /**
+   * モデルの思考強度を変える。null で未設定に戻す。
+   * モデルごとに持つので、別のモデルへ切り替えても値は残る。
+   */
+  setReasoningEffort(model: ModelId, effort: string | null): void;
 };
 
 /**
@@ -72,6 +77,27 @@ export function createSettingsStore(configPath: string): SettingsStore {
     setModel(model) {
       mutate((settings) => {
         settings.model = model;
+        return true;
+      });
+    },
+
+    setReasoningEffort(model, effort) {
+      mutate((settings) => {
+        const options = { ...settings.modelOptions };
+
+        if (effort === null) {
+          if (options[model] === undefined) return false;
+
+          // 他の設定が残っていれば残し、空になったら項目ごと消す。
+          const rest = { ...options[model] };
+          delete rest.reasoningEffort;
+          if (Object.keys(rest).length === 0) delete options[model];
+          else options[model] = rest;
+        } else {
+          options[model] = { ...options[model], reasoningEffort: effort };
+        }
+
+        settings.modelOptions = options;
         return true;
       });
     },

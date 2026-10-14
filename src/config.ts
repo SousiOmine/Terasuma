@@ -1,8 +1,8 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { getProviderConfig } from "@mastra/core/llm";
 import { resolveAppPaths } from "./paths";
 import { isModelId, type ModelId } from "./shared/model";
-import { findProviderCatalogEntry } from "./shared/providers";
 import type { ProviderCredentials } from "./shared/types";
 
 /** 使う LLM 実装。mock は開発・テスト専用で、既定には決してならない。 */
@@ -10,7 +10,7 @@ export type EngineKind = "mastra" | "mock";
 
 /**
  * プロバイダ 1 件の設定。
- * 既知のプロバイダは apiKey だけを持ち、OpenAI 互換の独自エンドポイントは baseUrl（と label）も持つ。
+ * カタログのプロバイダは apiKey だけを持ち、OpenAI 互換の独自エンドポイントは baseUrl（と label）も持つ。
  * baseUrl があるかどうかが「独自エンドポイントかどうか」の印になる。
  */
 export type ProviderSettings = {
@@ -19,19 +19,32 @@ export type ProviderSettings = {
   label?: string;
 };
 
+/** モデル 1 件ごとの設定。 */
+export type ModelOptionSettings = {
+  /** 思考強度。未設定なら渡さない（プロバイダの既定に任せる）。 */
+  reasoningEffort?: string;
+};
+
+/** モデル id → 設定。並び順は設定ファイルに書かれた順のまま保つ。 */
+export type ModelOptionsSettings = Record<string, ModelOptionSettings>;
+
 /** プロバイダ id → 設定。並び順は設定ファイルに書かれた順のまま保つ。 */
 export type ProvidersSettings = Record<string, ProviderSettings>;
 
 /** プロバイダ 1 件に書ける項目。 */
 const PROVIDER_KEYS = ["apiKey", "baseUrl", "label"] as const;
 
-const FILE_KEYS = ["model", "providers", "port", "engine"] as const;
+/** モデル 1 件に書ける項目。 */
+const MODEL_OPTION_KEYS = ["reasoningEffort"] as const;
+
+const FILE_KEYS = ["model", "providers", "modelOptions", "port", "engine"] as const;
 type FileKey = (typeof FILE_KEYS)[number];
 
 /** config.json に書ける設定。書かなかった項目は既定値になる。 */
 export type FileSettings = Partial<{
   model: ModelId;
   providers: ProvidersSettings;
+  modelOptions: ModelOptionsSettings;
   port: number;
   engine: EngineKind;
 }>;
@@ -41,6 +54,8 @@ export type ModelSettings = {
   /** 既定のモデル。未設定なら null。 */
   model: ModelId | null;
   providers: ProvidersSettings;
+  /** モデルごとの設定（思考強度など）。 */
+  modelOptions: ModelOptionsSettings;
 };
 
 export type AppConfig = {
@@ -107,7 +122,11 @@ export function ensureDirectories(config: AppConfig): void {
 
 /** 設定ファイルから、実行時に使うモデル設定だけを取り出す。 */
 export function toModelSettings(file: FileSettings): ModelSettings {
-  return { model: file.model ?? null, providers: file.providers ?? {} };
+  return {
+    model: file.model ?? null,
+    providers: file.providers ?? {},
+    modelOptions: file.modelOptions ?? {},
+  };
 }
 
 /** 設定ファイルがまだ無ければ空を返す。あるのに読めない場合は起動を止める。 */
@@ -150,6 +169,9 @@ export function readSettingsFile(path: string): FileSettings {
   const providers = readProviders(source, path);
   if (providers !== undefined) settings.providers = providers;
 
+  const modelOptions = readModelOptions(source, path);
+  if (modelOptions !== undefined) settings.modelOptions = modelOptions;
+
   const port = readNumber(source, "port", path);
   if (port !== undefined) {
     if (!Number.isInteger(port) || port < 1 || port > 65535) {
@@ -184,6 +206,7 @@ function serialize(settings: FileSettings): string {
   const ordered: Record<string, unknown> = {};
   if (settings.model !== undefined) ordered["model"] = settings.model;
   if (settings.providers !== undefined) ordered["providers"] = settings.providers;
+  if (settings.modelOptions !== undefined) ordered["modelOptions"] = settings.modelOptions;
   if (settings.port !== undefined) ordered["port"] = settings.port;
   if (settings.engine !== undefined) ordered["engine"] = settings.engine;
   return `${JSON.stringify(ordered, null, 2)}\n`;
@@ -192,28 +215,24 @@ function serialize(settings: FileSettings): string {
 /**
  * プロバイダ 1 件の設定を検証し、保存できる形に整える。
  *
- * 既知のプロバイダはモデルルーターに任せるので baseUrl を持たない。
- * 独自エンドポイントは baseUrl が無いと接続先が決まらないため、必ず要求する。
+ * baseUrl を持つものは OpenAI 互換の独自エンドポイントで、接続先を利用者が決める。
+ * 持たないものは models.dev のカタログのプロバイダとして扱い、Mastra が URL を解決できることを確かめる。
  * 既定値で埋め合わせると「設定したつもりで繋がらない」状態になるので、ここでは何も補わない。
  */
 export function normalizeProvider(id: string, raw: ProviderSettings, source: string): ProviderSettings {
-  const entry = findProviderCatalogEntry(id);
-  const isEndpoint = entry === undefined || entry.kind === "openai-compatible";
+  const isEndpoint = raw.baseUrl !== undefined;
+  const registered = getProviderConfig(id) !== undefined;
 
-  if (isEndpoint && raw.baseUrl === undefined) {
-    throw new Error(`${source} に baseUrl を指定してください（OpenAI 互換のエンドポイントが必要です）`);
+  if (!isEndpoint && !registered) {
+    throw new Error(
+      `${source} に baseUrl を指定してください（${id} は models.dev のカタログに無いため、独自の接続先が必要です）`,
+    );
   }
-  if (!isEndpoint && raw.baseUrl !== undefined) {
-    throw new Error(`${source} の baseUrl は OpenAI 互換のエンドポイントにだけ指定できます`);
-  }
-
-  if (entry?.kind === "builtin" && raw.apiKey === undefined) {
+  if (!isEndpoint && raw.apiKey === undefined) {
     throw new Error(`${source} に apiKey を指定してください`);
   }
-
-  const labelAllowed = entry === undefined || (entry.kind === "openai-compatible" && entry.requiresLabel);
-  if (raw.label !== undefined && !labelAllowed) {
-    throw new Error(`${source} の label は名前を付けて保存するエンドポイントにだけ指定できます`);
+  if (raw.label !== undefined && !isEndpoint) {
+    throw new Error(`${source} の label は OpenAI 互換のエンドポイントにだけ指定できます`);
   }
 
   const settings: ProviderSettings = {};
@@ -321,8 +340,51 @@ function readProviderString(
   return trimmed;
 }
 
-function readString(source: Record<string, unknown>, key: FileKey, path: string): string | undefined {
-  const value = source[key];
+/** モデルごとの設定（思考強度など）を読む。 */
+function readModelOptions(source: Record<string, unknown>, path: string): ModelOptionsSettings | undefined {
+  const value = source["modelOptions"];
+  if (value === undefined) return undefined;
+
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new Error(`${path} の modelOptions はオブジェクトにしてください`);
+  }
+
+  const options: ModelOptionsSettings = {};
+  for (const [model, entry] of Object.entries(value as Record<string, unknown>)) {
+    if (!isModelId(model)) {
+      throw new Error(
+        `${path} の modelOptions に使えないモデル ID があります: ${JSON.stringify(model)}（"provider/model" の形式にしてください）`,
+      );
+    }
+    options[model] = readModelOption(model, entry, path);
+  }
+  return options;
+}
+
+function readModelOption(model: string, raw: unknown, path: string): ModelOptionSettings {
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+    throw new Error(`${path} の modelOptions.${model} はオブジェクトにしてください`);
+  }
+
+  const source = raw as Record<string, unknown>;
+  const unknownKeys = Object.keys(source).filter(
+    (key) => !MODEL_OPTION_KEYS.includes(key as (typeof MODEL_OPTION_KEYS)[number]),
+  );
+  if (unknownKeys.length > 0) {
+    throw new Error(
+      `${path} の modelOptions.${model} に未知の項目があります: ${unknownKeys.join(", ")}（使える項目: ${MODEL_OPTION_KEYS.join(", ")}）`,
+    );
+  }
+
+  const effort = source["reasoningEffort"];
+  if (effort === undefined) return {};
+  if (typeof effort !== "string" || effort.trim().length === 0) {
+    throw new Error(`${path} の modelOptions.${model}.reasoningEffort は空でない文字列にしてください`);
+  }
+  return { reasoningEffort: effort.trim() };
+}
+
+function readString(source: Record<string, unknown>, key: FileKey, path: string): string | undefined {  const value = source[key];
   if (value === undefined) return undefined;
   if (typeof value !== "string") throw new Error(`${path} の ${key} は文字列で指定してください`);
 

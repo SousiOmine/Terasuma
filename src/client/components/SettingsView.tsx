@@ -1,3 +1,4 @@
+import { IconArrowLeft } from "@tabler/icons-preact";
 import type { Locale, MessageKey } from "../i18n";
 import { LOCALES, locale, setLocale, t } from "../i18n";
 import { closeSettings, settingsCategory, type SettingsCategory } from "../state";
@@ -18,19 +19,22 @@ export function SettingsView() {
 
   return (
     <div class="flex h-full flex-col">
-      <header class="flex h-12 shrink-0 items-center gap-3 border-b border-neutral-200 px-3 dark:border-neutral-800">
+      <header class="flex h-12 shrink-0 items-center border-b border-neutral-200 px-3 dark:border-neutral-800">
         <button
           type="button"
           onClick={closeSettings}
-          class="rounded-lg px-2 py-1 text-sm text-neutral-600 transition hover:bg-neutral-200/70 dark:text-neutral-300 dark:hover:bg-neutral-800"
+          class="flex items-center gap-1.5 rounded-lg px-2 py-1 text-sm text-neutral-600 transition hover:bg-neutral-200/70 dark:text-neutral-300 dark:hover:bg-neutral-800"
         >
-          ← {t("settings.back")}
+          <IconArrowLeft size={16} stroke={1.6} class="shrink-0" />
+          {t("settings.back")}
         </button>
-        <h1 class="text-sm font-medium">{t("settings.title")}</h1>
       </header>
 
       <div class="flex min-h-0 flex-1">
         <nav class="w-56 shrink-0 border-r border-neutral-200 p-2 dark:border-neutral-800">
+          <h1 class="px-3 pb-2 pt-1 text-xs font-medium text-neutral-500 dark:text-neutral-400">
+            {t("settings.title")}
+          </h1>
           <ul class="space-y-0.5">
             {CATEGORIES.map((item) => {
               const active = category === item.id;

@@ -49,6 +49,7 @@ export type ApiErrorCode =
   | "provider_auth_failed"
   | "provider_unreachable"
   | "provider_no_models"
+  | "catalog_unavailable"
   | "settings_write_failed"
   | "internal_error";
 
@@ -82,6 +83,35 @@ export type ProviderCredentials = {
 /** 接続確認の入力。 */
 export type ProviderForm = ProviderCredentials & {
   id: string;
+};
+
+/** 接続確認の結果。verified が false のときは、確認する手段が無かったことを表す。 */
+export type ProviderCheckResult = {
+  verified: boolean;
+  /** 確認できたときに得られたモデル ID。独自エンドポイントのモデル選択に使う。 */
+  models: readonly string[];
+};
+
+/**
+ * 設定画面に並べるプロバイダ 1 件（models.dev のカタログ）。
+ * モデルの呼び出し方（どの URL に投げるか）は Mastra が持つので、ここには出さない。
+ */
+export type CatalogProviderView = {
+  /** モデル ID の先頭部分になる id。 */
+  id: string;
+  name: string;
+  /** このプロバイダのモデルまでを持つかどうか。 */
+  models: number;
+};
+
+/** 既定のモデルに設定できる思考強度。 */
+export type ReasoningView = {
+  /** 対象のモデル。未設定なら null。 */
+  model: ModelId | null;
+  /** このモデルに保存されている思考強度。未設定なら null。 */
+  effort: string | null;
+  /** 選べる値。思考強度を渡せないモデルでは空になる。 */
+  values: readonly string[];
 };
 
 /** プロバイダの追加。追加と同時に既定のモデルを決められる。 */

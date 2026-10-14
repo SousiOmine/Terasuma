@@ -158,15 +158,6 @@ async function removeSession(id: string): Promise<void> {
   }
 }
 
-export async function renameSession(id: string, title: string): Promise<void> {
-  try {
-    await api.renameSession(id, title);
-    await refreshSessions();
-  } catch (error) {
-    reportError(error);
-  }
-}
-
 export function clearError(): void {
   errorCode.value = null;
   errorDetail.value = null;

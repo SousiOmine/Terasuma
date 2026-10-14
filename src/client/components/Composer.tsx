@@ -1,4 +1,6 @@
+import { IconPlayerStopFilled, IconSend } from "@tabler/icons-preact";
 import { useEffect, useRef, useState } from "preact/hooks";
+import { isSendKey } from "../composerKeys";
 import { t } from "../i18n";
 import { isStreaming, sendMessage, stopStreaming } from "../state";
 
@@ -38,11 +40,10 @@ export function Composer() {
             class="max-h-[200px] min-h-6 flex-1 resize-none bg-transparent py-1 text-sm leading-relaxed outline-none placeholder:text-neutral-400"
             onInput={(event) => setDraft(event.currentTarget.value)}
             onKeyDown={(event) => {
-              // 日本語入力の変換確定の Enter を送信と勘違いしないよう isComposing を見る。
-              if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
-                event.preventDefault();
-                submit();
-              }
+              // Enter と Shift + Enter は改行のままにする（送信は Ctrl / Cmd + Enter）。
+              if (!isSendKey(event)) return;
+              event.preventDefault();
+              submit();
             }}
           />
 
@@ -50,23 +51,25 @@ export function Composer() {
             <button
               type="button"
               onClick={stopStreaming}
-              class="shrink-0 rounded-lg bg-neutral-200 px-3 py-1.5 text-xs font-medium text-neutral-700 transition hover:bg-neutral-300 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-700"
+              title={t("composer.stop")}
+              aria-label={t("composer.stop")}
+              class="shrink-0 rounded-lg bg-neutral-200 p-2 text-neutral-700 transition hover:bg-neutral-300 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-700"
             >
-              {t("composer.stop")}
+              <IconPlayerStopFilled size={16} />
             </button>
           ) : (
             <button
               type="button"
               onClick={submit}
               disabled={draft.trim().length === 0}
-              class="shrink-0 rounded-lg bg-neutral-900 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-neutral-700 disabled:opacity-40 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
+              title={t("composer.send")}
+              aria-label={t("composer.send")}
+              class="shrink-0 rounded-lg bg-neutral-900 p-2 text-white transition hover:bg-neutral-700 disabled:opacity-40 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
             >
-              {t("composer.send")}
+              <IconSend size={16} stroke={1.6} />
             </button>
           )}
         </div>
-
-        <p class="mt-1.5 text-center text-[11px] text-neutral-500 dark:text-neutral-400">{t("composer.hint")}</p>
       </div>
     </div>
   );

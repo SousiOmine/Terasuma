@@ -6,18 +6,30 @@ import {
   type ProviderSettings,
 } from "../config";
 import { isModelId, modelProvider, type ModelId } from "../shared/model";
-import { findProviderCatalogEntry } from "../shared/providers";
+import { findEndpointPreset } from "../shared/providers";
 import { encodeChatEvent } from "../shared/sse";
 import type {
   ChatEvent,
   ChatMessage,
+  CatalogProviderView,
   ModelSettingsView,
   ProviderCredentials,
+  ProviderView,
+  ReasoningView,
   TokenUsage,
 } from "../shared/types";
 import { resolveModel, type AgentEngine } from "./engine";
 import { describeError, jsonError } from "./errors";
-import { ProviderRequestError, type ProviderAccess, type ProviderModelLister } from "./provider-models";
+import type { Catalog, CatalogSnapshot } from "./models-dev";
+import {
+  ProviderRequestError,
+  connectionTarget,
+  type ConnectionChecker,
+  type ConnectionResult,
+  type ConnectionTarget,
+  type ProviderModelLister,
+} from "./provider-models";
+import { selectableEfforts } from "./reasoning";
 import type { SettingsStore } from "./settings";
 import type { Store } from "./store";
 
@@ -42,12 +54,16 @@ export type ApiDeps = {
   engine: AgentEngine;
   /** モデルとプロバイダの設定。変更は config.json に書き戻される。 */
   settings: SettingsStore;
-  /** プロバイダのモデル一覧を取ってくる関数（接続確認を兼ねる）。 */
+  /** models.dev のカタログ。プロバイダとモデルの一覧はここから取る。 */
+  catalog: Catalog;
+  /** プロバイダへ接続できるかを確かめる。 */
+  checkConnection: ConnectionChecker;
+  /** 独自エンドポイントのモデル一覧を取る。 */
   listModels: ProviderModelLister;
 };
 
 export function createApiHandlers(deps: ApiDeps) {
-  const { store, settings, listModels } = deps;
+  const { store, settings } = deps;
 
   /** モデル設定の現在の状態。設定を変える API はすべてこれを返す。 */
   function currentView(): Response {
@@ -68,20 +84,39 @@ export function createApiHandlers(deps: ApiDeps) {
     return currentView();
   }
 
+  /**
+   * カタログを使える状態にする。
+   * 設定画面を開いたときだけ取りに行き、チャットの呼び出しでは通信を待たない。
+   */
+  async function loadCatalog(): Promise<CatalogSnapshot | Response> {
+    try {
+      return await deps.catalog.load({ fresh: true });
+    } catch (error) {
+      return jsonError(502, "catalog_unavailable", describeError(error));
+    }
+  }
+
+  /** 既定のモデルの思考強度。選べる値も一緒に返す。 */
+  function reasoningView(snapshot: CatalogSnapshot): Response {
+    const model = settings.read().model;
+    if (model === null) {
+      return Response.json({ model: null, effort: null, values: [] } satisfies ReasoningView);
+    }
+
+    const providerId = modelProvider(model);
+    const modelId = model.slice(providerId.length + 1);
+    const entry = snapshot.models.get(providerId)?.find((candidate) => candidate.id === modelId) ?? null;
+
+    return Response.json({
+      model,
+      effort: settings.read().modelOptions[model]?.reasoningEffort ?? null,
+      values: selectableEfforts(providerId, entry),
+    } satisfies ReasoningView);
+  }
+
   return {
     listSessions(): Response {
       return Response.json({ sessions: store.listSessions() });
-    },
-
-    async renameSession(req: ApiRequest<{ id: string }>): Promise<Response> {
-      const body = await readJsonBody(req);
-      const title = typeof body?.["title"] === "string" ? body["title"] : null;
-      if (title === null) return jsonError(400, "invalid_request", "title must be a string");
-
-      if (!store.renameSession(req.params.id, title)) {
-        return jsonError(404, "session_not_found");
-      }
-      return Response.json({ session: store.getSession(req.params.id) });
     },
 
     deleteSession(req: ApiRequest<{ id: string }>): Response {
@@ -142,7 +177,95 @@ export function createApiHandlers(deps: ApiDeps) {
     },
 
     /**
-     * 保存せずに接続だけを確かめる。追加ウィザードが、モデルを選ばせる前の一覧取得に使う。
+     * 既定のモデルの思考強度と、選べる値を返す。
+     * 設定画面の「思考強度」は、いま選ばれているモデルの分だけを出す。
+     */
+    async readReasoning(): Promise<Response> {
+    // モデルが未設定なら見る値が無い。カタログも取りに行かない。
+    if (settings.read().model === null) {
+      return Response.json({ model: null, effort: null, values: [] } satisfies ReasoningView);
+    }
+
+    const snapshot = await loadCatalog();
+    if (snapshot instanceof Response) return snapshot;
+    return reasoningView(snapshot);
+  },
+
+    /**
+     * 既定のモデルの思考強度を変える。
+     * モデルごとに保存するので、別のモデルへ切り替えて戻ると前の値が復元される。
+     */
+    async setReasoning(req: PlainRequest): Promise<Response> {
+      const body = await readJsonBody(req);
+      const raw = body?.["reasoningEffort"];
+      if (raw !== undefined && raw !== null && typeof raw !== "string") {
+        return jsonError(400, "invalid_request", "reasoningEffort must be a string or null");
+      }
+
+      const effort = typeof raw === "string" ? raw.trim() : null;
+      if (effort !== null && effort.length === 0) {
+        return jsonError(400, "invalid_request", "reasoningEffort must be a non-empty string or null");
+      }
+
+      const model = settings.read().model;
+      if (model === null) {
+        return jsonError(400, "invalid_request", "既定のモデルが設定されていません");
+      }
+
+      // 値はモデルが受け付けるものだけを通す。渡せない値が設定に入ると、次の送信が必ず失敗する。
+      const snapshot = await loadCatalog();
+      if (snapshot instanceof Response) return snapshot;
+
+      if (effort !== null) {
+        const providerId = modelProvider(model);
+        const modelId = model.slice(providerId.length + 1);
+        const entry = snapshot.models.get(providerId)?.find((candidate) => candidate.id === modelId) ?? null;
+        const values = selectableEfforts(providerId, entry);
+
+        if (!values.includes(effort)) {
+          return jsonError(
+            400,
+            "invalid_request",
+            values.length === 0
+              ? `${model} は思考強度を指定できません`
+              : `${model} の思考強度は ${values.join(", ")} のいずれかにしてください`,
+          );
+        }
+      }
+
+      const response = commit(() => settings.setReasoningEffort(model, effort));
+      return response.ok ? reasoningView(snapshot) : response;
+    },
+
+    /** 設定画面に並べるプロバイダの一覧（models.dev のカタログ）。 */
+    async listCatalogProviders(): Promise<Response> {
+      const snapshot = await loadCatalog();
+      if (snapshot instanceof Response) return snapshot;
+
+      const providers: CatalogProviderView[] = snapshot.providers.map((provider) => ({
+        id: provider.id,
+        name: provider.name,
+        models: snapshot.models.get(provider.id)?.length ?? 0,
+      }));
+      return Response.json({ providers });
+    },
+
+    /** カタログのプロバイダで使えるモデルの一覧。追加ウィザードが使う。 */
+    async listCatalogModels(req: ApiRequest<{ id: string }>): Promise<Response> {
+      const snapshot = await loadCatalog();
+      if (snapshot instanceof Response) return snapshot;
+
+      const models = snapshot.models.get(req.params.id);
+      if (models === undefined) {
+        return jsonError(404, "provider_not_found", `プロバイダ ${req.params.id} がカタログにありません`);
+      }
+      return Response.json({ models: models.map((model) => model.id) });
+    },
+
+    /**
+     * 保存せずに接続だけを確かめる。
+     * モデルの一覧はカタログから取るので、ここで見るのは資格が通るかどうかだけ。
+     * 確認する手段が無いプロバイダは verified: false で返し、保存は妨げない。
      */
     async checkProvider(req: PlainRequest): Promise<Response> {
       const body = await readJsonBody(req);
@@ -152,12 +275,13 @@ export function createApiHandlers(deps: ApiDeps) {
       const provider = parseProviderSettings(id, body);
       if (provider instanceof Response) return provider;
 
-      return listModelsResponse(listModels, { id, ...accessOf(id, provider) }, req.signal);
+      const result = await verifyProvider(id, provider, req.signal);
+      return result instanceof Response ? result : Response.json(result);
     },
 
     /**
-     * プロバイダを追加する。保存の前に必ず接続を確かめるので、
-     * 設定に入っているプロバイダは常に「到達確認済み」になる。
+     * プロバイダを追加する。保存の前に接続を確かめるが、
+     * 確認する手段が無いプロバイダはそのまま保存できる。
      */
     async addProvider(req: PlainRequest): Promise<Response> {
       const body = await readJsonBody(req);
@@ -177,8 +301,8 @@ export function createApiHandlers(deps: ApiDeps) {
       const provider = parseProviderSettings(id, body);
       if (provider instanceof Response) return provider;
 
-      const failure = await verifyProvider(listModels, id, provider, req.signal);
-      if (failure !== null) return failure;
+      const failure = await verifyProvider(id, provider, req.signal);
+      if (failure instanceof Response) return failure;
 
       return commit(() => settings.putProvider(id, provider, defaultModel ?? undefined));
     },
@@ -206,8 +330,8 @@ export function createApiHandlers(deps: ApiDeps) {
       const provider = parseProviderSettings(id, merged);
       if (provider instanceof Response) return provider;
 
-      const failure = await verifyProvider(listModels, id, provider, req.signal);
-      if (failure !== null) return failure;
+      const failure = await verifyProvider(id, provider, req.signal);
+      if (failure instanceof Response) return failure;
 
       return commit(() => settings.putProvider(id, provider));
     },
@@ -222,7 +346,10 @@ export function createApiHandlers(deps: ApiDeps) {
       return commit(() => void settings.deleteProvider(id));
     },
 
-    /** 設定済みのプロバイダで使えるモデルの一覧。既定のモデルを選び直すときに使う。 */
+    /**
+     * 設定済みのプロバイダで使えるモデルの一覧。既定のモデルを選び直すときに使う。
+     * カタログのプロバイダはカタログから、独自エンドポイントは /models から取る。
+     */
     async listProviderModels(req: ApiRequest<{ id: string }>): Promise<Response> {
       const id = req.params.id;
       const provider = settings.read().providers[id];
@@ -230,67 +357,70 @@ export function createApiHandlers(deps: ApiDeps) {
         return jsonError(404, "provider_not_found", `プロバイダ ${id} は設定されていません`);
       }
 
-      return listModelsResponse(listModels, { id, ...accessOf(id, provider) }, req.signal);
+      if (provider.baseUrl === undefined) {
+        let snapshot: CatalogSnapshot;
+        try {
+          snapshot = await deps.catalog.load();
+        } catch (error) {
+          return jsonError(502, "catalog_unavailable", describeError(error));
+        }
+
+        const models = snapshot.models.get(id);
+        if (models === undefined) {
+          return jsonError(404, "provider_not_found", `プロバイダ ${id} がカタログにありません`);
+        }
+        return Response.json({ models: models.map((model) => model.id) });
+      }
+
+      try {
+        const models = await deps.listModels({
+          target: connectionTarget({ id, baseUrl: provider.baseUrl, api: null }),
+          apiKey: provider.apiKey ?? null,
+          signal: req.signal,
+        });
+        return Response.json({ models });
+      } catch (error) {
+        return providerFailureResponse(error);
+      }
     },
   };
+
+  /** 保存の前後に使う接続確認。失敗した場合はそのまま返せるレスポンスを返す。 */
+  async function verifyProvider(
+    id: string,
+    provider: ProviderSettings,
+    signal: AbortSignal,
+  ): Promise<ConnectionResult | Response> {
+    try {
+      return await deps.checkConnection({
+        target: targetOf(id, provider),
+        apiKey: provider.apiKey ?? null,
+        signal,
+      });
+    } catch (error) {
+      return providerFailureResponse(error);
+    }
+  }
+
+  /** 接続確認の宛先。カタログを読んでいなければ、カタログのプロバイダでも宛先は分からない。 */
+  function targetOf(id: string, provider: ProviderSettings): ConnectionTarget | null {
+    const baseUrl = provider.baseUrl ?? findEndpointPreset(id)?.defaultBaseUrl ?? null;
+    const api = deps.catalog.snapshot()?.providers.find((candidate) => candidate.id === id)?.api ?? null;
+    return connectionTarget({ id, baseUrl, api });
+  }
 }
 
-/** 設定から画面用の形を作る。 */
+/** 設定から画面用の形を作る。名前は label があればそれ、無ければ id（カタログの名前はクライアントが当てる）。 */
 function toSettingsView(settings: ModelSettings): ModelSettingsView {
   return {
     model: settings.model,
     providers: Object.entries(settings.providers).map(([id, provider]) => ({
       id,
-      name: provider.label ?? findProviderCatalogEntry(id)?.name ?? id,
+      name: provider.label ?? id,
       baseUrl: provider.baseUrl ?? null,
       hasApiKey: provider.apiKey !== undefined,
     })),
   };
-}
-
-/** 保存済み・保存前の設定から、接続確認に渡す値を取り出す。 */
-function accessOf(id: string, provider: ProviderSettings): Omit<ProviderAccess, "id"> {
-  return {
-    apiKey: provider.apiKey ?? null,
-    // カタログに既定のベース URL があるものは、利用者が入れなかったときにそれを使う（Ollama など）。
-    baseUrl: provider.baseUrl ?? defaultBaseUrlOf(id),
-  };
-}
-
-function defaultBaseUrlOf(id: string): string | null {
-  const entry = findProviderCatalogEntry(id);
-  return entry?.kind === "openai-compatible" ? entry.defaultBaseUrl : null;
-}
-
-/**
- * 保存の前に接続を確かめる。
- * 通らなかった場合はそのまま返せるレスポンスを返し、通った場合は null を返す。
- */
-async function verifyProvider(
-  listModels: ProviderModelLister,
-  id: string,
-  provider: ProviderSettings,
-  signal: AbortSignal,
-): Promise<Response | null> {
-  try {
-    await listModels({ id, ...accessOf(id, provider) }, signal);
-    return null;
-  } catch (error) {
-    return providerFailureResponse(error);
-  }
-}
-
-/** モデル一覧の取得を API のレスポンスにする。 */
-async function listModelsResponse(
-  listModels: ProviderModelLister,
-  access: ProviderAccess,
-  signal: AbortSignal,
-): Promise<Response> {
-  try {
-    return Response.json({ models: await listModels(access, signal) });
-  } catch (error) {
-    return providerFailureResponse(error);
-  }
 }
 
 function providerFailureResponse(error: unknown): Response {

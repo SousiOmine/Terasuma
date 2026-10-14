@@ -1,17 +1,24 @@
-import { useRef, useState } from "preact/hooks";
+import { IconChevronRight, IconSearch } from "@tabler/icons-preact";
+import { useEffect, useRef, useState } from "preact/hooks";
 import type { ModelId } from "../../shared/model";
 import {
-  findProviderCatalogEntry,
+  ENDPOINT_PRESETS,
   OPENAI_COMPATIBLE_TEMPLATE,
-  PROVIDER_CATALOG,
-  type ProviderCatalogEntry,
+  findEndpointPreset,
+  type EndpointPreset,
 } from "../../shared/providers";
-import type { ProviderCredentials, ProviderView } from "../../shared/types";
+import type { CatalogProviderView, ProviderCredentials, ProviderView } from "../../shared/types";
 import * as api from "../api";
 import { toErrorState, type ErrorState } from "../errors";
 import { t } from "../i18n";
-import { addProvider, modelSettings, providers, updateProvider } from "../modelSettings";
-import { providerName } from "../providerText";
+import {
+  addProvider,
+  catalogProviders,
+  loadCatalog,
+  modelSettings,
+  providers,
+  updateProvider,
+} from "../modelSettings";
 import { Button } from "./Button";
 import { ErrorNotice } from "./ErrorNotice";
 import { Field } from "./Field";
@@ -26,6 +33,11 @@ export type ProviderWizardProps = {
   onClose: () => void;
 };
 
+/** 追加・変更の対象。カタログのプロバイダか、接続先を自分で決めるエンドポイントか。 */
+type Target =
+  | { kind: "catalog"; id: string; name: string }
+  | { kind: "endpoint"; preset: EndpointPreset; id: string };
+
 const ADD_STEPS = [
   { key: "settings.wizard.step.choose" },
   { key: "settings.wizard.step.connect" },
@@ -39,26 +51,23 @@ const INPUT_CLASS =
  * プロバイダを追加するウィザード。
  *
  * 追加は「選ぶ → 接続を確認する → 使うモデルを選ぶ」の 3 段。
- * 接続を確認できて初めて保存へ進めるので、設定に残るのは必ず疎通したプロバイダだけになる。
+ * プロバイダの一覧とモデルの一覧は models.dev のカタログから取る。
+ * 接続を確認できないプロバイダ（/models を公開していないもの）も、その旨を出したうえで追加できる。
  * 変更は接続情報の 1 段だけ（モデルの選び直しは「既定のモデル」から行う）。
  */
 export function ProviderWizard({ mode, onClose }: ProviderWizardProps) {
   const editing = mode.kind === "edit";
-  // 変更のときは、設定済みの id からカタログの項目を引く。引けないものは独自エンドポイント。
-  const template = editing ? findProviderCatalogEntry(mode.provider.id) ?? OPENAI_COMPATIBLE_TEMPLATE : null;
 
-  const [target, setTarget] = useState<{ entry: ProviderCatalogEntry; id: string } | null>(() =>
-    editing && template !== null ? { entry: template, id: mode.provider.id } : null,
-  );
+  const [target, setTarget] = useState<Target | null>(() => (mode.kind === "edit" ? targetOf(mode.provider) : null));
   const [apiKey, setApiKey] = useState("");
   const [baseUrl, setBaseUrl] = useState(() => (editing ? mode.provider.baseUrl ?? "" : ""));
-  const [label, setLabel] = useState(() =>
-    editing && template !== null && needsLabel(template) ? mode.provider.name : "",
-  );
+  const [label, setLabel] = useState(() => (editing && isEndpoint(mode.provider) ? mode.provider.name : ""));
   const [revealKey, setRevealKey] = useState(false);
   const [models, setModels] = useState<readonly string[] | null>(null);
   const [model, setModel] = useState<string | null>(null);
   const [makeDefault, setMakeDefault] = useState(true);
+  /** 接続を確かめられなかった理由（確認できたときは null）。 */
+  const [checkNote, setCheckNote] = useState<"skipped" | null>(null);
   const [busy, setBusy] = useState<"checking" | "saving" | null>(null);
   const [error, setError] = useState<ErrorState | null>(null);
 
@@ -79,8 +88,8 @@ export function ProviderWizard({ mode, onClose }: ProviderWizardProps) {
     });
   };
 
-  const needsKey = target !== null && target.entry.requiresApiKey && !editing;
-  const needsBaseUrl = target !== null && target.entry.kind === "openai-compatible";
+  const needsKey = target !== null && target.kind === "catalog" && !editing;
+  const needsBaseUrl = target !== null && target.kind === "endpoint";
   const incomplete = (needsKey && apiKey.trim().length === 0) || (needsBaseUrl && baseUrl.trim().length === 0);
 
   /** 入力中の値。空欄は「未入力」として null で送る。 */
@@ -90,10 +99,23 @@ export function ProviderWizard({ mode, onClose }: ProviderWizardProps) {
     label: trimmedOrNull(label),
   });
 
-  const selectProvider = (entry: ProviderCatalogEntry) => {
-    setTarget({ entry, id: needsLabel(entry) ? nextCustomEndpointId(providers.value) : entry.id });
-    setBaseUrl(entry.kind === "openai-compatible" ? entry.defaultBaseUrl ?? "" : "");
-    // 入力は前のプロバイダのものなので、選び直したら持ち越さない。
+  const selectCatalogProvider = (id: string, name: string) => {
+    setTarget({ kind: "catalog", id, name });
+    resetInputs();
+  };
+
+  const selectPreset = (preset: EndpointPreset) => {
+    setTarget({
+      kind: "endpoint",
+      preset,
+      id: preset.uniqueId ? nextCustomEndpointId(providers.value) : preset.id,
+    });
+    setBaseUrl(preset.defaultBaseUrl ?? "");
+    resetInputs();
+  };
+
+  /** 入力は前のプロバイダのものなので、選び直したら持ち越さない。 */
+  const resetInputs = () => {
     setLabel("");
     setApiKey("");
     setRevealKey(false);
@@ -104,18 +126,29 @@ export function ProviderWizard({ mode, onClose }: ProviderWizardProps) {
     setTarget(null);
     setModels(null);
     setModel(null);
+    setCheckNote(null);
     setError(null);
   };
 
+  /** 接続を確かめ、モデルの一覧を用意して次の段へ進む。 */
   const connect = async () => {
     if (target === null) return;
 
     setBusy("checking");
     setError(null);
     try {
-      const found = await api.checkProvider({ id: target.id, ...credentials() });
+      const result = await api.checkProvider({ id: target.id, ...credentials() });
+      const found = target.kind === "catalog" ? await api.fetchCatalogModels(target.id) : result.models;
+
+      if (found.length === 0) {
+        // モデルを選べないと追加できない。接続の段に留めて理由を出す。
+        setError({ code: "provider_no_models", detail: null });
+        return;
+      }
+
+      setCheckNote(result.verified ? null : "skipped");
       setModels(found);
-      setModel(pickModel(target.entry, found));
+      setModel(pickModel(target, found));
     } catch (failure) {
       setError(toErrorState(failure));
     } finally {
@@ -162,30 +195,26 @@ export function ProviderWizard({ mode, onClose }: ProviderWizardProps) {
         onBack: backToChoose,
         onConnect: () => run(connect),
         onSubmit: () => run(submit),
-        onBackToConnect: () => setModels(null),
+        onBackToConnect: () => {
+          setModels(null);
+          setCheckNote(null);
+        },
       })}
     >
       {!editing && <StepIndicator current={step} />}
 
       {step === "choose" && (
-        <ul class="grid grid-cols-2 gap-1">
-          {PROVIDER_CATALOG.map((entry) => (
-            <li key={entry.id}>
-              <button
-                type="button"
-                onClick={() => selectProvider(entry)}
-                class="w-full truncate rounded-lg border border-neutral-200 px-3 py-2 text-left text-sm transition hover:border-neutral-400 hover:bg-neutral-50 dark:border-neutral-800 dark:hover:border-neutral-600 dark:hover:bg-neutral-800/50"
-              >
-                {providerName(entry)}
-              </button>
-            </li>
-          ))}
-        </ul>
+        <ProviderChooser
+          onSelectCatalog={selectCatalogProvider}
+          onSelectPreset={selectPreset}
+          error={error}
+          onError={setError}
+        />
       )}
 
       {target !== null && step !== "choose" && (
         <div class="space-y-1">
-          {needsLabel(target.entry) && (
+          {target.kind === "endpoint" && target.preset.requiresLabel && (
             <Field label={t("settings.wizard.name.label")} description={t("settings.wizard.name.description")}>
               <input
                 type="text"
@@ -198,7 +227,7 @@ export function ProviderWizard({ mode, onClose }: ProviderWizardProps) {
             </Field>
           )}
 
-          {target.entry.kind === "openai-compatible" && (
+          {target.kind === "endpoint" && (
             <Field label={t("settings.wizard.baseUrl.label")} description={t("settings.wizard.baseUrl.description")}>
               <input
                 type="text"
@@ -212,7 +241,7 @@ export function ProviderWizard({ mode, onClose }: ProviderWizardProps) {
             </Field>
           )}
 
-          <Field label={t("settings.wizard.apiKey.label")} hint={apiKeyHint(editing, target.entry)}>
+          <Field label={t("settings.wizard.apiKey.label")} hint={apiKeyHint(editing, target)}>
             <div class="flex items-center gap-2">
               <ApiKeyInput value={apiKey} reveal={revealKey} onInput={setApiKey} />
               <button
@@ -223,18 +252,13 @@ export function ProviderWizard({ mode, onClose }: ProviderWizardProps) {
                 {t(revealKey ? "settings.wizard.apiKey.hide" : "settings.wizard.apiKey.show")}
               </button>
             </div>
-
-            {target.entry.keyUrl !== null && (
-              <a
-                href={target.entry.keyUrl}
-                target="_blank"
-                rel="noreferrer"
-                class="mt-1.5 inline-block text-xs text-neutral-600 underline dark:text-neutral-300"
-              >
-                {t("settings.wizard.keyUrl")}
-              </a>
-            )}
           </Field>
+
+          {target.kind === "catalog" && (
+            <p class="pt-1 text-xs text-neutral-500 dark:text-neutral-400">
+              {t("settings.wizard.catalogHint")}
+            </p>
+          )}
 
           {error !== null && (
             <div class="pt-2">
@@ -246,6 +270,12 @@ export function ProviderWizard({ mode, onClose }: ProviderWizardProps) {
 
       {step === "model" && models !== null && (
         <div class="space-y-3">
+          {checkNote === "skipped" && (
+            <p class="rounded-lg border border-neutral-200 px-3 py-2 text-xs text-neutral-600 dark:border-neutral-700 dark:text-neutral-300">
+              {t("settings.wizard.checkSkipped")}
+            </p>
+          )}
+
           <ModelList models={models} value={model} onChange={setModel} />
 
           <label class="flex items-start gap-2 text-xs">
@@ -273,15 +303,143 @@ export function ProviderWizard({ mode, onClose }: ProviderWizardProps) {
   );
 }
 
-function subtitleOf(step: "choose" | "connect" | "model", target: { entry: ProviderCatalogEntry } | null): string {
-  if (step === "choose") return t("settings.wizard.chooseDescription");
-  if (step === "model") return t("settings.wizard.model.description");
-  return target === null ? t("settings.wizard.chooseDescription") : providerName(target.entry);
+/**
+ * 選択肢の 1 件。
+ * カタログのプロバイダと、接続先を自分で決めるエンドポイント（Ollama など）を同じ並びに置く。
+ */
+type ChooserEntry =
+  | { kind: "catalog"; id: string; name: string; models: number }
+  | { kind: "endpoint"; preset: EndpointPreset; id: string; name: string; models: null };
+
+/** カタログの並び（名前順）に、接続先を自分で決めるものを混ぜる。 */
+function chooserEntries(catalog: readonly CatalogProviderView[] | null): readonly ChooserEntry[] {
+  const entries: ChooserEntry[] = [
+    ...(catalog ?? []).map((provider) => ({
+      kind: "catalog" as const,
+      id: provider.id,
+      name: provider.name,
+      models: provider.models,
+    })),
+    ...ENDPOINT_PRESETS.map((preset) => ({
+      kind: "endpoint" as const,
+      preset,
+      id: preset.id,
+      name: presetName(preset),
+      models: null,
+    })),
+  ];
+
+  return entries.sort((left, right) => left.name.localeCompare(right.name));
 }
 
-function apiKeyHint(editing: boolean, entry: ProviderCatalogEntry): string | undefined {
+/** プロバイダを選ぶ段。カタログの一覧を絞り込みながら選ぶ。 */
+function ProviderChooser({
+  onSelectCatalog,
+  onSelectPreset,
+  error,
+  onError,
+}: {
+  onSelectCatalog: (id: string, name: string) => void;
+  onSelectPreset: (preset: EndpointPreset) => void;
+  error: ErrorState | null;
+  onError: (error: ErrorState | null) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const list = catalogProviders.value;
+
+  useEffect(() => {
+    if (catalogProviders.value !== null) return;
+
+    void loadCatalog().catch((failure: unknown) => onError(toErrorState(failure)));
+  }, []);
+
+  const keyword = query.trim().toLowerCase();
+  const visible = chooserEntries(list).filter(
+    (entry) => keyword.length === 0 || entry.name.toLowerCase().includes(keyword) || entry.id.includes(keyword),
+  );
+
+  return (
+    <div class="space-y-3">
+      <div class="relative">
+        <IconSearch
+          size={16}
+          stroke={1.6}
+          class="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-neutral-400"
+        />
+        <input
+          type="search"
+          value={query}
+          placeholder={t("settings.wizard.search")}
+          aria-label={t("settings.wizard.search")}
+          class="w-full rounded-lg border border-neutral-300 bg-white py-1.5 pl-8 pr-3 text-sm outline-none focus:border-neutral-400 dark:border-neutral-700 dark:bg-neutral-900 dark:focus:border-neutral-600"
+          onInput={(event) => setQuery(event.currentTarget.value)}
+        />
+      </div>
+
+      {error !== null && <ErrorNotice error={error} />}
+
+      <div class="max-h-80 overflow-y-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
+        {list === null ? (
+          <p class="px-3 py-4 text-center text-xs text-neutral-500 dark:text-neutral-400">
+            {t("chat.loading")}
+          </p>
+        ) : visible.length === 0 ? (
+          <p class="px-3 py-4 text-center text-xs text-neutral-500 dark:text-neutral-400">
+            {t("settings.wizard.noMatch")}
+          </p>
+        ) : (
+          <ul class="p-1">
+            {visible.map((entry) => (
+              <li key={`${entry.kind}-${entry.id}`}>
+                <button
+                  type="button"
+                  onClick={() =>
+                    entry.kind === "catalog" ? onSelectCatalog(entry.id, entry.name) : onSelectPreset(entry.preset)
+                  }
+                  class="flex w-full items-baseline gap-2 rounded-md px-2 py-1.5 text-left text-sm transition hover:bg-neutral-100 dark:hover:bg-neutral-800"
+                >
+                  <span class="min-w-0 flex-1 truncate">{entry.name}</span>
+                  {entry.models !== null && (
+                    <span class="shrink-0 text-[11px] text-neutral-400 dark:text-neutral-500">{entry.models}</span>
+                  )}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** 設定済みのプロバイダから、変更フォームの対象を決める。 */
+function targetOf(provider: ProviderView): Target {
+  if (provider.baseUrl === null) return { kind: "catalog", id: provider.id, name: provider.name };
+
+  return { kind: "endpoint", preset: findEndpointPreset(provider.id) ?? OPENAI_COMPATIBLE_TEMPLATE, id: provider.id };
+}
+
+/** 接続先を自分で決めるエンドポイントかどうか。 */
+function isEndpoint(provider: ProviderView): boolean {
+  return provider.baseUrl !== null;
+}
+
+/** 雛形の表示名。Ollama のような固有名詞はそのまま出す。 */
+function presetName(preset: EndpointPreset): string {
+  return preset.id === OPENAI_COMPATIBLE_TEMPLATE.id ? t("provider.custom.name") : preset.name;
+}
+
+function subtitleOf(step: "choose" | "connect" | "model", target: Target | null): string {
+  if (step === "choose") return t("settings.wizard.chooseDescription");
+  if (step === "model") return t("settings.wizard.model.description");
+  if (target === null) return t("settings.wizard.chooseDescription");
+
+  return target.kind === "catalog" ? target.name : presetName(target.preset);
+}
+
+function apiKeyHint(editing: boolean, target: Target): string | undefined {
   if (editing) return t("settings.wizard.apiKey.keep");
-  return entry.requiresApiKey ? undefined : t("settings.wizard.apiKey.optional");
+  return target.kind === "endpoint" ? t("settings.wizard.apiKey.optional") : undefined;
 }
 
 type FooterOptions = {
@@ -346,7 +504,7 @@ function StepIndicator({ current }: { current: "choose" | "connect" | "model" })
           <span class={position <= index ? "font-medium text-neutral-900 dark:text-neutral-100" : undefined}>
             {position + 1}. {t(item.key)}
           </span>
-          {position < ADD_STEPS.length - 1 && <span aria-hidden="true">›</span>}
+          {position < ADD_STEPS.length - 1 && <IconChevronRight size={12} stroke={1.6} class="shrink-0" />}
         </li>
       ))}
     </ol>
@@ -377,11 +535,6 @@ function ApiKeyInput({
   return reveal ? <input type="text" {...common} /> : <input type="password" {...common} />;
 }
 
-/** 名前を付けて保存するエンドポイントかどうか。 */
-function needsLabel(entry: ProviderCatalogEntry): boolean {
-  return entry.kind === "openai-compatible" && entry.requiresLabel;
-}
-
 /** 追加する独自エンドポイントの id。設定済みと重ならない番号を選ぶ。 */
 function nextCustomEndpointId(used: readonly ProviderView[]): string {
   const ids = new Set(used.map((provider) => provider.id));
@@ -391,10 +544,9 @@ function nextCustomEndpointId(used: readonly ProviderView[]): string {
   }
 }
 
-/** 一覧の中から最初に選ぶモデル。プロバイダごしの推奨が一覧にあれば、それを使う。 */
-function pickModel(entry: ProviderCatalogEntry, models: readonly string[]): string | null {
-  const preferred = entry.preferredModels.find((candidate) => models.includes(candidate));
-  return preferred ?? models[0] ?? null;
+/** 一覧の中から最初に選ぶモデル。カタログのプロバイダでは先頭を使う。 */
+function pickModel(target: Target, models: readonly string[]): string | null {
+  return models[0] ?? null;
 }
 
 function fullModelId(providerId: string, model: string): ModelId {

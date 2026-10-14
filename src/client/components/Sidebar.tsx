@@ -1,3 +1,4 @@
+import { IconDots, IconPlus, IconSettings, IconTrash } from "@tabler/icons-preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import type { Session } from "../../shared/types";
 import { t } from "../i18n";
@@ -8,7 +9,6 @@ import {
   openSession,
   openSettings,
   pendingDeleteSession,
-  renameSession,
   requestDeleteSession,
   sessions,
   startNewChat,
@@ -42,9 +42,10 @@ export function Sidebar() {
         <button
           type="button"
           onClick={startNewChat}
-          class="w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-left text-sm transition hover:bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-900 dark:hover:bg-neutral-800"
+          class="flex w-full items-center gap-2 rounded-lg border border-neutral-300 bg-white px-3 py-2 text-left text-sm transition hover:bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-900 dark:hover:bg-neutral-800"
         >
-          ＋ {t("sidebar.new")}
+          <IconPlus size={16} stroke={1.6} class="shrink-0" />
+          {t("sidebar.new")}
         </button>
       </div>
 
@@ -100,44 +101,13 @@ function SettingsButton() {
         onClick={() => openSettings()}
         class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-neutral-600 transition hover:bg-neutral-200/60 dark:text-neutral-300 dark:hover:bg-neutral-800/60"
       >
-        <GearIcon />
+        <IconSettings size={16} stroke={1.6} class="shrink-0" />
         {t("settings.title")}
       </button>
     </div>
   );
 }
 
-function GearIcon() {
-  return (
-    <svg
-      viewBox="0 0 16 16"
-      class="size-4 shrink-0"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.4"
-      strokeLinecap="round"
-      aria-hidden="true"
-    >
-      <circle cx="8" cy="8" r="2.4" />
-      <path d="M8 1.6v1.9M8 12.5v1.9M1.6 8h1.9M12.5 8h1.9M3.5 3.5l1.3 1.3M11.2 11.2l1.3 1.3M12.5 3.5l-1.3 1.3M4.8 11.2l-1.3 1.3" />
-    </svg>
-  );
-}
-
-function MoreIcon() {
-  return (
-    <svg viewBox="0 0 16 16" class="size-4 shrink-0" fill="currentColor" aria-hidden="true">
-      <circle cx="3.4" cy="8" r="1.3" />
-      <circle cx="8" cy="8" r="1.3" />
-      <circle cx="12.6" cy="8" r="1.3" />
-    </svg>
-  );
-}
-
-/**
- * 改名は行の中だけで完結させる。
- * window.prompt は埋め込み WebView の権限設定で使えないことがあるため、ネイティブダイアログに依存しない。
- */
 type SessionRowProps = {
   session: Session;
   /** この行のメニューが開いているか。 */
@@ -146,47 +116,7 @@ type SessionRowProps = {
 };
 
 function SessionRow({ session, menuOpen, onOpenMenu }: SessionRowProps) {
-  const [renaming, setRenaming] = useState(false);
-  const [draft, setDraft] = useState("");
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (renaming) inputRef.current?.select();
-  }, [renaming]);
-
   const title = session.title ?? t("sidebar.untitled");
-
-  if (renaming) {
-    const commit = () => {
-      const next = draft.trim();
-      setRenaming(false);
-      if (next.length > 0 && next !== session.title) void renameSession(session.id, next);
-    };
-
-    return (
-      <div class="flex items-center gap-1 px-2 py-1">
-        <input
-          ref={inputRef}
-          value={draft}
-          aria-label={t("sidebar.rename")}
-          class="min-w-0 flex-1 rounded border border-neutral-300 bg-white px-1.5 py-1 text-sm outline-none dark:border-neutral-600 dark:bg-neutral-900"
-          onInput={(event) => setDraft(event.currentTarget.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") {
-              event.preventDefault();
-              commit();
-            } else if (event.key === "Escape") {
-              event.preventDefault();
-              setRenaming(false);
-            }
-          }}
-          // Enter 以外で抜けた場合は取り消す（意図しない改名を防ぐ）。
-          onBlur={() => setRenaming(false)}
-        />
-      </div>
-    );
-  }
-
   const active = activeSessionId.value === session.id;
 
   return (
@@ -200,12 +130,8 @@ function SessionRow({ session, menuOpen, onOpenMenu }: SessionRowProps) {
       <button
         type="button"
         class="min-w-0 flex-1 truncate text-left"
-        title={`${title}\n${t("sidebar.renameHint")}`}
+        title={title}
         onClick={() => void openSession(session.id)}
-        onDblClick={() => {
-          setDraft(session.title ?? "");
-          setRenaming(true);
-        }}
       >
         {title}
       </button>
@@ -220,7 +146,7 @@ function SessionRow({ session, menuOpen, onOpenMenu }: SessionRowProps) {
         aria-expanded={menuOpen}
         onClick={(event) => onOpenMenu(session, event.currentTarget)}
       >
-        <MoreIcon />
+        <IconDots size={16} stroke={1.6} />
       </button>
     </div>
   );
@@ -276,12 +202,13 @@ function SessionMenu({ session, button, onClose }: SessionMenuProps) {
           ref={itemRef}
           type="button"
           role="menuitem"
-          class="block w-full px-3 py-1.5 text-left text-sm text-red-600 transition hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
+          class="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-red-600 transition hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
           onClick={() => {
             onClose();
             requestDeleteSession(session.id);
           }}
         >
+          <IconTrash size={16} stroke={1.6} class="shrink-0" />
           {t("sidebar.delete")}
         </button>
       </div>

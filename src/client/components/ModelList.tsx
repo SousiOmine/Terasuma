@@ -1,3 +1,4 @@
+import { IconCheck, IconSearch } from "@tabler/icons-preact";
 import { useState } from "preact/hooks";
 import { t } from "../i18n";
 
@@ -18,14 +19,21 @@ export function ModelList({ models, value, onChange, currentModel = null }: Mode
 
   return (
     <div>
-      <input
-        type="search"
-        value={query}
-        placeholder={t("settings.model.searchModel")}
-        aria-label={t("settings.model.searchModel")}
-        class="w-full rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-sm outline-none focus:border-neutral-400 dark:border-neutral-700 dark:bg-neutral-900 dark:focus:border-neutral-600"
-        onInput={(event) => setQuery(event.currentTarget.value)}
-      />
+      <div class="relative">
+        <IconSearch
+          size={16}
+          stroke={1.6}
+          class="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-neutral-400"
+        />
+        <input
+          type="search"
+          value={query}
+          placeholder={t("settings.model.searchModel")}
+          aria-label={t("settings.model.searchModel")}
+          class="w-full rounded-lg border border-neutral-300 bg-white py-1.5 pl-8 pr-3 text-sm outline-none focus:border-neutral-400 dark:border-neutral-700 dark:bg-neutral-900 dark:focus:border-neutral-600"
+          onInput={(event) => setQuery(event.currentTarget.value)}
+        />
+      </div>
 
       <div class="mt-2 max-h-64 overflow-y-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
         {visible.length === 0 ? (
@@ -50,7 +58,10 @@ export function ModelList({ models, value, onChange, currentModel = null }: Mode
                   >
                     <span class="min-w-0 flex-1 truncate">{model}</span>
                     {model === currentModel && (
-                      <span class="shrink-0 text-[11px] opacity-70">{t("settings.model.current")}</span>
+                      <span class="flex shrink-0 items-center gap-1 text-[11px] opacity-70">
+                        <IconCheck size={14} stroke={1.6} />
+                        {t("settings.model.current")}
+                      </span>
                     )}
                   </button>
                 </li>

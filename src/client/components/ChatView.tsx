@@ -105,9 +105,8 @@ export function ChatView() {
 
 function EmptyState() {
   return (
-    <div class="flex h-full flex-col items-center justify-center gap-2 px-6 text-center">
+    <div class="flex h-full flex-col items-center justify-center px-6 text-center">
       <h2 class="text-lg font-medium">{t("chat.empty.title")}</h2>
-      <p class="text-sm text-neutral-500 dark:text-neutral-400">{t("chat.empty.hint")}</p>
     </div>
   );
 }

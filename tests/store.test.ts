@@ -89,22 +89,10 @@ describe("store", () => {
     expect(store.listMessages("s1")[0]?.usage).toBeNull();
   });
 
-  test("renameSession は前後の空白を取り除き、空文字は拒否する", () => {
-    const store = makeStore();
-    store.ensureSession("s1", null);
-
-    expect(store.renameSession("s1", "  新しい名前  ")).toBe(true);
-    expect(store.getSession("s1")?.title).toBe("新しい名前");
-
-    expect(store.renameSession("s1", "   ")).toBe(false);
-    expect(store.getSession("s1")?.title).toBe("新しい名前");
-  });
-
   test("存在しないセッションの操作は失敗を返す", () => {
     const store = makeStore();
 
     expect(store.getSession("missing")).toBeNull();
-    expect(store.renameSession("missing", "名前")).toBe(false);
     expect(store.deleteSession("missing")).toBe(false);
   });
 

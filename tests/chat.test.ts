@@ -190,20 +190,6 @@ describe("チャット API", () => {
     });
   });
 
-  test("改名できる", async () => {
-    await withServer(fastMock(), async (harness) => {
-      await harness.send("s1", "元のタイトル");
-
-      const response = await harness.request("/api/sessions/s1", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: "新しいタイトル" }),
-      });
-      expect(response.status).toBe(200);
-      expect((await harness.sessions())[0]?.title).toBe("新しいタイトル");
-    });
-  });
-
   test("削除するとセッションも履歴も消える", async () => {
     await withServer(fastMock(), async (harness) => {
       await harness.send("s1", "消される会話");
