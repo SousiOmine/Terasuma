@@ -7,7 +7,7 @@ import { createStore } from "../src/server/store";
 import type { Store } from "../src/server/store";
 import { decodeChatEvents } from "../src/shared/sse";
 import type { ApiErrorCode, ChatEvent, ChatMessage, Session } from "../src/shared/types";
-import { TEST_SETTINGS, withTempSettings } from "./support";
+import { TEST_SETTINGS, createMcpStub, withTempSettings } from "./support";
 
 const config: AppConfig = {
   host: "127.0.0.1",
@@ -40,7 +40,7 @@ type Harness = {
 async function withServer<T>(engine: AgentEngine, run: (harness: Harness) => Promise<T>): Promise<T> {
   return withTempSettings(TEST_SETTINGS, async (settings) => {
     const store = createStore(":memory:");
-    const { server } = startServer({ config, store, engine, settings });
+    const { server } = startServer({ config, store, engine, settings, mcp: createMcpStub() });
     const base = server.url;
 
     const request = (path: string, init?: RequestInit) => fetch(new URL(path, base), init);
@@ -118,12 +118,40 @@ function createFailingEngine(mode: "immediate" | "mid-stream"): AgentEngine {
       if (mode === "immediate") return Promise.reject(new Error("モデルに接続できなかった"));
 
       return Promise.resolve({
-        textStream: (async function* () {
-          yield "部分";
-          yield "的な";
+        events: (async function* () {
+          yield { type: "text-delta", delta: "部分" } as const;
+          yield { type: "text-delta", delta: "的な" } as const;
           throw new Error("途中で切れた");
         })(),
         usage: Promise.resolve(null),
+      });
+    },
+  };
+}
+
+/** ツール呼び出しを 1 回挟むターンを流すエンジン。 */
+function createToolEngine(): AgentEngine {
+  const call = { type: "tool-call", id: "call-1", server: "local", tool: "echo", args: { text: "hi" } } as const;
+  const result = {
+    type: "tool-result",
+    id: "call-1",
+    server: "local",
+    tool: "echo",
+    failed: false,
+    output: "echo: hi",
+  } as const;
+
+  return {
+    name: "tool-engine",
+    stream(): Promise<EngineStream> {
+      return Promise.resolve({
+        events: (async function* () {
+          yield { type: "text-delta", delta: "調べます。" } as const;
+          yield { type: "tool-call", part: call } as const;
+          yield { type: "tool-result", part: result } as const;
+          yield { type: "text-delta", delta: "分かりました。" } as const;
+        })(),
+        usage: Promise.resolve({ inputTokens: 3, outputTokens: 4, cachedInputTokens: 0 }),
       });
     },
   };
@@ -190,8 +218,77 @@ describe("チャット API", () => {
     });
   });
 
-  test("削除するとセッションも履歴も消える", async () => {
+  test("ツール呼び出しと結果がイベントとして流れ、本文と一緒に保存される", async () => {
+    await withServer(createToolEngine(), async (harness) => {
+      const events = await harness.send("s1", "調べて");
+
+      expect(events.map((event) => event.type)).toEqual([
+        "user-message",
+        "assistant-start",
+        "text-delta",
+        "tool-call",
+        "tool-result",
+        "text-delta",
+        "assistant-done",
+      ]);
+
+      const done = assistantDone(events);
+      expect(done.content).toBe("調べます。分かりました。");
+      expect(done.parts).toEqual([
+        { type: "text", text: "調べます。" },
+        { type: "tool-call", id: "call-1", server: "local", tool: "echo", args: { text: "hi" } },
+        {
+          type: "tool-result",
+          id: "call-1",
+          server: "local",
+          tool: "echo",
+          failed: false,
+          output: "echo: hi",
+        },
+        { type: "text", text: "分かりました。" },
+      ]);
+
+      // 読み直しても同じ並びで戻る。
+      const messages = await harness.messages("s1");
+      expect(messages[1]?.parts).toEqual(done.parts);
+    });
+  });
+
+  test("ツールを使わなかったターンは部品を持たない（本文だけ）", async () => {
     await withServer(fastMock(), async (harness) => {
+      await harness.send("s1", "こんにちは");
+
+      const messages = await harness.messages("s1");
+      expect(messages[1]?.parts).toBeNull();
+    });
+  });
+
+  test("次のターンの履歴には、前のターンのツール呼び出しと結果が入っている", async () => {
+    const recording = createRecordingEngine(createToolEngine());
+    await withServer(recording, async (harness) => {
+      await harness.send("s1", "調べて");
+      await harness.send("s1", "もう一度");
+
+      const second = recording.inputs[1];
+      if (second === undefined) throw new Error("2 ターン目の入力が無い");
+
+      expect(second.history[1]?.parts).toEqual([
+        { type: "text", text: "調べます。" },
+        { type: "tool-call", id: "call-1", server: "local", tool: "echo", args: { text: "hi" } },
+        {
+          type: "tool-result",
+          id: "call-1",
+          server: "local",
+          tool: "echo",
+          failed: false,
+          output: "echo: hi",
+        },
+        { type: "text", text: "分かりました。" },
+      ]);
+    });
+  });
+
+  test("削除するとセッションも履歴も消える", async () => {    await withServer(fastMock(), async (harness) => {
       await harness.send("s1", "消される会話");
 
       const deleted = await harness.request("/api/sessions/s1", { method: "DELETE" });
@@ -281,7 +378,9 @@ describe("チャット API", () => {
       const reference = createMockEngine({ chunkSize: 10_000, delayMs: 0 });
       const full = await reference.stream({ history: [user], signal: new AbortController().signal });
       let fullText = "";
-      for await (const chunk of full.textStream) fullText += chunk;
+      for await (const event of full.events) {
+        if (event.type === "text-delta") fullText += event.delta;
+      }
 
       expect(fullText.startsWith(assistant.content)).toBe(true);
       expect(assistant.content.length).toBeLessThan(fullText.length);

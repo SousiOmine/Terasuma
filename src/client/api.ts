@@ -6,6 +6,10 @@ import type {
   CatalogProviderView,
   ChatEvent,
   ChatMessage,
+  McpAuthorizationView,
+  McpServerForm,
+  McpServersView,
+  McpServerStatusView,
   ModelSettingsView,
   ProviderCheckResult,
   ProviderCredentials,
@@ -14,8 +18,8 @@ import type {
   Session,
 } from "../shared/types";
 
-/** サーバが返すコードに、クライアント側だけで発生する "network" を足したもの。 */
-export type ClientErrorCode = ApiErrorCode | "network";
+/** サーバが返すコードに、クライアント側だけで発生するコードを足したもの。 */
+export type ClientErrorCode = ApiErrorCode | "network" | "input";
 
 const API_ERROR_CODES: readonly ApiErrorCode[] = [
   "invalid_request",
@@ -28,12 +32,18 @@ const API_ERROR_CODES: readonly ApiErrorCode[] = [
   "provider_unreachable",
   "provider_no_models",
   "catalog_unavailable",
+  "mcp_server_not_found",
+  "mcp_server_exists",
+  "mcp_authorization_failed",
   "settings_write_failed",
   "internal_error",
 ];
 
 /** モデルとプロバイダの設定。 */
 const MODEL_PATH = "/api/model";
+
+/** MCP サーバーの設定。 */
+const MCP_PATH = "/api/mcp/servers";
 
 export class ApiError extends Error {
   readonly code: ClientErrorCode;
@@ -191,6 +201,42 @@ export async function deleteProvider(providerId: string): Promise<ModelSettingsV
 
 function providerPath(providerId: string): string {
   return `${MODEL_PATH}/providers/${encodeURIComponent(providerId)}`;
+}
+
+/** MCP サーバーの一覧（設定と、いま分かっている接続状態）。 */
+export async function fetchMcpServers(): Promise<McpServersView> {
+  return request<McpServersView>(MCP_PATH);
+}
+
+export async function addMcpServer(form: McpServerForm): Promise<McpServersView> {
+  return request<McpServersView>(MCP_PATH, jsonRequest("POST", form));
+}
+
+export async function updateMcpServer(form: McpServerForm): Promise<McpServersView> {
+  return request<McpServersView>(mcpServerPath(form.id), jsonRequest("PATCH", form));
+}
+
+export async function deleteMcpServer(serverId: string): Promise<McpServersView> {
+  return request<McpServersView>(mcpServerPath(serverId), { method: "DELETE" });
+}
+
+/** 接続を確かめ、公開されているツールを取り直す。 */
+export async function checkMcpServer(serverId: string): Promise<McpServerStatusView> {
+  return request<McpServerStatusView>(`${mcpServerPath(serverId)}/check`, { method: "POST" });
+}
+
+/** OAuth の認可を始める。開く URL が返る（すでに認可済みなら null）。 */
+export async function authorizeMcpServer(serverId: string): Promise<McpAuthorizationView> {
+  return request<McpAuthorizationView>(`${mcpServerPath(serverId)}/authorize`, { method: "POST" });
+}
+
+/** 待っている認可を取り消す。 */
+export async function cancelMcpAuthorization(serverId: string): Promise<McpServersView> {
+  return request<McpServersView>(`${mcpServerPath(serverId)}/authorize`, { method: "DELETE" });
+}
+
+function mcpServerPath(serverId: string): string {
+  return `${MCP_PATH}/${encodeURIComponent(serverId)}`;
 }
 
 /** JSON を送るリクエストの共通部分。 */

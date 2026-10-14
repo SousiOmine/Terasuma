@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { ModelSettings } from "../src/config";
 import { createMastraEngine, type SettingsReader } from "../src/server/engine";
 import type { ChatMessage } from "../src/shared/types";
+import { createMcpStub } from "./support";
 
 /**
  * OpenAI 互換のストリーミング応答を返す偽のプロバイダ。
@@ -52,6 +53,7 @@ function history(): ChatMessage[] {
       seq: 1,
       role: "user",
       content: "こんにちは",
+      parts: null,
       createdAt: 0,
       usage: null,
     },
@@ -75,13 +77,15 @@ function portOf(server: { port?: number }): number {
 
 async function runEngine(settings: ModelSettings): Promise<string> {
   const reader: SettingsReader = { read: () => settings };
-  const stream = await createMastraEngine(reader).stream({
+  const stream = await createMastraEngine(reader, createMcpStub()).stream({
     history: history(),
     signal: new AbortController().signal,
   });
 
   let text = "";
-  for await (const delta of stream.textStream) text += delta;
+  for await (const event of stream.events) {
+    if (event.type === "text-delta") text += event.delta;
+  }
   return text;
 }
 

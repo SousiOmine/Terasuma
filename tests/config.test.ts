@@ -7,9 +7,11 @@ import {
   DEFAULT_PORT,
   isProviderId,
   loadConfig,
+  mcpServerSettingsFromForm,
   normalizeProvider,
   providerSettingsFromForm,
   readSettingsFile,
+  toMcpSettings,
   toModelSettings,
   writeSettingsFile,
 } from "../src/config";
@@ -218,8 +220,122 @@ describe("modelOptions の検証", () => {
   });
 });
 
-describe("writeSettingsFile", () => {
-  test("書いた内容をそのまま読み直せる", () => {
+describe("mcpServers の検証", () => {
+  const read = (mcpServers: unknown) => withConfigFile(JSON.stringify({ mcpServers }), (env) => loadConfig(env));
+
+  test("ローカルのサーバーは command と args, env を持つ", () => {
+    withConfigFile(
+      JSON.stringify({
+        mcpServers: {
+          local: {
+            type: "stdio",
+            command: "bunx",
+            args: ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"],
+            env: { HOME_DIR: "/tmp" },
+          },
+        },
+      }),
+      (env) => {
+        expect(toMcpSettings(readSettingsFile(loadConfig(env).configPath))).toEqual({
+          servers: {
+            local: {
+              type: "stdio",
+              command: "bunx",
+              args: ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"],
+              env: { HOME_DIR: "/tmp" },
+            },
+          },
+        });
+      },
+    );
+  });
+
+  test("HTTP のサーバーは url と oauth を持つ", () => {
+    withConfigFile(
+      JSON.stringify({ mcpServers: { remote: { type: "http", url: "https://mcp.example.test/mcp/", oauth: true } } }),
+      (env) => {
+        // 末尾のスラッシュは落として保存する（接続先そのものを指すため）。
+        expect(toMcpSettings(readSettingsFile(loadConfig(env).configPath)).servers).toEqual({
+          remote: { type: "http", url: "https://mcp.example.test/mcp", oauth: true },
+        });
+      },
+    );
+  });
+
+  test("type と食い違う項目は止める", () => {
+    expect(() => read({ local: { type: "stdio", command: "bunx", url: "http://127.0.0.1/mcp" } })).toThrow(/http のサーバー/);
+    expect(() => read({ remote: { type: "http", url: "http://127.0.0.1/mcp", command: "bunx" } })).toThrow(/stdio のサーバー/);
+    expect(() => read({ remote: { type: "sse", url: "http://127.0.0.1/mcp" } })).toThrow(/"stdio" か "http"/);
+  });
+
+  test("未知の項目と使えない id は止める", () => {
+    expect(() => read({ local: { type: "stdio", command: "bunx", shell: true } })).toThrow(/未知の項目/);
+    expect(() => read({ "Local Server": { type: "stdio", command: "bunx" } })).toThrow(/使えない id/);
+  });
+
+  test("command と url は空にできない", () => {
+    expect(() => read({ local: { type: "stdio", command: "  " } })).toThrow(/空でない文字列/);
+    expect(() => read({ remote: { type: "http", url: "" } })).toThrow(/空でない文字列/);
+    expect(() => read({ remote: { type: "http", url: "file:///tmp/x" } })).toThrow(/http:\/\//);
+    expect(() => read({ remote: { type: "http", url: "not a url" } })).toThrow(/URL として読めません/);
+  });
+
+  test("env の名前と値を確かめる", () => {
+    expect(() => read({ local: { type: "stdio", command: "bunx", env: { "1BAD": "x" } } })).toThrow(/環境変数名/);
+    expect(() => read({ local: { type: "stdio", command: "bunx", env: { GOOD: 3 } } })).toThrow(/文字列/);
+  });
+
+  test("args は空でない文字列の配列にする", () => {
+    expect(() => read({ local: { type: "stdio", command: "bunx", args: "-y" } })).toThrow(/配列/);
+    expect(() => read({ local: { type: "stdio", command: "bunx", args: [""] } })).toThrow(/空でない文字列/);
+  });
+});
+
+describe("MCP サーバーの入力の検証", () => {
+  test("未入力は省き、trim して保存できる形にする", () => {
+    expect(
+      mcpServerSettingsFromForm(
+        {
+          id: "local",
+          type: "stdio",
+          command: "  bunx  ",
+          args: ["-y", "@scope/pkg"],
+          env: { TOKEN: "abc" },
+          url: null,
+          oauth: false,
+        },
+        "mcpServers.local",
+      ),
+    ).toEqual({
+      type: "stdio",
+      command: "bunx",
+      args: ["-y", "@scope/pkg"],
+      env: { TOKEN: "abc" },
+    });
+
+    expect(
+      mcpServerSettingsFromForm(
+        { id: "remote", type: "http", command: null, args: null, env: null, url: "https://mcp.example.test/mcp", oauth: true },
+        "mcpServers.remote",
+      ),
+    ).toEqual({ type: "http", url: "https://mcp.example.test/mcp", oauth: true });
+  });
+
+  test("種類と食い違う項目は止める", () => {
+    const base = { id: "x", command: null, args: null, env: null, url: null, oauth: false };
+
+    expect(() => mcpServerSettingsFromForm({ ...base, type: "stdio" }, "mcpServers.x")).toThrow(/command/);
+    expect(() => mcpServerSettingsFromForm({ ...base, type: "http" }, "mcpServers.x")).toThrow(/url/);
+    expect(() =>
+      mcpServerSettingsFromForm({ ...base, type: "stdio", command: "bunx", oauth: true }, "mcpServers.x"),
+    ).toThrow(/http のサーバー/);
+    expect(() =>
+      mcpServerSettingsFromForm({ ...base, type: "http", url: "http://127.0.0.1/mcp", args: ["-y"] }, "mcpServers.x"),
+    ).toThrow(/stdio のサーバー/);
+  });
+});
+
+describe("writeSettingsFile", () => {  test("書いた内容をそのまま読み直せる", () => {
     withConfigFile(null, (_env, dir) => {
       const path = join(dir, CONFIG_FILE_NAME);
       writeSettingsFile(path, { model: "openai/gpt-5.6-sol", port: 4567, engine: "mock" });

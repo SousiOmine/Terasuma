@@ -2,12 +2,14 @@ import { IconArrowLeft } from "@tabler/icons-preact";
 import type { Locale, MessageKey } from "../i18n";
 import { LOCALES, locale, setLocale, t } from "../i18n";
 import { closeSettings, settingsCategory, type SettingsCategory } from "../state";
+import { McpSettingsView } from "./McpSettingsView";
 import { ModelSettingsView } from "./ModelSettingsView";
 
 /** 左ペインに並べるカテゴリ。増やすときはここに足す。 */
 const CATEGORIES: readonly { id: SettingsCategory; labelKey: MessageKey }[] = [
   { id: "general", labelKey: "settings.general" },
   { id: "model", labelKey: "settings.model" },
+  { id: "advanced", labelKey: "settings.advanced" },
 ];
 
 /** 言語名はその言語自身で書く（どの言語で表示していても読めるように）。 */
@@ -61,7 +63,9 @@ export function SettingsView() {
         </nav>
 
         <section class="min-w-0 flex-1 overflow-y-auto px-6 py-8">
-          {category === "general" ? <GeneralSettings /> : <ModelSettingsView />}
+          {category === "general" && <GeneralSettings />}
+          {category === "model" && <ModelSettingsView />}
+          {category === "advanced" && <McpSettingsView />}
         </section>
       </div>
     </div>

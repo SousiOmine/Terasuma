@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CONFIG_FILE_NAME, type FileSettings } from "../src/config";
+import type { McpManager } from "../src/server/mcp";
 import { createSettingsStore, type SettingsStore } from "../src/server/settings";
 import { createStore } from "../src/server/store";
 
@@ -9,6 +10,24 @@ import { createStore } from "../src/server/store";
 export function makeStore() {
   let tick = 1_000;
   return createStore(":memory:", { now: () => (tick += 1) });
+}
+
+/**
+ * MCP を使わないテストのための差し替え。
+ * 接続も子プロセスも持たず、常に「まだ何も確かめていない」状態を返す。
+ */
+export function createMcpStub(): McpManager {
+  const unknown = { state: "unknown", tools: [], detail: null } as const;
+
+  return {
+    status: () => unknown,
+    check: async () => unknown,
+    toolset: async () => ({}),
+    authorize: async () => ({ url: null }),
+    cancelAuthorization: () => undefined,
+    completeAuthorization: async () => ({ serverId: "stub" }),
+    close: async () => undefined,
+  };
 }
 
 /** 一時ディレクトリに本物の設定ファイルを作り、そこを指すストアを渡す。 */

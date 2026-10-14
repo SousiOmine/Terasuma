@@ -93,8 +93,42 @@ describe("設定ストア", () => {
     });
   });
 
-  test("ファイルが壊れていたら書かずに失敗する", async () => {
-    await withTempSettings({ model: "deepseek/deepseek-flash" }, async (store, path) => {
+  test("MCP サーバーを足すとファイルにも書かれ、消すと消える", async () => {
+    await withTempSettings({ port: 4567 }, async (store, path) => {
+      store.putMcpServer("local", { type: "stdio", command: "bunx", args: ["-y", "server-filesystem"] });
+
+      expect(store.readMcp()).toEqual({
+        servers: { local: { type: "stdio", command: "bunx", args: ["-y", "server-filesystem"] } },
+      });
+      expect(readSettingsFile(path).mcpServers).toEqual({
+        local: { type: "stdio", command: "bunx", args: ["-y", "server-filesystem"] },
+      });
+      // モデルの設定は触らない。
+      expect(readSettingsFile(path).port).toBe(4567);
+
+      expect(store.deleteMcpServer("local")).toBe(true);
+      expect(store.readMcp().servers).toEqual({});
+      expect(readSettingsFile(path).mcpServers).toEqual({});
+      expect(store.deleteMcpServer("local")).toBe(false);
+    });
+  });
+
+  test("MCP サーバーの設定は、手で書いた他の項目を消さずに書き換える", async () => {
+    await withTempSettings(
+      { mcpServers: { local: { type: "stdio", command: "bunx" } }, model: "deepseek/deepseek-flash" },
+      async (store, path) => {
+        store.putMcpServer("remote", { type: "http", url: "https://mcp.example.test/mcp", oauth: true });
+
+        expect(readSettingsFile(path).mcpServers).toEqual({
+          local: { type: "stdio", command: "bunx" },
+          remote: { type: "http", url: "https://mcp.example.test/mcp", oauth: true },
+        });
+        expect(readSettingsFile(path).model).toBe("deepseek/deepseek-flash");
+      },
+    );
+  });
+
+  test("ファイルが壊れていたら書かずに失敗する", async () => {    await withTempSettings({ model: "deepseek/deepseek-flash" }, async (store, path) => {
       writeFileSync(path, "{ 壊れている", "utf8");
 
       expect(() => store.setModel("openai/gpt-5.6-sol")).toThrow(/JSON/);

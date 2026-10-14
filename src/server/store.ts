@@ -1,5 +1,5 @@
 import { Database } from "bun:sqlite";
-import type { ChatMessage, MessageRole, Session, TokenUsage } from "../shared/types";
+import type { ChatMessage, MessagePart, MessageRole, Session, TokenUsage } from "../shared/types";
 
 export const TITLE_MAX_LENGTH = 40;
 
@@ -19,6 +19,8 @@ export type AppendMessageInput = {
   sessionId: string;
   role: MessageRole;
   content: string;
+  /** ツール呼び出しを含むときだけ渡す。含まないメッセージは null。 */
+  parts?: MessagePart[] | null;
   usage?: TokenUsage | null;
 };
 
@@ -47,6 +49,7 @@ type MessageRow = {
   seq: number;
   role: string;
   content: string;
+  parts: string | null;
   created_at: number;
   input_tokens: number | null;
   output_tokens: number | null;
@@ -73,9 +76,21 @@ function toMessage(row: MessageRow): ChatMessage {
     seq: row.seq,
     role: row.role as MessageRole,
     content: row.content,
+    parts: readParts(row),
     createdAt: row.created_at,
     usage,
   };
+}
+
+/** 保存されている部分を読み戻す。読めない値は黙って捨てず、そのまま失敗させる。 */
+function readParts(row: MessageRow): MessagePart[] | null {
+  if (row.parts === null) return null;
+
+  const parsed: unknown = JSON.parse(row.parts);
+  if (!Array.isArray(parsed)) {
+    throw new Error(`メッセージ ${row.id} の parts は配列ではありません`);
+  }
+  return parsed as MessagePart[];
 }
 
 export type CreateStoreOptions = {
@@ -105,6 +120,7 @@ export function createStore(dbPath: string, options: CreateStoreOptions = {}): S
       seq                 INTEGER NOT NULL,
       role                TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
       content             TEXT NOT NULL,
+      parts               TEXT,
       created_at          INTEGER NOT NULL,
       input_tokens        INTEGER,
       output_tokens       INTEGER,
@@ -115,6 +131,13 @@ export function createStore(dbPath: string, options: CreateStoreOptions = {}): S
     CREATE INDEX IF NOT EXISTS idx_messages_session_seq ON messages (session_id, seq);
     CREATE INDEX IF NOT EXISTS idx_sessions_updated_at ON sessions (updated_at DESC);
   `);
+
+  // ツール呼び出しを持たなかった頃に作られた DB には parts 列が無い。
+  // 保存済みの会話を捨てずに済むよう、列だけを足す。
+  const messageColumns = db.query<{ name: string }, []>("PRAGMA table_info(messages)").all();
+  if (!messageColumns.some((column) => column.name === "parts")) {
+    db.exec("ALTER TABLE messages ADD COLUMN parts TEXT");
+  }
 
   const selectSession = db.query<SessionRow, [string]>(
     "SELECT id, title, created_at, updated_at FROM sessions WHERE id = ?",
@@ -136,7 +159,7 @@ export function createStore(dbPath: string, options: CreateStoreOptions = {}): S
   const deleteSessionStmt = db.query<unknown, [string]>("DELETE FROM sessions WHERE id = ?");
 
   const selectMessages = db.query<MessageRow, [string]>(
-    `SELECT id, session_id, seq, role, content, created_at, input_tokens, output_tokens, cached_input_tokens
+    `SELECT id, session_id, seq, role, content, parts, created_at, input_tokens, output_tokens, cached_input_tokens
      FROM messages WHERE session_id = ? ORDER BY seq ASC`,
   );
   const selectNextSeq = db.query<{ next_seq: number }, [string]>(
@@ -144,16 +167,17 @@ export function createStore(dbPath: string, options: CreateStoreOptions = {}): S
   );
   const insertMessage = db.query<
     unknown,
-    [string, string, number, string, string, number, number | null, number | null, number | null]
+    [string, string, number, string, string, string | null, number, number | null, number | null, number | null]
   >(
     `INSERT INTO messages
-       (id, session_id, seq, role, content, created_at, input_tokens, output_tokens, cached_input_tokens)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (id, session_id, seq, role, content, parts, created_at, input_tokens, output_tokens, cached_input_tokens)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   );
 
   const append = db.transaction((input: AppendMessageInput): ChatMessage => {
     const at = now();
     const seq = selectNextSeq.get(input.sessionId)?.next_seq ?? 1;
+    const parts = input.parts ?? null;
 
     insertMessage.run(
       input.id,
@@ -161,6 +185,7 @@ export function createStore(dbPath: string, options: CreateStoreOptions = {}): S
       seq,
       input.role,
       input.content,
+      parts === null ? null : JSON.stringify(parts),
       at,
       input.usage?.inputTokens ?? null,
       input.usage?.outputTokens ?? null,
@@ -179,6 +204,7 @@ export function createStore(dbPath: string, options: CreateStoreOptions = {}): S
       seq,
       role: input.role,
       content: input.content,
+      parts,
       createdAt: at,
       usage: input.usage ?? null,
     };

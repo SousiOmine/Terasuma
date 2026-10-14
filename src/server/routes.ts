@@ -1,7 +1,11 @@
 import {
+  isMcpServerId,
   isProviderId,
+  mcpServerSettingsFromForm,
   normalizeProvider,
   providerSettingsFromForm,
+  type McpServerSettings,
+  type McpServersSettings,
   type ModelSettings,
   type ProviderSettings,
 } from "../config";
@@ -12,6 +16,10 @@ import type {
   ChatEvent,
   ChatMessage,
   CatalogProviderView,
+  McpAuthorizationView,
+  McpServerForm,
+  McpServersView,
+  MessagePart,
   ModelSettingsView,
   ProviderCredentials,
   ProviderView,
@@ -20,6 +28,7 @@ import type {
 } from "../shared/types";
 import { resolveModel, type AgentEngine } from "./engine";
 import { describeError, jsonError } from "./errors";
+import { McpServerNotFound, type McpManager } from "./mcp";
 import type { Catalog, CatalogSnapshot } from "./models-dev";
 import {
   ProviderRequestError,
@@ -54,6 +63,8 @@ export type ApiDeps = {
   engine: AgentEngine;
   /** モデルとプロバイダの設定。変更は config.json に書き戻される。 */
   settings: SettingsStore;
+  /** MCP サーバーとの接続。設定画面からの操作もここを通す。 */
+  mcp: McpManager;
   /** models.dev のカタログ。プロバイダとモデルの一覧はここから取る。 */
   catalog: Catalog;
   /** プロバイダへ接続できるかを確かめる。 */
@@ -82,6 +93,16 @@ export function createApiHandlers(deps: ApiDeps) {
       return jsonError(500, "settings_write_failed", describeError(error));
     }
     return currentView();
+  }
+
+  /** MCP の設定を書き換えて、書き換えた後の全体を返す。 */
+  function commitMcp(change: () => void): Response {
+    try {
+      change();
+    } catch (error) {
+      return jsonError(500, "settings_write_failed", describeError(error));
+    }
+    return Response.json(toMcpView(settings.readMcp().servers, deps.mcp));
   }
 
   /**
@@ -383,6 +404,120 @@ export function createApiHandlers(deps: ApiDeps) {
         return providerFailureResponse(error);
       }
     },
+
+    /** MCP サーバーの一覧（設定と、いま分かっている接続状態）。 */
+    listMcpServers(): Response {
+      return Response.json(toMcpView(settings.readMcp().servers, deps.mcp));
+    },
+
+    /** MCP サーバーを追加する。接続の確認は追加の後で行う（OAuth は保存済みの設定が要る）。 */
+    async addMcpServer(req: PlainRequest): Promise<Response> {
+      const parsed = await readMcpForm(req);
+      if (parsed instanceof Response) return parsed;
+
+      if (settings.readMcp().servers[parsed.id] !== undefined) {
+        return jsonError(409, "mcp_server_exists", `MCP サーバー ${parsed.id} はすでに追加されています`);
+      }
+
+      return commitMcp(() => settings.putMcpServer(parsed.id, parsed.server));
+    },
+
+    /** MCP サーバーの設定を変える。接続は次に確かめたときから新しい設定になる。 */
+    async updateMcpServer(req: ApiRequest<{ id: string }>): Promise<Response> {
+      const id = req.params.id;
+      if (settings.readMcp().servers[id] === undefined) {
+        return jsonError(404, "mcp_server_not_found", `MCP サーバー ${id} は設定されていません`);
+      }
+
+      const parsed = await readMcpForm(req);
+      if (parsed instanceof Response) return parsed;
+
+      if (parsed.id !== id) {
+        return jsonError(400, "invalid_request", `id は URL の ${id} と同じにしてください`);
+      }
+
+      return commitMcp(() => settings.putMcpServer(id, parsed.server));
+    },
+
+    removeMcpServer(req: ApiRequest<{ id: string }>): Response {
+      const id = req.params.id;
+      if (settings.readMcp().servers[id] === undefined) {
+        return jsonError(404, "mcp_server_not_found", `MCP サーバー ${id} は設定されていません`);
+      }
+
+      deps.mcp.cancelAuthorization(id);
+      return commitMcp(() => void settings.deleteMcpServer(id));
+    },
+
+    /** 接続を確かめ、公開されているツールを返す。 */
+    async checkMcpServer(req: ApiRequest<{ id: string }>): Promise<Response> {
+      const id = req.params.id;
+      if (settings.readMcp().servers[id] === undefined) {
+        return jsonError(404, "mcp_server_not_found", `MCP サーバー ${id} は設定されていません`);
+      }
+
+      try {
+        return Response.json(await deps.mcp.check(id));
+      } catch (error) {
+        return mcpFailureResponse(error);
+      }
+    },
+
+    /** OAuth の認可を始める。ブラウザで開く URL を返す。 */
+    async authorizeMcpServer(req: ApiRequest<{ id: string }>): Promise<Response> {
+      const id = req.params.id;
+      if (settings.readMcp().servers[id] === undefined) {
+        return jsonError(404, "mcp_server_not_found", `MCP サーバー ${id} は設定されていません`);
+      }
+
+      try {
+        const result = await deps.mcp.authorize(id);
+        return Response.json({ url: result.url } satisfies McpAuthorizationView);
+      } catch (error) {
+        if (error instanceof McpServerNotFound) return mcpFailureResponse(error);
+        return jsonError(502, "mcp_authorization_failed", describeError(error));
+      }
+    },
+
+    /** 待っている認可を取り消す。 */
+    cancelMcpAuthorization(req: ApiRequest<{ id: string }>): Response {
+      const id = req.params.id;
+      if (settings.readMcp().servers[id] === undefined) {
+        return jsonError(404, "mcp_server_not_found", `MCP サーバー ${id} は設定されていません`);
+      }
+
+      deps.mcp.cancelAuthorization(id);
+      return Response.json(toMcpView(settings.readMcp().servers, deps.mcp));
+    },
+
+    /**
+     * OAuth のリダイレクト先。ブラウザが直接開くため、JSON ではなく読める 1 枚のページを返す。
+     * 成否はサーバーのログではなくここに出し、設定画面は接続を確かめ直して状態を拾う。
+     */
+    async mcpOAuthCallback(request: { url: string }): Promise<Response> {
+      const url = new URL(request.url);
+      const state = url.searchParams.get("state");
+      if (state === null) return authorizationPage(400, "認可を確認できませんでした", ["URL に state がありません。", "Invalid callback: missing state."]);
+
+      try {
+        await deps.mcp.completeAuthorization(state, {
+          code: url.searchParams.get("code"),
+          iss: url.searchParams.get("iss"),
+          error: url.searchParams.get("error"),
+        });
+      } catch (error) {
+        return authorizationPage(400, "認可できませんでした", [
+          describeError(error),
+          "設定画面の「認可する」からやり直してください。",
+          "Authorization failed. Start it again from Settings.",
+        ]);
+      }
+
+      return authorizationPage(200, "認可が完了しました", [
+        "このタブを閉じて、Terasuma の画面に戻ってください。",
+        "Authorization is complete. Close this tab and return to Terasma.",
+      ]);
+    },
   };
 
   /** 保存の前後に使う接続確認。失敗した場合はそのまま返せるレスポンスを返す。 */
@@ -423,12 +558,103 @@ function toSettingsView(settings: ModelSettings): ModelSettingsView {
   };
 }
 
+/** MCP サーバーの設定を、画面に出す形にする。接続状態は manager が持っているものを当てる。 */
+function toMcpView(servers: McpServersSettings, mcp: McpManager): McpServersView {
+  return {
+    servers: Object.entries(servers).map(([id, server]) => ({
+      id,
+      type: server.type,
+      command: server.type === "stdio" ? server.command : null,
+      args: server.type === "stdio" ? (server.args ?? []) : [],
+      env: server.type === "stdio" ? (server.env ?? {}) : {},
+      url: server.type === "http" ? server.url : null,
+      oauth: server.type === "http" && server.oauth === true,
+      status: mcp.status(id),
+    })),
+  };
+}
+
+/** 画面から来た MCP サーバーの入力。id と種類の食い違いは保存の前に弾く。 */
+async function readMcpForm(
+  req: { json(): Promise<unknown> },
+): Promise<{ id: string; server: McpServerSettings } | Response> {
+  const body = await readJsonBody(req);
+
+  const rawId = body?.["id"];
+  const id = typeof rawId === "string" ? rawId.trim() : "";
+  if (!isMcpServerId(id)) {
+    return jsonError(400, "invalid_request", "id は英小文字・数字・ハイフンで指定してください");
+  }
+
+  const type = body?.["type"];
+  if (type !== "stdio" && type !== "http") {
+    return jsonError(400, "invalid_request", 'type は "stdio" か "http" にしてください');
+  }
+
+  const command = readOptionalString(body, "command");
+  const url = readOptionalString(body, "url");
+  const args = readOptionalStringList(body, "args");
+  const env = readOptionalStringMap(body, "env");
+  const oauth = body?.["oauth"] ?? false;
+  if (command === undefined || url === undefined || args === undefined || env === undefined) {
+    return jsonError(400, "invalid_request", "command, url, args, env は文字列・文字列の配列・文字列の対応表で指定してください");
+  }
+  if (typeof oauth !== "boolean") {
+    return jsonError(400, "invalid_request", "oauth は true か false で指定してください");
+  }
+
+  const form: McpServerForm = { id, type, command, args, env, url, oauth };
+
+  try {
+    return { id, server: mcpServerSettingsFromForm(form, `mcpServers.${id}`) };
+  } catch (error) {
+    return jsonError(400, "invalid_request", describeError(error));
+  }
+}
+
+/** 認可の結果をブラウザに出す 1 枚のページ。サーバを言語非依存に保つため日英を併記する。 */
+function authorizationPage(status: number, title: string, lines: readonly string[]): Response {
+  const paragraphs = lines
+    .map((line) => `<p style="margin:.4rem 0;font-size:.9rem;color:#404040">${escapeHtml(line)}</p>`)
+    .join("");
+
+  const html = `<!doctype html>
+<html lang="ja">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Terasuma</title></head>
+<body style="margin:0;padding:3rem 1.5rem;font-family:system-ui,-apple-system,sans-serif;line-height:1.7;color:#171717;background:#fafafa">
+<main style="max-width:32rem;margin:0 auto;background:#fff;border:1px solid #e5e5e5;border-radius:12px;padding:1.5rem 1.75rem">
+<h1 style="margin:0 0 .5rem;font-size:1.05rem">${escapeHtml(title)}</h1>
+${paragraphs}
+</main>
+</body></html>`;
+
+  return new Response(html, { status, headers: { "Content-Type": "text/html; charset=utf-8" } });
+}
+
+const HTML_ESCAPES: Record<string, string> = {
+  "&": "&amp;",
+  "<": "&lt;",
+  ">": "&gt;",
+  '"': "&quot;",
+  "'": "&#39;",
+};
+
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (character) => HTML_ESCAPES[character] ?? character);
+}
+
 function providerFailureResponse(error: unknown): Response {
   if (error instanceof ProviderRequestError) {
     // 認証の失敗は入力の問題なので 400、それ以外は接続先の問題として 502 にする。
     const status = error.code === "provider_auth_failed" ? 400 : 502;
     return jsonError(status, error.code, error.message);
   }
+  return jsonError(500, "internal_error", describeError(error));
+}
+
+/** MCP の manager からの失敗を、そのまま返せるレスポンスにする。 */
+function mcpFailureResponse(error: unknown): Response {
+  if (error instanceof McpServerNotFound) return jsonError(404, "mcp_server_not_found", error.message);
   return jsonError(500, "internal_error", describeError(error));
 }
 
@@ -466,6 +692,31 @@ function readOptionalString(body: Record<string, unknown> | null, key: string): 
   const value = body?.[key];
   if (value === undefined || value === null) return null;
   return typeof value === "string" ? value : undefined;
+}
+
+/** 未入力（null / 無し）は null、文字列の配列はそのまま、それ以外は undefined を返す。 */
+function readOptionalStringList(
+  body: Record<string, unknown> | null,
+  key: string,
+): readonly string[] | null | undefined {
+  const value = body?.[key];
+  if (value === undefined || value === null) return null;
+  if (!Array.isArray(value) || !value.every((entry) => typeof entry === "string")) return undefined;
+  return value as string[];
+}
+
+/** 未入力（null / 無し）は null、文字列→文字列の対応表はそのまま、それ以外は undefined を返す。 */
+function readOptionalStringMap(
+  body: Record<string, unknown> | null,
+  key: string,
+): Record<string, string> | null | undefined {
+  const value = body?.[key];
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "object" || Array.isArray(value)) return undefined;
+
+  const entries = Object.entries(value as Record<string, unknown>);
+  if (!entries.every(([, entry]) => typeof entry === "string")) return undefined;
+  return Object.fromEntries(entries) as Record<string, string>;
 }
 
 /**
@@ -516,36 +767,66 @@ async function* runTurn(
   // （プロンプトキャッシュが当たり続けるようにするため）。
   const history = store.listMessages(sessionId);
 
-  let text = "";
+  /** 生成中の本文とツールの出来事。保存される並びそのものになる。 */
+  const parts: MessagePart[] = [];
   let usage: TokenUsage | null = null;
   let failure: string | null = null;
   let finalMessage: ChatMessage | null = null;
 
+  const appendText = (delta: string): void => {
+    const last = parts.at(-1);
+    if (last?.type === "text") last.text += delta;
+    else parts.push({ type: "text", text: delta });
+  };
+
+  /** ツールを使わなかったターンは、本文だけを持つ（parts 無し）メッセージにする。 */
+  const storedParts = (): MessagePart[] | null => (parts.some((part) => part.type !== "text") ? parts : null);
+  const storedText = (): string =>
+    parts
+      .filter((part): part is Extract<MessagePart, { type: "text" }> => part.type === "text")
+      .map((part) => part.text)
+      .join("");
+
   /**
-   * 生成済みの本文は、正常終了でも「停止」でも必ず保存する。
+   * 生成済みの内容は、正常終了でも「停止」でも必ず保存する。
    * 停止時は呼び出し元がジェネレータを return するため、yield を含む後続のコードは実行されない。
    * だから保存だけは finally から呼べる形に切り出してある。
-   * 本文が無いまま失敗したときだけ、空のメッセージを作らない。
+   * 何も生成しないまま失敗したときだけ、空のメッセージを作らない。
    */
   const persist = (): void => {
     if (finalMessage !== null) return;
-    if (text.length === 0 && failure !== null) return;
+    if (parts.length === 0 && failure !== null) return;
 
     finalMessage = store.appendMessage({
       id: assistantId,
       sessionId,
       role: "assistant",
-      content: text,
+      content: storedText(),
+      parts: storedParts(),
       usage,
     });
   };
 
   try {
     const stream = await engine.stream({ history, signal });
-    for await (const delta of stream.textStream) {
-      text += delta;
-      yield { type: "text-delta", id: assistantId, delta };
+
+    for await (const event of stream.events) {
+      switch (event.type) {
+        case "text-delta":
+          appendText(event.delta);
+          yield { type: "text-delta", id: assistantId, delta: event.delta };
+          break;
+        case "tool-call":
+          parts.push(event.part);
+          yield { type: "tool-call", id: assistantId, part: event.part };
+          break;
+        case "tool-result":
+          parts.push(event.part);
+          yield { type: "tool-result", id: assistantId, part: event.part };
+          break;
+      }
     }
+
     usage = await stream.usage;
   } catch (error) {
     failure = describeError(error);

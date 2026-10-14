@@ -15,6 +15,7 @@ import {
 import { startServer } from "../src/server/server";
 import { createSettingsStore, type SettingsStore } from "../src/server/settings";
 import { createStore } from "../src/server/store";
+import { createMcpStub } from "./support";
 import type { ModelSettingsView, ProviderView, ReasoningView } from "../src/shared/types";
 
 /** テストで使うカタログの中身。deepseek はカタログのプロバイダ、custom-1 は独自エンドポイント。 */
@@ -147,6 +148,7 @@ async function withModelServer<T>(
     store: createStore(":memory:"),
     engine: createMockEngine({ chunkSize: 10_000, delayMs: 0 }),
     settings,
+    mcp: createMcpStub(),
     catalog: catalog.catalog,
     checkConnection: check.checkConnection,
     listModels: lister.listModels,

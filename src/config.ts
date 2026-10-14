@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { getProviderConfig } from "@mastra/core/llm";
 import { resolveAppPaths } from "./paths";
 import { isModelId, type ModelId } from "./shared/model";
-import type { ProviderCredentials } from "./shared/types";
+import type { McpServerForm, ProviderCredentials } from "./shared/types";
 
 /** 使う LLM 実装。mock は開発・テスト専用で、既定には決してならない。 */
 export type EngineKind = "mastra" | "mock";
@@ -31,13 +31,44 @@ export type ModelOptionsSettings = Record<string, ModelOptionSettings>;
 /** プロバイダ id → 設定。並び順は設定ファイルに書かれた順のまま保つ。 */
 export type ProvidersSettings = Record<string, ProviderSettings>;
 
+/** この端末で動かす MCP サーバー（stdio）。コマンドを起動して標準入出力で話す。 */
+export type McpStdioServerSettings = {
+  type: "stdio";
+  /** 起動するコマンド。PATH が通った名前か、実行ファイルの絶対パス。 */
+  command: string;
+  args?: string[];
+  /** 子プロセスに足す環境変数。 */
+  env?: Record<string, string>;
+};
+
+/** HTTP で話す MCP サーバー。OAuth で認可するものは oauth を立てる。 */
+export type McpHttpServerSettings = {
+  type: "http";
+  url: string;
+  /** OAuth の認可を通してから接続するかどうか。 */
+  oauth?: boolean;
+};
+
+/**
+ * MCP サーバー 1 件の設定。
+ * type を明示させ、command と url のどちらがあるかで種類を推測しない
+ * （取り違えると起動時に分かりにくい失敗になるため）。
+ */
+export type McpServerSettings = McpStdioServerSettings | McpHttpServerSettings;
+
+/** MCP サーバー id → 設定。並び順は設定ファイルに書かれた順のまま保つ。 */
+export type McpServersSettings = Record<string, McpServerSettings>;
+
+/** MCP サーバー 1 件に書ける項目。 */
+const MCP_SERVER_KEYS = ["type", "command", "args", "env", "url", "oauth"] as const;
+
 /** プロバイダ 1 件に書ける項目。 */
 const PROVIDER_KEYS = ["apiKey", "baseUrl", "label"] as const;
 
 /** モデル 1 件に書ける項目。 */
 const MODEL_OPTION_KEYS = ["reasoningEffort"] as const;
 
-const FILE_KEYS = ["model", "providers", "modelOptions", "port", "engine"] as const;
+const FILE_KEYS = ["model", "providers", "modelOptions", "mcpServers", "port", "engine"] as const;
 type FileKey = (typeof FILE_KEYS)[number];
 
 /** config.json に書ける設定。書かなかった項目は既定値になる。 */
@@ -45,9 +76,15 @@ export type FileSettings = Partial<{
   model: ModelId;
   providers: ProvidersSettings;
   modelOptions: ModelOptionsSettings;
+  mcpServers: McpServersSettings;
   port: number;
   engine: EngineKind;
 }>;
+
+/** 実行時に使う MCP の設定。 */
+export type McpSettings = {
+  servers: McpServersSettings;
+};
 
 /** 実行時に使うモデル設定。config.json のうち、設定画面から変えられる部分。 */
 export type ModelSettings = {
@@ -82,9 +119,17 @@ export const CONFIG_FILE_NAME = "config.json";
  */
 export const LOOPBACK_HOST = "127.0.0.1";
 
+/** id に使える文字。AI へ渡す名前の先頭部分になるため、記号と空白は許さない。 */
+const ID_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
+
 /** プロバイダ id に使える文字。モデル ID の先頭部分になるため、スラッシュと空白は許さない。 */
 export function isProviderId(value: string): boolean {
-  return /^[a-z0-9][a-z0-9-]*$/.test(value);
+  return ID_PATTERN.test(value);
+}
+
+/** MCP サーバー id に使える文字。ツール名の先頭に付くため、アンダースコアも許さない。 */
+export function isMcpServerId(value: string): boolean {
+  return ID_PATTERN.test(value);
 }
 
 /**
@@ -127,6 +172,11 @@ export function toModelSettings(file: FileSettings): ModelSettings {
     providers: file.providers ?? {},
     modelOptions: file.modelOptions ?? {},
   };
+}
+
+/** 設定ファイルから、実行時に使う MCP の設定だけを取り出す。 */
+export function toMcpSettings(file: FileSettings): McpSettings {
+  return { servers: file.mcpServers ?? {} };
 }
 
 /** 設定ファイルがまだ無ければ空を返す。あるのに読めない場合は起動を止める。 */
@@ -172,6 +222,9 @@ export function readSettingsFile(path: string): FileSettings {
   const modelOptions = readModelOptions(source, path);
   if (modelOptions !== undefined) settings.modelOptions = modelOptions;
 
+  const mcpServers = readMcpServers(source, path);
+  if (mcpServers !== undefined) settings.mcpServers = mcpServers;
+
   const port = readNumber(source, "port", path);
   if (port !== undefined) {
     if (!Number.isInteger(port) || port < 1 || port > 65535) {
@@ -207,6 +260,7 @@ function serialize(settings: FileSettings): string {
   if (settings.model !== undefined) ordered["model"] = settings.model;
   if (settings.providers !== undefined) ordered["providers"] = settings.providers;
   if (settings.modelOptions !== undefined) ordered["modelOptions"] = settings.modelOptions;
+  if (settings.mcpServers !== undefined) ordered["mcpServers"] = settings.mcpServers;
   if (settings.port !== undefined) ordered["port"] = settings.port;
   if (settings.engine !== undefined) ordered["engine"] = settings.engine;
   return `${JSON.stringify(ordered, null, 2)}\n`;
@@ -256,6 +310,39 @@ export function providerSettingsFromForm(form: ProviderCredentials): ProviderSet
   if (label !== undefined && label.length > 0) settings.label = label;
 
   return settings;
+}
+
+/**
+ * 画面から来た MCP サーバーの入力（未入力は null）を、設定に書ける形へ直す。
+ * 種類と食い違う項目は黙って捨てずに失敗させる（入れたつもりで効かない状態を作らないため）。
+ */
+export function mcpServerSettingsFromForm(form: McpServerForm, source: string): McpServerSettings {
+  if (form.type === "stdio") {
+    if (form.url !== null || form.oauth) {
+      throw new Error(`${source} の url と oauth は http のサーバーにだけ指定できます`);
+    }
+
+    return readMcpServerEntry(
+      form.id,
+      {
+        type: "stdio",
+        command: form.command ?? undefined,
+        args: form.args === null ? undefined : [...form.args],
+        env: form.env === null ? undefined : { ...form.env },
+      },
+      source,
+    );
+  }
+
+  if (form.command !== null || form.args !== null || form.env !== null) {
+    throw new Error(`${source} の command / args / env は stdio のサーバーにだけ指定できます`);
+  }
+
+  return readMcpServerEntry(
+    form.id,
+    { type: "http", url: form.url ?? undefined, oauth: form.oauth ? true : undefined },
+    source,
+  );
 }
 
 /** エンドポイントの指定。末尾のスラッシュは落として、URL の組み立てを単純にする。 */
@@ -336,6 +423,149 @@ function readProviderString(
   const trimmed = value.trim();
   if (trimmed.length === 0) {
     throw new Error(`${path} の providers.${id}.${key} を空にはできません`);
+  }
+  return trimmed;
+}
+
+/** MCP サーバーの一覧を読む。id は保存された並び順のまま保つ。 */
+function readMcpServers(source: Record<string, unknown>, path: string): McpServersSettings | undefined {
+  const value = source["mcpServers"];
+  if (value === undefined) return undefined;
+
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new Error(`${path} の mcpServers はオブジェクトにしてください`);
+  }
+
+  const servers: McpServersSettings = {};
+  for (const [id, entry] of Object.entries(value as Record<string, unknown>)) {
+    if (!isMcpServerId(id)) {
+      throw new Error(
+        `${path} の mcpServers に使えない id があります: ${JSON.stringify(id)}（英小文字・数字・ハイフンで指定してください）`,
+      );
+    }
+    servers[id] = readMcpServerEntry(id, entry, path);
+  }
+  return servers;
+}
+
+/**
+ * MCP サーバー 1 件を読む。
+ * type の取り違えは起動時に落とす（command を url として繋ぎに行くような失敗を作らない）。
+ */
+function readMcpServerEntry(id: string, raw: unknown, path: string): McpServerSettings {
+  const where = `${path} の mcpServers.${id}`;
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+    throw new Error(`${where} はオブジェクトにしてください`);
+  }
+
+  const source = raw as Record<string, unknown>;
+  const unknownKeys = Object.keys(source).filter(
+    (key) => !MCP_SERVER_KEYS.includes(key as (typeof MCP_SERVER_KEYS)[number]),
+  );
+  if (unknownKeys.length > 0) {
+    throw new Error(
+      `${where} に未知の項目があります: ${unknownKeys.join(", ")}（使える項目: ${MCP_SERVER_KEYS.join(", ")}）`,
+    );
+  }
+
+  const type = source["type"];
+  if (type === "stdio") return readStdioServer(source, where);
+  if (type === "http") return readHttpServer(source, where);
+
+  throw new Error(
+    `${where} の type は "stdio" か "http" にしてください（現在の値: ${JSON.stringify(type)}）`,
+  );
+}
+
+function readStdioServer(source: Record<string, unknown>, where: string): McpStdioServerSettings {
+  for (const key of ["url", "oauth"] as const) {
+    if (source[key] !== undefined) {
+      throw new Error(`${where} の ${key} は http のサーバーにだけ指定できます`);
+    }
+  }
+
+  const command = source["command"];
+  if (typeof command !== "string" || command.trim().length === 0) {
+    throw new Error(`${where} の command は空でない文字列にしてください`);
+  }
+
+  const settings: McpStdioServerSettings = { type: "stdio", command: command.trim() };
+
+  const args = source["args"];
+  if (args !== undefined) {
+    if (!Array.isArray(args)) throw new Error(`${where} の args は配列にしてください`);
+
+    // 空の配列は書かない（既定と同じ意味なので、設定ファイルに残す意味がない）。
+    const values = args.map((arg, index) => {
+      if (typeof arg !== "string" || arg.length === 0) {
+        throw new Error(`${where} の args[${index}] は空でない文字列にしてください`);
+      }
+      return arg;
+    });
+    if (values.length > 0) settings.args = values;
+  }
+
+  const env = source["env"];
+  if (env !== undefined) {
+    if (typeof env !== "object" || env === null || Array.isArray(env)) {
+      throw new Error(`${where} の env はオブジェクトにしてください`);
+    }
+
+    const variables: Record<string, string> = {};
+    for (const [name, value] of Object.entries(env as Record<string, unknown>)) {
+      // 環境変数名として読めない名前は、渡しても効かないまま気づけないのでここで止める。
+      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) {
+        throw new Error(`${where} の env に環境変数名として使えない名前があります: ${JSON.stringify(name)}`);
+      }
+      if (typeof value !== "string") {
+        throw new Error(`${where} の env.${name} は文字列にしてください`);
+      }
+      variables[name] = value;
+    }
+    if (Object.keys(variables).length > 0) settings.env = variables;
+  }
+
+  return settings;
+}
+
+function readHttpServer(source: Record<string, unknown>, where: string): McpHttpServerSettings {
+  for (const key of ["command", "args", "env"] as const) {
+    if (source[key] !== undefined) {
+      throw new Error(`${where} の ${key} は stdio のサーバーにだけ指定できます`);
+    }
+  }
+
+  const url = source["url"];
+  if (typeof url !== "string" || url.trim().length === 0) {
+    throw new Error(`${where} の url は空でない文字列にしてください`);
+  }
+
+  const settings: McpHttpServerSettings = { type: "http", url: normalizeServerUrl(url, where) };
+
+  const oauth = source["oauth"];
+  if (oauth !== undefined) {
+    if (typeof oauth !== "boolean") throw new Error(`${where} の oauth は true か false にしてください`);
+    if (oauth) settings.oauth = true;
+  }
+
+  return settings;
+}
+
+/** MCP サーバーの URL。エンドポイントそのものを指すので、末尾のスラッシュだけ落とす。 */
+export function normalizeServerUrl(value: string, source: string): string {
+  const trimmed = value.trim().replace(/\/+$/, "");
+
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch (error) {
+    throw new Error(`${source} の url は URL として読めません（現在の値: ${JSON.stringify(value)}）`, {
+      cause: error,
+    });
+  }
+
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new Error(`${source} の url は http:// か https:// で始めてください（現在の値: ${JSON.stringify(value)}）`);
   }
   return trimmed;
 }

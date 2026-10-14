@@ -1,20 +1,25 @@
 import {
   readSettingsFile,
+  toMcpSettings,
   toModelSettings,
   writeSettingsFile,
   type FileSettings,
+  type McpServerSettings,
+  type McpSettings,
   type ModelSettings,
   type ProviderSettings,
 } from "../config";
 import type { ModelId } from "../shared/model";
 
 /**
- * モデルとプロバイダの設定。
+ * モデルとプロバイダ、MCP サーバーの設定。
  * config.json を唯一の保存先にしていて、変更のたびにファイルへ書き戻す。
  */
 export type SettingsStore = {
-  /** 現在の設定。 */
+  /** 現在のモデル設定。 */
   read(): ModelSettings;
+  /** 現在の MCP サーバーの設定。 */
+  readMcp(): McpSettings;
   /**
    * プロバイダを追加・変更する。
    * 追加ウィザードでモデルまで選んだときは、既定のモデルも同じ書き込みで変える。
@@ -29,6 +34,10 @@ export type SettingsStore = {
    * モデルごとに持つので、別のモデルへ切り替えても値は残る。
    */
   setReasoningEffort(model: ModelId, effort: string | null): void;
+  /** MCP サーバーを追加・変更する。 */
+  putMcpServer(id: string, server: McpServerSettings): void;
+  /** MCP サーバーを消す。設定が無ければ false を返し、何も書かない。 */
+  deleteMcpServer(id: string): boolean;
 };
 
 /**
@@ -40,16 +49,22 @@ export type SettingsStore = {
  */
 export function createSettingsStore(configPath: string): SettingsStore {
   let current = toModelSettings(readSettingsFile(configPath));
+  let currentMcp = toMcpSettings(readSettingsFile(configPath));
 
   function mutate(change: (settings: FileSettings) => boolean): void {
     const settings = readSettingsFile(configPath);
     if (change(settings)) writeSettingsFile(configPath, settings);
     current = toModelSettings(settings);
+    currentMcp = toMcpSettings(settings);
   }
 
   return {
     read() {
       return current;
+    },
+
+    readMcp() {
+      return currentMcp;
     },
 
     putProvider(id, provider, defaultModel) {
@@ -100,6 +115,27 @@ export function createSettingsStore(configPath: string): SettingsStore {
         settings.modelOptions = options;
         return true;
       });
+    },
+
+    putMcpServer(id, server) {
+      mutate((settings) => {
+        settings.mcpServers = { ...settings.mcpServers, [id]: server };
+        return true;
+      });
+    },
+
+    deleteMcpServer(id) {
+      let removed = false;
+      mutate((settings) => {
+        if (settings.mcpServers?.[id] === undefined) return false;
+
+        const servers = { ...settings.mcpServers };
+        delete servers[id];
+        settings.mcpServers = servers;
+        removed = true;
+        return true;
+      });
+      return removed;
     },
   };
 }

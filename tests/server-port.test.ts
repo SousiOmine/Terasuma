@@ -3,7 +3,7 @@ import type { AppConfig } from "../src/config";
 import { createMockEngine } from "../src/server/engine";
 import { startServer, type StartedServer } from "../src/server/server";
 import { createStore } from "../src/server/store";
-import { TEST_SETTINGS, withTempSettings } from "./support";
+import { TEST_SETTINGS, createMcpStub, withTempSettings } from "./support";
 
 /** ポートだけを差し替えて使う設定。 */
 function makeConfig(port: number): AppConfig {
@@ -27,6 +27,7 @@ async function withServerOn<T>(port: number, run: (started: StartedServer) => Pr
       store: createStore(":memory:"),
       engine: createMockEngine({ chunkSize: 10_000, delayMs: 0 }),
       settings,
+      mcp: createMcpStub(),
     });
 
     try {
@@ -95,6 +96,7 @@ describe("サーバの起動ポート", () => {
           store: createStore(":memory:"),
           engine: createMockEngine({ chunkSize: 10_000, delayMs: 0 }),
           settings,
+          mcp: createMcpStub(),
         });
 
       expect(attempt).toThrow();

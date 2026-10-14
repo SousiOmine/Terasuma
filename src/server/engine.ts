@@ -1,19 +1,22 @@
 import { Agent } from "@mastra/core/agent";
 import { getProviderConfig } from "@mastra/core/llm";
 import type { OpenAICompatibleConfig } from "@mastra/core/llm";
+import type { ChunkType } from "@mastra/core/stream";
 import type { AppConfig, ModelSettings } from "../config";
 import { modelProvider, type ModelId } from "../shared/model";
-import type { ChatMessage, TokenUsage } from "../shared/types";
-import { SYSTEM_PROMPT } from "./prompt";
+import type { ChatMessage, MessagePart, TokenUsage } from "../shared/types";
+import type { McpToolset } from "./mcp";
+import { SYSTEM_PROMPT, toModelMessages } from "./prompt";
 import { reasoningProviderOptions } from "./reasoning";
 
-/** モデルへ渡す会話 1 件分。role ごとに分けた union にしてある（Mastra 側の型がこの形を要求する）。 */
-export type EngineMessage =
-  | { role: "user"; content: string }
-  | { role: "assistant"; content: string };
+/** モデルから流れてくる出来事。画面へ流す単位でもある。 */
+export type EngineEvent =
+  | { type: "text-delta"; delta: string }
+  | { type: "tool-call"; part: Extract<MessagePart, { type: "tool-call" }> }
+  | { type: "tool-result"; part: Extract<MessagePart, { type: "tool-result" }> };
 
 export type EngineStream = {
-  textStream: AsyncIterable<string>;
+  events: AsyncIterable<EngineEvent>;
   /** ストリーム終了時に解決する。取得できない場合は null。 */
   usage: Promise<TokenUsage | null>;
 };
@@ -24,10 +27,15 @@ export type EngineInput = {
   signal: AbortSignal;
 };
 
+/** モデルへ渡すツールの供給元。接続を持たないテストでもここを差し替えれば済む。 */
+export type ToolsetProvider = {
+  toolset(): Promise<McpToolset>;
+};
+
 /**
  * LLM 呼び出しのインタフェース。
  * Mastra に依存する部分はこのインタフェースの内側だけにあるので、実装の差し替え
- * （AI SDK の直接呼び出し、ツール対応、プロファイルごとのエージェント切り替え）は
+ * （AI SDK の直接呼び出し、承認フローの追加、プロファイルごとのエージェント切り替え）は
  * ここを実装し直すだけで済む。
  */
 export interface AgentEngine {
@@ -106,19 +114,19 @@ export function resolveModel(settings: ModelSettings): ModelResolution {
   return { ok: true, model: { kind: "builtin", id: model, apiKey: provider.apiKey, reasoningEffort } };
 }
 
-export function createEngine(options: { config: AppConfig; settings: SettingsReader }): AgentEngine {
+export function createEngine(options: { config: AppConfig; settings: SettingsReader; mcp: ToolsetProvider }): AgentEngine {
   if (options.config.engine === "mock") return createMockEngine();
-  return createMastraEngine(options.settings);
+  return createMastraEngine(options.settings, options.mcp);
 }
 
-export function createMastraEngine(settings: SettingsReader): AgentEngine {
+export function createMastraEngine(settings: SettingsReader, mcp: ToolsetProvider): AgentEngine {
   // モデル一覧の定期再取得は常駐アプリには不要（既定で 1 時間ごとに通信する）。
   // Mastra が初期化時に読むため、Agent を作る前に必ず設定する。
   process.env.MASTRA_AUTO_REFRESH_PROVIDERS ??= "false";
 
   let cached: { key: string; agent: Agent } | null = null;
 
-  /** 設定が変わったら作り直す。同じ設定の間は使い回す。思考強度は呼び出しごとに渡すので鍵に含めない。 */
+  /** 設定が変わったら作り直す。同じ設定の間は使い回す。思考強度とツールは呼び出しごとに渡す。 */
   function agentFor(model: ResolvedModel): Agent {
     const key = JSON.stringify(toModelConfig(model));
     if (cached !== null && cached.key === key) return cached.agent;
@@ -142,11 +150,9 @@ export function createMastraEngine(settings: SettingsReader): AgentEngine {
       const resolution = resolveModel(settings.read());
       if (!resolution.ok) throw new Error(resolution.detail);
 
-      const messages: EngineMessage[] = history.map((message) =>
-        message.role === "user"
-          ? { role: "user", content: message.content }
-          : { role: "assistant", content: message.content },
-      );
+      // 保存済み履歴をそのまま渡す。要約も並べ替えもしない
+      // （プロンプトキャッシュが当たり続けるようにするため）。
+      const messages = toModelMessages(history);
 
       // 思考強度はプロバイダごとに渡し方が違うので、ここで組み立てて呼び出しごとに渡す。
       const providerOptions = reasoningProviderOptions(
@@ -154,17 +160,122 @@ export function createMastraEngine(settings: SettingsReader): AgentEngine {
         resolution.model.reasoningEffort,
       );
 
+      // MCP のツールは呼び出しごとに渡す（設定画面でサーバーを足しても Agent を作り直さずに済む）。
+      const tools = await mcp.toolset();
+
       const result = await agentFor(resolution.model).stream(messages, {
         abortSignal: signal,
         ...(providerOptions === null ? {} : { providerOptions }),
+        ...(Object.keys(tools).length === 0 ? {} : { toolsets: { mcp: tools } }),
       });
 
       return {
-        textStream: result.textStream,
+        events: toEngineEvents(result.fullStream),
         usage: result.usage.then(normalizeUsage, () => null),
       };
     },
   };
+}
+
+/**
+ * Mastra のストリームを、画面と保存に必要な出来事だけに絞る。
+ * 失敗はチャンクとして流れてくるので、ここで例外に戻す（黙って空の応答にしないため）。
+ */
+async function* toEngineEvents(chunks: AsyncIterable<ChunkType>): AsyncGenerator<EngineEvent> {
+  for await (const chunk of chunks) {
+    const event = toEngineEvent(chunk);
+    if (event !== null) yield event;
+  }
+}
+
+function toEngineEvent(chunk: ChunkType): EngineEvent | null {
+  switch (chunk.type) {
+    case "text-delta":
+      return { type: "text-delta", delta: chunk.payload.text };
+
+    case "tool-call": {
+      const { server, tool } = splitToolName(chunk.payload.toolName);
+      return {
+        type: "tool-call",
+        part: { type: "tool-call", id: chunk.payload.toolCallId, server, tool, args: chunk.payload.args ?? {} },
+      };
+    }
+
+    case "tool-result": {
+      const { server, tool } = splitToolName(chunk.payload.toolName);
+      return {
+        type: "tool-result",
+        part: {
+          type: "tool-result",
+          id: chunk.payload.toolCallId,
+          server,
+          tool,
+          failed: chunk.payload.isError === true,
+          output: toolOutputText(chunk.payload.result),
+        },
+      };
+    }
+
+    case "tool-error": {
+      const { server, tool } = splitToolName(chunk.payload.toolName);
+      return {
+        type: "tool-result",
+        part: {
+          type: "tool-result",
+          id: chunk.payload.toolCallId,
+          server,
+          tool,
+          failed: true,
+          output: describe(chunk.payload.error),
+        },
+      };
+    }
+
+    case "error":
+      throw chunk.payload.error instanceof Error ? chunk.payload.error : new Error(describe(chunk.payload.error));
+
+    default:
+      return null;
+  }
+}
+
+/**
+ * "<サーバー id>_<ツール名>" を分ける。
+ * サーバー id に "_" は使えないので、最初の区切りで必ず確定する。
+ */
+function splitToolName(name: string): { server: string; tool: string } {
+  const boundary = name.indexOf("_");
+  if (boundary === -1) return { server: "", tool: name };
+  return { server: name.slice(0, boundary), tool: name.slice(boundary + 1) };
+}
+
+/** ツールの戻り値を、モデルと画面に見せる文字列にする。 */
+function toolOutputText(value: unknown): string {
+  const text = mcpContentText(value);
+  if (text !== null) return text;
+
+  if (typeof value === "string") return value;
+  const json = JSON.stringify(value);
+  return json === undefined ? String(value) : json;
+}
+
+/**
+ * MCP の結果（content ブロック）がそのまま入っている場合に、そのテキストをまとめる。
+ * 構造化された値しか無い場合は null を返し、呼び出し側が JSON として見せる。
+ */
+function mcpContentText(value: unknown): string | null {
+  if (typeof value !== "object" || value === null) return null;
+
+  const content = (value as { content?: unknown }).content;
+  if (!Array.isArray(content)) return null;
+
+  const texts: string[] = [];
+  for (const block of content) {
+    if (typeof block !== "object" || block === null) continue;
+    const entry = block as { type?: unknown; text?: unknown };
+    if (entry.type === "text" && typeof entry.text === "string") texts.push(entry.text);
+  }
+  return texts.length === 0 ? null : texts.join("\n");
 }
 
 /** Mastra（AI SDK）へ渡すモデルの指定。 */
@@ -218,7 +329,7 @@ export function createMockEngine(options: { chunkSize?: number; delayMs?: number
       };
 
       return Promise.resolve({
-        textStream: chunkText(reply, chunkSize, delayMs, signal),
+        events: chunkText(reply, chunkSize, delayMs, signal),
         usage: Promise.resolve(usage),
       });
     },
@@ -230,10 +341,14 @@ async function* chunkText(
   chunkSize: number,
   delayMs: number,
   signal: AbortSignal,
-): AsyncGenerator<string> {
+): AsyncGenerator<EngineEvent> {
   for (let index = 0; index < text.length; index += chunkSize) {
     if (signal.aborted) return;
     if (delayMs > 0) await new Promise((resolve) => setTimeout(resolve, delayMs));
-    yield text.slice(index, index + chunkSize);
+    yield { type: "text-delta", delta: text.slice(index, index + chunkSize) };
   }
+}
+
+function describe(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }

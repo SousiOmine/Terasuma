@@ -1,5 +1,5 @@
 import { computed, signal } from "@preact/signals";
-import type { ChatEvent, ChatMessage, Session } from "../shared/types";
+import type { ChatEvent, ChatMessage, MessagePart, Session } from "../shared/types";
 import * as api from "./api";
 import { toErrorState } from "./errors";
 import { locale, setLocale } from "./i18n";
@@ -11,14 +11,18 @@ export type ClientErrorCode = api.ClientErrorCode;
 export type View = "chat" | "settings";
 
 /** 設定画面のカテゴリ。導線から特定のカテゴリを直接開くために signal で持つ。 */
-export type SettingsCategory = "general" | "model";
+export type SettingsCategory = "general" | "model" | "advanced";
 
 export const view = signal<View>("chat");
 export const settingsCategory = signal<SettingsCategory>("general");
 export const sessions = signal<readonly Session[]>([]);
 export const activeSessionId = signal<string | null>(null);
 export const messages = signal<readonly ChatMessage[]>([]);
-export const streamingText = signal("");
+/**
+ * 生成中の応答。本文とツールの出来事を、保存されるのと同じ並びで組み立てる。
+ * 完了すると messages へ移り、ここは空に戻る。
+ */
+export const streamingParts = signal<readonly MessagePart[]>([]);
 export const isStreaming = signal(false);
 export const isLoadingMessages = signal(false);
 export const errorCode = signal<ClientErrorCode | null>(null);
@@ -69,7 +73,7 @@ export function startNewChat(): void {
   // セッション行はサーバ側で最初の送信時に作られる。ここでは id だけ先に決めておく。
   activeSessionId.value = crypto.randomUUID();
   messages.value = [];
-  streamingText.value = "";
+  streamingParts.value = [];
 }
 
 export async function openSession(id: string): Promise<void> {
@@ -95,7 +99,7 @@ export async function sendMessage(rawContent: string): Promise<void> {
   const abort = new AbortController();
   controller = abort;
   isStreaming.value = true;
-  streamingText.value = "";
+  streamingParts.value = [];
 
   try {
     for await (const event of api.streamTurn(sessionId, content, abort.signal)) {
@@ -105,7 +109,7 @@ export async function sendMessage(rawContent: string): Promise<void> {
     reportError(error);
   } finally {
     isStreaming.value = false;
-    streamingText.value = "";
+    streamingParts.value = [];
     controller = null;
   }
 
@@ -179,20 +183,32 @@ function applyEvent(event: ChatEvent): void {
       messages.value = [...messages.value, event.message];
       break;
     case "assistant-start":
-      streamingText.value = "";
+      streamingParts.value = [];
       break;
     case "text-delta":
-      streamingText.value += event.delta;
+      streamingParts.value = appendText(streamingParts.value, event.delta);
+      break;
+    case "tool-call":
+    case "tool-result":
+      streamingParts.value = [...streamingParts.value, event.part];
       break;
     case "assistant-done":
       messages.value = [...messages.value, event.message];
-      streamingText.value = "";
+      streamingParts.value = [];
       break;
     case "error":
       errorCode.value = event.code;
       errorDetail.value = event.detail;
       break;
   }
+}
+
+/** 本文は末尾に足す。無ければ新しく始める（signal は差し替えて再描画させる）。 */
+function appendText(parts: readonly MessagePart[], delta: string): readonly MessagePart[] {
+  const last = parts.at(-1);
+  if (last?.type !== "text") return [...parts, { type: "text", text: delta }];
+
+  return [...parts.slice(0, -1), { type: "text", text: last.text + delta }];
 }
 
 function reportError(error: unknown): void {

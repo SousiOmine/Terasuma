@@ -10,7 +10,7 @@ import {
   isStreaming,
   messages,
   openSettings,
-  streamingText,
+  streamingParts,
 } from "../state";
 import { Composer } from "./Composer";
 import { ErrorNotice } from "./ErrorNotice";
@@ -18,7 +18,7 @@ import { MessageBubble } from "./MessageBubble";
 
 export function ChatView() {
   const items = messages.value;
-  const pending = streamingText.value;
+  const pending = streamingParts.value;
   const streaming = isStreaming.value;
   const loading = isLoadingMessages.value;
   const error = errorCode.value;
@@ -26,10 +26,12 @@ export function ChatView() {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // 新しい内容が来たら末尾へ寄せる。会話が伸びる操作は送信とストリーミングだけなので十分。
+  // 本文は少しずつ伸びるので、部品の数だけでは足りない（文字数も見る）。
+  const pendingLength = pending.reduce((total, part) => total + (part.type === "text" ? part.text.length : 1), 0);
   useEffect(() => {
     const node = scrollRef.current;
     if (node !== null) node.scrollTop = node.scrollHeight;
-  }, [items.length, pending, loading]);
+  }, [items.length, pendingLength, loading]);
 
   const title = activeSession.value?.title ?? t("sidebar.untitled");
   const showEmpty = !loading && items.length === 0 && pending.length === 0;
@@ -63,9 +65,14 @@ export function ChatView() {
         ) : (
           <div class="mx-auto flex w-full max-w-3xl flex-col gap-6 px-5 py-8">
             {items.map((message) => (
-              <MessageBubble key={message.id} role={message.role} content={message.content} />
+              <MessageBubble
+                key={message.id}
+                role={message.role}
+                content={message.content}
+                parts={message.parts}
+              />
             ))}
-            {pending.length > 0 && <MessageBubble role="assistant" content={pending} />}
+            {pending.length > 0 && <MessageBubble role="assistant" content="" parts={pending} />}
             {streaming && pending.length === 0 && <Replying />}
             {loading && <p class="text-sm text-neutral-500 dark:text-neutral-400">{t("chat.loading")}</p>}
           </div>

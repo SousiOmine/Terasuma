@@ -4,6 +4,8 @@ import index from "../client/index.html";
 import type { AppConfig } from "../config";
 import type { AgentEngine } from "./engine";
 import { describeError } from "./errors";
+import type { McpManager } from "./mcp";
+import { OAUTH_CALLBACK_PATH } from "./mcp-oauth";
 import { CATALOG_FILE_NAME, createCatalog, type Catalog } from "./models-dev";
 import {
   createConnectionChecker,
@@ -21,6 +23,8 @@ export type ServerOptions = {
   engine: AgentEngine;
   /** モデルとプロバイダの設定。 */
   settings: SettingsStore;
+  /** MCP サーバーとの接続。OAuth のコールバックもここを通る。 */
+  mcp: McpManager;
   /** models.dev のカタログ。テストで差し替える。 */
   catalog?: Catalog;
   /** プロバイダへ接続できるかの確認。テストで差し替える。 */
@@ -49,11 +53,12 @@ const ANY_FREE_PORT = 0;
  * ルートはここでリテラルのパスとして並べる（Bun のルータは文字列リテラルからパラメータ型を作る）。
  */
 export function startServer(options: ServerOptions): StartedServer {
-  const { config, store, engine, settings } = options;
+  const { config, store, engine, settings, mcp } = options;
   const api = createApiHandlers({
     store,
     engine,
     settings,
+    mcp,
     catalog: options.catalog ?? createCatalog({ cachePath: join(config.dataDir, CATALOG_FILE_NAME) }),
     checkConnection: options.checkConnection ?? createConnectionChecker(),
     listModels: options.listModels ?? createModelLister(),
@@ -102,6 +107,25 @@ export function startServer(options: ServerOptions): StartedServer {
         },
         "/api/model/providers/:id/models": {
           GET: api.listProviderModels,
+        },
+        "/api/mcp/servers": {
+          GET: api.listMcpServers,
+          POST: api.addMcpServer,
+        },
+        "/api/mcp/servers/:id": {
+          PATCH: api.updateMcpServer,
+          DELETE: api.removeMcpServer,
+        },
+        "/api/mcp/servers/:id/check": {
+          POST: api.checkMcpServer,
+        },
+        "/api/mcp/servers/:id/authorize": {
+          POST: api.authorizeMcpServer,
+          DELETE: api.cancelMcpAuthorization,
+        },
+        // 認可のコールバックは、OAuth 側が組み立てる URL（OAUTH_CALLBACK_PATH）と同じパスに置く。
+        [OAUTH_CALLBACK_PATH]: {
+          GET: api.mcpOAuthCallback,
         },
       },
       fetch() {

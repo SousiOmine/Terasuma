@@ -14,13 +14,44 @@ export type TokenUsage = {
   cachedInputTokens: number;
 };
 
+/**
+ * メッセージを組み立てている部品。
+ * 本文とツールの呼び出しが混ざるため、順序を保ったまま部分ごとに持つ。
+ */
+export type MessagePart =
+  | { type: "text"; text: string }
+  | {
+      type: "tool-call";
+      /** モデルが発行した呼び出し id。結果と突き合わせる。 */
+      id: string;
+      /** 接続している MCP サーバーの id。 */
+      server: string;
+      /** MCP サーバーが公開しているツール名。 */
+      tool: string;
+      /** モデルが組み立てた引数。 */
+      args: unknown;
+    }
+  | {
+      type: "tool-result";
+      id: string;
+      server: string;
+      tool: string;
+      /** ツールがエラーを返したかどうか。 */
+      failed: boolean;
+      /** ツールが返した内容（モデルへ渡るのと同じ文字列）。 */
+      output: string;
+    };
+
 export type ChatMessage = {
   id: string;
   sessionId: string;
   /** セッション内の連番。1 から始まり、履歴の並び順を確定させる。 */
   seq: number;
   role: MessageRole;
+  /** 本文（parts があるときは text 部分を連結したもの）。 */
   content: string;
+  /** ツール呼び出しを含むメッセージだけが持つ。含まないメッセージでは null。 */
+  parts: MessagePart[] | null;
   /** epoch ミリ秒 */
   createdAt: number;
   usage: TokenUsage | null;
@@ -50,6 +81,9 @@ export type ApiErrorCode =
   | "provider_unreachable"
   | "provider_no_models"
   | "catalog_unavailable"
+  | "mcp_server_not_found"
+  | "mcp_server_exists"
+  | "mcp_authorization_failed"
   | "settings_write_failed"
   | "internal_error";
 
@@ -122,11 +156,73 @@ export type AddProviderForm = ProviderForm & {
 
 /**
  * 1 ターン分のストリーミングで流れるイベント。
- * ツール呼び出しを足すときは、この union に種類を増やすだけで済む形にしてある。
+ * ツール呼び出しの本体（引数・結果）はメッセージとして保存されるので、
+ * ここでは流れてくる順に組み立てるための断片だけを運ぶ。
  */
 export type ChatEvent =
   | { type: "user-message"; message: ChatMessage }
   | { type: "assistant-start"; id: string; createdAt: number }
   | { type: "text-delta"; id: string; delta: string }
+  | { type: "tool-call"; id: string; part: Extract<MessagePart, { type: "tool-call" }> }
+  | { type: "tool-result"; id: string; part: Extract<MessagePart, { type: "tool-result" }> }
   | { type: "assistant-done"; message: ChatMessage }
   | { type: "error"; code: ApiErrorCode; detail: string | null };
+
+/** MCP サーバーの接続状態。 */
+export type McpServerState =
+  /** まだ接続を確かめていない。 */
+  | "unknown"
+  | "connected"
+  /** ブラウザでの認可を待っている。 */
+  | "authorizing"
+  /** 認可が必要（認可すると繋がる可能性がある）。 */
+  | "authorization_required"
+  | "failed";
+
+/** MCP サーバー 1 件の接続状態。 */
+export type McpServerStatusView = {
+  state: McpServerState;
+  /** 接続できたときに公開されているツール名。 */
+  tools: readonly string[];
+  /** 繋がらない理由。無ければ null。 */
+  detail: string | null;
+};
+
+/** 設定画面に並べる MCP サーバー 1 件。 */
+export type McpServerView = {
+  id: string;
+  type: "stdio" | "http";
+  /** ローカルのサーバーを起動するコマンド。http では null。 */
+  command: string | null;
+  /** コマンドに渡す引数（stdio のみ）。 */
+  args: readonly string[];
+  /** 子プロセスに足す環境変数（stdio のみ）。 */
+  env: Record<string, string>;
+  /** http のサーバーの URL。stdio では null。 */
+  url: string | null;
+  /** OAuth で認可するかどうか（http のみ true になりうる）。 */
+  oauth: boolean;
+  status: McpServerStatusView;
+};
+
+/** MCP 設定の現在の状態。設定を変える API はすべてこの形を返す。 */
+export type McpServersView = {
+  servers: McpServerView[];
+};
+
+/** MCP サーバーの追加・変更の入力。未入力は null。 */
+export type McpServerForm = {
+  id: string;
+  type: "stdio" | "http";
+  command: string | null;
+  args: readonly string[] | null;
+  env: Record<string, string> | null;
+  url: string | null;
+  oauth: boolean;
+};
+
+/** 認可を始めた結果。開く URL が返るか、すでに認可済みか。 */
+export type McpAuthorizationView = {
+  /** ブラウザで開く認可画面の URL。すでに認可済みなら null。 */
+  url: string | null;
+};
