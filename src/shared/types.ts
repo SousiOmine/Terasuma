@@ -106,6 +106,7 @@ export type ApiErrorCode =
   | "container_start_failed"
   | "container_not_running"
   | "handover_not_pending"
+  | "turn_in_progress"
   | "settings_write_failed"
   | "internal_error";
 

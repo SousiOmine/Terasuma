@@ -50,8 +50,14 @@ export const computerPaneOpen = signal(false);
 export const computerViewOnly = signal(true);
 
 /**
- * いまユーザーへ渡している頼み。null なら渡していない。
- * エージェントが computer_ask_user を呼んだ時点で入り、結果が届くと消える。
+ * いまユーザーへ画面を渡しているかどうか。
+ * エージェントが computer_ask_user を呼んだ時点で立ち、結果が届くと下りる。
+ */
+export const handoverActive = signal(false);
+
+/**
+ * ユーザーへ見せる頼み。渡していないときは null。
+ * 何を頼むかはモデルが書くので空のこともあるため、待ちの有無は handoverActive で見る。
  */
 export const handoverQuestion = signal<string | null>(null);
 
@@ -63,7 +69,7 @@ export async function answerHandover(
   answer: { kind: "done" } | { kind: "text"; text: string },
 ): Promise<void> {
   const sessionId = activeSessionId.value;
-  if (sessionId === null || handoverQuestion.value === null) return;
+  if (sessionId === null || !handoverActive.value) return;
 
   clearError();
   try {
@@ -139,6 +145,11 @@ export async function openSession(id: string): Promise<void> {
   isLoadingMessages.value = true;
   try {
     messages.value = await api.listMessages(id);
+  } catch (error) {
+    // 履歴を読めない会話を開いたとき、前の会話を残したままにすると
+    // 見出しと本文が食い違う。空にして、理由を画面に出す。
+    messages.value = [];
+    reportError(error);
   } finally {
     isLoadingMessages.value = false;
   }
@@ -150,7 +161,7 @@ export async function sendMessage(rawContent: string): Promise<void> {
 
   // 引き受けている間の入力は、新しい発言ではなくツールの戻り値になる。
   // 新しい発言として扱うと、ターンが 2 つ重なって会話の並びが崩れる。
-  if (handoverQuestion.value !== null) {
+  if (handoverActive.value) {
     await answerHandover({ kind: "text", text: content });
     return;
   }
@@ -289,6 +300,7 @@ function questionOf(args: unknown): string | null {
 
 /** 引き受けを始める。ペインを開き、操作できるようにする。 */
 function beginHandover(question: string | null): void {
+  handoverActive.value = true;
   handoverQuestion.value = question;
   computerViewOnly.value = false;
   openComputerPane();
@@ -296,6 +308,7 @@ function beginHandover(question: string | null): void {
 
 /** 引き受けを終える。見るだけに戻す。 */
 function endHandover(): void {
+  handoverActive.value = false;
   handoverQuestion.value = null;
   computerViewOnly.value = true;
 }

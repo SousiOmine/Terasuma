@@ -214,6 +214,7 @@ export const ja: Record<MessageKey, string> = {
   "error.container_start_failed": "コンピュータを起動できませんでした。",
   "error.container_not_running": "コンピュータが動いていません。",
   "error.handover_not_pending": "この会話は操作を待っていません。",
+  "error.turn_in_progress": "この会話はほかで応答を生成しています。",
   "error.settings_write_failed": "設定を保存できませんでした。",
   "error.internal_error": "問題が発生しました。",
   "error.network": "サーバーに接続できません。",

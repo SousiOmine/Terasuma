@@ -214,6 +214,7 @@ export const en = {
   "error.container_start_failed": "The computer could not be started.",
   "error.container_not_running": "The computer is not running.",
   "error.handover_not_pending": "This conversation is not waiting for you.",
+  "error.turn_in_progress": "This conversation is already generating a reply elsewhere.",
   "error.settings_write_failed": "The settings could not be saved.",
   "error.internal_error": "Something went wrong.",
   "error.network": "The server is not reachable.",

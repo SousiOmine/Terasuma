@@ -98,6 +98,13 @@ export type ApiDeps = {
 export function createApiHandlers(deps: ApiDeps) {
   const { store, settings } = deps;
 
+  /**
+   * いま応答を生成しているセッション。
+   * 同じセッションでターンが重なると、履歴の並びと引き受けの待ちが壊れる。
+   * 画面は 1 つのターンしか始めないが、別のタブから同じ会話を開けるため、ここでも断る。
+   */
+  const turnRunning = new Set<string>();
+
   /** モデル設定の現在の状態。設定を変える API はすべてこれを返す。 */
   function currentView(): Response {
     return Response.json(toSettingsView(settings.read()));
@@ -195,7 +202,12 @@ export function createApiHandlers(deps: ApiDeps) {
         return jsonError(400, "model_not_configured", resolution.detail);
       }
 
-      return sseResponse(runTurn(deps, req.params.id, content, req.signal));
+      if (turnRunning.has(req.params.id)) {
+        return jsonError(409, "turn_in_progress", "この会話はほかで応答を生成しています");
+      }
+
+      turnRunning.add(req.params.id);
+      return sseResponse(runTurn(deps, req.params.id, content, req.signal, turnRunning));
     },
 
     /** 設定画面を開いたときに読む、モデル設定の全体。 */
@@ -368,7 +380,13 @@ export function createApiHandlers(deps: ApiDeps) {
       }
 
       // API キーは画面へ返さないので、空で送られたときは保存済みのものを使う。
-      const merged: ProviderCredentials = { ...credentials, apiKey: credentials.apiKey ?? existing.apiKey ?? null };
+      // 空文字も「未入力」として扱う（providerSettingsFromForm は空文字を落とすため、
+      // そのまま渡すと保存済みのキーが黙って消える）。
+      const apiKey = credentials.apiKey?.trim();
+      const merged: ProviderCredentials = {
+        ...credentials,
+        apiKey: apiKey === undefined || apiKey.length === 0 ? (existing.apiKey ?? null) : apiKey,
+      };
 
       const provider = parseProviderSettings(id, merged);
       if (provider instanceof Response) return provider;
@@ -903,10 +921,28 @@ function parseProviderSettings(
 }
 
 /**
+ * 1 ターン分のイベント列。終わったら、実行中の印を必ず外す。
+ * 「停止」やタブの切断でジェネレータが閉じられた場合も、finally は通る。
+ */
+async function* runTurn(
+  deps: ApiDeps,
+  sessionId: string,
+  content: string,
+  signal: AbortSignal,
+  running: Set<string>,
+): AsyncGenerator<ChatEvent> {
+  try {
+    yield* turnEvents(deps, sessionId, content, signal);
+  } finally {
+    running.delete(sessionId);
+  }
+}
+
+/**
  * 1 ターン分のイベント列。
  * 保存 → モデル呼び出し → 保存、の順で進み、履歴は常に追記だけになる。
  */
-async function* runTurn(
+async function* turnEvents(
   deps: ApiDeps,
   sessionId: string,
   content: string,

@@ -110,14 +110,19 @@ export function ProviderWizard({ mode, onClose }: ProviderWizardProps) {
       preset,
       id: preset.uniqueId ? nextCustomEndpointId(providers.value) : preset.id,
     });
-    setBaseUrl(preset.defaultBaseUrl ?? "");
     resetInputs();
+    setBaseUrl(preset.defaultBaseUrl ?? "");
   };
 
-  /** 入力は前のプロバイダのものなので、選び直したら持ち越さない。 */
+  /**
+   * 入力は前のプロバイダのものなので、選び直したら持ち越さない。
+   * baseUrl も消す。残したままだと、カタログのプロバイダを選んでも
+   * 送信時に独自エンドポイントとして扱われる（サーバは baseUrl の有無で種類を決める）。
+   */
   const resetInputs = () => {
     setLabel("");
     setApiKey("");
+    setBaseUrl("");
     setRevealKey(false);
     setError(null);
   };

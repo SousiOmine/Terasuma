@@ -38,9 +38,17 @@ type Harness = {
  * テストごとにサーバを起動して停止する。
  * ストレージはメモリ上、ポートは自動割り当てなのでテスト同士が干渉しない。
  */
-async function withServer<T>(engine: AgentEngine, run: (harness: Harness) => Promise<T>): Promise<T> {
+async function withServer<T>(
+  engine: AgentEngine,
+  run: (harness: Harness) => Promise<T>,
+  /**
+   * ストアを差し替える（既定はメモリ上の本物）。
+   * 読み出しで失敗するストアを混ぜて、想定外の例外の返し方を確かめるために使う。
+   */
+  makeStore: () => Store = () => createStore(":memory:"),
+): Promise<T> {
   return withTempSettings(TEST_SETTINGS, async (settings) => {
-    const store = createStore(":memory:");
+    const store = makeStore();
     const { server } = startServer({ config, store, engine, settings, mcp: createMcpStub(), container: createContainerStub(), images: createImageStub(), handover: createHandover() });
     const base = server.url;
 
@@ -320,6 +328,61 @@ describe("チャット API", () => {
       expect(response.status).toBe(404);
       expect(((await response.json()) as { code: string }).code).toBe("session_not_found");
     });
+  });
+
+  test("同じ会話で応答を生成している間は、次の送信を 409 で断る", async () => {
+    // ゆっくり流し、1 つ目が終わらないうちに 2 つ目を送れるようにする。
+    await withServer(createMockEngine({ chunkSize: 1, delayMs: 5 }), async (harness) => {
+      const send = (content: string) =>
+        harness.request("/api/sessions/busy-1/messages", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ content }),
+        });
+
+      const first = await send("1 つ目の質問");
+      expect(first.status).toBe(200);
+
+      // 読み切っていないので、まだ生成中。ここで送ると断られる。
+      const second = await send("2 つ目の質問");
+      expect(second.status).toBe(409);
+      expect(((await second.json()) as { code: string }).code).toBe("turn_in_progress");
+
+      // 読み切れば、また受け付ける。
+      await first.text();
+      const third = await send("3 つ目の質問");
+      expect(third.status).toBe(200);
+      await third.text();
+
+      // 断られた分は履歴に残らない（user だけが 2 件増える）。
+      const messages = await harness.messages("busy-1");
+      expect(messages.filter((message) => message.role === "user").map((message) => message.content)).toEqual([
+        "1 つ目の質問",
+        "3 つ目の質問",
+      ]);
+    });
+  });
+
+  test("ハンドラの中で起きた想定外の例外も、JSON の 500 で返す", async () => {
+    const base = createStore(":memory:");
+    const broken: Store = {
+      ...base,
+      listSessions() {
+        throw new Error("一覧を読めませんでした");
+      },
+    };
+
+    await withServer(
+      fastMock(),
+      async (harness) => {
+        const response = await harness.request("/api/sessions");
+
+        expect(response.status).toBe(500);
+        expect(response.headers.get("content-type")).toContain("application/json");
+        expect(await response.json()).toEqual({ code: "internal_error", detail: "一覧を読めませんでした" });
+      },
+      () => broken,
+    );
   });
 
   test("モデルが即座に失敗したら error を返し、空のメッセージを残さない", async () => {

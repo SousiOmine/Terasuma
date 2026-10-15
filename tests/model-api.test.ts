@@ -499,6 +499,28 @@ describe("モデル設定 API", () => {
     );
   });
 
+  test("API キーを空文字で送っても、保存済みのキーをそのまま使う", async () => {
+    await withModelServer(
+      {
+        providers: {
+          "custom-1": { baseUrl: "https://gw.example.test/v1", apiKey: "sk-old", label: "社内" },
+        },
+      },
+      async (harness) => {
+        const view = await settingsView(
+          harness,
+          "/api/model/providers/custom-1",
+          jsonRequest("PATCH", { apiKey: "", baseUrl: "https://gw.example.test/v1", label: "社内" }),
+        );
+
+        expect(findProvider(view, "custom-1").hasApiKey).toBe(true);
+        expect(harness.file().providers).toEqual({
+          "custom-1": { baseUrl: "https://gw.example.test/v1", apiKey: "sk-old", label: "社内" },
+        });
+      },
+    );
+  });
+
   test("設定に無いプロバイダの変更は 404", async () => {
     await withModelServer(null, async (harness) => {
       const response = await harness.request(

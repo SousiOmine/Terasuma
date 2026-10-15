@@ -2,7 +2,7 @@ import { IconX } from "@tabler/icons-preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { containerStatus } from "../containerSettings";
 import { t } from "../i18n";
-import { answerHandover, closeComputerPane, computerPaneOpen, computerViewOnly, handoverQuestion } from "../state";
+import { answerHandover, closeComputerPane, computerPaneOpen, computerViewOnly, handoverActive, handoverQuestion } from "../state";
 
 /**
  * 右ペイン。いまはコンテナの画面を noVNC で映す。
@@ -41,6 +41,7 @@ export function ComputerPane() {
   const status = containerStatus.value;
   const viewOnly = computerViewOnly.value;
 
+  const active = handoverActive.value;
   const question = handoverQuestion.value;
   const targetRef = useRef<HTMLDivElement>(null);
   const clientRef = useRef<RfbClient | null>(null);
@@ -97,7 +98,7 @@ export function ComputerPane() {
       <section class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
         <header class="flex h-12 shrink-0 items-center gap-2 border-b border-neutral-200 px-4 dark:border-neutral-800">
           <h2 class="min-w-0 flex-1 truncate text-sm font-medium">{t("chat.computer.title")}</h2>
-          {question !== null && (
+          {active && (
             <span class="shrink-0 rounded-md bg-amber-100 px-2 py-0.5 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-200">
               {t("chat.computer.yourTurn")}
             </span>
@@ -113,10 +114,10 @@ export function ComputerPane() {
           </button>
         </header>
 
-        {question !== null && (
+        {active && (
           <div class="shrink-0 border-b border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-900/60 dark:bg-amber-950/40">
             <p class="text-xs leading-relaxed whitespace-pre-wrap text-amber-900 dark:text-amber-200">
-              {question}
+              {question ?? t("chat.computer.yourTurn")}
             </p>
             <button
               type="button"

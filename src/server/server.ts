@@ -6,7 +6,7 @@ import { type ContainerManager } from "./container";
 import type { AgentEngine } from "./engine";
 import type { Handover } from "./handover";
 import type { ImageStore } from "./images";
-import { describeError } from "./errors";
+import { describeError, jsonError } from "./errors";
 import type { McpManager } from "./mcp";
 import { OAUTH_CALLBACK_PATH } from "./mcp-oauth";
 import { CATALOG_FILE_NAME, createCatalog, type Catalog } from "./models-dev";
@@ -227,6 +227,15 @@ export function startServer(options: ServerOptions): StartedServer {
       },
       fetch() {
         return new Response("Not Found", { status: 404 });
+      },
+      /**
+       * ハンドラから漏れた例外も、ほかの失敗と同じ JSON で返す。
+       * Bun の既定のエラーページは HTML なので、画面はコードから文言を選べず、
+       * 理由も「HTTP 500」しか分からなくなる。
+       */
+      error(error: Error): Response {
+        console.error(error);
+        return jsonError(500, "internal_error", describeError(error));
       },
     });
 
