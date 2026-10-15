@@ -39,6 +39,13 @@ export function createHandover(): Handover {
   return {
     wait(sessionId, signal) {
       return new Promise<string>((resolve, reject) => {
+        // すでに止まったターンから呼ばれることがある（停止と ask_user が競合した場合）。
+        // ここで断らないと、誰も返事をしない待ちが残り、ターンが片付かない。
+        if (signal.aborted) {
+          reject(new Error("画面を渡す前にターンが終わりました"));
+          return;
+        }
+
         const settle = (answer: HandoverAnswer): void => {
           waiting.delete(sessionId);
           signal.removeEventListener("abort", onAbort);

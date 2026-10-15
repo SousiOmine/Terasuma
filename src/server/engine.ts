@@ -140,6 +140,13 @@ export function createEngine(options: {
   return createMastraEngine(options.settings, options.mcp, options.computer, options.images);
 }
 
+/**
+ * 1 ターンでモデルを呼ぶ回数の上限。
+ * 画面を見て押して、また見て確かめるような操作は何ステップにもなる。
+ * 依存側の既定値に任せると、上げ下げのつもりがなくても変わってしまうので、ここで決める。
+ */
+const MAX_STEPS_PER_TURN = 5;
+
 export function createMastraEngine(
   settings: SettingsReader,
   mcp: ToolsetProvider,
@@ -199,6 +206,7 @@ export function createMastraEngine(
 
       const result = await agentFor(resolution.model).stream(messages, {
         abortSignal: signal,
+        maxSteps: MAX_STEPS_PER_TURN,
         ...(providerOptions === null ? {} : { providerOptions }),
         ...(Object.keys(tools).length === 0 ? {} : { toolsets: { tools } }),
         // tool の本文に画像を置けるプロバイダが無い（OpenAI 互換は文字列へ潰す）。

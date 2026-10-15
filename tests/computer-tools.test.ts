@@ -20,8 +20,12 @@ type ToolContext = {
   tools: ReturnType<typeof createComputerTools>;
   /** xdotool に渡された引数。 */
   execCalls: string[][];
+  /** exec に渡された中断の signal。 */
+  execSignals: (AbortSignal | undefined)[];
   /** bash -lc に渡されたスクリプト。 */
   shellCalls: string[];
+  /** shell に渡された中断の signal。 */
+  shellSignals: (AbortSignal | undefined)[];
   images: ImageStore;
   homeDir: string;
 };
@@ -47,16 +51,20 @@ async function withTools<T>(behaviour: ToolBehaviour, run: (context: ToolContext
   });
 
   const execCalls: string[][] = [];
+  const execSignals: (AbortSignal | undefined)[] = [];
   const shellCalls: string[] = [];
+  const shellSignals: (AbortSignal | undefined)[] = [];
 
   const container: ContainerManager = {
     ...base,
-    exec: async (args) => {
+    exec: async (args, options) => {
       execCalls.push([...args]);
+      execSignals.push(options.signal);
       return behaviour.execResult ?? OK;
     },
-    shell: async (script) => {
+    shell: async (script, options) => {
       shellCalls.push(script);
+      shellSignals.push(options.signal);
       return behaviour.shell ?? OK;
     },
     screenshot: async () => behaviour.screenshot ?? testPng(1280, 800),
@@ -66,17 +74,22 @@ async function withTools<T>(behaviour: ToolBehaviour, run: (context: ToolContext
   const tools = createComputerTools({ container, images, handover: createHandover(), sessionId: "s1" });
 
   try {
-    return await run({ tools, execCalls, shellCalls, images, homeDir: join(dir, "container", "home") });
+    return await run({ tools, execCalls, execSignals, shellCalls, shellSignals, images, homeDir: join(dir, "container", "home") });
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
 }
 
 /** ツールをモデルを介さずにそのまま呼ぶ。 */
-async function callTool(tools: ToolContext["tools"], name: string, input: unknown): Promise<unknown> {
+async function callTool(
+  tools: ToolContext["tools"],
+  name: string,
+  input: unknown,
+  context: { abortSignal?: AbortSignal } = {},
+): Promise<unknown> {
   const tool = tools[name];
   if (tool?.execute === undefined) throw new Error(`${name} が無い`);
-  return tool.execute(input as never, {} as never);
+  return tool.execute(input as never, context as never);
 }
 
 /** ツール名の一覧を作るときの土台。 */
@@ -302,5 +315,43 @@ describe("コンテナの中での実行", () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+describe("ターンの中断", () => {
+  test("止まったターンでは、待つのをやめる", async () => {
+    await withTools({}, async ({ tools }) => {
+      const controller = new AbortController();
+      const waiting = callTool(tools, "computer_wait", { seconds: 30 }, { abortSignal: controller.signal });
+      controller.abort();
+
+      await expect(waiting).rejects.toThrow("ターンが終了した");
+    });
+  });
+
+  test("コンテナの操作には、ターンの中断がそのまま渡る", async () => {
+    await withTools({}, async ({ tools, execSignals, shellSignals }) => {
+      const controller = new AbortController();
+
+      await callTool(tools, "computer_click", { x: 10, y: 20 }, { abortSignal: controller.signal });
+      await callTool(tools, "computer_shell", { command: "uname -a" }, { abortSignal: controller.signal });
+
+      expect(execSignals.at(-1)).toBe(controller.signal);
+      expect(shellSignals.at(-1)).toBe(controller.signal);
+    });
+  });
+
+  test("computer_ask_user の質問は空を許さない", async () => {
+    await withTools({}, async ({ tools }) => {
+      const schema = tools["computer_ask_user"]?.inputSchema;
+      if (schema === undefined) throw new Error("computer_ask_user が無い");
+
+      // 空の質問だと、画面には帯も「操作を完了した」も出せない。
+      const empty = await schema["~standard"].validate({ question: "" });
+      const filled = await schema["~standard"].validate({ question: "ログインしてください" });
+
+      expect(empty.issues?.length ?? 0).toBeGreaterThan(0);
+      expect(filled.issues).toBeUndefined();
+    });
   });
 });

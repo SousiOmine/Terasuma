@@ -45,6 +45,8 @@ const INSPECT_TIMEOUT_MS = 30_000;
 const BUILD_TIMEOUT_MS = 15 * 60_000;
 const RUN_TIMEOUT_MS = 60_000;
 const REMOVE_TIMEOUT_MS = 60_000;
+/** 画面の撮影に許す時間。podman が返らないままターンが終わらなくなるのを防ぐ。 */
+const SCREENSHOT_TIMEOUT_MS = 15_000;
 
 /** コンテナを操作できなかった理由。画面の文言はクライアント側の i18n が決める。 */
 export type ContainerErrorCode =
@@ -77,8 +79,13 @@ export type CommandResult = {
 /**
  * コマンドの実行。テストでは podman の代わりにこれを差し替える。
  * 実行ファイルが見つからない場合も例外にせず、code -1 の結果として返す。
+ * signal が立つと、実行中のコマンドを打ち切る。
  */
-export type CommandRunner = (cmd: readonly string[], timeoutMs: number) => Promise<CommandResult>;
+export type CommandRunner = (
+  cmd: readonly string[],
+  timeoutMs: number,
+  signal?: AbortSignal,
+) => Promise<CommandResult>;
 
 /** コンテナの中でコマンドを実行した結果。 */
 export type ShellResult = {
@@ -106,14 +113,14 @@ export type ContainerManager = {
   /** コンテナを作り直す。wipeHome を選ぶと、マウントしたフォルダの中身も消す。 */
   reset(options: { wipeHome: boolean }): Promise<ContainerStatusView>;
   /** コンテナの中で bash -lc を実行する。動いていなければ ContainerError を投げる。 */
-  shell(script: string, options: { timeoutMs: number }): Promise<ShellResult>;
+  shell(script: string, options: { timeoutMs: number; signal?: AbortSignal }): Promise<ShellResult>;
   /**
    * コンテナの中で 1 つのコマンドを実行する。
    * シェルを介さないので、空白や記号を含む引数（打ち込む文字など）もそのまま渡せる。
    */
-  exec(args: readonly string[], options: { timeoutMs: number }): Promise<ExecResult>;
+  exec(args: readonly string[], options: { timeoutMs: number; signal?: AbortSignal }): Promise<ExecResult>;
   /** いまの画面を PNG で撮る。 */
-  screenshot(): Promise<Uint8Array>;
+  screenshot(signal?: AbortSignal): Promise<Uint8Array>;
 };
 
 export type ContainerManagerOptions = {
@@ -250,6 +257,17 @@ export function createContainerManager(options: ContainerManagerOptions): Contai
     };
   }
 
+  /** 動いていなければ、どの操作でも同じ理由で失敗させる。 */
+  async function requireRunning(): Promise<void> {
+    const current = await status();
+    if (current.state !== "running") {
+      throw new ContainerError(
+        "container_not_running",
+        `コンピュータが動いていません（いまの状態: ${current.state}）。設定の「コンピュータ」から起動してください`,
+      );
+    }
+  }
+
   async function start(): Promise<ContainerStatusView> {
     const before = await status();
 
@@ -284,63 +302,45 @@ export function createContainerManager(options: ContainerManagerOptions): Contai
       return start();
     },
 
-    async shell(script, { timeoutMs }) {
-      const current = await status();
-      if (current.state !== "running") {
-        throw new ContainerError(
-          "container_not_running",
-          `コンピュータが動いていません（いまの状態: ${current.state}）。設定の「コンピュータ」から起動してください`,
-        );
-      }
+    async shell(script, { timeoutMs, signal }) {
+      await requireRunning();
 
       const result = await run(
         ["podman", "exec", "--workdir", WORKDIR_IN_CONTAINER, CONTAINER_NAME, "bash", "-lc", script],
         timeoutMs,
+        signal,
       );
 
-      return {
-        exitCode: result.code,
-        stdout: result.stdout,
-        stderr: result.stderr,
-        truncated: result.truncated,
-        timedOut: result.timedOut,
-      };
+      return toShellResult(result);
     },
 
-    async exec(args, { timeoutMs }) {
-      const current = await status();
-      if (current.state !== "running") {
-        throw new ContainerError(
-          "container_not_running",
-          `コンピュータが動いていません（いまの状態: ${current.state}）。設定の「コンピュータ」から起動してください`,
-        );
-      }
+    async exec(args, { timeoutMs, signal }) {
+      await requireRunning();
 
       const result = await run(
         ["podman", "exec", "--workdir", WORKDIR_IN_CONTAINER, CONTAINER_NAME, ...args],
         timeoutMs,
+        signal,
       );
 
-      return {
-        exitCode: result.code,
-        stdout: result.stdout,
-        stderr: result.stderr,
-        truncated: result.truncated,
-        timedOut: result.timedOut,
-      };
+      return toShellResult(result);
     },
 
-    async screenshot() {
-      const current = await status();
-      if (current.state !== "running") {
-        throw new ContainerError(
-          "container_not_running",
-          `コンピュータが動いていません（いまの状態: ${current.state}）。設定の「コンピュータ」から起動してください`,
-        );
-      }
-
-      return captureScreen();
+    async screenshot(signal) {
+      await requireRunning();
+      return captureScreen(signal);
     },
+  };
+}
+
+/** コマンドの結果を、ツールへ返す形に整える。 */
+function toShellResult(result: CommandResult): ShellResult {
+  return {
+    exitCode: result.code,
+    stdout: result.stdout,
+    stderr: result.stderr,
+    truncated: result.truncated,
+    timedOut: result.timedOut,
   };
 }
 
@@ -348,37 +348,57 @@ export function createContainerManager(options: ContainerManagerOptions): Contai
  * 画面を PNG で撮る。画像は文字列にせず、バイト列のまま受け取る。
  * DISPLAY はイメージの ENV で入っているので、ここでは渡さなくてよい。
  */
-async function captureScreen(): Promise<Uint8Array> {
+async function captureScreen(signal?: AbortSignal): Promise<Uint8Array> {
+  const timeout = AbortSignal.timeout(SCREENSHOT_TIMEOUT_MS);
+  const abort = signal === undefined ? timeout : AbortSignal.any([signal, timeout]);
+
   const proc = Bun.spawn({
     cmd: ["podman", "exec", CONTAINER_NAME, "import", "-window", "root", "png:-"],
     stdin: "ignore",
     stdout: "pipe",
     stderr: "pipe",
+    signal: abort,
   });
 
-  const [data, stderr, code] = await Promise.all([
-    new Response(proc.stdout).arrayBuffer(),
-    new Response(proc.stderr).text(),
-    proc.exited,
-  ]);
+  try {
+    const [data, stderr, code] = await Promise.all([
+      new Response(proc.stdout).arrayBuffer(),
+      new Response(proc.stderr).text(),
+      proc.exited,
+    ]);
 
-  if (code !== 0) {
+    if (code !== 0) {
+      throw new ContainerError(
+        "container_not_running",
+        stderr.trim() || `画面を撮れませんでした（podman exec の終了コード ${code}）`,
+      );
+    }
+    if (data.byteLength === 0) {
+      throw new ContainerError("container_not_running", "画面の画像が空でした");
+    }
+
+    return new Uint8Array(data);
+  } catch (error) {
+    if (error instanceof ContainerError) throw error;
+
+    // 打ち切り（時間切れ、またはターンの停止）でもここへ来る。
     throw new ContainerError(
       "container_not_running",
-      stderr.trim() || `画面を撮れませんでした（podman exec の終了コード ${code}）`,
+      timeout.aborted
+        ? `画面を撮るのに ${SCREENSHOT_TIMEOUT_MS / 1000} 秒以上かかりました`
+        : `画面を撮れませんでした: ${describe(error)}`,
     );
   }
-  if (data.byteLength === 0) {
-    throw new ContainerError("container_not_running", "画面の画像が空でした");
-  }
-
-  return new Uint8Array(data);
 }
 
 /** podman のコマンドを実行し、出力と終了コードを返す。 */
-async function runCommand(cmd: readonly string[], timeoutMs: number): Promise<CommandResult> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+async function runCommand(
+  cmd: readonly string[],
+  timeoutMs: number,
+  signal?: AbortSignal,
+): Promise<CommandResult> {
+  const timeout = AbortSignal.timeout(timeoutMs);
+  const abort = signal === undefined ? timeout : AbortSignal.any([signal, timeout]);
 
   try {
     const proc = Bun.spawn({
@@ -386,7 +406,7 @@ async function runCommand(cmd: readonly string[], timeoutMs: number): Promise<Co
       stdin: "ignore",
       stdout: "pipe",
       stderr: "pipe",
-      signal: controller.signal,
+      signal: abort,
     });
 
     const [stdout, stderr] = await Promise.all([readLimited(proc.stdout), readLimited(proc.stderr)]);
@@ -397,13 +417,12 @@ async function runCommand(cmd: readonly string[], timeoutMs: number): Promise<Co
       stdout: stdout.text,
       stderr: stderr.text,
       truncated: stdout.truncated || stderr.truncated,
-      timedOut: controller.signal.aborted,
+      timedOut: timeout.aborted,
     };
   } catch (error) {
     // podman が入っていない場合、実行ファイルが見つからずここへ来る。
-    return { code: -1, stdout: "", stderr: describe(error), truncated: false, timedOut: false };
-  } finally {
-    clearTimeout(timer);
+    // signal で打ち切られた場合もここへ来る（code -1 で、理由は stderr に入る）。
+    return { code: -1, stdout: "", stderr: describe(error), truncated: false, timedOut: timeout.aborted };
   }
 }
 

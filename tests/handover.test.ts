@@ -56,6 +56,17 @@ describe("引き受けの待ち", () => {
     expect(handover.pending("s1")).toBe(false);
   });
 
+  test("すでに止まっているターンでは、待ちを作らずに終わる", async () => {
+    const handover = createHandover();
+    const controller = new AbortController();
+    controller.abort();
+
+    const waiting = handover.wait("s1", controller.signal);
+
+    expect(handover.pending("s1")).toBe(false);
+    expect(await waiting.catch((error: unknown) => (error as Error).message)).toContain("ターンが終わりました");
+  });
+
   test("待ちを片付けると、完了として終わる", async () => {
     const handover = createHandover();
     const waiting = handover.wait("s1", new AbortController().signal);

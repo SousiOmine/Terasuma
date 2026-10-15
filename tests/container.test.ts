@@ -221,4 +221,30 @@ describe("コンテナの中での実行", () => {
       },
     );
   });
+
+  test("実行中のコマンドには、渡された中断の signal がそのまま届く", async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "terasuma-container-"));
+    const stub = createPodmanStub({});
+    const seen: (AbortSignal | undefined)[] = [];
+    const container = createContainerManager({
+      dataDir,
+      containerDir: join(dataDir, "container-files"),
+      // 状態の問い合わせは signal を取らない。実行だけが取る。
+      command: (cmd, timeoutMs, signal) => {
+        seen.push(signal);
+        return stub.run(cmd, timeoutMs);
+      },
+    });
+
+    try {
+      const controller = new AbortController();
+      await container.exec(["true"], { timeoutMs: 1_000, signal: controller.signal });
+      await container.shell("uname -a", { timeoutMs: 1_000, signal: controller.signal });
+
+      // 状態の問い合わせは signal を取らないので、実行した 2 回だけが残る。
+      expect(seen.filter((signal) => signal !== undefined)).toEqual([controller.signal, controller.signal]);
+    } finally {
+      rmSync(dataDir, { recursive: true, force: true });
+    }
+  });
 });

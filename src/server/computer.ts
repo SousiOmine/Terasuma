@@ -34,6 +34,12 @@ const ACTION_TIMEOUT_MS = 15_000;
 export const SHELL_TIMEOUT_MS = 120_000;
 
 /**
+ * ツールの実行に渡ってくる中断。
+ * ターンが止まったら、待っている操作もコンテナのコマンドも打ち切る。
+ */
+type ToolContext = { abortSignal?: AbortSignal };
+
+/**
  * モデルへ渡すコンテナのツールを決める。
  *
  * podman が無い端末では 1 つも渡さない。呼ばせてから失敗させると、
@@ -72,8 +78,8 @@ export function createComputerTools(options: ComputerToolsOptions): ComputerTool
   const { container, images, handover, sessionId, onImage } = options;
 
   /** xdotool を 1 回呼ぶ。失敗と打ち切りは例外にして、モデルが理由を読めるようにする。 */
-  async function xdotool(args: readonly string[]): Promise<ExecResult> {
-    const result = await container.exec(["xdotool", ...args], { timeoutMs: ACTION_TIMEOUT_MS });
+  async function xdotool(args: readonly string[], signal?: AbortSignal): Promise<ExecResult> {
+    const result = await container.exec(["xdotool", ...args], { timeoutMs: ACTION_TIMEOUT_MS, signal });
     if (result.timedOut) {
       throw new Error(`xdotool ${args[0] ?? ""} が ${ACTION_TIMEOUT_MS / 1000} 秒で終わりませんでした`);
     }
@@ -116,10 +122,13 @@ export function createComputerTools(options: ComputerToolsOptions): ComputerTool
         button: z.enum(["left", "right", "middle"]).optional().describe("Mouse button to use (default: left)"),
         count: z.number().int().min(1).max(3).optional().describe("How many times to click (default: 1)"),
       }),
-      execute: async ({ x, y, button, count }: { x: number; y: number; button?: string; count?: number }) => {
+      execute: async (
+        { x, y, button, count }: { x: number; y: number; button?: string; count?: number },
+        context: ToolContext,
+      ) => {
         const times = count ?? 1;
-        await xdotool(["mousemove", String(x), String(y)]);
-        await xdotool(["click", "--repeat", String(times), String(BUTTON_CODES[button ?? "left"])]);
+        await xdotool(["mousemove", String(x), String(y)], context.abortSignal);
+        await xdotool(["click", "--repeat", String(times), String(BUTTON_CODES[button ?? "left"])], context.abortSignal);
         return `clicked ${button ?? "left"} ${times} time(s) at ${x},${y}`;
       },
     }),
@@ -133,20 +142,23 @@ export function createComputerTools(options: ComputerToolsOptions): ComputerTool
         direction: z.enum(["up", "down", "left", "right"]).describe("Direction to scroll"),
         amount: z.number().int().min(1).max(20).optional().describe("Number of wheel steps (default: 3)"),
       }),
-      execute: async ({
-        x,
-        y,
-        direction,
-        amount,
-      }: {
-        x: number;
-        y: number;
-        direction: string;
-        amount?: number;
-      }) => {
+      execute: async (
+        {
+          x,
+          y,
+          direction,
+          amount,
+        }: {
+          x: number;
+          y: number;
+          direction: string;
+          amount?: number;
+        },
+        context: ToolContext,
+      ) => {
         const steps = amount ?? 3;
-        await xdotool(["mousemove", String(x), String(y)]);
-        await xdotool(["click", "--repeat", String(steps), String(SCROLL_BUTTONS[direction])]);
+        await xdotool(["mousemove", String(x), String(y)], context.abortSignal);
+        await xdotool(["click", "--repeat", String(steps), String(SCROLL_BUTTONS[direction])], context.abortSignal);
         return `scrolled ${direction} ${steps} step(s) at ${x},${y}`;
       },
     }),
@@ -160,8 +172,8 @@ export function createComputerTools(options: ComputerToolsOptions): ComputerTool
       inputSchema: z.object({
         text: z.string().describe("Text to type"),
       }),
-      execute: async ({ text }: { text: string }) => {
-        await xdotool(["type", "--delay", "20", "--", text]);
+      execute: async ({ text }: { text: string }, context: ToolContext) => {
+        await xdotool(["type", "--delay", "20", "--", text], context.abortSignal);
         return `typed ${text.length} character(s)`;
       },
     }),
@@ -175,8 +187,8 @@ export function createComputerTools(options: ComputerToolsOptions): ComputerTool
       inputSchema: z.object({
         key: z.string().describe("Key name or combination"),
       }),
-      execute: async ({ key }: { key: string }) => {
-        await xdotool(["key", "--", key]);
+      execute: async ({ key }: { key: string }, context: ToolContext) => {
+        await xdotool(["key", "--", key], context.abortSignal);
         return `pressed ${key}`;
       },
     }),
@@ -188,7 +200,13 @@ export function createComputerTools(options: ComputerToolsOptions): ComputerTool
         "Use this to find out what is open before clicking or typing.",
       ].join(" "),
       inputSchema: z.object({}),
-      execute: async () => container.shell(WINDOW_LIST_SCRIPT, { timeoutMs: ACTION_TIMEOUT_MS }).then(formatWindows),
+      execute: async (_input: Record<string, never>, context: ToolContext) => {
+        const result = await container.shell(WINDOW_LIST_SCRIPT, {
+          timeoutMs: ACTION_TIMEOUT_MS,
+          signal: context.abortSignal,
+        });
+        return formatWindows(result);
+      },
     }),
 
     computer_wait: createTool({
@@ -197,8 +215,8 @@ export function createComputerTools(options: ComputerToolsOptions): ComputerTool
       inputSchema: z.object({
         seconds: z.number().min(0).max(60).describe("Seconds to wait"),
       }),
-      execute: async ({ seconds }: { seconds: number }) => {
-        await new Promise((resolve) => setTimeout(resolve, seconds * 1_000));
+      execute: async ({ seconds }: { seconds: number }, context: ToolContext) => {
+        await waitFor(seconds * 1_000, context.abortSignal);
         return `waited ${seconds} second(s)`;
       },
     }),
@@ -213,10 +231,10 @@ export function createComputerTools(options: ComputerToolsOptions): ComputerTool
         command: z.string().describe('Command to start, for example "xterm"'),
         args: z.array(z.string()).optional().describe("Arguments for the command"),
       }),
-      execute: async ({ command, args }: { command: string; args?: string[] }) => {
+      execute: async ({ command, args }: { command: string; args?: string[] }, context: ToolContext) => {
         // exec のセッションが終わっても残るよう、nohup で切り離して起動する。
         const line = `nohup ${[command, ...(args ?? [])].map(quote).join(" ")} >/dev/null 2>&1 &`;
-        const result = await container.shell(line, { timeoutMs: ACTION_TIMEOUT_MS });
+        const result = await container.shell(line, { timeoutMs: ACTION_TIMEOUT_MS, signal: context.abortSignal });
         if (result.exitCode !== 0) {
           throw new Error(result.stderr.trim() || `起動できませんでした（終了コード ${result.exitCode}）`);
         }
@@ -233,9 +251,9 @@ export function createComputerTools(options: ComputerToolsOptions): ComputerTool
         "Do not take screenshots while the user is working on the screen.",
       ].join(" "),
       inputSchema: z.object({
-        question: z.string().describe("What you need the user to do, written for the user to read"),
+        question: z.string().min(1).describe("What you need the user to do, written for the user to read"),
       }),
-      execute: async ({ question }: { question: string }, context: { abortSignal?: AbortSignal }) => {
+      execute: async ({ question }: { question: string }, context: ToolContext) => {
         const signal = context.abortSignal;
         // 中断を受け取れないと、ユーザーを待ったままターンを片付けられなくなる。
         if (signal === undefined) throw new Error("ターンの中断を受け取れないため、ユーザーを待てません");
@@ -256,8 +274,8 @@ export function createComputerTools(options: ComputerToolsOptions): ComputerTool
       inputSchema: z.object({
         command: z.string().describe('Shell command to run, for example "uname -a"'),
       }),
-      execute: async ({ command }: { command: string }) => {
-        const result = await container.shell(command, { timeoutMs: SHELL_TIMEOUT_MS });
+      execute: async ({ command }: { command: string }, context: ToolContext) => {
+        const result = await container.shell(command, { timeoutMs: SHELL_TIMEOUT_MS, signal: context.abortSignal });
         return formatShellResult(result);
       },
     }),
@@ -331,6 +349,31 @@ function formatShellResult(result: ShellResult): string {
 
 /** 画像つきのツールの戻り値。 */
 type ImageOutput = { text: string; image: ImageRef };
+
+/**
+ * 指定した時間だけ待つ。ターンが止まったら、待つのもやめる。
+ * 止められないと、停止したあともタイマーが残り、その間ターンが片付かない。
+ */
+function waitFor(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const onAbort = (): void => {
+      clearTimeout(timer);
+      reject(new Error("ターンが終了したため、待つのをやめました"));
+    };
+
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+
+    if (signal?.aborted === true) {
+      clearTimeout(timer);
+      reject(new Error("ターンはすでに終了しています"));
+      return;
+    }
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
 
 function trimTrailingNewline(text: string): string {
   return text.endsWith("\n") ? text.slice(0, -1) : text;
