@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, readdirSync, rmSync } from "node:fs";
+import { mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createImageStore } from "../src/server/images";
@@ -65,6 +65,16 @@ describe("画像の置き場", () => {
       // ハッシュの形でない値は、パスを組み立てる前に断る。
       expect(store.find("../../etc/passwd")).toBeNull();
       expect(store.find("短い")).toBeNull();
+    });
+  });
+
+  test("参照のハッシュが形に合わなければ、実体を読みに行かない", () => {
+    withStore(({ store, dir }) => {
+      // 置き場の外にファイルを置いても、参照からは辿れない。
+      writeFileSync(join(dir, "secret.png"), "置き場の外のファイル");
+
+      expect(store.read({ sha256: "../secret", mime: "image/png", width: 1, height: 1 })).toBeNull();
+      expect(store.read({ sha256: "短い", mime: "image/png", width: 1, height: 1 })).toBeNull();
     });
   });
 

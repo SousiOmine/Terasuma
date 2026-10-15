@@ -21,6 +21,9 @@ const MIME_EXTENSIONS: Record<string, string> = {
 /** 中身がハッシュで決まるので、URL ごと長く持たせてよい。 */
 const CACHE_CONTROL = "public, max-age=31536000, immutable";
 
+/** ファイル名に使えるハッシュの形。パスを組み立てる前に必ずこれで確かめる。 */
+const SHA256_PATTERN = /^[0-9a-f]{64}$/;
+
 /** ディレクトリ名。データディレクトリの直下に置く。 */
 const IMAGES_DIR_NAME = "images";
 
@@ -71,6 +74,9 @@ export function createImageStore(dataDir: string): ImageStore {
     read(ref) {
       const extension = MIME_EXTENSIONS[ref.mime];
       if (extension === undefined) return null;
+      // 参照は保存済みの値だが、パスを組み立てる前に形を確かめる。
+      // MCP サーバーのツール結果から作られた参照は、端末の外で決まった値でもある。
+      if (!SHA256_PATTERN.test(ref.sha256)) return null;
 
       const file = fileFor(ref.sha256, extension);
       return existsSync(file) ? readFileSync(file) : null;
@@ -78,7 +84,7 @@ export function createImageStore(dataDir: string): ImageStore {
 
     find(sha256) {
       // ハッシュ以外を受け付けない（パスを組み立てる材料にするため）。
-      if (!/^[0-9a-f]{64}$/.test(sha256)) return null;
+      if (!SHA256_PATTERN.test(sha256)) return null;
 
       for (const [mime, extension] of Object.entries(MIME_EXTENSIONS)) {
         const file = fileFor(sha256, extension);
