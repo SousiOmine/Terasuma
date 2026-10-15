@@ -9,6 +9,7 @@
  * 独自エンドポイント（OpenAI 互換）はカタログに無いので、モデルの一覧もここから取る。
  */
 import type { ApiErrorCode, ProviderCheckResult } from "../shared/types";
+import { describeError } from "../shared/errors";
 
 /** 接続確認で返す失敗の種類。ルート側でそのまま API のコードになる。 */
 export type ProviderErrorCode = Extract<
@@ -129,7 +130,7 @@ async function probeModels(fetchImpl: FetchLike, request: ProviderRequest): Prom
         `${target.url} から ${CONNECTION_TIMEOUT_MS / 1000} 秒以内に応答がありません`,
       );
     }
-    throw new ProviderRequestError("provider_unreachable", `${target.url} に接続できません: ${describe(error)}`);
+    throw new ProviderRequestError("provider_unreachable", `${target.url} に接続できません: ${describeError(error)}`);
   }
 
   if (!response.ok) {
@@ -251,6 +252,3 @@ function readErrorMessage(body: unknown): string | null {
   return typeof message === "string" ? message : null;
 }
 
-function describe(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}

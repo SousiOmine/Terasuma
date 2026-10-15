@@ -4,6 +4,7 @@ import { getProviderConfig } from "@mastra/core/llm";
 import { resolveAppPaths } from "./paths";
 import { isModelId, type ModelId } from "./shared/model";
 import type { McpServerForm, ProviderCredentials } from "./shared/types";
+import { describeError } from "./shared/errors";
 
 /** 使う LLM 実装。mock は開発・テスト専用で、既定には決してならない。 */
 type EngineKind = "mastra" | "mock";
@@ -204,22 +205,16 @@ export function readSettingsFile(path: string): FileSettings {
   try {
     raw = JSON.parse(text);
   } catch (error) {
-    throw new Error(`${path} を JSON として解釈できません: ${describe(error)}`, { cause: error });
+    throw new Error(`${path} を JSON として解釈できません: ${describeError(error)}`, { cause: error });
   }
 
-  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+  if (!isRecord(raw)) {
     throw new Error(`${path} の内容は JSON のオブジェクトにしてください`);
   }
 
-  const source = raw as Record<string, unknown>;
-
   // 綴り違いに気づかないまま動くと、設定したつもりで効かない状態になる。
-  const unknownKeys = Object.keys(source).filter((key) => !FILE_KEYS.includes(key as FileKey));
-  if (unknownKeys.length > 0) {
-    throw new Error(
-      `${path} に未知の項目があります: ${unknownKeys.join(", ")}（使える項目: ${FILE_KEYS.join(", ")}）`,
-    );
-  }
+  assertKnownKeys(raw, FILE_KEYS, path);
+  const source = raw;
 
   const settings: FileSettings = {};
 
@@ -306,7 +301,7 @@ export function normalizeProvider(id: string, raw: ProviderSettings, source: str
 
   const settings: ProviderSettings = {};
   if (raw.apiKey !== undefined) settings.apiKey = raw.apiKey;
-  if (raw.baseUrl !== undefined) settings.baseUrl = normalizeBaseUrl(raw.baseUrl, source);
+  if (raw.baseUrl !== undefined) settings.baseUrl = normalizeHttpUrl(raw.baseUrl, source, "baseUrl");
   if (raw.label !== undefined) settings.label = raw.label;
   return settings;
 }
@@ -332,6 +327,12 @@ export function providerSettingsFromForm(form: ProviderCredentials): ProviderSet
  * 種類と食い違う項目は黙って捨てずに失敗させる（入れたつもりで効かない状態を作らないため）。
  */
 export function mcpServerSettingsFromForm(form: McpServerForm, source: string): McpServerSettings {
+  // id の検証は、設定ファイルを読むときと同じ 1 つの規則に任せる。
+  const idProblem = mcpServerIdProblem(form.id);
+  if (idProblem !== null) {
+    throw new Error(`${source} の id に使えない値です: ${idProblem}`);
+  }
+
   if (form.type === "stdio") {
     if (form.url !== null) {
       throw new Error(`${source} の url は http のサーバーにだけ指定できます`);
@@ -356,35 +357,51 @@ export function mcpServerSettingsFromForm(form: McpServerForm, source: string): 
   return readMcpServerEntry(form.id, { type: "http", url: form.url ?? undefined }, source);
 }
 
-/** エンドポイントの指定。末尾のスラッシュは落として、URL の組み立てを単純にする。 */
-function normalizeBaseUrl(value: string, source: string): string {
+/**
+ * 接続先の URL を検証する。末尾のスラッシュは落として、URL の組み立てを単純にする。
+ * プロバイダの baseUrl も MCP サーバーの url も指す先は 1 つなので、同じ扱いにする。
+ */
+function normalizeHttpUrl(value: string, source: string, what: string): string {
   const trimmed = value.trim().replace(/\/+$/, "");
 
   let parsed: URL;
   try {
     parsed = new URL(trimmed);
   } catch (error) {
-    throw new Error(`${source} の baseUrl は URL として読めません（現在の値: ${JSON.stringify(value)}）`, {
+    throw new Error(`${source} の ${what} は URL として読めません（現在の値: ${JSON.stringify(value)}）`, {
       cause: error,
     });
   }
 
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-    throw new Error(`${source} の baseUrl は http:// か https:// で始めてください（現在の値: ${JSON.stringify(value)}）`);
+    throw new Error(`${source} の ${what} は http:// か https:// で始めてください（現在の値: ${JSON.stringify(value)}）`);
   }
   return trimmed;
+}
+
+/** オブジェクトとして読める値かどうか。配列は含めない。 */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** 使える項目だけが書かれているか確かめる。綴り違いは起動時に落とす。 */
+function assertKnownKeys(source: Record<string, unknown>, allowed: readonly string[], where: string): void {
+  const unknownKeys = Object.keys(source).filter((key) => !allowed.includes(key));
+  if (unknownKeys.length > 0) {
+    throw new Error(`${where} に未知の項目があります: ${unknownKeys.join(", ")}（使える項目: ${allowed.join(", ")}）`);
+  }
 }
 
 function readProviders(source: Record<string, unknown>, path: string): ProvidersSettings | undefined {
   const value = source["providers"];
   if (value === undefined) return undefined;
 
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+  if (!isRecord(value)) {
     throw new Error(`${path} の providers はオブジェクトにしてください`);
   }
 
   const providers: ProvidersSettings = {};
-  for (const [id, entry] of Object.entries(value as Record<string, unknown>)) {
+  for (const [id, entry] of Object.entries(value)) {
     if (!isProviderId(id)) {
       throw new Error(
         `${path} の providers に使えない id があります: ${JSON.stringify(id)}（英小文字・数字・ハイフンで指定してください）`,
@@ -396,17 +413,12 @@ function readProviders(source: Record<string, unknown>, path: string): Providers
 }
 
 function readProviderEntry(id: string, raw: unknown, path: string): ProviderSettings {
-  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+  if (!isRecord(raw)) {
     throw new Error(`${path} の providers.${id} はオブジェクトにしてください`);
   }
 
-  const source = raw as Record<string, unknown>;
-  const unknownKeys = Object.keys(source).filter((key) => !PROVIDER_KEYS.includes(key as (typeof PROVIDER_KEYS)[number]));
-  if (unknownKeys.length > 0) {
-    throw new Error(
-      `${path} の providers.${id} に未知の項目があります: ${unknownKeys.join(", ")}（使える項目: ${PROVIDER_KEYS.join(", ")}）`,
-    );
-  }
+  assertKnownKeys(raw, PROVIDER_KEYS, `${path} の providers.${id}`);
+  const source = raw;
 
   return normalizeProvider(
     id,
@@ -443,12 +455,12 @@ function readMcpServers(source: Record<string, unknown>, path: string): McpServe
   const value = source["mcpServers"];
   if (value === undefined) return undefined;
 
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+  if (!isRecord(value)) {
     throw new Error(`${path} の mcpServers はオブジェクトにしてください`);
   }
 
   const servers: McpServersSettings = {};
-  for (const [id, entry] of Object.entries(value as Record<string, unknown>)) {
+  for (const [id, entry] of Object.entries(value)) {
     const problem = mcpServerIdProblem(id);
     if (problem !== null) {
       throw new Error(`${path} の mcpServers に使えない id があります: ${problem}`);
@@ -464,19 +476,12 @@ function readMcpServers(source: Record<string, unknown>, path: string): McpServe
  */
 function readMcpServerEntry(id: string, raw: unknown, path: string): McpServerSettings {
   const where = `${path} の mcpServers.${id}`;
-  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+  if (!isRecord(raw)) {
     throw new Error(`${where} はオブジェクトにしてください`);
   }
 
-  const source = raw as Record<string, unknown>;
-  const unknownKeys = Object.keys(source).filter(
-    (key) => !MCP_SERVER_KEYS.includes(key as (typeof MCP_SERVER_KEYS)[number]),
-  );
-  if (unknownKeys.length > 0) {
-    throw new Error(
-      `${where} に未知の項目があります: ${unknownKeys.join(", ")}（使える項目: ${MCP_SERVER_KEYS.join(", ")}）`,
-    );
-  }
+  assertKnownKeys(raw, MCP_SERVER_KEYS, where);
+  const source = raw;
 
   const type = source["type"];
   if (type === "stdio") return readStdioServer(source, where);
@@ -515,12 +520,12 @@ function readStdioServer(source: Record<string, unknown>, where: string): McpStd
 
   const env = source["env"];
   if (env !== undefined) {
-    if (typeof env !== "object" || env === null || Array.isArray(env)) {
+    if (!isRecord(env)) {
       throw new Error(`${where} の env はオブジェクトにしてください`);
     }
 
     const variables: Record<string, string> = {};
-    for (const [name, value] of Object.entries(env as Record<string, unknown>)) {
+    for (const [name, value] of Object.entries(env)) {
       // 環境変数名として読めない名前は、渡しても効かないまま気づけないのでここで止める。
       if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) {
         throw new Error(`${where} の env に環境変数名として使えない名前があります: ${JSON.stringify(name)}`);
@@ -548,26 +553,7 @@ function readHttpServer(source: Record<string, unknown>, where: string): McpHttp
     throw new Error(`${where} の url は空でない文字列にしてください`);
   }
 
-  return { type: "http", url: normalizeServerUrl(url, where) };
-}
-
-/** MCP サーバーの URL。エンドポイントそのものを指すので、末尾のスラッシュだけ落とす。 */
-export function normalizeServerUrl(value: string, source: string): string {
-  const trimmed = value.trim().replace(/\/+$/, "");
-
-  let parsed: URL;
-  try {
-    parsed = new URL(trimmed);
-  } catch (error) {
-    throw new Error(`${source} の url は URL として読めません（現在の値: ${JSON.stringify(value)}）`, {
-      cause: error,
-    });
-  }
-
-  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-    throw new Error(`${source} の url は http:// か https:// で始めてください（現在の値: ${JSON.stringify(value)}）`);
-  }
-  return trimmed;
+  return { type: "http", url: normalizeHttpUrl(url, where, "url") };
 }
 
 /** モデルごとの設定（思考強度など）を読む。 */
@@ -575,12 +561,12 @@ function readModelOptions(source: Record<string, unknown>, path: string): ModelO
   const value = source["modelOptions"];
   if (value === undefined) return undefined;
 
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+  if (!isRecord(value)) {
     throw new Error(`${path} の modelOptions はオブジェクトにしてください`);
   }
 
   const options: ModelOptionsSettings = {};
-  for (const [model, entry] of Object.entries(value as Record<string, unknown>)) {
+  for (const [model, entry] of Object.entries(value)) {
     if (!isModelId(model)) {
       throw new Error(
         `${path} の modelOptions に使えないモデル ID があります: ${JSON.stringify(model)}（"provider/model" の形式にしてください）`,
@@ -592,19 +578,12 @@ function readModelOptions(source: Record<string, unknown>, path: string): ModelO
 }
 
 function readModelOption(model: string, raw: unknown, path: string): ModelOptionSettings {
-  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+  if (!isRecord(raw)) {
     throw new Error(`${path} の modelOptions.${model} はオブジェクトにしてください`);
   }
 
-  const source = raw as Record<string, unknown>;
-  const unknownKeys = Object.keys(source).filter(
-    (key) => !MODEL_OPTION_KEYS.includes(key as (typeof MODEL_OPTION_KEYS)[number]),
-  );
-  if (unknownKeys.length > 0) {
-    throw new Error(
-      `${path} の modelOptions.${model} に未知の項目があります: ${unknownKeys.join(", ")}（使える項目: ${MODEL_OPTION_KEYS.join(", ")}）`,
-    );
-  }
+  assertKnownKeys(raw, MODEL_OPTION_KEYS, `${path} の modelOptions.${model}`);
+  const source = raw;
 
   const effort = source["reasoningEffort"];
   if (effort === undefined) return {};
@@ -652,6 +631,3 @@ function readEnvEngine(env: NodeJS.ProcessEnv): EngineKind | undefined {
   return raw;
 }
 
-function describe(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}

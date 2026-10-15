@@ -10,14 +10,17 @@ import type { ImageRef } from "../shared/types";
 import type { ComputerToolset } from "./computer";
 import type { ImageStore } from "./images";
 import type { McpToolset } from "./mcp";
-import { SYSTEM_PROMPT, toModelMessages } from "./prompt";
+import { SYSTEM_PROMPT, screenImageText, toModelMessages } from "./prompt";
 import { reasoningProviderOptions } from "./reasoning";
+import { describeError } from "../shared/errors";
 
 /** モデルから流れてくる出来事。画面へ流す単位でもある。 */
 export type EngineEvent =
   | { type: "text-delta"; delta: string }
   | { type: "tool-call"; part: Extract<MessagePart, { type: "tool-call" }> }
-  | { type: "tool-result"; part: Extract<MessagePart, { type: "tool-result" }> };
+  | { type: "tool-result"; part: Extract<MessagePart, { type: "tool-result" }> }
+  /** 1 ターンのステップの上限で打ち切られた。 */
+  | { type: "step-limit" };
 
 export type EngineStream = {
   events: AsyncIterable<EngineEvent>;
@@ -276,7 +279,13 @@ function toEngineEvent(chunk: ChunkType): EngineEvent | null {
     }
 
     case "error":
-      throw chunk.payload.error instanceof Error ? chunk.payload.error : new Error(describe(chunk.payload.error));
+      throw chunk.payload.error instanceof Error ? chunk.payload.error : new Error(describeError(chunk.payload.error));
+
+    case "finish": {
+      // ステップの上限まで使ったかどうか。黙って切れると、応答が途中で終わった理由が分からない。
+      const steps = chunk.payload.output.steps?.length ?? 0;
+      return steps >= MAX_STEPS_PER_TURN ? { type: "step-limit" } : null;
+    }
 
     default:
       return null;
@@ -458,7 +467,7 @@ function stepImageMessage(image: ImageRef, images: ImageStore): MastraDBMessage[
       content: {
         format: 2,
         parts: [
-          { type: "text", text: "(screen image from the computer_screenshot call)" },
+          { type: "text", text: screenImageText() },
           { type: "file", mimeType: image.mime, data: Buffer.from(data).toString("base64") },
         ],
       },
@@ -466,6 +475,3 @@ function stepImageMessage(image: ImageRef, images: ImageStore): MastraDBMessage[
   ];
 }
 
-function describe(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}

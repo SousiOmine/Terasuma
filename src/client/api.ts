@@ -1,4 +1,5 @@
 import { decodeChatEvents } from "../shared/sse";
+import { describeError } from "../shared/errors";
 import type { ModelId } from "../shared/model";
 import { API_ERROR_CODES } from "../shared/types";
 import type {
@@ -66,7 +67,7 @@ export async function deleteSession(sessionId: string): Promise<void> {
   try {
     response = await fetch(sessionPath(sessionId), { method: "DELETE" });
   } catch (error) {
-    throw new ApiError("network", describe(error));
+    throw new ApiError("network", describeError(error));
   }
 
   if (!response.ok) throw await toApiError(response);
@@ -91,7 +92,7 @@ export async function* streamTurn(
     });
   } catch (error) {
     if (signal.aborted) return;
-    throw new ApiError("network", describe(error));
+    throw new ApiError("network", describeError(error));
   }
 
   if (!response.ok) throw await toApiError(response);
@@ -250,7 +251,7 @@ export async function answerHandover(
   try {
     response = await fetch(HANDOVER_PATH, jsonRequest("POST", { sessionId, ...answer }));
   } catch (error) {
-    throw new ApiError("network", describe(error));
+    throw new ApiError("network", describeError(error));
   }
 
   if (!response.ok) throw await toApiError(response);
@@ -285,7 +286,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   try {
     response = await fetch(path, init);
   } catch (error) {
-    throw new ApiError("network", describe(error));
+    throw new ApiError("network", describeError(error));
   }
 
   if (!response.ok) throw await toApiError(response);
@@ -308,6 +309,3 @@ function isApiErrorCode(value: unknown): value is ApiErrorCode {
   return typeof value === "string" && (API_ERROR_CODES as readonly string[]).includes(value);
 }
 
-function describe(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}

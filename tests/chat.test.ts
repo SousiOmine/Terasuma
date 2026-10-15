@@ -385,6 +385,31 @@ describe("チャット API", () => {
     );
   });
 
+  test("ステップの上限で打ち切られたら、理由を本文の末尾に残す", async () => {
+    /** 上限で打ち切られたターンを流すエンジン。 */
+    const limitEngine: AgentEngine = {
+      name: "limit",
+      stream: async () => ({
+        events: (async function* () {
+          yield { type: "text-delta", delta: "画面を確認しています。" } as const;
+          yield { type: "step-limit" } as const;
+        })(),
+        usage: Promise.resolve(null),
+      }),
+    };
+
+    await withServer(limitEngine, async (harness) => {
+      const events = await harness.send("s1", "操作を続けて");
+
+      expect(joinedDeltas(events)).toContain("画面を確認しています。");
+      expect(joinedDeltas(events)).toContain("上限");
+
+      // 保存された本文にも残る（画面を読み直しても、モデルも理由が分かる）。
+      const messages = await harness.messages("s1");
+      expect(messages[1]?.content).toContain("上限");
+    });
+  });
+
   test("モデルが即座に失敗したら error を返し、空のメッセージを残さない", async () => {
     await withServer(createFailingEngine("immediate"), async (harness) => {
       const events = await harness.send("s1", "届かない質問");

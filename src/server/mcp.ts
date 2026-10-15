@@ -13,6 +13,7 @@ import {
   type OAuthStorage,
 } from "./mcp-oauth";
 import type { SettingsStore } from "./settings";
+import { describeError } from "../shared/errors";
 
 /** モデルへ渡すツール。キーは "<サーバー id>_<ツール名>"。 */
 export type McpToolset = Record<string, Tool<any, any, any, any>>;
@@ -366,7 +367,7 @@ export function createMcpManager(options: McpManagerOptions): McpManager {
           iss: callback.iss,
         });
       } catch (error) {
-        statuses.set(serverId, { state: "failed", tools: [], detail: describe(error) });
+        statuses.set(serverId, { state: "failed", tools: [], detail: describeError(error) });
         throw error;
       } finally {
         // 待つのを止める。次に確かめるときは、新しい状態（トークンがある）で繋ぎに行く。
@@ -420,6 +421,3 @@ function sameServer(left: McpServerSettings, right: McpServerSettings): boolean 
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
-function describe(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}

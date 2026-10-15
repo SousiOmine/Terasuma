@@ -99,6 +99,14 @@ function toImageMessages(parts: readonly MessagePart[], images: ImageReader): Mo
 }
 
 /**
+ * 画像を渡すときの本文。どの呼び出しの画像なのかをモデルに示す。
+ * 組み立てる場所が 2 つあるので、文言はここに 1 つだけ置く。
+ */
+export function screenImageText(label = "computer_screenshot call"): string {
+  return `(screen image from the ${label})`;
+}
+
+/**
  * 撮った画像を、モデルへ渡す user メッセージにする。
  * 画像は tool の本文に置けないので（OpenAI 互換のプロバイダは文字列へ潰す）、
  * 結果の直後に別のメッセージとして置く。
@@ -115,7 +123,7 @@ export function screenMessage(
     {
       role: "user",
       content: [
-        { type: "text", text: `(screen image from the ${label})` },
+        { type: "text", text: screenImageText(label) },
         { type: "image", image: data, mediaType: image.mime },
       ],
     },

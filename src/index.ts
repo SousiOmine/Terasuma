@@ -3,7 +3,7 @@ import { ensureDirectories, loadConfig } from "./config";
 import { createComputerToolset } from "./server/computer";
 import { createContainerManager } from "./server/container";
 import { createEngine, resolveModel } from "./server/engine";
-import { describeError } from "./server/errors";
+import { describeError } from "./shared/errors";
 import { createHandover } from "./server/handover";
 import { createImageStore } from "./server/images";
 import { createMcpManager } from "./server/mcp";
@@ -72,6 +72,24 @@ console.log(
     `  data   : ${config.dataDir}`,
   ].join("\n"),
 );
+
+// 端末からの停止（Ctrl+C）や OS からの停止で、接続と DB を畳んでから終わる。
+// 畳まないと、MCP サーバーの接続と SQLite の WAL がそのまま残る。
+async function shutdown(signal: NodeJS.Signals): Promise<void> {
+  console.log(`\n  ${signal} を受けたので終わります`);
+
+  try {
+    await server.stop(true);
+    await mcp.close();
+    store.close();
+  } catch (error) {
+    console.log(`  終われませんでした: ${describeError(error)}`);
+  }
+  process.exit(0);
+}
+
+process.once("SIGINT", () => void shutdown("SIGINT"));
+process.once("SIGTERM", () => void shutdown("SIGTERM"));
 
 // ホストを再起動したあとも同じ画面に戻れるよう、起動時にコンテナも起こし直す。
 // 初回はイメージの build で数分かかるので、待たずに進め、結果だけを知らせる。

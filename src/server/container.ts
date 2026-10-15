@@ -2,6 +2,7 @@ import { mkdirSync, rmSync } from "node:fs";
 import { createServer } from "node:net";
 import { join } from "node:path";
 import type { ContainerStatusView } from "../shared/types";
+import { describeError } from "../shared/errors";
 
 /**
  * podman で動かす Debian コンテナの面倒を見る。
@@ -99,15 +100,6 @@ export type ShellResult = {
   timedOut: boolean;
 };
 
-/** コンテナの中で 1 つのコマンドを実行した結果。 */
-export type ExecResult = {
-  exitCode: number;
-  stdout: string;
-  stderr: string;
-  truncated: boolean;
-  timedOut: boolean;
-};
-
 export type ContainerManager = {
   /** podman に問い合わせて、いまどこまで準備できているかを返す。 */
   status(): Promise<ContainerStatusView>;
@@ -121,7 +113,7 @@ export type ContainerManager = {
    * コンテナの中で 1 つのコマンドを実行する。
    * シェルを介さないので、空白や記号を含む引数（打ち込む文字など）もそのまま渡せる。
    */
-  exec(args: readonly string[], options: { timeoutMs: number; signal?: AbortSignal }): Promise<ExecResult>;
+  exec(args: readonly string[], options: { timeoutMs: number; signal?: AbortSignal }): Promise<ShellResult>;
   /** いまの画面を PNG で撮る。 */
   screenshot(signal?: AbortSignal): Promise<Uint8Array>;
 };
@@ -409,7 +401,7 @@ async function captureScreen(signal?: AbortSignal): Promise<Uint8Array> {
       "container_not_running",
       timeout.aborted
         ? `画面を撮るのに ${SCREENSHOT_TIMEOUT_MS / 1000} 秒以上かかりました`
-        : `画面を撮れませんでした: ${describe(error)}`,
+        : `画面を撮れませんでした: ${describeError(error)}`,
     );
   }
 }
@@ -445,7 +437,7 @@ async function runCommand(
   } catch (error) {
     // podman が入っていない場合、実行ファイルが見つからずここへ来る。
     // signal で打ち切られた場合もここへ来る（code -1 で、理由は stderr に入る）。
-    return { code: -1, stdout: "", stderr: describe(error), truncated: false, timedOut: timeout.aborted };
+    return { code: -1, stdout: "", stderr: describeError(error), truncated: false, timedOut: timeout.aborted };
   }
 }
 
@@ -505,6 +497,3 @@ function describeFailure(result: CommandResult): string {
   return result.timedOut ? `${detail}（時間内に終わりませんでした）` : detail;
 }
 
-function describe(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}

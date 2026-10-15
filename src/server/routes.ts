@@ -1,37 +1,30 @@
-import {
-  isProviderId,
-  mcpServerIdProblem,
-  mcpServerSettingsFromForm,
-  normalizeProvider,
-  providerSettingsFromForm,
-  type McpServerSettings,
-  type McpServersSettings,
-  type ModelSettings,
-  type ProviderSettings,
-} from "../config";
-import { isModelId, modelProvider, type ModelId } from "../shared/model";
+import type { ProviderSettings } from "../config";
+import { isModelId, modelParts, modelProvider } from "../shared/model";
 import { findEndpointPreset } from "../shared/providers";
-import { encodeChatEvent } from "../shared/sse";
 import type {
-  ChatEvent,
-  ChatMessage,
   CatalogProviderView,
   ContainerStatusView,
   McpAuthorizationView,
-  McpServerForm,
-  McpServersView,
-  MessagePart,
-  ModelSettingsView,
   ProviderCheckResult,
   ProviderCredentials,
   ReasoningView,
-  TokenUsage,
 } from "../shared/types";
 import { resolveModel, type AgentEngine } from "./engine";
 import { ContainerError, type ContainerErrorCode, type ContainerManager } from "./container";
 import type { Handover } from "./handover";
 import type { ImageStore } from "./images";
-import { describeError, jsonError } from "./errors";
+import { describeError } from "../shared/errors";
+import { jsonError } from "./errors";
+import {
+  parseProviderSettings,
+  readCredentials,
+  readDefaultModel,
+  readJsonBody,
+  readMcpForm,
+  readProviderId,
+} from "./body";
+import { authorizationPage, toMcpView, toSettingsView } from "./views";
+import { runTurn, sseResponse } from "./turn";
 import { McpServerNotFound, type McpManager } from "./mcp";
 import type { Catalog, CatalogSnapshot } from "./models-dev";
 import {
@@ -147,14 +140,13 @@ export function createApiHandlers(deps: ApiDeps) {
       return Response.json({ model: null, effort: null, values: [] } satisfies ReasoningView);
     }
 
-    const providerId = modelProvider(model);
-    const modelId = model.slice(providerId.length + 1);
-    const entry = snapshot.models.get(providerId)?.find((candidate) => candidate.id === modelId) ?? null;
+    const { provider, model: modelName } = modelParts(model);
+    const entry = snapshot.models.get(provider)?.find((candidate) => candidate.id === modelName) ?? null;
 
     return Response.json({
       model,
       effort: settings.read().modelOptions[model]?.reasoningEffort ?? null,
-      values: selectableEfforts(providerId, entry),
+      values: selectableEfforts(provider, entry),
     } satisfies ReasoningView);
   }
 
@@ -266,10 +258,9 @@ export function createApiHandlers(deps: ApiDeps) {
       if (snapshot instanceof Response) return snapshot;
 
       if (effort !== null) {
-        const providerId = modelProvider(model);
-        const modelId = model.slice(providerId.length + 1);
-        const entry = snapshot.models.get(providerId)?.find((candidate) => candidate.id === modelId) ?? null;
-        const values = selectableEfforts(providerId, entry);
+        const { provider, model: modelName } = modelParts(model);
+        const entry = snapshot.models.get(provider)?.find((candidate) => candidate.id === modelName) ?? null;
+        const values = selectableEfforts(provider, entry);
 
         if (!values.includes(effort)) {
           return jsonError(
@@ -697,101 +688,6 @@ export function createApiHandlers(deps: ApiDeps) {
     return connectionTarget({ id, baseUrl, api });
   }
 }
-
-/** 設定から画面用の形を作る。名前は label があればそれ、無ければ id（カタログの名前はクライアントが当てる）。 */
-function toSettingsView(settings: ModelSettings): ModelSettingsView {
-  return {
-    model: settings.model,
-    providers: Object.entries(settings.providers).map(([id, provider]) => ({
-      id,
-      name: provider.label ?? id,
-      baseUrl: provider.baseUrl ?? null,
-      hasApiKey: provider.apiKey !== undefined,
-    })),
-  };
-}
-
-/** MCP サーバーの設定を、画面に出す形にする。接続状態は manager が持っているものを当てる。 */
-function toMcpView(servers: McpServersSettings, mcp: McpManager): McpServersView {
-  return {
-    servers: Object.entries(servers).map(([id, server]) => ({
-      id,
-      type: server.type,
-      command: server.type === "stdio" ? server.command : null,
-      args: server.type === "stdio" ? (server.args ?? []) : [],
-      env: server.type === "stdio" ? (server.env ?? {}) : {},
-      url: server.type === "http" ? server.url : null,
-      status: mcp.status(id),
-    })),
-  };
-}
-
-/** 画面から来た MCP サーバーの入力。id と種類の食い違いは保存の前に弾く。 */
-async function readMcpForm(
-  req: { json(): Promise<unknown> },
-): Promise<{ id: string; server: McpServerSettings } | Response> {
-  const body = await readJsonBody(req);
-
-  const rawId = body?.["id"];
-  const id = typeof rawId === "string" ? rawId.trim() : "";
-  const idProblem = mcpServerIdProblem(id);
-  if (idProblem !== null) {
-    return jsonError(400, "invalid_request", `id に使えない値です: ${idProblem}`);
-  }
-
-  const type = body?.["type"];
-  if (type !== "stdio" && type !== "http") {
-    return jsonError(400, "invalid_request", 'type は "stdio" か "http" にしてください');
-  }
-
-  const command = readOptionalString(body, "command");
-  const url = readOptionalString(body, "url");
-  const args = readOptionalStringList(body, "args");
-  const env = readOptionalStringMap(body, "env");
-  if (command === undefined || url === undefined || args === undefined || env === undefined) {
-    return jsonError(400, "invalid_request", "command, url, args, env は文字列・文字列の配列・文字列の対応表で指定してください");
-  }
-
-  const form: McpServerForm = { id, type, command, args, env, url };
-
-  try {
-    return { id, server: mcpServerSettingsFromForm(form, `mcpServers.${id}`) };
-  } catch (error) {
-    return jsonError(400, "invalid_request", describeError(error));
-  }
-}
-
-/** 認可の結果をブラウザに出す 1 枚のページ。サーバを言語非依存に保つため日英を併記する。 */
-function authorizationPage(status: number, title: string, lines: readonly string[]): Response {
-  const paragraphs = lines
-    .map((line) => `<p style="margin:.4rem 0;font-size:.9rem;color:#404040">${escapeHtml(line)}</p>`)
-    .join("");
-
-  const html = `<!doctype html>
-<html lang="ja">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Terasuma</title></head>
-<body style="margin:0;padding:3rem 1.5rem;font-family:system-ui,-apple-system,sans-serif;line-height:1.7;color:#171717;background:#fafafa">
-<main style="max-width:32rem;margin:0 auto;background:#fff;border:1px solid #e5e5e5;border-radius:12px;padding:1.5rem 1.75rem">
-<h1 style="margin:0 0 .5rem;font-size:1.05rem">${escapeHtml(title)}</h1>
-${paragraphs}
-</main>
-</body></html>`;
-
-  return new Response(html, { status, headers: { "Content-Type": "text/html; charset=utf-8" } });
-}
-
-const HTML_ESCAPES: Record<string, string> = {
-  "&": "&amp;",
-  "<": "&lt;",
-  ">": "&gt;",
-  '"': "&quot;",
-  "'": "&#39;",
-};
-
-function escapeHtml(value: string): string {
-  return value.replace(/[&<>"']/g, (character) => HTML_ESCAPES[character] ?? character);
-}
-
 function providerFailureResponse(error: unknown): Response {
   if (error instanceof ProviderRequestError) {
     // 認証の失敗は入力の問題なので 400、それ以外は接続先の問題として 502 にする。
@@ -825,297 +721,4 @@ function containerStatus(code: ContainerErrorCode): number {
   if (code === "container_not_running") return 409;
   // イメージの作成や起動の失敗は、接続先（podman）側の問題として扱う。
   return 502;
-}
-
-/** リクエストからプロバイダ id を読む。 */
-function readProviderId(body: Record<string, unknown> | null): string | null {
-  const id = body?.["id"];
-  if (typeof id !== "string") return null;
-
-  const trimmed = id.trim();
-  return isProviderId(trimmed) ? trimmed : null;
-}
-
-/** リクエストから接続情報（apiKey / baseUrl / label）を読む。 */
-function readCredentials(body: Record<string, unknown> | null): ProviderCredentials | null {
-  const apiKey = readOptionalString(body, "apiKey");
-  const baseUrl = readOptionalString(body, "baseUrl");
-  const label = readOptionalString(body, "label");
-  if (apiKey === undefined || baseUrl === undefined || label === undefined) return null;
-
-  return { apiKey, baseUrl, label };
-}
-
-/** 追加と同時に決める既定のモデル。文字列でない値は弾く。 */
-function readDefaultModel(body: Record<string, unknown> | null): ModelId | null | Response {
-  const value = body?.["defaultModel"];
-  if (value === undefined || value === null) return null;
-  if (typeof value !== "string" || !isModelId(value)) {
-    return jsonError(400, "invalid_request", 'defaultModel must be a "provider/model" string or null');
-  }
-  return value;
-}
-
-/** 未入力（null / 無し）は null、文字列はそのまま、それ以外は undefined を返す。 */
-function readOptionalString(body: Record<string, unknown> | null, key: string): string | null | undefined {
-  const value = body?.[key];
-  if (value === undefined || value === null) return null;
-  return typeof value === "string" ? value : undefined;
-}
-
-/** 未入力（null / 無し）は null、文字列の配列はそのまま、それ以外は undefined を返す。 */
-function readOptionalStringList(
-  body: Record<string, unknown> | null,
-  key: string,
-): readonly string[] | null | undefined {
-  const value = body?.[key];
-  if (value === undefined || value === null) return null;
-  if (!Array.isArray(value) || !value.every((entry) => typeof entry === "string")) return undefined;
-  return value as string[];
-}
-
-/** 未入力（null / 無し）は null、文字列→文字列の対応表はそのまま、それ以外は undefined を返す。 */
-function readOptionalStringMap(
-  body: Record<string, unknown> | null,
-  key: string,
-): Record<string, string> | null | undefined {
-  const value = body?.[key];
-  if (value === undefined || value === null) return null;
-  if (typeof value !== "object" || Array.isArray(value)) return undefined;
-
-  const entries = Object.entries(value as Record<string, unknown>);
-  if (!entries.every(([, entry]) => typeof entry === "string")) return undefined;
-  return Object.fromEntries(entries) as Record<string, string>;
-}
-
-/**
- * リクエストの本文から接続情報を読み、検証して保存できる形にする。
- * 弾いた場合はそのまま返せる 400 のレスポンスを返す。
- */
-function parseProviderSettings(
-  id: string,
-  body: Record<string, unknown> | null,
-): ProviderSettings | Response {
-  const credentials = readCredentials(body);
-  if (credentials === null) {
-    return jsonError(400, "invalid_request", "apiKey, baseUrl, label must be strings or null");
-  }
-
-  try {
-    return normalizeProvider(id, providerSettingsFromForm(credentials), `providers.${id}`);
-  } catch (error) {
-    return jsonError(400, "invalid_request", describeError(error));
-  }
-}
-
-/**
- * 1 ターン分のイベント列。終わったら、実行中の印を必ず外す。
- * 「停止」やタブの切断でジェネレータが閉じられた場合も、finally は通る。
- */
-async function* runTurn(
-  deps: ApiDeps,
-  sessionId: string,
-  content: string,
-  signal: AbortSignal,
-  running: Set<string>,
-): AsyncGenerator<ChatEvent> {
-  try {
-    yield* turnEvents(deps, sessionId, content, signal);
-  } finally {
-    running.delete(sessionId);
-  }
-}
-
-/**
- * 1 ターン分のイベント列。
- * 保存 → モデル呼び出し → 保存、の順で進み、履歴は常に追記だけになる。
- */
-async function* turnEvents(
-  deps: ApiDeps,
-  sessionId: string,
-  content: string,
-  signal: AbortSignal,
-): AsyncGenerator<ChatEvent> {
-  const { store, engine } = deps;
-
-  store.ensureSession(sessionId, content);
-  const userMessage = store.appendMessage({
-    id: crypto.randomUUID(),
-    sessionId,
-    role: "user",
-    content,
-  });
-  yield { type: "user-message", message: userMessage };
-
-  const assistantId = crypto.randomUUID();
-  yield { type: "assistant-start", id: assistantId, createdAt: Date.now() };
-
-  // 保存済み履歴をそのまま渡す。要約も並べ替えもしない
-  // （プロンプトキャッシュが当たり続けるようにするため）。
-  const history = store.listMessages(sessionId);
-
-  /** 生成中の本文とツールの出来事。保存される並びそのものになる。 */
-  const parts: MessagePart[] = [];
-  let usage: TokenUsage | null = null;
-  let failure: string | null = null;
-  let finalMessage: ChatMessage | null = null;
-
-  const appendText = (delta: string): void => {
-    const last = parts.at(-1);
-    if (last?.type === "text") last.text += delta;
-    else parts.push({ type: "text", text: delta });
-  };
-
-  /** ツールを使わなかったターンは、本文だけを持つ（parts 無し）メッセージにする。 */
-  const storedParts = (): MessagePart[] | null => (parts.some((part) => part.type !== "text") ? parts : null);
-  const storedText = (): string =>
-    parts
-      .filter((part): part is Extract<MessagePart, { type: "text" }> => part.type === "text")
-      .map((part) => part.text)
-      .join("");
-
-  /**
-   * 生成済みの内容は、正常終了でも「停止」でも必ず保存する。
-   * 停止時は呼び出し元がジェネレータを return するため、yield を含む後続のコードは実行されない。
-   * だから保存だけは finally から呼べる形に切り出してある。
-   * 何も生成しないまま失敗したときだけ、空のメッセージを作らない。
-   */
-  const persist = (): void => {
-    if (finalMessage !== null) return;
-    if (parts.length === 0 && failure !== null) return;
-
-    finalMessage = store.appendMessage({
-      id: assistantId,
-      sessionId,
-      role: "assistant",
-      content: storedText(),
-      parts: storedParts(),
-      usage,
-    });
-  };
-
-  try {
-    const stream = await engine.stream({ history, signal, sessionId });
-
-    for await (const event of stream.events) {
-      switch (event.type) {
-        case "text-delta":
-          appendText(event.delta);
-          yield { type: "text-delta", id: assistantId, delta: event.delta };
-          break;
-        case "tool-call":
-          parts.push(event.part);
-          yield { type: "tool-call", id: assistantId, part: event.part };
-          break;
-        case "tool-result":
-          parts.push(event.part);
-          yield { type: "tool-result", id: assistantId, part: event.part };
-          break;
-      }
-    }
-
-    usage = await stream.usage;
-  } catch (error) {
-    failure = describeError(error);
-  } finally {
-    persist();
-  }
-
-  if (failure === null && finalMessage !== null) {
-    yield { type: "assistant-done", message: finalMessage };
-    return;
-  }
-
-  // クライアントが離脱済みなら届け先が無いのでイベントにしない。
-  if (failure !== null && !signal.aborted) {
-    yield { type: "error", code: "model_error", detail: failure };
-  }
-}
-
-/**
- * 待ちの接続に流す心拍の間隔。
- * Bun の待ち受けは、何も流さない接続を既定の 10 秒で切る（実測で 12 秒）。
- * ユーザーの操作を待つ間や、モデルが長く考えている間も切れないよう、これより短くする。
- */
-const HEARTBEAT_INTERVAL_MS = 5_000;
-
-/** 何も流れない間に流すコメント行（SSE の仕様上、読む側は無視する）。 */
-const HEARTBEAT_FRAME = ": heartbeat\n\n";
-
-/**
- * クライアントが読むたびに、次のイベントを 1 つずつ返す。
- * pull ベースなので、相手が読まなくなれば cancel が呼ばれ、生成側も止まる。
- *
- * 次のイベントが来ないまま間隔が空いたら、コメント行を流して接続を保つ。
- * 止まった待ち（ユーザーの操作、長い思考）で切れないようにするため。
- * タイマーは待っている間だけ動かし、イベントが来たら必ず止める。
- */
-function sseResponse(events: AsyncGenerator<ChatEvent>): Response {
-  const encoder = new TextEncoder();
-  let pending: Promise<IteratorResult<ChatEvent>> | null = null;
-  let heartbeat: ReturnType<typeof setTimeout> | null = null;
-
-  function stopHeartbeat(): void {
-    if (heartbeat === null) return;
-
-    clearTimeout(heartbeat);
-    heartbeat = null;
-  }
-
-  /** 心拍までの待ち。イベントが先に来ても、タイマーは stopHeartbeat が片付ける。 */
-  function nextHeartbeat(): Promise<{ kind: "heartbeat" }> {
-    return new Promise((resolve) => {
-      heartbeat = setTimeout(() => resolve({ kind: "heartbeat" }), HEARTBEAT_INTERVAL_MS);
-    });
-  }
-
-  const body = new ReadableStream<Uint8Array>({
-    async pull(controller) {
-      // 前回の pull で待ち続けている分があれば、それをそのまま使う。
-      pending ??= events.next();
-
-      const outcome = await Promise.race([
-        pending.then((result) => ({ kind: "event" as const, result })),
-        nextHeartbeat(),
-      ]);
-      stopHeartbeat();
-
-      // 相手が読むのをやめた直後は、流す先が無い。
-      if (controller.desiredSize === null) return;
-
-      if (outcome.kind === "heartbeat") {
-        controller.enqueue(encoder.encode(HEARTBEAT_FRAME));
-        return;
-      }
-
-      pending = null;
-      if (outcome.result.done === true) {
-        controller.close();
-        return;
-      }
-      controller.enqueue(encoder.encode(encodeChatEvent(outcome.result.value)));
-    },
-    async cancel() {
-      stopHeartbeat();
-      await events.return(undefined);
-    },
-  });
-
-  return new Response(body, {
-    headers: {
-      "Content-Type": "text/event-stream; charset=utf-8",
-      "Cache-Control": "no-cache, no-transform",
-      "X-Accel-Buffering": "no",
-    },
-  });
-}
-
-/** 本文が無い・JSON でない場合は「本文なし」として扱い、呼び出し側で invalid_request にする。 */
-async function readJsonBody(req: { json(): Promise<unknown> }): Promise<Record<string, unknown> | null> {
-  try {
-    const body = await req.json();
-    return typeof body === "object" && body !== null ? (body as Record<string, unknown>) : null;
-  } catch {
-    return null;
-  }
 }

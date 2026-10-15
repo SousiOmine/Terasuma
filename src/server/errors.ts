@@ -4,7 +4,3 @@ import type { ApiErrorCode } from "../shared/types";
 export function jsonError(status: number, code: ApiErrorCode, detail?: string): Response {
   return Response.json({ code, detail: detail ?? null }, { status });
 }
-
-export function describeError(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}

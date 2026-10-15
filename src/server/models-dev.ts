@@ -9,6 +9,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { getProviderConfig } from "@mastra/core/llm";
 import type { FetchLike } from "./provider-models";
+import { describeError } from "../shared/errors";
 
 const MODELS_DEV_URL = "https://models.dev/api.json";
 export const CATALOG_FILE_NAME = "models-dev.json";
@@ -140,7 +141,7 @@ export function createCatalog(options: {
     try {
       response = await fetchImpl(MODELS_DEV_URL, { headers: { Accept: "application/json" }, signal: abort });
     } catch (error) {
-      throw new Error(`${MODELS_DEV_URL} からカタログを取得できません: ${describe(error)}`, { cause: error });
+      throw new Error(`${MODELS_DEV_URL} からカタログを取得できません: ${describeError(error)}`, { cause: error });
     }
 
     if (!response.ok) {
@@ -151,7 +152,7 @@ export function createCatalog(options: {
     try {
       raw = await response.json();
     } catch (error) {
-      throw new Error(`${MODELS_DEV_URL} の応答を JSON として読めません: ${describe(error)}`, { cause: error });
+      throw new Error(`${MODELS_DEV_URL} の応答を JSON として読めません: ${describeError(error)}`, { cause: error });
     }
 
     const fetchedAt = now();
@@ -292,6 +293,3 @@ function readNumber(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
-function describe(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}

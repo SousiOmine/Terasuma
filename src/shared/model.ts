@@ -24,3 +24,12 @@ export function isModelId(value: string): value is ModelId {
 export function modelProvider(model: ModelId): string {
   return model.slice(0, model.indexOf("/"));
 }
+
+/**
+ * モデル ID を、プロバイダ名とモデル名に分ける。
+ * 分解の仕方を各所に書くと、区切りの扱いが場所ごとにずれる。
+ */
+export function modelParts(model: ModelId): { provider: string; model: string } {
+  const boundary = model.indexOf("/");
+  return { provider: model.slice(0, boundary), model: model.slice(boundary + 1) };
+}

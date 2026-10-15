@@ -2,7 +2,7 @@ import { createTool } from "@mastra/core/tools";
 import type { Tool } from "@mastra/core/tools";
 import { z } from "zod";
 import type { ImageRef } from "../shared/types";
-import type { ContainerManager, ExecResult, ShellResult } from "./container";
+import type { ContainerManager, ShellResult } from "./container";
 import type { ComputerToolsetProvider } from "./engine";
 import type { Handover } from "./handover";
 import type { ImageStore } from "./images";
@@ -78,7 +78,7 @@ export function createComputerTools(options: ComputerToolsOptions): ComputerTool
   const { container, images, handover, sessionId, onImage } = options;
 
   /** xdotool を 1 回呼ぶ。失敗と打ち切りは例外にして、モデルが理由を読めるようにする。 */
-  async function xdotool(args: readonly string[], signal?: AbortSignal): Promise<ExecResult> {
+  async function xdotool(args: readonly string[], signal?: AbortSignal): Promise<ShellResult> {
     const result = await container.exec(["xdotool", ...args], { timeoutMs: ACTION_TIMEOUT_MS, signal });
     if (result.timedOut) {
       throw new Error(`xdotool ${args[0] ?? ""} が ${ACTION_TIMEOUT_MS / 1000} 秒で終わりませんでした`);
