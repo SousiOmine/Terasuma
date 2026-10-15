@@ -10,12 +10,12 @@ import { dirname } from "node:path";
 import { getProviderConfig } from "@mastra/core/llm";
 import type { FetchLike } from "./provider-models";
 
-export const MODELS_DEV_URL = "https://models.dev/api.json";
+const MODELS_DEV_URL = "https://models.dev/api.json";
 export const CATALOG_FILE_NAME = "models-dev.json";
 /** カタログを取り直す間隔。 */
 export const CATALOG_TTL_MS = 24 * 60 * 60 * 1000;
 /** 取得が返らないまま待ち続けないための上限。 */
-export const CATALOG_TIMEOUT_MS = 30_000;
+const CATALOG_TIMEOUT_MS = 30_000;
 
 /** 思考強度としてモデルが受け付ける指定。models.dev の reasoning_options をそのまま持つ。 */
 export type CatalogReasoningOption =
@@ -25,17 +25,14 @@ export type CatalogReasoningOption =
 
 export type CatalogModel = {
   id: string;
-  name: string;
   reasoningOptions: readonly CatalogReasoningOption[];
 };
 
 export type CatalogProvider = {
   id: string;
   name: string;
-  doc: string | null;
   /** models.dev が持つベース URL。無いものは Mastra のモデルルーターが既定の URL を使う。 */
   api: string | null;
-  npm: string | null;
 };
 
 export type CatalogSnapshot = {
@@ -211,9 +208,7 @@ function readProvider(id: string, value: unknown): CatalogProvider | null {
   return {
     id,
     name: readText(source, "name") ?? id,
-    doc: readText(source, "doc"),
     api: readText(source, "api"),
-    npm: readText(source, "npm"),
   };
 }
 
@@ -231,7 +226,6 @@ function readModels(provider: unknown): readonly CatalogModel[] {
 
     models.push({
       id,
-      name: readText(entry, "name") ?? id,
       reasoningOptions: readReasoningOptions(entry["reasoning_options"]),
     });
   }

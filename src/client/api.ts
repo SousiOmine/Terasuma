@@ -1,5 +1,6 @@
 import { decodeChatEvents } from "../shared/sse";
 import type { ModelId } from "../shared/model";
+import { API_ERROR_CODES } from "../shared/types";
 import type {
   AddProviderForm,
   ApiErrorCode,
@@ -22,42 +23,6 @@ import type {
 
 /** サーバが返すコードに、クライアント側だけで発生するコードを足したもの。 */
 export type ClientErrorCode = ApiErrorCode | "network" | "input" | "mcp_unreachable";
-
-/**
- * サーバが返すコードのうち、クライアントが解釈できるもの。
- * 一覧そのものは ApiErrorCode の union と対で保つ必要があるため、
- * 下の型で「足りないコードが無いか」を型検査に確かめさせる。
- */
-const API_ERROR_CODES = [
-  "invalid_request",
-  "session_not_found",
-  "model_error",
-  "model_not_configured",
-  "provider_not_found",
-  "provider_exists",
-  "provider_auth_failed",
-  "provider_unreachable",
-  "provider_no_models",
-  "catalog_unavailable",
-  "mcp_server_not_found",
-  "mcp_server_exists",
-  "mcp_authorization_failed",
-  "container_unavailable",
-  "container_build_failed",
-  "container_start_failed",
-  "container_not_running",
-  "handover_not_pending",
-  "turn_in_progress",
-  "settings_write_failed",
-  "internal_error",
-] as const satisfies readonly ApiErrorCode[];
-
-/**
- * ApiErrorCode のうち、この一覧に無いもの。
- * 足し忘れると never にならず、下の型でコンパイルエラーになる。
- */
-type MissingApiErrorCode = Exclude<ApiErrorCode, (typeof API_ERROR_CODES)[number]>;
-type ApiErrorCodeListIsComplete = MissingApiErrorCode extends never ? true : never;
 
 /** モデルとプロバイダの設定。 */
 const MODEL_PATH = "/api/model";

@@ -8,11 +8,11 @@ import { parseCatalog, type Catalog, type CatalogSnapshot } from "../src/server/
 import {
   ProviderRequestError,
   type ConnectionChecker,
-  type ConnectionResult,
   type ProviderModelLister,
   type ProviderRequest,
 } from "../src/server/provider-models";
 import { startServer } from "../src/server/server";
+import type { ProviderCheckResult } from "../src/shared/types";
 import { createSettingsStore, type SettingsStore } from "../src/server/settings";
 import { createStore } from "../src/server/store";
 import { createHandover } from "../src/server/handover";
@@ -68,11 +68,11 @@ function createCatalogStub() {
 /** 接続確認の差し替え。呼ばれた宛先と資格を記録する。 */
 function createCheckStub() {
   const requests: ProviderRequest[] = [];
-  let respond: () => Promise<ConnectionResult> = async () => ({ verified: true, models: ["model-a", "model-b"] });
+  let respond: () => Promise<ProviderCheckResult> = async () => ({ verified: true, models: ["model-a", "model-b"] });
 
   return {
     requests,
-    setResponse(next: () => Promise<ConnectionResult>) {
+    setResponse(next: () => Promise<ProviderCheckResult>) {
       respond = next;
     },
     checkConnection: (async (request: ProviderRequest) => {

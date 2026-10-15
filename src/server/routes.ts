@@ -22,8 +22,8 @@ import type {
   McpServersView,
   MessagePart,
   ModelSettingsView,
+  ProviderCheckResult,
   ProviderCredentials,
-  ProviderView,
   ReasoningView,
   TokenUsage,
 } from "../shared/types";
@@ -38,7 +38,6 @@ import {
   ProviderRequestError,
   connectionTarget,
   type ConnectionChecker,
-  type ConnectionResult,
   type ConnectionTarget,
   type ProviderModelLister,
 } from "./provider-models";
@@ -49,15 +48,10 @@ import type { Store } from "./store";
 /**
  * ハンドラが必要とする最小限のリクエスト形状。
  * Bun 固有の型に依存させないことで、ルーティングと HTTP 処理を分けて読めるようにしている。
+ * パラメータを持たないルートでは、型引数を省ける。
  */
-export type ApiRequest<Params extends Record<string, string>> = {
+export type ApiRequest<Params extends Record<string, string> = Record<string, never>> = {
   params: Params;
-  signal: AbortSignal;
-  json(): Promise<unknown>;
-};
-
-/** パラメータを持たないルートのリクエスト。 */
-export type PlainRequest = {
   signal: AbortSignal;
   json(): Promise<unknown>;
 };
@@ -216,7 +210,7 @@ export function createApiHandlers(deps: ApiDeps) {
     },
 
     /** 既定のモデルを変える。設定済みのプロバイダのモデルしか受け付けない。 */
-    async setDefaultModel(req: PlainRequest): Promise<Response> {
+    async setDefaultModel(req: ApiRequest): Promise<Response> {
       const body = await readJsonBody(req);
       const model = body?.["model"];
       if (typeof model !== "string" || !isModelId(model)) {
@@ -236,21 +230,21 @@ export function createApiHandlers(deps: ApiDeps) {
      * 設定画面の「思考強度」は、いま選ばれているモデルの分だけを出す。
      */
     async readReasoning(): Promise<Response> {
-    // モデルが未設定なら見る値が無い。カタログも取りに行かない。
-    if (settings.read().model === null) {
-      return Response.json({ model: null, effort: null, values: [] } satisfies ReasoningView);
-    }
+      // モデルが未設定なら見る値が無い。カタログも取りに行かない。
+      if (settings.read().model === null) {
+        return Response.json({ model: null, effort: null, values: [] } satisfies ReasoningView);
+      }
 
-    const snapshot = await loadCatalog();
-    if (snapshot instanceof Response) return snapshot;
-    return reasoningView(snapshot);
-  },
+      const snapshot = await loadCatalog();
+      if (snapshot instanceof Response) return snapshot;
+      return reasoningView(snapshot);
+    },
 
     /**
      * 既定のモデルの思考強度を変える。
      * モデルごとに保存するので、別のモデルへ切り替えて戻ると前の値が復元される。
      */
-    async setReasoning(req: PlainRequest): Promise<Response> {
+    async setReasoning(req: ApiRequest): Promise<Response> {
       const body = await readJsonBody(req);
       const raw = body?.["reasoningEffort"];
       if (raw !== undefined && raw !== null && typeof raw !== "string") {
@@ -322,7 +316,7 @@ export function createApiHandlers(deps: ApiDeps) {
      * モデルの一覧はカタログから取るので、ここで見るのは資格が通るかどうかだけ。
      * 確認する手段が無いプロバイダは verified: false で返し、保存は妨げない。
      */
-    async checkProvider(req: PlainRequest): Promise<Response> {
+    async checkProvider(req: ApiRequest): Promise<Response> {
       const body = await readJsonBody(req);
       const id = readProviderId(body);
       if (id === null) return jsonError(400, "invalid_request", "id must be a provider id");
@@ -338,7 +332,7 @@ export function createApiHandlers(deps: ApiDeps) {
      * プロバイダを追加する。保存の前に接続を確かめるが、
      * 確認する手段が無いプロバイダはそのまま保存できる。
      */
-    async addProvider(req: PlainRequest): Promise<Response> {
+    async addProvider(req: ApiRequest): Promise<Response> {
       const body = await readJsonBody(req);
       const id = readProviderId(body);
       if (id === null) return jsonError(400, "invalid_request", "id must be a provider id");
@@ -454,7 +448,7 @@ export function createApiHandlers(deps: ApiDeps) {
      * MCP サーバーを追加する。繋がるかどうかは画面が確かめてからここへ来る
      * （同じ接続を 2 度試さないよう、ここでは確かめ直さない）。
      */
-    async addMcpServer(req: PlainRequest): Promise<Response> {
+    async addMcpServer(req: ApiRequest): Promise<Response> {
       const parsed = await readMcpForm(req);
       if (parsed instanceof Response) return parsed;
 
@@ -469,7 +463,7 @@ export function createApiHandlers(deps: ApiDeps) {
      * 保存する前に、入力された設定で繋がるか確かめる。設定には何も書かない。
      * サーバーが認可を求めた場合は、ブラウザで開く URL を返して認可を待つ。
      */
-    async testMcpServer(req: PlainRequest): Promise<Response> {
+    async testMcpServer(req: ApiRequest): Promise<Response> {
       const parsed = await readMcpForm(req);
       if (parsed instanceof Response) return parsed;
 
@@ -598,7 +592,7 @@ export function createApiHandlers(deps: ApiDeps) {
      * 引き受け（画面を渡している間）の返事。
      * チャットに書いた文か、「操作を完了した」を、待っているツールの戻り値にする。
      */
-    async answerHandover(req: PlainRequest): Promise<Response> {
+    async answerHandover(req: ApiRequest): Promise<Response> {
       const body = await readJsonBody(req);
       const sessionId = typeof body?.["sessionId"] === "string" ? body["sessionId"] : "";
       if (sessionId.length === 0) {
@@ -638,7 +632,7 @@ export function createApiHandlers(deps: ApiDeps) {
     },
 
     /** コンテナを作り直す。wipeHome を選んだときだけ、マウントしたフォルダの中身も消す。 */
-    async resetContainer(req: PlainRequest): Promise<Response> {
+    async resetContainer(req: ApiRequest): Promise<Response> {
       const body = await readJsonBody(req);
       return containerResponse(() => deps.container.reset({ wipeHome: body?.["wipeHome"] === true }));
     },
@@ -684,7 +678,7 @@ export function createApiHandlers(deps: ApiDeps) {
     id: string,
     provider: ProviderSettings,
     signal: AbortSignal,
-  ): Promise<ConnectionResult | Response> {
+  ): Promise<ProviderCheckResult | Response> {
     try {
       return await deps.checkConnection({
         target: targetOf(id, provider),
@@ -827,16 +821,10 @@ async function containerResponse(operation: () => Promise<ContainerStatusView>):
 
 /** コンテナの失敗を、画面が扱いやすい HTTP の状態にする。 */
 function containerStatus(code: ContainerErrorCode): number {
-  switch (code) {
-    // podman が無いのは、この端末ではもう用意できないという意味。
-    case "container_unavailable":
-      return 503;
-    // 操作の前提（動いていること）が満たされていない。
-    case "container_not_running":
-      return 409;
-    default:
-      return 502;
-  }
+  // 操作の前提（動いていること）が満たされていない。
+  if (code === "container_not_running") return 409;
+  // イメージの作成や起動の失敗は、接続先（podman）側の問題として扱う。
+  return 502;
 }
 
 /** リクエストからプロバイダ id を読む。 */
@@ -1060,10 +1048,26 @@ const HEARTBEAT_FRAME = ": heartbeat\n\n";
  *
  * 次のイベントが来ないまま間隔が空いたら、コメント行を流して接続を保つ。
  * 止まった待ち（ユーザーの操作、長い思考）で切れないようにするため。
+ * タイマーは待っている間だけ動かし、イベントが来たら必ず止める。
  */
 function sseResponse(events: AsyncGenerator<ChatEvent>): Response {
   const encoder = new TextEncoder();
   let pending: Promise<IteratorResult<ChatEvent>> | null = null;
+  let heartbeat: ReturnType<typeof setTimeout> | null = null;
+
+  function stopHeartbeat(): void {
+    if (heartbeat === null) return;
+
+    clearTimeout(heartbeat);
+    heartbeat = null;
+  }
+
+  /** 心拍までの待ち。イベントが先に来ても、タイマーは stopHeartbeat が片付ける。 */
+  function nextHeartbeat(): Promise<{ kind: "heartbeat" }> {
+    return new Promise((resolve) => {
+      heartbeat = setTimeout(() => resolve({ kind: "heartbeat" }), HEARTBEAT_INTERVAL_MS);
+    });
+  }
 
   const body = new ReadableStream<Uint8Array>({
     async pull(controller) {
@@ -1072,8 +1076,12 @@ function sseResponse(events: AsyncGenerator<ChatEvent>): Response {
 
       const outcome = await Promise.race([
         pending.then((result) => ({ kind: "event" as const, result })),
-        delay(HEARTBEAT_INTERVAL_MS).then(() => ({ kind: "heartbeat" as const })),
+        nextHeartbeat(),
       ]);
+      stopHeartbeat();
+
+      // 相手が読むのをやめた直後は、流す先が無い。
+      if (controller.desiredSize === null) return;
 
       if (outcome.kind === "heartbeat") {
         controller.enqueue(encoder.encode(HEARTBEAT_FRAME));
@@ -1088,6 +1096,7 @@ function sseResponse(events: AsyncGenerator<ChatEvent>): Response {
       controller.enqueue(encoder.encode(encodeChatEvent(outcome.result.value)));
     },
     async cancel() {
+      stopHeartbeat();
       await events.return(undefined);
     },
   });
@@ -1099,10 +1108,6 @@ function sseResponse(events: AsyncGenerator<ChatEvent>): Response {
       "X-Accel-Buffering": "no",
     },
   });
-}
-
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /** 本文が無い・JSON でない場合は「本文なし」として扱い、呼び出し側で invalid_request にする。 */

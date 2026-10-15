@@ -6,7 +6,7 @@ const APP_DIR_NAME = "Terasuma";
 /** Linux などでは小文字が慣例。 */
 const APP_DIR_NAME_LOWER = "terasuma";
 
-export type AppPaths = {
+type AppPaths = {
   /** 設定ファイル（config.json）を置くディレクトリ。 */
   configDir: string;
   /** 会話データ（SQLite）を置くディレクトリ。 */

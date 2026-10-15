@@ -26,10 +26,6 @@ export type Handover = {
   wait(sessionId: string, signal: AbortSignal): Promise<string>;
   /** ユーザーからの返事。待っているものが無ければ false。 */
   answer(sessionId: string, answer: HandoverAnswer): boolean;
-  /** いま待っているかどうか。 */
-  pending(sessionId: string): boolean;
-  /** 待ちを片付ける（画面を渡せないままターンが終わった場合）。 */
-  cancel(sessionId: string): void;
 };
 
 export function createHandover(): Handover {
@@ -69,17 +65,6 @@ export function createHandover(): Handover {
 
       settle(answer);
       return true;
-    },
-
-    pending(sessionId) {
-      return waiting.has(sessionId);
-    },
-
-    cancel(sessionId) {
-      const settle = waiting.get(sessionId);
-      if (settle === undefined) return;
-
-      settle({ kind: "done" });
     },
   };
 }

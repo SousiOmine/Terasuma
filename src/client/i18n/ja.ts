@@ -167,7 +167,6 @@ export const ja: Record<MessageKey, string> = {
     "このプロバイダで使えるモデルは models.dev のカタログから取得します。",
   "settings.wizard.checkSkipped":
     "このプロバイダは接続確認に使う一覧（/models）を公開していないため、確認せずに追加します。",
-  "settings.wizard.keyUrl": "API キーを取得する",
   "settings.wizard.apiKey.label": "API キー",
   "settings.wizard.apiKey.placeholder": "API キーを貼り付け",
   "settings.wizard.apiKey.show": "表示",
@@ -209,7 +208,6 @@ export const ja: Record<MessageKey, string> = {
   "error.mcp_server_exists": "この MCP サーバーはすでに追加されています。",
   "error.mcp_authorization_failed": "MCP サーバーの認可を始められませんでした。",
   "error.mcp_unreachable": "MCP サーバーに接続できませんでした。",
-  "error.container_unavailable": "podman が見つかりません。",
   "error.container_build_failed": "コンピュータのイメージを作れませんでした。",
   "error.container_start_failed": "コンピュータを起動できませんでした。",
   "error.container_not_running": "コンピュータが動いていません。",

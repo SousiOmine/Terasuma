@@ -48,12 +48,15 @@ const REMOVE_TIMEOUT_MS = 60_000;
 /** 画面の撮影に許す時間。podman が返らないままターンが終わらなくなるのを防ぐ。 */
 const SCREENSHOT_TIMEOUT_MS = 15_000;
 
+/**
+ * 状態の問い合わせを使い回す時間。
+ * 画面の中継は 1 回の表示で何度も同じ問い合わせをするので、毎回 podman を呼ぶと待ちが積み上がる。
+ * 使う側（起動・リセット）は、操作の前後でこのキャッシュを使わない。
+ */
+const STATUS_CACHE_MS = 1_000;
+
 /** コンテナを操作できなかった理由。画面の文言はクライアント側の i18n が決める。 */
-export type ContainerErrorCode =
-  | "container_unavailable"
-  | "container_build_failed"
-  | "container_start_failed"
-  | "container_not_running";
+export type ContainerErrorCode = "container_build_failed" | "container_start_failed" | "container_not_running";
 
 export class ContainerError extends Error {
   constructor(
@@ -136,6 +139,9 @@ export function createContainerManager(options: ContainerManagerOptions): Contai
   const run = options.command ?? runCommand;
   const homeDir = join(options.dataDir, HOME_DIR_NAME);
   const containerfilePath = join(options.containerDir, "Containerfile");
+
+  /** 直近に読んだ状態と、その時刻。画面の中継のように短い間に何度も聞かれるため。 */
+  let cachedStatus: { at: number; view: ContainerStatusView } | null = null;
 
   function fail(code: ContainerErrorCode, result: CommandResult): ContainerError {
     return new ContainerError(code, describeFailure(result));
@@ -233,6 +239,16 @@ export function createContainerManager(options: ContainerManagerOptions): Contai
   }
 
   async function status(): Promise<ContainerStatusView> {
+    const at = Date.now();
+    if (cachedStatus !== null && at - cachedStatus.at < STATUS_CACHE_MS) return cachedStatus.view;
+
+    const view = await readStatus();
+    cachedStatus = { at, view };
+    return view;
+  }
+
+  /** podman に聞き直して、いまどこまで準備できているかを返す（使い回さない）。 */
+  async function readStatus(): Promise<ContainerStatusView> {
     if ((await podmanVersion()) === null) {
       return { state: "podman_missing", vncPort: null, detail: null };
     }
@@ -269,7 +285,8 @@ export function createContainerManager(options: ContainerManagerOptions): Contai
   }
 
   async function start(): Promise<ContainerStatusView> {
-    const before = await status();
+    // 操作の前は、使い回さずに podman へ聞き直す。
+    const before = await readStatus();
 
     switch (before.state) {
       case "podman_missing":
@@ -278,14 +295,20 @@ export function createContainerManager(options: ContainerManagerOptions): Contai
       case "image_missing":
         await buildImage();
         await createContainer();
-        return status();
+        return refreshStatus();
       case "container_missing":
         await createContainer();
-        return status();
+        return refreshStatus();
       case "stopped":
         await startContainer();
-        return status();
+        return refreshStatus();
     }
+  }
+
+  /** 操作の後で状態を読み直し、使い回している分も入れ替える。 */
+  async function refreshStatus(): Promise<ContainerStatusView> {
+    cachedStatus = null;
+    return status();
   }
 
   return {

@@ -8,11 +8,11 @@ describe("引き受けの待ち", () => {
     const controller = new AbortController();
 
     const waiting = handover.wait("s1", controller.signal);
-    expect(handover.pending("s1")).toBe(true);
-
     expect(handover.answer("s1", { kind: "text", text: "ログインできた。二段階認証も済んだ" })).toBe(true);
     expect(await waiting).toBe("ログインできた。二段階認証も済んだ");
-    expect(handover.pending("s1")).toBe(false);
+
+    // 返したあとの待ちは残らない。
+    expect(handover.answer("s1", { kind: "done" })).toBe(false);
   });
 
   test("「操作を完了した」は決まった文になる", async () => {
@@ -20,7 +20,7 @@ describe("引き受けの待ち", () => {
     const controller = new AbortController();
 
     const waiting = handover.wait("s1", controller.signal);
-    handover.answer("s1", { kind: "done" });
+    expect(handover.answer("s1", { kind: "done" })).toBe(true);
 
     expect(await waiting).toBe(HANDOVER_DONE);
   });
@@ -29,7 +29,6 @@ describe("引き受けの待ち", () => {
     const handover = createHandover();
 
     expect(handover.answer("s1", { kind: "done" })).toBe(false);
-    expect(handover.pending("s1")).toBe(false);
   });
 
   test("別のセッションの待ちは混ざらない", async () => {
@@ -37,11 +36,11 @@ describe("引き受けの待ち", () => {
     const first = handover.wait("s1", new AbortController().signal);
     const second = handover.wait("s2", new AbortController().signal);
 
-    handover.answer("s2", { kind: "text", text: "s2 の返事" });
+    expect(handover.answer("s2", { kind: "text", text: "s2 の返事" })).toBe(true);
     expect(await second).toBe("s2 の返事");
-    expect(handover.pending("s1")).toBe(true);
 
-    handover.answer("s1", { kind: "text", text: "s1 の返事" });
+    // s1 の待ちは残っている。
+    expect(handover.answer("s1", { kind: "text", text: "s1 の返事" })).toBe(true);
     expect(await first).toBe("s1 の返事");
   });
 
@@ -53,7 +52,8 @@ describe("引き受けの待ち", () => {
     controller.abort();
 
     expect(await waiting.catch((error: unknown) => (error as Error).message)).toContain("ターンが終わりました");
-    expect(handover.pending("s1")).toBe(false);
+    // 止まったあとの返事は受け取らない。
+    expect(handover.answer("s1", { kind: "done" })).toBe(false);
   });
 
   test("すでに止まっているターンでは、待ちを作らずに終わる", async () => {
@@ -63,15 +63,7 @@ describe("引き受けの待ち", () => {
 
     const waiting = handover.wait("s1", controller.signal);
 
-    expect(handover.pending("s1")).toBe(false);
     expect(await waiting.catch((error: unknown) => (error as Error).message)).toContain("ターンが終わりました");
-  });
-
-  test("待ちを片付けると、完了として終わる", async () => {
-    const handover = createHandover();
-    const waiting = handover.wait("s1", new AbortController().signal);
-
-    handover.cancel("s1");
-    expect(await waiting).toBe(HANDOVER_DONE);
+    expect(handover.answer("s1", { kind: "done" })).toBe(false);
   });
 });

@@ -102,9 +102,8 @@ describe("引き受けの API", () => {
       expect(noSession.status).toBe(400);
 
       // どれも受け付けていないので、待ちは残ったまま。
-      expect(handover.pending("s1")).toBe(true);
-      handover.cancel("s1");
-      await waiting;
+      expect(handover.answer("s1", { kind: "done" })).toBe(true);
+      expect(await waiting).toBe("ユーザーは操作を完了しました");
     });
   });
 });

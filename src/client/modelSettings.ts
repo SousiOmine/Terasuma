@@ -55,10 +55,6 @@ export function providerName(provider: ProviderView): string {
   return catalogProviders.value?.find((entry) => entry.id === provider.id)?.name ?? provider.name;
 }
 
-/** 接続先の種類。設定に baseUrl があるかどうかで決まる。 */
-export function isEndpoint(provider: ProviderView): boolean {
-  return provider.baseUrl !== null;
-}
 
 /** 設定を読む。失敗は呼び出し側が画面に出す。 */
 export async function loadModelSettings(): Promise<void> {

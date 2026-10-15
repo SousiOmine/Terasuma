@@ -6,7 +6,7 @@ import { isModelId, type ModelId } from "./shared/model";
 import type { McpServerForm, ProviderCredentials } from "./shared/types";
 
 /** 使う LLM 実装。mock は開発・テスト専用で、既定には決してならない。 */
-export type EngineKind = "mastra" | "mock";
+type EngineKind = "mastra" | "mock";
 
 /**
  * プロバイダ 1 件の設定。
@@ -26,7 +26,7 @@ export type ModelOptionSettings = {
 };
 
 /** モデル id → 設定。並び順は設定ファイルに書かれた順のまま保つ。 */
-export type ModelOptionsSettings = Record<string, ModelOptionSettings>;
+type ModelOptionsSettings = Record<string, ModelOptionSettings>;
 
 /** プロバイダ id → 設定。並び順は設定ファイルに書かれた順のまま保つ。 */
 export type ProvidersSettings = Record<string, ProviderSettings>;
@@ -614,7 +614,8 @@ function readModelOption(model: string, raw: unknown, path: string): ModelOption
   return { reasoningEffort: effort.trim() };
 }
 
-function readString(source: Record<string, unknown>, key: FileKey, path: string): string | undefined {  const value = source[key];
+function readString(source: Record<string, unknown>, key: FileKey, path: string): string | undefined {
+  const value = source[key];
   if (value === undefined) return undefined;
   if (typeof value !== "string") throw new Error(`${path} の ${key} は文字列で指定してください`);
 

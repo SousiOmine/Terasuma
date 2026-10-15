@@ -253,7 +253,7 @@ export function createComputerTools(options: ComputerToolsOptions): ComputerTool
       inputSchema: z.object({
         question: z.string().min(1).describe("What you need the user to do, written for the user to read"),
       }),
-      execute: async ({ question }: { question: string }, context: ToolContext) => {
+      execute: async (_input: { question: string }, context: ToolContext) => {
         const signal = context.abortSignal;
         // 中断を受け取れないと、ユーザーを待ったままターンを片付けられなくなる。
         if (signal === undefined) throw new Error("ターンの中断を受け取れないため、ユーザーを待てません");

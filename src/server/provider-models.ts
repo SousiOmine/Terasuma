@@ -8,7 +8,7 @@
  *
  * 独自エンドポイント（OpenAI 互換）はカタログに無いので、モデルの一覧もここから取る。
  */
-import type { ApiErrorCode } from "../shared/types";
+import type { ApiErrorCode, ProviderCheckResult } from "../shared/types";
 
 /** 接続確認で返す失敗の種類。ルート側でそのまま API のコードになる。 */
 export type ProviderErrorCode = Extract<
@@ -55,13 +55,7 @@ export type ProviderRequest = {
 };
 
 /** 確認の結果。verified が false のときは、確かめる手段が無かったことを表す。 */
-export type ConnectionResult = {
-  verified: boolean;
-  /** 確かめられたときに得られたモデル ID。独自エンドポイントのモデル選択に使う。 */
-  models: readonly string[];
-};
-
-export type ConnectionChecker = (request: ProviderRequest) => Promise<ConnectionResult>;
+export type ConnectionChecker = (request: ProviderRequest) => Promise<ProviderCheckResult>;
 
 /** 独自エンドポイントのモデル一覧を取る関数。 */
 export type ProviderModelLister = (request: ProviderRequest) => Promise<readonly string[]>;

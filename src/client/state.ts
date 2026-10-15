@@ -6,7 +6,6 @@ import { toErrorState } from "./errors";
 import { locale, setLocale } from "./i18n";
 import { loadModelSettings } from "./modelSettings";
 
-export type ClientErrorCode = api.ClientErrorCode;
 
 /** 表示中の画面。設定は全画面で開く。 */
 export type View = "chat" | "settings";
@@ -26,7 +25,7 @@ export const messages = signal<readonly ChatMessage[]>([]);
 export const streamingParts = signal<readonly MessagePart[]>([]);
 export const isStreaming = signal(false);
 export const isLoadingMessages = signal(false);
-export const errorCode = signal<ClientErrorCode | null>(null);
+export const errorCode = signal<api.ClientErrorCode | null>(null);
 export const errorDetail = signal<string | null>(null);
 
 /** 一覧にまだ載っていない新規セッションでは null になる（その場合は「新しいチャット」と表示する）。 */

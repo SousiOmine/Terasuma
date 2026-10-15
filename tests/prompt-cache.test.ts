@@ -171,7 +171,7 @@ describe("ツールを使ったターンの入力", () => {
 
 describe("画像つきのツール結果", () => {
   /** 画面を撮ったことにして、画像つきの結果を 1 つ持つ履歴を作る。 */
-  function screenshotHistory(images: ReturnType<typeof createImageStore>, result: { image?: ImageRef }) {
+  function screenshotHistory(result: { image?: ImageRef }) {
     const store = makeStore();
     store.ensureSession("s1", null);
     store.appendMessage({ id: "m1", sessionId: "s1", role: "user", content: "画面を見て" });
@@ -204,7 +204,7 @@ describe("画像つきのツール結果", () => {
 
     try {
       const ref = images.save(png, "image/png");
-      const input = buildModelInput(screenshotHistory(images, { image: ref }), images);
+      const input = buildModelInput(screenshotHistory({ image: ref }), images);
 
       // tool の本文に画像は置けない（OpenAI 互換のプロバイダが文字列へ潰すため）。
       // 結果はテキストで渡し、画像はその直後の user メッセージで渡す。
@@ -241,8 +241,8 @@ describe("画像つきのツール結果", () => {
       const first = images.save(testPng(1280, 800), "image/png");
       const second = images.save(testPng(1280, 800), "image/png");
 
-      expect(buildModelInput(screenshotHistory(images, { image: second }), images)).toEqual(
-        buildModelInput(screenshotHistory(images, { image: first }), images),
+      expect(buildModelInput(screenshotHistory({ image: second }), images)).toEqual(
+        buildModelInput(screenshotHistory({ image: first }), images),
       );
     } finally {
       rmSync(dir, { recursive: true, force: true });
@@ -255,7 +255,7 @@ describe("画像つきのツール結果", () => {
     const missing: ImageRef = { sha256: "0".repeat(64), mime: "image/png", width: 1280, height: 800 };
 
     try {
-      const input = buildModelInput(screenshotHistory(images, { image: missing }), images);
+      const input = buildModelInput(screenshotHistory({ image: missing }), images);
       expect(input[3]).toEqual({
         role: "tool",
         content: [

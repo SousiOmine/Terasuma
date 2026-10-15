@@ -1,5 +1,5 @@
 import { IconLayoutSidebarRight } from "@tabler/icons-preact";
-import { useEffect, useRef } from "preact/hooks";
+import { useEffect, useMemo, useRef } from "preact/hooks";
 import { containerStatus } from "../containerSettings";
 import { t } from "../i18n";
 import { modelProblem } from "../modelSettings";
@@ -33,14 +33,34 @@ export function ChatView() {
   const containerAvailable = containerStatus.value !== null && !containerMissing;
   const paneOpen = computerPaneOpen.value;
   const scrollRef = useRef<HTMLDivElement>(null);
+  /** 末尾にいるかどうか。履歴を読んでいる間は引き戻さない。 */
+  const stickToBottom = useRef(true);
+
+  // 確定した会話は、増えたときだけ組み立て直す。
+  // 生成中の本文が伸びるたびに全メッセージの部品を作り直すと、長い会話ほど重くなる。
+  const bubbles = useMemo(
+    () =>
+      items.map((message) => (
+        <MessageBubble key={message.id} role={message.role} content={message.content} parts={message.parts} />
+      )),
+    [items],
+  );
 
   // 新しい内容が来たら末尾へ寄せる。会話が伸びる操作は送信とストリーミングだけなので十分。
   // 本文は少しずつ伸びるので、部品の数だけでは足りない（文字数も見る）。
   const pendingLength = pending.reduce((total, part) => total + (part.type === "text" ? part.text.length : 1), 0);
   useEffect(() => {
     const node = scrollRef.current;
-    if (node !== null) node.scrollTop = node.scrollHeight;
+    if (node !== null && stickToBottom.current) node.scrollTop = node.scrollHeight;
   }, [items.length, pendingLength, loading]);
+
+  const handleScroll = (): void => {
+    const node = scrollRef.current;
+    if (node === null) return;
+
+    // 最下部の近くにいるときだけ、これから来る内容に追従する。
+    stickToBottom.current = node.scrollHeight - node.scrollTop - node.clientHeight < 40;
+  };
 
   const title = activeSession.value?.title ?? t("sidebar.untitled");
   const showEmpty = !loading && items.length === 0 && pending.length === 0;
@@ -99,19 +119,12 @@ export function ChatView() {
         </div>
       )}
 
-      <div ref={scrollRef} class="min-h-0 flex-1 overflow-y-auto">
+      <div ref={scrollRef} onScroll={handleScroll} class="min-h-0 flex-1 overflow-y-auto">
         {showEmpty ? (
           <EmptyState />
         ) : (
           <div class="mx-auto flex w-full max-w-3xl flex-col gap-6 px-5 py-8">
-            {items.map((message) => (
-              <MessageBubble
-                key={message.id}
-                role={message.role}
-                content={message.content}
-                parts={message.parts}
-              />
-            ))}
+            {bubbles}
             {pending.length > 0 && <MessageBubble role="assistant" content="" parts={pending} />}
             {streaming && pending.length === 0 && <Replying />}
             {loading && <p class="text-sm text-neutral-500 dark:text-neutral-400">{t("chat.loading")}</p>}

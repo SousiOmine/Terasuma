@@ -153,7 +153,7 @@ export function ProviderWizard({ mode, onClose }: ProviderWizardProps) {
 
       setCheckNote(result.verified ? null : "skipped");
       setModels(found);
-      setModel(pickModel(target, found));
+      setModel(pickModel(found));
     } catch (failure) {
       setError(toErrorState(failure));
     } finally {
@@ -549,8 +549,8 @@ function nextCustomEndpointId(used: readonly ProviderView[]): string {
   }
 }
 
-/** 一覧の中から最初に選ぶモデル。カタログのプロバイダでは先頭を使う。 */
-function pickModel(target: Target, models: readonly string[]): string | null {
+/** 一覧の中から最初に選ぶモデル。 */
+function pickModel(models: readonly string[]): string | null {
   return models[0] ?? null;
 }
 

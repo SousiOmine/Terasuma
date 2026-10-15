@@ -162,27 +162,25 @@ export function createStore(dbPath: string, options: CreateStoreOptions = {}): S
     `SELECT id, session_id, seq, role, content, parts, created_at, input_tokens, output_tokens, cached_input_tokens
      FROM messages WHERE session_id = ? ORDER BY seq ASC`,
   );
-  const selectNextSeq = db.query<{ next_seq: number }, [string]>(
-    "SELECT COALESCE(MAX(seq), 0) + 1 AS next_seq FROM messages WHERE session_id = ?",
-  );
   const insertMessage = db.query<
-    unknown,
-    [string, string, number, string, string, string | null, number, number | null, number | null, number | null]
+    { seq: number },
+    [string, string, string, string, string, string | null, number, number | null, number | null, number | null]
   >(
     `INSERT INTO messages
        (id, session_id, seq, role, content, parts, created_at, input_tokens, output_tokens, cached_input_tokens)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, (SELECT COALESCE(MAX(seq), 0) + 1 FROM messages WHERE session_id = ?), ?, ?, ?, ?, ?, ?, ?)
+     RETURNING seq`,
   );
 
   const append = db.transaction((input: AppendMessageInput): ChatMessage => {
     const at = now();
-    const seq = selectNextSeq.get(input.sessionId)?.next_seq ?? 1;
     const parts = input.parts ?? null;
 
-    insertMessage.run(
+    // 連番は INSERT の中で決める（読み出してから書くまでの往復を減らす）。
+    const inserted = insertMessage.get(
       input.id,
       input.sessionId,
-      seq,
+      input.sessionId,
       input.role,
       input.content,
       parts === null ? null : JSON.stringify(parts),
@@ -191,6 +189,8 @@ export function createStore(dbPath: string, options: CreateStoreOptions = {}): S
       input.usage?.outputTokens ?? null,
       input.usage?.cachedInputTokens ?? null,
     );
+    const seq = inserted?.seq ?? 1;
+
     touchSession.run(at, input.sessionId);
 
     if (input.role === "user") {

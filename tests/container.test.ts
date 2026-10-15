@@ -78,6 +78,28 @@ describe("コンテナの状態", () => {
       expect(status.detail).not.toBeNull();
     });
   });
+
+  test("同じ問い合わせは短い間だけ使い回す", async () => {
+    await withManager({}, async ({ container, calls }) => {
+      await container.status();
+      const afterFirst = callsOf(calls, "inspect").length;
+      expect(afterFirst).toBeGreaterThan(0);
+
+      // 画面の中継は 1 回の表示で何度も聞くので、2 回目以降は podman を呼ばない。
+      await container.status();
+      expect(callsOf(calls, "inspect")).toHaveLength(afterFirst);
+    });
+  });
+
+  test("起動の後は、使い回している状態も入れ替える", async () => {
+    await withManager({ running: false }, async ({ container }) => {
+      expect(await container.status()).toMatchObject({ state: "stopped" });
+
+      // 止まっている状態を読んだあとに起動しても、その後の問い合わせは running を返す。
+      expect(await container.start()).toMatchObject({ state: "running" });
+      expect(await container.status()).toMatchObject({ state: "running" });
+    });
+  });
 });
 
 describe("コンテナの起動", () => {
@@ -222,8 +244,7 @@ describe("コンテナの中での実行", () => {
     );
   });
 
-  test("実行中のコマンドには、渡された中断の signal がそのまま届く", async () => {
-    const dataDir = mkdtempSync(join(tmpdir(), "terasuma-container-"));
+  test("実行中のコマンドには、渡された中断の signal がそのまま届く", async () => {    const dataDir = mkdtempSync(join(tmpdir(), "terasuma-container-"));
     const stub = createPodmanStub({});
     const seen: (AbortSignal | undefined)[] = [];
     const container = createContainerManager({

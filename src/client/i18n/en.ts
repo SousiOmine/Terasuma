@@ -167,7 +167,6 @@ export const en = {
   "settings.wizard.catalogHint": "Models for this provider come from the models.dev catalog.",
   "settings.wizard.checkSkipped":
     "This provider does not expose /models, so the connection was not checked before adding.",
-  "settings.wizard.keyUrl": "Get an API key",
   "settings.wizard.apiKey.label": "API key",
   "settings.wizard.apiKey.placeholder": "Paste your API key",
   "settings.wizard.apiKey.show": "Show",
@@ -209,7 +208,6 @@ export const en = {
   "error.mcp_server_exists": "This MCP server is already added.",
   "error.mcp_authorization_failed": "Authorization for the MCP server could not be started.",
   "error.mcp_unreachable": "Could not connect to the MCP server.",
-  "error.container_unavailable": "podman was not found.",
   "error.container_build_failed": "The computer image could not be built.",
   "error.container_start_failed": "The computer could not be started.",
   "error.container_not_running": "The computer is not running.",
