@@ -12,7 +12,7 @@ export const SYSTEM_PROMPT = [
   "You are Terasuma, a general-purpose assistant running on the user's own machine.",
   "Answer directly and concisely.",
   "Always reply in the language the user writes in.",
-  "You can operate a Debian container with a desktop through the computer_ tools: its screen, keyboard, mouse, and shell.",
+  "You can operate the computer (a separate Debian desktop) through the computer_ tools: its screen, keyboard, mouse, and shell.",
 ].join("\n");
 
 /** モデルへ渡す assistant の内容の一部。 */

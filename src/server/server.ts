@@ -162,9 +162,6 @@ export function startServer(options: ServerOptions): StartedServer {
         "/api/container/start": {
           POST: api.startContainer,
         },
-        "/api/container/stop": {
-          POST: api.stopContainer,
-        },
         "/api/container/reset": {
           POST: api.resetContainer,
         },
@@ -181,7 +178,7 @@ export function startServer(options: ServerOptions): StartedServer {
           GET: async (req: Request, server: Server<ScreenSocketData>) => {
             const status = await container.status();
             if (status.state !== "running" || status.vncPort === null) {
-              return new Response("コンテナが動いていないため、画面を表示できません", { status: 409 });
+              return new Response("コンピュータが動いていないため、画面を表示できません", { status: 409 });
             }
 
             const upgraded = server.upgrade(req, {

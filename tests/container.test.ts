@@ -150,19 +150,7 @@ describe("コンテナの起動", () => {
   });
 });
 
-describe("コンテナの停止とリセット", () => {
-  test("動いていれば止め、止まっていれば何もしない", async () => {
-    await withManager({}, async ({ container, calls }) => {
-      expect(await container.stop()).toMatchObject({ state: "stopped" });
-      expect(callsOf(calls, "stop")).toHaveLength(1);
-    });
-
-    await withManager({ running: false }, async ({ container, calls }) => {
-      await container.stop();
-      expect(callsOf(calls, "stop")).toHaveLength(0);
-    });
-  });
-
+describe("コンテナのリセット", () => {
   test("リセットは作り直すだけで、ホームの中身は残す", async () => {
     await withManager({}, async ({ container, calls, homeDir }) => {
       // コンテナが既にある状態では、ホームはマウント済みで中身がある。

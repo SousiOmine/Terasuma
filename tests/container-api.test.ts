@@ -94,14 +94,6 @@ describe("コンテナの API", () => {
     });
   });
 
-  test("停止は止めて、止まった状態を返す", async () => {
-    await withContainerServer({}, async ({ request }) => {
-      expect(await readStatus(await request("/api/container/stop", { method: "POST" }))).toMatchObject({
-        state: "stopped",
-      });
-    });
-  });
-
   test("リセットは wipeHome の指定を受け取る", async () => {
     await withContainerServer({}, async ({ request }) => {
       const kept = await request("/api/container/reset", {
@@ -125,14 +117,6 @@ describe("コンテナの API", () => {
       const body = (await response.json()) as { code: string; detail: string };
       expect(body.code).toBe("container_build_failed");
       expect(body.detail).toContain("ミラーに届きません");
-    });
-  });
-
-  test("停止に失敗したら、理由とコードを返す", async () => {
-    await withContainerServer({ fail: "stop" }, async ({ request }) => {
-      const response = await request("/api/container/stop", { method: "POST" });
-      expect(response.status).toBe(502);
-      expect(((await response.json()) as { code: string }).code).toBe("container_stop_failed");
     });
   });
 });

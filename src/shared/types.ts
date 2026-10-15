@@ -104,7 +104,6 @@ export type ApiErrorCode =
   | "container_unavailable"
   | "container_build_failed"
   | "container_start_failed"
-  | "container_stop_failed"
   | "container_not_running"
   | "handover_not_pending"
   | "settings_write_failed"

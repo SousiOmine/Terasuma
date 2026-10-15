@@ -87,7 +87,7 @@ export function createComputerTools(options: ComputerToolsOptions): ComputerTool
     computer_screenshot: createTool({
       id: "computer_screenshot",
       description: [
-        "Take a screenshot of the container desktop and return it as an image.",
+        "Take a screenshot of the computer desktop and return it as an image.",
         "The screen size is fixed, so coordinates read from the image can be used as they are.",
         "The mouse pointer is not drawn in the image.",
       ].join(" "),
@@ -206,7 +206,7 @@ export function createComputerTools(options: ComputerToolsOptions): ComputerTool
     computer_open: createTool({
       id: "computer_open",
       description: [
-        "Start an application on the container desktop.",
+        "Start an application on the computer desktop.",
         "The application keeps running after the call returns; take a screenshot to see it.",
       ].join(" "),
       inputSchema: z.object({
@@ -227,7 +227,7 @@ export function createComputerTools(options: ComputerToolsOptions): ComputerTool
     computer_ask_user: createTool({
       id: "computer_ask_user",
       description: [
-        "Hand the container screen over to the user and wait for them.",
+        "Hand the computer screen over to the user and wait for them.",
         "Use this for logins, two-factor codes, identity checks, or any choice only the user can make.",
         "What the user replies, or that the user finished, comes back as the result.",
         "Do not take screenshots while the user is working on the screen.",
@@ -248,7 +248,7 @@ export function createComputerTools(options: ComputerToolsOptions): ComputerTool
     computer_shell: createTool({
       id: "computer_shell",
       description: [
-        "Run a shell command inside the Debian container that you operate.",
+        "Run a shell command on the Debian computer that you operate.",
         "The command runs as bash -lc in /home/agent (the folder shared with the user's machine).",
         "sudo works without a password.",
         "Returns the exit code, standard output, and standard error.",

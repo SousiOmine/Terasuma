@@ -44,7 +44,6 @@ const VERSION_TIMEOUT_MS = 10_000;
 const INSPECT_TIMEOUT_MS = 30_000;
 const BUILD_TIMEOUT_MS = 15 * 60_000;
 const RUN_TIMEOUT_MS = 60_000;
-const STOP_TIMEOUT_MS = 60_000;
 const REMOVE_TIMEOUT_MS = 60_000;
 
 /** コンテナを操作できなかった理由。画面の文言はクライアント側の i18n が決める。 */
@@ -52,7 +51,6 @@ export type ContainerErrorCode =
   | "container_unavailable"
   | "container_build_failed"
   | "container_start_failed"
-  | "container_stop_failed"
   | "container_not_running";
 
 export class ContainerError extends Error {
@@ -105,8 +103,6 @@ export type ContainerManager = {
   status(): Promise<ContainerStatusView>;
   /** イメージを作り、コンテナを作り、起動する（既に動いていれば何もしない）。 */
   start(): Promise<ContainerStatusView>;
-  /** 止める。止まっていれば何もしない。 */
-  stop(): Promise<ContainerStatusView>;
   /** コンテナを作り直す。wipeHome を選ぶと、マウントしたフォルダの中身も消す。 */
   reset(options: { wipeHome: boolean }): Promise<ContainerStatusView>;
   /** コンテナの中で bash -lc を実行する。動いていなければ ContainerError を投げる。 */
@@ -242,7 +238,7 @@ export function createContainerManager(options: ContainerManagerOptions): Contai
 
     const state = await containerStatus();
     if (state !== "running") {
-      return { state: "stopped", vncPort: null, detail: state === null ? "コンテナの状態を読めませんでした" : null };
+      return { state: "stopped", vncPort: null, detail: state === null ? "コンピュータの状態を読めませんでした" : null };
     }
 
     const vncPort = await publishedVncPort();
@@ -279,15 +275,6 @@ export function createContainerManager(options: ContainerManagerOptions): Contai
 
     start,
 
-    async stop() {
-      const before = await status();
-      if (before.state !== "running") return before;
-
-      const result = await run(["podman", "stop", "--time", "10", CONTAINER_NAME], STOP_TIMEOUT_MS);
-      if (result.code !== 0) throw fail("container_stop_failed", result);
-      return status();
-    },
-
     async reset({ wipeHome }) {
       await removeContainer();
       // イメージは作り直さない。作り直すのはコンテナだけ（ホームを消すかどうかは別に選ぶ）。
@@ -302,7 +289,7 @@ export function createContainerManager(options: ContainerManagerOptions): Contai
       if (current.state !== "running") {
         throw new ContainerError(
           "container_not_running",
-          `コンテナが動いていません（いまの状態: ${current.state}）。設定の「コンテナ」から起動してください`,
+          `コンピュータが動いていません（いまの状態: ${current.state}）。設定の「コンピュータ」から起動してください`,
         );
       }
 
@@ -325,7 +312,7 @@ export function createContainerManager(options: ContainerManagerOptions): Contai
       if (current.state !== "running") {
         throw new ContainerError(
           "container_not_running",
-          `コンテナが動いていません（いまの状態: ${current.state}）。設定の「コンテナ」から起動してください`,
+          `コンピュータが動いていません（いまの状態: ${current.state}）。設定の「コンピュータ」から起動してください`,
         );
       }
 
@@ -348,7 +335,7 @@ export function createContainerManager(options: ContainerManagerOptions): Contai
       if (current.state !== "running") {
         throw new ContainerError(
           "container_not_running",
-          `コンテナが動いていません（いまの状態: ${current.state}）。設定の「コンテナ」から起動してください`,
+          `コンピュータが動いていません（いまの状態: ${current.state}）。設定の「コンピュータ」から起動してください`,
         );
       }
 

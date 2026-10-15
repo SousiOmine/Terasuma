@@ -283,10 +283,6 @@ export async function startContainer(): Promise<ContainerStatusView> {
   return request<ContainerStatusView>(`${CONTAINER_PATH}/start`, { method: "POST" });
 }
 
-export async function stopContainer(): Promise<ContainerStatusView> {
-  return request<ContainerStatusView>(`${CONTAINER_PATH}/stop`, { method: "POST" });
-}
-
 /** コンテナを作り直す。ホームの中身も消すかどうかを選べる。 */
 export async function resetContainer(wipeHome: boolean): Promise<ContainerStatusView> {
   return request<ContainerStatusView>(`${CONTAINER_PATH}/reset`, jsonRequest("POST", { wipeHome }));

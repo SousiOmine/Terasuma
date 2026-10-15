@@ -81,7 +81,7 @@ export type ApiDeps = {
   settings: SettingsStore;
   /** MCP サーバーとの接続。設定画面からの操作もここを通す。 */
   mcp: McpManager;
-  /** podman で動かすコンテナ。設定画面からの起動・停止・リセットもここを通す。 */
+  /** podman で動かすコンテナ。設定画面からの起動とリセットもここを通す。 */
   container: ContainerManager;
   /** ツールが撮った画像の置き場。画面へはここから返す。 */
   images: ImageStore;
@@ -619,11 +619,6 @@ export function createApiHandlers(deps: ApiDeps) {
       return containerResponse(() => deps.container.start());
     },
 
-    /** コンテナを止める。止まっていれば何もしない。 */
-    async stopContainer(): Promise<Response> {
-      return containerResponse(() => deps.container.stop());
-    },
-
     /** コンテナを作り直す。wipeHome を選んだときだけ、マウントしたフォルダの中身も消す。 */
     async resetContainer(req: PlainRequest): Promise<Response> {
       const body = await readJsonBody(req);
@@ -639,7 +634,7 @@ export function createApiHandlers(deps: ApiDeps) {
     async relayScreen(req: ScreenRelayRequest): Promise<Response> {
       const status = await deps.container.status();
       if (status.state !== "running" || status.vncPort === null) {
-        return jsonError(409, "container_not_running", "コンテナが動いていないため、画面を表示できません");
+        return jsonError(409, "container_not_running", "コンピュータが動いていないため、画面を表示できません");
       }
 
       const incoming = new URL(req.url);

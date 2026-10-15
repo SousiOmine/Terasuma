@@ -49,7 +49,6 @@ export function createContainerStub(options: { vncPort?: number } = {}): Contain
   return {
     status: async () => view,
     start: async () => view,
-    stop: async () => view,
     reset: async () => view,
     shell: async () => {
       throw new ContainerError("container_not_running", "テスト用の差し替えでは実行できません");
@@ -89,8 +88,8 @@ export type PodmanStubBehaviour = {
   running?: boolean;
   /** `podman port` が返す行。動いているときの既定は "127.0.0.1:45678"。 */
   port?: string;
-  /** build / run / start / stop / rm のどれかを失敗させる。 */
-  fail?: "build" | "run" | "start" | "stop" | "rm";
+  /** build / run / start / rm のどれかを失敗させる。 */
+  fail?: "build" | "run" | "start" | "rm";
   /** `podman exec` の結果。 */
   exec?: { code: number; stdout: string; stderr: string; truncated?: boolean; timedOut?: boolean };
 };
@@ -157,11 +156,6 @@ export function createPodmanStub(initial: PodmanStubBehaviour = {}): {
       case "start":
         if (initial.fail === "start") return result(125, "", "起動できません");
         state.running = true;
-        return result(0, "terasuma\n");
-
-      case "stop":
-        if (initial.fail === "stop") return result(125, "", "止められません");
-        state.running = false;
         return result(0, "terasuma\n");
 
       case "rm":

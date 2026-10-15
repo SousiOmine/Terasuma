@@ -11,13 +11,12 @@ import {
   resetContainer,
   showContainerError,
   startContainer,
-  stopContainer,
 } from "../containerSettings";
 import { Button } from "./Button";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { ErrorNotice } from "./ErrorNotice";
 
-/** 状態の表示。文言は i18n、色はこの 1 箇所にまとめる。 */
+/** 状態の表示。文言は i18n にまとめる（状態に色は付けない）。 */
 const STATE_LABELS: Record<ContainerState, MessageKey> = {
   podman_missing: "settings.container.state.podman_missing",
   image_missing: "settings.container.state.image_missing",
@@ -26,19 +25,11 @@ const STATE_LABELS: Record<ContainerState, MessageKey> = {
   running: "settings.container.state.running",
 };
 
-const STATE_CLASSES: Record<ContainerState, string> = {
-  podman_missing: "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300",
-  image_missing: "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-300",
-  container_missing: "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-300",
-  stopped: "bg-neutral-200 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300",
-  running: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300",
-};
-
 /**
- * 設定の「コンテナ」。
+ * 設定の「コンピュータ」（podman のコンテナ）。
  *
- * 状態は podman に問い合わせた結果をそのまま出す。操作は 停止・起動・リセット の 3 つで、
- * リセットだけは何が消えるかを確かめてから実行する。
+ * 状態は podman に問い合わせた結果をそのまま出す。操作は 起動 と リセット の 2 つで、
+ * リセットだけは何が消えるかを確かめてから実行する。止める操作は置かない。
  * 起動は面倒を見る範囲が広い（イメージが無ければ作り、コンテナが無ければ作る）ので、
  * 利用者に順番を覚えさせない。
  */
@@ -76,43 +67,26 @@ export function ContainerSettingsView() {
         <div class="flex items-center justify-between gap-4">
           <div class="min-w-0">
             <p class="text-xs text-neutral-500 dark:text-neutral-400">{t("settings.container.state.label")}</p>
-            <p class="mt-1 flex items-center gap-2">
-              {status === null ? (
-                <span class="text-sm text-neutral-500 dark:text-neutral-400">
-                  {t("settings.container.state.checking")}
-                </span>
-              ) : (
-                <span class={`rounded-md px-2 py-0.5 text-xs ${STATE_CLASSES[status.state]}`}>
-                  {t(STATE_LABELS[status.state])}
-                </span>
-              )}
-              {status?.vncPort != null && (
-                <span class="text-xs text-neutral-500 dark:text-neutral-400">
-                  {t("settings.container.vncPort")}: {status.vncPort}
-                </span>
-              )}
+            <p class="mt-1 text-sm">
+              {status === null ? t("settings.container.state.checking") : t(STATE_LABELS[status.state])}
             </p>
           </div>
 
           {status !== null && status.state !== "podman_missing" && (
             <div class="flex shrink-0 gap-2">
-              {status.state === "running" ? (
-                <Button disabled={busy} onClick={() => run(stopContainer)}>
-                  {busy ? t("settings.container.stopping") : t("settings.container.stop")}
-                </Button>
-              ) : (
-                <Button variant="primary" disabled={busy} onClick={() => run(startContainer)}>
-                  {busy ? t("settings.container.starting") : t("settings.container.start")}
+              {status.state !== "running" && (
+                <Button variant="primary" disabled={busy !== null} onClick={() => run(startContainer)}>
+                  {busy === "start" ? t("settings.container.starting") : t("settings.container.start")}
                 </Button>
               )}
               <Button
-                disabled={busy}
+                disabled={busy !== null}
                 onClick={() => {
                   setWipeHome(false);
                   setResetting(true);
                 }}
               >
-                {busy ? t("settings.container.resetting") : t("settings.container.reset")}
+                {busy === "reset" ? t("settings.container.resetting") : t("settings.container.reset")}
               </Button>
             </div>
           )}
