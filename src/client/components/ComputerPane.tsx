@@ -5,7 +5,10 @@ import { t } from "../i18n";
 import { answerHandover, closeComputerPane, computerPaneOpen, computerViewOnly, handoverQuestion } from "../state";
 
 /**
- * 右ペイン。コンテナの画面を noVNC で映す。
+ * 右ペイン。いまはコンテナの画面を noVNC で映す。
+ *
+ * チャットとは別のカードとして浮かせて置く（角丸・枠・影を付ける）。
+ * コンピュータ以外の中身をここへ足せるよう、見出しと本文はカードの中に閉じ込めておく。
  *
  * 開いている間だけ繋ぎ、閉じたら WebSocket も切る。
  * 操作できるのはエージェントから引き受けている間だけで、ふだんは見るだけ。
@@ -63,7 +66,9 @@ export function ComputerPane() {
       client = new module.default(target, `${protocol}://${location.host}/api/computer/vnc`);
       client.viewOnly = computerViewOnly.value;
       client.scaleViewport = true;
-      client.background = "#0a0a0a";
+      // 画面が入りきらない部分（接続中など）は、下のカードの背景をそのまま見せる。
+      // 既定の黒を敷くと、画面が出るまでの間だけ黒い帯になる。
+      client.background = "transparent";
       client.addEventListener("connect", () => {
         if (!disposed) setConnection("connected");
       });
@@ -88,59 +93,57 @@ export function ComputerPane() {
   if (!open) return null;
 
   return (
-    <aside class="flex w-[42%] min-w-80 shrink-0 flex-col border-l border-neutral-200 dark:border-neutral-800">
-      <header class="flex h-12 shrink-0 items-center gap-2 border-b border-neutral-200 px-4 dark:border-neutral-800">
-        <h2 class="min-w-0 flex-1 truncate text-sm font-medium">{t("chat.computer.title")}</h2>
-        {running && question === null && viewOnly && (
-          <span class="shrink-0 rounded-md bg-neutral-200 px-2 py-0.5 text-xs text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">
-            {t("chat.computer.viewOnly")}
-          </span>
-        )}
-        {question !== null && (
-          <span class="shrink-0 rounded-md bg-amber-100 px-2 py-0.5 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-200">
-            {t("chat.computer.yourTurn")}
-          </span>
-        )}
-        <button
-          type="button"
-          onClick={closeComputerPane}
-          title={t("chat.computer.hide")}
-          aria-label={t("chat.computer.hide")}
-          class="shrink-0 rounded-lg p-1 text-neutral-500 transition hover:bg-neutral-200/70 dark:text-neutral-400 dark:hover:bg-neutral-800"
-        >
-          <IconX size={16} stroke={1.6} />
-        </button>
-      </header>
-
-      {question !== null && (
-        <div class="shrink-0 border-b border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-900/60 dark:bg-amber-950/40">
-          <p class="text-xs leading-relaxed whitespace-pre-wrap text-amber-900 dark:text-amber-200">
-            {question}
-          </p>
+    <aside class="flex w-[42%] min-w-80 shrink-0 flex-col p-3">
+      <section class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
+        <header class="flex h-12 shrink-0 items-center gap-2 border-b border-neutral-200 px-4 dark:border-neutral-800">
+          <h2 class="min-w-0 flex-1 truncate text-sm font-medium">{t("chat.computer.title")}</h2>
+          {question !== null && (
+            <span class="shrink-0 rounded-md bg-amber-100 px-2 py-0.5 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-200">
+              {t("chat.computer.yourTurn")}
+            </span>
+          )}
           <button
             type="button"
-            onClick={() => void answerHandover({ kind: "done" })}
-            class="mt-2 rounded-lg bg-neutral-900 px-2.5 py-1 text-xs text-white transition hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
+            onClick={closeComputerPane}
+            title={t("chat.computer.hide")}
+            aria-label={t("chat.computer.hide")}
+            class="shrink-0 rounded-lg p-1 text-neutral-500 transition hover:bg-neutral-200/70 dark:text-neutral-400 dark:hover:bg-neutral-800"
           >
-            {t("chat.computer.done")}
+            <IconX size={16} stroke={1.6} />
           </button>
-        </div>
-      )}
+        </header>
 
-      <div class="min-h-0 flex-1 overflow-auto bg-neutral-950">
-        {running ? (
-          <div class="relative">
-            <div ref={targetRef} class="aspect-[16/10] w-full" />
-            {connection !== "connected" && (
-              <p class="absolute inset-0 flex items-center justify-center text-xs text-neutral-400">
-                {t(connection === "connecting" ? "chat.computer.connecting" : "chat.computer.disconnected")}
-              </p>
-            )}
+        {question !== null && (
+          <div class="shrink-0 border-b border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-900/60 dark:bg-amber-950/40">
+            <p class="text-xs leading-relaxed whitespace-pre-wrap text-amber-900 dark:text-amber-200">
+              {question}
+            </p>
+            <button
+              type="button"
+              onClick={() => void answerHandover({ kind: "done" })}
+              class="mt-2 rounded-lg bg-neutral-900 px-2.5 py-1 text-xs text-white transition hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
+            >
+              {t("chat.computer.done")}
+            </button>
           </div>
-        ) : (
-          <p class="p-4 text-sm text-neutral-400">{t("chat.computer.notRunning")}</p>
         )}
-      </div>
+
+        {/* 画面を高さ方向の中央へ寄せる。周りはカードの背景のままにして、色を増やさない。 */}
+        <div class="flex min-h-0 flex-1 overflow-auto p-3">
+          {running ? (
+            <div class="relative m-auto w-full">
+              <div ref={targetRef} class="aspect-[16/10] w-full" />
+              {connection !== "connected" && (
+                <p class="absolute inset-0 flex items-center justify-center text-xs text-neutral-500 dark:text-neutral-400">
+                  {t(connection === "connecting" ? "chat.computer.connecting" : "chat.computer.disconnected")}
+                </p>
+              )}
+            </div>
+          ) : (
+            <p class="m-auto text-sm text-neutral-500 dark:text-neutral-400">{t("chat.computer.notRunning")}</p>
+          )}
+        </div>
+      </section>
     </aside>
   );
 }

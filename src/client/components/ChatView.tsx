@@ -1,4 +1,4 @@
-import { IconDeviceDesktop } from "@tabler/icons-preact";
+import { IconLayoutSidebarRight } from "@tabler/icons-preact";
 import { useEffect, useRef } from "preact/hooks";
 import { containerStatus } from "../containerSettings";
 import { t } from "../i18n";
@@ -62,7 +62,7 @@ export function ChatView() {
                 : "text-neutral-500 hover:bg-neutral-200/70 dark:text-neutral-400 dark:hover:bg-neutral-800"
             }`}
           >
-            <IconDeviceDesktop size={16} stroke={1.6} />
+            <IconLayoutSidebarRight size={16} stroke={1.6} />
           </button>
         )}
       </header>
