@@ -200,9 +200,16 @@ export type McpServerView = {
   env: Record<string, string>;
   /** http のサーバーの URL。stdio では null。 */
   url: string | null;
-  /** OAuth で認可するかどうか（http のみ true になりうる）。 */
-  oauth: boolean;
   status: McpServerStatusView;
+};
+
+/**
+ * 追加の前に確かめる接続の結果。
+ * サーバーが認可を求めた場合は、ブラウザで開く画面の URL も返る。
+ */
+export type McpTestView = McpServerStatusView & {
+  /** 認可が必要なときに開く画面の URL。要らないときは null。 */
+  authorizationUrl: string | null;
 };
 
 /** MCP 設定の現在の状態。設定を変える API はすべてこの形を返す。 */
@@ -218,7 +225,6 @@ export type McpServerForm = {
   args: readonly string[] | null;
   env: Record<string, string> | null;
   url: string | null;
-  oauth: boolean;
 };
 
 /** 認可を始めた結果。開く URL が返るか、すでに認可済みか。 */

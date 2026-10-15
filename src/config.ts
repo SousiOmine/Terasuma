@@ -41,12 +41,13 @@ export type McpStdioServerSettings = {
   env?: Record<string, string>;
 };
 
-/** HTTP で話す MCP サーバー。OAuth で認可するものは oauth を立てる。 */
+/**
+ * HTTP で話す MCP サーバー。
+ * OAuth が要るかどうかは設定に書かない（サーバーが認可を求めたときに始める）。
+ */
 export type McpHttpServerSettings = {
   type: "http";
   url: string;
-  /** OAuth の認可を通してから接続するかどうか。 */
-  oauth?: boolean;
 };
 
 /**
@@ -60,7 +61,7 @@ export type McpServerSettings = McpStdioServerSettings | McpHttpServerSettings;
 export type McpServersSettings = Record<string, McpServerSettings>;
 
 /** MCP サーバー 1 件に書ける項目。 */
-const MCP_SERVER_KEYS = ["type", "command", "args", "env", "url", "oauth"] as const;
+const MCP_SERVER_KEYS = ["type", "command", "args", "env", "url"] as const;
 
 /** プロバイダ 1 件に書ける項目。 */
 const PROVIDER_KEYS = ["apiKey", "baseUrl", "label"] as const;
@@ -318,8 +319,8 @@ export function providerSettingsFromForm(form: ProviderCredentials): ProviderSet
  */
 export function mcpServerSettingsFromForm(form: McpServerForm, source: string): McpServerSettings {
   if (form.type === "stdio") {
-    if (form.url !== null || form.oauth) {
-      throw new Error(`${source} の url と oauth は http のサーバーにだけ指定できます`);
+    if (form.url !== null) {
+      throw new Error(`${source} の url は http のサーバーにだけ指定できます`);
     }
 
     return readMcpServerEntry(
@@ -338,11 +339,7 @@ export function mcpServerSettingsFromForm(form: McpServerForm, source: string): 
     throw new Error(`${source} の command / args / env は stdio のサーバーにだけ指定できます`);
   }
 
-  return readMcpServerEntry(
-    form.id,
-    { type: "http", url: form.url ?? undefined, oauth: form.oauth ? true : undefined },
-    source,
-  );
+  return readMcpServerEntry(form.id, { type: "http", url: form.url ?? undefined }, source);
 }
 
 /** エンドポイントの指定。末尾のスラッシュは落として、URL の組み立てを単純にする。 */
@@ -478,10 +475,8 @@ function readMcpServerEntry(id: string, raw: unknown, path: string): McpServerSe
 }
 
 function readStdioServer(source: Record<string, unknown>, where: string): McpStdioServerSettings {
-  for (const key of ["url", "oauth"] as const) {
-    if (source[key] !== undefined) {
-      throw new Error(`${where} の ${key} は http のサーバーにだけ指定できます`);
-    }
+  if (source["url"] !== undefined) {
+    throw new Error(`${where} の url は http のサーバーにだけ指定できます`);
   }
 
   const command = source["command"];
@@ -540,15 +535,7 @@ function readHttpServer(source: Record<string, unknown>, where: string): McpHttp
     throw new Error(`${where} の url は空でない文字列にしてください`);
   }
 
-  const settings: McpHttpServerSettings = { type: "http", url: normalizeServerUrl(url, where) };
-
-  const oauth = source["oauth"];
-  if (oauth !== undefined) {
-    if (typeof oauth !== "boolean") throw new Error(`${where} の oauth は true か false にしてください`);
-    if (oauth) settings.oauth = true;
-  }
-
-  return settings;
+  return { type: "http", url: normalizeServerUrl(url, where) };
 }
 
 /** MCP サーバーの URL。エンドポイントそのものを指すので、末尾のスラッシュだけ落とす。 */

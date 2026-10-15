@@ -22,6 +22,7 @@ export function createMcpStub(): McpManager {
   return {
     status: () => unknown,
     check: async () => unknown,
+    test: async () => ({ ...unknown, authorizationUrl: null }),
     toolset: async () => ({}),
     authorize: async () => ({ url: null }),
     cancelAuthorization: () => undefined,

@@ -250,13 +250,13 @@ describe("mcpServers の検証", () => {
     );
   });
 
-  test("HTTP のサーバーは url と oauth を持つ", () => {
+  test("HTTP のサーバーは url だけを持つ", () => {
     withConfigFile(
-      JSON.stringify({ mcpServers: { remote: { type: "http", url: "https://mcp.example.test/mcp/", oauth: true } } }),
+      JSON.stringify({ mcpServers: { remote: { type: "http", url: "https://mcp.example.test/mcp/" } } }),
       (env) => {
         // 末尾のスラッシュは落として保存する（接続先そのものを指すため）。
         expect(toMcpSettings(readSettingsFile(loadConfig(env).configPath)).servers).toEqual({
-          remote: { type: "http", url: "https://mcp.example.test/mcp", oauth: true },
+          remote: { type: "http", url: "https://mcp.example.test/mcp" },
         });
       },
     );
@@ -270,6 +270,7 @@ describe("mcpServers の検証", () => {
 
   test("未知の項目と使えない id は止める", () => {
     expect(() => read({ local: { type: "stdio", command: "bunx", shell: true } })).toThrow(/未知の項目/);
+    expect(() => read({ remote: { type: "http", url: "http://127.0.0.1/mcp", oauth: true } })).toThrow(/未知の項目/);
     expect(() => read({ "Local Server": { type: "stdio", command: "bunx" } })).toThrow(/使えない id/);
   });
 
@@ -302,7 +303,6 @@ describe("MCP サーバーの入力の検証", () => {
           args: ["-y", "@scope/pkg"],
           env: { TOKEN: "abc" },
           url: null,
-          oauth: false,
         },
         "mcpServers.local",
       ),
@@ -315,19 +315,19 @@ describe("MCP サーバーの入力の検証", () => {
 
     expect(
       mcpServerSettingsFromForm(
-        { id: "remote", type: "http", command: null, args: null, env: null, url: "https://mcp.example.test/mcp", oauth: true },
+        { id: "remote", type: "http", command: null, args: null, env: null, url: "https://mcp.example.test/mcp" },
         "mcpServers.remote",
       ),
-    ).toEqual({ type: "http", url: "https://mcp.example.test/mcp", oauth: true });
+    ).toEqual({ type: "http", url: "https://mcp.example.test/mcp" });
   });
 
   test("種類と食い違う項目は止める", () => {
-    const base = { id: "x", command: null, args: null, env: null, url: null, oauth: false };
+    const base = { id: "x", command: null, args: null, env: null, url: null };
 
     expect(() => mcpServerSettingsFromForm({ ...base, type: "stdio" }, "mcpServers.x")).toThrow(/command/);
     expect(() => mcpServerSettingsFromForm({ ...base, type: "http" }, "mcpServers.x")).toThrow(/url/);
     expect(() =>
-      mcpServerSettingsFromForm({ ...base, type: "stdio", command: "bunx", oauth: true }, "mcpServers.x"),
+      mcpServerSettingsFromForm({ ...base, type: "stdio", command: "bunx", url: "http://127.0.0.1/mcp" }, "mcpServers.x"),
     ).toThrow(/http のサーバー/);
     expect(() =>
       mcpServerSettingsFromForm({ ...base, type: "http", url: "http://127.0.0.1/mcp", args: ["-y"] }, "mcpServers.x"),

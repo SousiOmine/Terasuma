@@ -410,7 +410,10 @@ export function createApiHandlers(deps: ApiDeps) {
       return Response.json(toMcpView(settings.readMcp().servers, deps.mcp));
     },
 
-    /** MCP サーバーを追加する。接続の確認は追加の後で行う（OAuth は保存済みの設定が要る）。 */
+    /**
+     * MCP サーバーを追加する。繋がるかどうかは画面が確かめてからここへ来る
+     * （同じ接続を 2 度試さないよう、ここでは確かめ直さない）。
+     */
     async addMcpServer(req: PlainRequest): Promise<Response> {
       const parsed = await readMcpForm(req);
       if (parsed instanceof Response) return parsed;
@@ -420,6 +423,21 @@ export function createApiHandlers(deps: ApiDeps) {
       }
 
       return commitMcp(() => settings.putMcpServer(parsed.id, parsed.server));
+    },
+
+    /**
+     * 保存する前に、入力された設定で繋がるか確かめる。設定には何も書かない。
+     * サーバーが認可を求めた場合は、ブラウザで開く URL を返して認可を待つ。
+     */
+    async testMcpServer(req: PlainRequest): Promise<Response> {
+      const parsed = await readMcpForm(req);
+      if (parsed instanceof Response) return parsed;
+
+      try {
+        return Response.json(await deps.mcp.test(parsed.id, parsed.server));
+      } catch (error) {
+        return mcpFailureResponse(error);
+      }
     },
 
     /** MCP サーバーの設定を変える。接続は次に確かめたときから新しい設定になる。 */
@@ -568,7 +586,6 @@ function toMcpView(servers: McpServersSettings, mcp: McpManager): McpServersView
       args: server.type === "stdio" ? (server.args ?? []) : [],
       env: server.type === "stdio" ? (server.env ?? {}) : {},
       url: server.type === "http" ? server.url : null,
-      oauth: server.type === "http" && server.oauth === true,
       status: mcp.status(id),
     })),
   };
@@ -595,15 +612,11 @@ async function readMcpForm(
   const url = readOptionalString(body, "url");
   const args = readOptionalStringList(body, "args");
   const env = readOptionalStringMap(body, "env");
-  const oauth = body?.["oauth"] ?? false;
   if (command === undefined || url === undefined || args === undefined || env === undefined) {
     return jsonError(400, "invalid_request", "command, url, args, env は文字列・文字列の配列・文字列の対応表で指定してください");
   }
-  if (typeof oauth !== "boolean") {
-    return jsonError(400, "invalid_request", "oauth は true か false で指定してください");
-  }
 
-  const form: McpServerForm = { id, type, command, args, env, url, oauth };
+  const form: McpServerForm = { id, type, command, args, env, url };
 
   try {
     return { id, server: mcpServerSettingsFromForm(form, `mcpServers.${id}`) };

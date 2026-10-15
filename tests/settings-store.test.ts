@@ -117,11 +117,11 @@ describe("設定ストア", () => {
     await withTempSettings(
       { mcpServers: { local: { type: "stdio", command: "bunx" } }, model: "deepseek/deepseek-flash" },
       async (store, path) => {
-        store.putMcpServer("remote", { type: "http", url: "https://mcp.example.test/mcp", oauth: true });
+        store.putMcpServer("remote", { type: "http", url: "https://mcp.example.test/mcp" });
 
         expect(readSettingsFile(path).mcpServers).toEqual({
           local: { type: "stdio", command: "bunx" },
-          remote: { type: "http", url: "https://mcp.example.test/mcp", oauth: true },
+          remote: { type: "http", url: "https://mcp.example.test/mcp" },
         });
         expect(readSettingsFile(path).model).toBe("deepseek/deepseek-flash");
       },

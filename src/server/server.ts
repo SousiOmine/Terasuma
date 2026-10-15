@@ -112,6 +112,10 @@ export function startServer(options: ServerOptions): StartedServer {
           GET: api.listMcpServers,
           POST: api.addMcpServer,
         },
+        // 追加の前に、入力された設定で繋がるかを確かめる（設定には書かない）。
+        "/api/mcp/test": {
+          POST: api.testMcpServer,
+        },
         "/api/mcp/servers/:id": {
           PATCH: api.updateMcpServer,
           DELETE: api.removeMcpServer,

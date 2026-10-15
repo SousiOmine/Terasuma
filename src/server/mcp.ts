@@ -1,9 +1,9 @@
 import { join } from "node:path";
 import type { Tool } from "@mastra/core/tools";
-import type { MastraMCPServerDefinition } from "@mastra/mcp";
+import type { MCPDiscoveryErrorDetails, MastraMCPServerDefinition } from "@mastra/mcp";
 import { MCPClient } from "@mastra/mcp";
 import type { McpHttpServerSettings, McpServerSettings, McpServersSettings } from "../config";
-import type { McpAuthorizationView, McpServerStatusView } from "../shared/types";
+import type { McpAuthorizationView, McpServerStatusView, McpTestView } from "../shared/types";
 import {
   McpOAuthProvider,
   createFileOAuthStorage,
@@ -40,6 +40,11 @@ export type McpManager = {
   status(serverId: string): McpServerStatusView;
   /** 接続して状態とツールを取り直す。 */
   check(serverId: string): Promise<McpServerStatusView>;
+  /**
+   * 保存する前に、渡された設定で繋がるか確かめる（設定には何も書かない）。
+   * サーバーが認可を求めた場合は、ブラウザで開く URL を返して認可を待つ。
+   */
+  test(serverId: string, server: McpServerSettings): Promise<McpTestView>;
   /** モデルへ渡すツール。設定が変わっていれば作り直してから返す。 */
   toolset(): Promise<McpToolset>;
   /** OAuth の認可を始める。開く URL を返す（すでに認可済みなら null）。 */
@@ -79,6 +84,9 @@ const DISCOVERY_TIMEOUT_MS = 15_000;
  * - モデルへ渡すときのツール名（"<サーバー id>_<ツール名>"）
  *
  * チャットのたびに接続を試みないのは、落ちているサーバーがあると毎回そこで待たされるため。
+ *
+ * OAuth が要るかどうかは設定に書かない。http のサーバーには常に認可の口を渡しておき、
+ * サーバーが 401 を返したときにだけ始める（要らないサーバーでは何も起きない）。
  */
 export function createMcpManager(options: McpManagerOptions): McpManager {
   const { settings } = options;
@@ -94,6 +102,8 @@ export function createMcpManager(options: McpManagerOptions): McpManager {
   let discovered = false;
   /** 認可を待っているサーバー（id → 認可画面の URL）。 */
   const pending = new Map<string, string>();
+  /** 保存前の確認で認可を待っているサーバー（id → 確かめている設定と、認可画面の URL）。 */
+  const pendingTests = new Map<string, { server: McpServerSettings; url: string }>();
 
   function storageFor(serverId: string): OAuthStorage {
     return createFileOAuthStorage(join(options.dataDir, OAUTH_DIR_NAME, `${serverId}.json`));
@@ -105,24 +115,29 @@ export function createMcpManager(options: McpManagerOptions): McpManager {
     return url;
   }
 
-  function definition(serverId: string, server: McpServerSettings): MastraMCPServerDefinition {
+  /** 1 つのサーバーへ繋ぐための材料。 */
+  function connectionFor(serverId: string, server: McpServerSettings): ServerConnection {
     if (server.type === "stdio") {
       return {
-        command: server.command,
-        ...(server.args === undefined ? {} : { args: [...server.args] }),
-        ...(server.env === undefined ? {} : { env: { ...server.env } }),
+        definition: {
+          command: server.command,
+          ...(server.args === undefined ? {} : { args: [...server.args] }),
+          ...(server.env === undefined ? {} : { env: { ...server.env } }),
+        },
+        oauth: null,
       };
     }
 
-    const definition: Extract<MastraMCPServerDefinition, { url: URL }> = { url: new URL(server.url) };
-    if (server.oauth === true) {
-      definition.authProvider = new McpOAuthProvider({
-        serverId,
-        redirectUrl: callbackUrl(),
-        storage: storageFor(serverId),
-      });
-    }
-    return definition;
+    const oauth = new McpOAuthProvider({
+      serverId,
+      redirectUrl: callbackUrl(),
+      storage: storageFor(serverId),
+    });
+    const definition: Extract<MastraMCPServerDefinition, { url: URL }> = {
+      url: new URL(server.url),
+      authProvider: oauth,
+    };
+    return { definition, oauth };
   }
 
   /** 設定に対応するクライアントを返す。設定が変わっていれば前のものを閉じて作り直す。 */
@@ -140,7 +155,7 @@ export function createMcpManager(options: McpManagerOptions): McpManager {
       // 同じ設定で複数作ると MCPClient 側が失敗するため、この manager だけの id を渡す。
       id: `terasuma-${crypto.randomUUID()}`,
       servers: Object.fromEntries(
-        Object.entries(servers).map(([serverId, server]) => [serverId, definition(serverId, server)]),
+        Object.entries(servers).map(([serverId, server]) => [serverId, connectionFor(serverId, server).definition]),
       ),
       timeout: DISCOVERY_TIMEOUT_MS,
     });
@@ -178,7 +193,7 @@ export function createMcpManager(options: McpManagerOptions): McpManager {
     const nextStatuses = new Map<string, McpServerStatusView>();
     const nextTools: McpToolset = {};
 
-    for (const [serverId, server] of Object.entries(servers)) {
+    for (const serverId of Object.keys(servers)) {
       const conflict = conflicted.get(serverId);
       if (conflict !== undefined) {
         nextStatuses.set(serverId, {
@@ -191,11 +206,7 @@ export function createMcpManager(options: McpManagerOptions): McpManager {
 
       const serverTools = toolsets[serverId];
       if (serverTools === undefined) {
-        nextStatuses.set(serverId, {
-          state: failureState(server, errorDetails[serverId]?.httpStatus),
-          tools: [],
-          detail: errorDetails[serverId]?.message ?? errors[serverId] ?? "接続できませんでした",
-        });
+        nextStatuses.set(serverId, failureStatus(mcp, serverId, errorDetails[serverId], errors[serverId]));
         continue;
       }
 
@@ -217,12 +228,10 @@ export function createMcpManager(options: McpManagerOptions): McpManager {
     return server;
   }
 
-  function requireOAuthServer(serverId: string, server: McpServerSettings): McpHttpServerSettings {
+  /** 認可を扱えるのは http のサーバーだけ。 */
+  function asHttpServer(serverId: string, server: McpServerSettings): McpHttpServerSettings {
     if (server.type !== "http") {
       throw new Error(`MCP サーバー ${serverId} はローカルで動くため、認可は要りません`);
-    }
-    if (server.oauth !== true) {
-      throw new Error(`MCP サーバー ${serverId} は OAuth を使う設定になっていません`);
     }
     return server;
   }
@@ -251,6 +260,58 @@ export function createMcpManager(options: McpManagerOptions): McpManager {
       return this.status(serverId);
     },
 
+    /**
+     * 保存する前に、渡された設定で繋がるか確かめる。設定にも接続の一覧にも何も残さない。
+     *
+     * 認可を待っている間に同じ設定で呼び直されたら、繋ぎに行かずに待ち状態を返す。
+     * 繋ぎに行くと認可の要求が作り直され、ブラウザで開いている URL が使えなくなるため。
+     */
+    async test(serverId, server) {
+      const waiting = pendingTests.get(serverId);
+      if (waiting !== undefined) {
+        if (sameServer(waiting.server, server)) {
+          return { state: "authorizing", tools: [], detail: null, authorizationUrl: waiting.url };
+        }
+        // 別の接続先を確かめるのだから、待っていた認可は捨てる。
+        pendingTests.delete(serverId);
+      }
+
+      const connection = connectionFor(serverId, server);
+      const probe = new MCPClient({
+        // 同じ設定で複数の MCPClient を作れるよう、この 1 回だけの id を渡す。
+        id: `terasuma-test-${crypto.randomUUID()}`,
+        servers: { [serverId]: connection.definition },
+        timeout: DISCOVERY_TIMEOUT_MS,
+      });
+
+      try {
+        const { toolsets, errors, errorDetails } = await probe.listToolsetsWithErrors({
+          perServerTimeoutMs: DISCOVERY_TIMEOUT_MS,
+        });
+
+        const tools = toolsets[serverId];
+        if (tools !== undefined) {
+          return { state: "connected", tools: Object.keys(tools), detail: null, authorizationUrl: null };
+        }
+
+        const authorizationUrl = connection.oauth?.takeAuthorizationUrl() ?? null;
+        if (authorizationUrl !== null) {
+          // コールバックを受けたときに、まだ設定に無い接続先でも終わらせられるように控える。
+          pendingTests.set(serverId, { server, url: authorizationUrl });
+          return { state: "authorization_required", tools: [], detail: null, authorizationUrl };
+        }
+
+        return {
+          state: "failed",
+          tools: [],
+          detail: errorDetails[serverId]?.message ?? errors[serverId] ?? "接続できませんでした",
+          authorizationUrl: null,
+        };
+      } finally {
+        await probe.disconnect();
+      }
+    },
+
     async toolset() {
       const servers = settings.readMcp().servers;
       if (Object.keys(servers).length === 0) return {};
@@ -261,7 +322,7 @@ export function createMcpManager(options: McpManagerOptions): McpManager {
     },
 
     async authorize(serverId) {
-      const server = requireOAuthServer(serverId, requireServer(serverId));
+      const server = asHttpServer(serverId, requireServer(serverId));
 
       const result = await startMcpAuthorization({
         serverId,
@@ -287,7 +348,10 @@ export function createMcpManager(options: McpManagerOptions): McpManager {
       const serverId = serverIdFromState(state);
       if (serverId === null) throw new Error("認可の state を読めませんでした（認可をやり直してください）");
 
-      const server = requireOAuthServer(serverId, requireServer(serverId));
+      // 保存前の確認で始めた認可は、その候補の接続先で終わらせる（設定にはまだ書かれていない）。
+      const candidate = pendingTests.get(serverId)?.server ?? settings.readMcp().servers[serverId];
+      if (candidate === undefined) throw new McpServerNotFound(serverId);
+      const server = asHttpServer(serverId, candidate);
 
       try {
         if (callback.error !== null) throw new Error(`認可が拒否されました（${callback.error}）`);
@@ -305,7 +369,9 @@ export function createMcpManager(options: McpManagerOptions): McpManager {
         statuses.set(serverId, { state: "failed", tools: [], detail: describe(error) });
         throw error;
       } finally {
+        // 待つのを止める。次に確かめるときは、新しい状態（トークンがある）で繋ぎに行く。
         pending.delete(serverId);
+        pendingTests.delete(serverId);
       }
 
       return { serverId };
@@ -320,9 +386,38 @@ export function createMcpManager(options: McpManagerOptions): McpManager {
   };
 }
 
-/** 接続できなかったときの状態。認可が要る場合だけ区別する。 */
-function failureState(server: McpServerSettings, httpStatus: number | undefined): "authorization_required" | "failed" {
-  return server.type === "http" && server.oauth === true && httpStatus === 401 ? "authorization_required" : "failed";
+/** 1 つのサーバーへ繋ぐための材料。 */
+type ServerConnection = {
+  definition: MastraMCPServerDefinition;
+  /** 認可が必要になったときに SDK が URL を渡してくる口。stdio では null。 */
+  oauth: McpOAuthProvider | null;
+};
+
+/**
+ * 接続できなかったときの状態。サーバーが認可を求めている場合だけ区別する。
+ *
+ * 認可が要るかどうかは設定ではなく、繋いだ結果で決まる。サーバーが 401 を返すと SDK が
+ * 認可の要求を作り、認可が要るサーバーとして印を付ける（設定に書く必要はない）。
+ */
+function failureStatus(
+  mcp: MCPClient,
+  serverId: string,
+  details: MCPDiscoveryErrorDetails | undefined,
+  fallback: string | undefined,
+): McpServerStatusView {
+  if (mcp.getServerAuthState(serverId) === "needs-auth") {
+    // 次にすることは「認可する」ボタンが示すので、SDK の内部的な失敗理由は出さない。
+    return { state: "authorization_required", tools: [], detail: null };
+  }
+  return { state: "failed", tools: [], detail: details?.message ?? fallback ?? "接続できませんでした" };
+}
+
+/**
+ * 同じ接続先を確かめているかどうか。
+ * 設定はどちらも入力から組み立てたものなので、項目の並びまで同じになる。
+ */
+function sameServer(left: McpServerSettings, right: McpServerSettings): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
 }
 
 function describe(error: unknown): string {

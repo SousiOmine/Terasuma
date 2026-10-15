@@ -45,8 +45,9 @@ const STATE_CLASSES: Record<McpServerState, string> = {
 /**
  * 設定の「詳細設定」。
  *
- * MCP サーバーの接続だけを置く。保存しても接続は確かめず、「接続を確認」を押したときだけ繋ぎに行く
+ * MCP サーバーの接続だけを置く。一覧を開いただけでは繋ぎに行かず、「接続を確認」を押したときだけ確かめる
  * （落ちているサーバーがあるたびに設定画面が固まらないようにするため）。
+ * 追加はダイアログの中で繋がることを確かめてから行い、変更は保存したあとにここで確かめる。
  */
 export function McpSettingsView() {
   const view = mcpServers.value;
@@ -128,6 +129,7 @@ export function McpSettingsView() {
       {dialog !== null && (
         <McpServerDialog
           mode={dialog}
+          existingIds={view?.servers.map((server) => server.id) ?? []}
           onClose={(savedId) => {
             setDialog(null);
             // 保存したサーバーは、そのまま繋がるか確かめる（繋がらなくても設定は残る）。
@@ -183,7 +185,9 @@ function McpServerCard({
   onDelete,
 }: McpServerCardProps) {
   const { state, tools, detail } = server.status;
-  const needsAuthorization = server.oauth && (state === "authorization_required" || state === "failed");
+  // 認可が要るかどうかは設定ではなく接続の結果で決まる。http は、繋がらない理由が
+  // 認可（未認可・失効）であることもあるので、やり直せるようにしておく。
+  const canAuthorize = server.type === "http" && (state === "authorization_required" || state === "failed");
 
   return (
     <div class="rounded-xl border border-neutral-200 px-4 py-3 dark:border-neutral-800">
@@ -261,7 +265,7 @@ function McpServerCard({
             </button>
           ) : (
             <div class="flex items-center gap-1">
-              {needsAuthorization && (
+              {canAuthorize && (
                 <button
                   type="button"
                   onClick={() => onAuthorize(authorizationUrl)}

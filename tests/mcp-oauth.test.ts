@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { createHash } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -10,115 +9,11 @@ import {
   startMcpAuthorization,
   type OAuthStorage,
 } from "../src/server/mcp-oauth";
+import { FAKE_REDIRECT_URL, startFakeOAuthServer } from "./fixtures/oauth-server";
 
 /** テストで使うサーバー id と URL。実際には接続しない。 */
 const SERVER_ID = "remote";
-const REDIRECT_URL = new URL("http://127.0.0.1:3000/api/mcp/oauth/callback");
-
-/**
- * 認可サーバーのふるまいを最小限だけ真似る偽物。
- * 探索・動的クライアント登録・PKCE の検証・トークンの発行だけを行い、ブラウザは介在しない。
- */
-function startFakeAuthorizationServer() {
-  let issuer = "";
-  const registrations: Record<string, unknown>[] = [];
-  const tokenRequests: URLSearchParams[] = [];
-  /** 発行済みの認可コード。code → 認可要求の内容。 */
-  const codes = new Map<string, { challenge: string; redirectUri: string }>();
-  let issued = 0;
-
-  const server = Bun.serve({
-    hostname: "127.0.0.1",
-    port: 0,
-    async fetch(request) {
-      const url = new URL(request.url);
-
-      if (url.pathname.startsWith("/.well-known/oauth-protected-resource")) {
-        return Response.json({ resource: `${issuer}/mcp`, authorization_servers: [issuer] });
-      }
-
-      if (url.pathname === "/.well-known/oauth-authorization-server") {
-        return Response.json({
-          issuer,
-          authorization_endpoint: `${issuer}/authorize`,
-          token_endpoint: `${issuer}/token`,
-          registration_endpoint: `${issuer}/register`,
-          response_types_supported: ["code"],
-          grant_types_supported: ["authorization_code", "refresh_token"],
-          code_challenge_methods_supported: ["S256"],
-          token_endpoint_auth_methods_supported: ["none"],
-        });
-      }
-
-      if (url.pathname === "/register" && request.method === "POST") {
-        const body = (await request.json()) as Record<string, unknown>;
-        registrations.push(body);
-        return Response.json({ ...body, client_id: `client-${registrations.length}`, client_id_issued_at: 0 });
-      }
-
-      if (url.pathname === "/token" && request.method === "POST") {
-        const params = new URLSearchParams(await request.text());
-        tokenRequests.push(params);
-
-        if (params.get("grant_type") === "refresh_token") {
-          issued += 1;
-          return Response.json({
-            access_token: `access-${issued}`,
-            token_type: "Bearer",
-            expires_in: 3_600,
-            refresh_token: `refresh-${issued}`,
-          });
-        }
-
-        const code = params.get("code") ?? "";
-        const stored = codes.get(code);
-        if (stored === undefined) return errorResponse("invalid_grant", "知らない認可コードです");
-
-        // PKCE の検証。挑戦値と検証子が対応していなければ認可は成立しない。
-        const verifier = params.get("code_verifier") ?? "";
-        const challenge = createHash("sha256").update(verifier).digest("base64url");
-        if (challenge !== stored.challenge) return errorResponse("invalid_grant", "PKCE が一致しません");
-        if (params.get("redirect_uri") !== stored.redirectUri) {
-          return errorResponse("invalid_grant", "redirect_uri が一致しません");
-        }
-
-        issued += 1;
-        return Response.json({
-          access_token: `access-${issued}`,
-          token_type: "Bearer",
-          expires_in: 3_600,
-          refresh_token: `refresh-${issued}`,
-        });
-      }
-
-      return new Response("not found", { status: 404 });
-    },
-  });
-
-  issuer = `http://127.0.0.1:${server.port}`;
-
-  return {
-    server,
-    get issuer() {
-      return issuer;
-    },
-    registrations,
-    tokenRequests,
-    /** 認可画面で「許可」を押したことにして、認可コードを発行する。 */
-    approve(authorizationUrl: URL): string {
-      const code = `code-${codes.size + 1}`;
-      codes.set(code, {
-        challenge: authorizationUrl.searchParams.get("code_challenge") ?? "",
-        redirectUri: authorizationUrl.searchParams.get("redirect_uri") ?? "",
-      });
-      return code;
-    },
-  };
-}
-
-function errorResponse(error: string, description: string): Response {
-  return Response.json({ error, error_description: description }, { status: 400 });
-}
+const REDIRECT_URL = FAKE_REDIRECT_URL;
 
 async function withStorage<T>(run: (storage: OAuthStorage, path: string) => Promise<T>): Promise<T> {
   const dir = mkdtempSync(join(tmpdir(), "terasuma-oauth-"));
@@ -132,7 +27,7 @@ async function withStorage<T>(run: (storage: OAuthStorage, path: string) => Prom
 
 describe("MCP の OAuth", () => {
   test("認可を始めると、登録ずみのクライアントで PKCE 付きの URL が返る", async () => {
-    const as = startFakeAuthorizationServer();
+    const as = startFakeOAuthServer();
     try {
       await withStorage(async (storage) => {
         const result = await startMcpAuthorization({
@@ -164,7 +59,7 @@ describe("MCP の OAuth", () => {
   });
 
   test("コールバックで受け取ったコードをトークンに交換し、次は認可を求めない", async () => {
-    const as = startFakeAuthorizationServer();
+    const as = startFakeOAuthServer();
     try {
       await withStorage(async (storage) => {
         const material = { serverId: SERVER_ID, serverUrl: `${as.issuer}/mcp`, redirectUrl: REDIRECT_URL, storage };
@@ -184,7 +79,7 @@ describe("MCP の OAuth", () => {
   });
 
   test("期限切れのトークンは、保存済みの更新トークンで更新する", async () => {
-    const as = startFakeAuthorizationServer();
+    const as = startFakeOAuthServer();
     try {
       await withStorage(async (storage) => {
         const material = { serverId: SERVER_ID, serverUrl: `${as.issuer}/mcp`, redirectUrl: REDIRECT_URL, storage };
@@ -212,7 +107,7 @@ describe("MCP の OAuth", () => {
   });
 
   test("コールバック先が変わったら、登録からやり直す", async () => {
-    const as = startFakeAuthorizationServer();
+    const as = startFakeOAuthServer();
     try {
       await withStorage(async (storage) => {
         const base = { serverId: SERVER_ID, serverUrl: `${as.issuer}/mcp`, storage };

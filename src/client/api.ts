@@ -10,6 +10,7 @@ import type {
   McpServerForm,
   McpServersView,
   McpServerStatusView,
+  McpTestView,
   ModelSettingsView,
   ProviderCheckResult,
   ProviderCredentials,
@@ -19,7 +20,7 @@ import type {
 } from "../shared/types";
 
 /** サーバが返すコードに、クライアント側だけで発生するコードを足したもの。 */
-export type ClientErrorCode = ApiErrorCode | "network" | "input";
+export type ClientErrorCode = ApiErrorCode | "network" | "input" | "mcp_unreachable";
 
 const API_ERROR_CODES: readonly ApiErrorCode[] = [
   "invalid_request",
@@ -44,6 +45,9 @@ const MODEL_PATH = "/api/model";
 
 /** MCP サーバーの設定。 */
 const MCP_PATH = "/api/mcp/servers";
+
+/** MCP サーバーを追加する前の接続確認。 */
+const MCP_TEST_PATH = "/api/mcp/test";
 
 export class ApiError extends Error {
   readonly code: ClientErrorCode;
@@ -223,6 +227,11 @@ export async function deleteMcpServer(serverId: string): Promise<McpServersView>
 /** 接続を確かめ、公開されているツールを取り直す。 */
 export async function checkMcpServer(serverId: string): Promise<McpServerStatusView> {
   return request<McpServerStatusView>(`${mcpServerPath(serverId)}/check`, { method: "POST" });
+}
+
+/** 追加の前に、入力された設定で繋がるかを確かめる。サーバーが認可を求めれば、開く URL が返る。 */
+export async function testMcpServer(form: McpServerForm): Promise<McpTestView> {
+  return request<McpTestView>(MCP_TEST_PATH, jsonRequest("POST", form));
 }
 
 /** OAuth の認可を始める。開く URL が返る（すでに認可済みなら null）。 */

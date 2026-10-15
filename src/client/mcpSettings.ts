@@ -18,10 +18,10 @@ export const authorizingServer = signal<string | null>(null);
 export const authorizationUrl = signal<string | null>(null);
 
 /** 認可を待つ間、接続を確かめる間隔。 */
-const AUTHORIZATION_POLL_MS = 2_000;
+export const AUTHORIZATION_POLL_MS = 2_000;
 
 /** 認可を待つ上限。待ち続けて画面が固まったように見えるのを避ける。 */
-const AUTHORIZATION_TIMEOUT_MS = 5 * 60 * 1_000;
+export const AUTHORIZATION_TIMEOUT_MS = 5 * 60 * 1_000;
 
 /** 設定画面を開いたときに読む。 */
 export async function loadMcpServers(): Promise<void> {
