@@ -1,5 +1,11 @@
+import { join } from "node:path";
 import { ensureDirectories, loadConfig } from "./config";
+import { createComputerToolset } from "./server/computer";
+import { createContainerManager } from "./server/container";
 import { createEngine, resolveModel } from "./server/engine";
+import { describeError } from "./server/errors";
+import { createHandover } from "./server/handover";
+import { createImageStore } from "./server/images";
 import { createMcpManager } from "./server/mcp";
 import { OAUTH_CALLBACK_PATH } from "./server/mcp-oauth";
 import { startServer } from "./server/server";
@@ -22,8 +28,32 @@ const mcp = createMcpManager({
     boundPort === null ? null : new URL(`http://${config.host}:${boundPort}${OAUTH_CALLBACK_PATH}`),
 });
 
-const engine = createEngine({ config, settings, mcp });
-const { server, portChanged } = startServer({ config, store, engine, settings, mcp });
+// Containerfile と entry.sh は、リポジトリの container/ に置いてある。
+// src から実行しても dist から実行しても、1 つ上がリポジトリのルートになる。
+const container = createContainerManager({
+  dataDir: config.dataDir,
+  containerDir: join(import.meta.dir, "..", "container"),
+});
+
+// ツールが撮った画像は、データディレクトリにファイルとして置く（会話には参照だけが残る）。
+const images = createImageStore(config.dataDir);
+
+// エージェントがユーザーへ画面を渡すときの待ち（ログインや二段階認証）。
+const handover = createHandover();
+
+const computer = createComputerToolset({ container, images, handover });
+
+const engine = createEngine({ config, settings, mcp, computer, images });
+const { server, portChanged } = startServer({
+  config,
+  store,
+  engine,
+  settings,
+  mcp,
+  container,
+  images,
+  handover,
+});
 boundPort = server.port ?? null;
 
 // モデルが未設定でも起動はする（画面から追加できる）。気づけるようにここで 1 行だけ出す。
@@ -42,3 +72,15 @@ console.log(
     `  data   : ${config.dataDir}`,
   ].join("\n"),
 );
+
+// ホストを再起動したあとも同じ画面に戻れるよう、起動時にコンテナも起こし直す。
+// 初回はイメージの build で数分かかるので、待たずに進め、結果だけを知らせる。
+void container
+  .start()
+  .then((status) => {
+    const where = status.vncPort === null ? "" : ` (vnc 127.0.0.1:${status.vncPort})`;
+    console.log(`  container: ${status.state}${where}${status.detail === null ? "" : ` — ${status.detail}`}`);
+  })
+  .catch((error: unknown) => {
+    console.log(`  container: 起動できませんでした — ${describeError(error)}`);
+  });

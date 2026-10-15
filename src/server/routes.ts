@@ -1,6 +1,6 @@
 import {
-  isMcpServerId,
   isProviderId,
+  mcpServerIdProblem,
   mcpServerSettingsFromForm,
   normalizeProvider,
   providerSettingsFromForm,
@@ -16,6 +16,7 @@ import type {
   ChatEvent,
   ChatMessage,
   CatalogProviderView,
+  ContainerStatusView,
   McpAuthorizationView,
   McpServerForm,
   McpServersView,
@@ -27,6 +28,9 @@ import type {
   TokenUsage,
 } from "../shared/types";
 import { resolveModel, type AgentEngine } from "./engine";
+import { ContainerError, type ContainerErrorCode, type ContainerManager } from "./container";
+import type { Handover } from "./handover";
+import type { ImageStore } from "./images";
 import { describeError, jsonError } from "./errors";
 import { McpServerNotFound, type McpManager } from "./mcp";
 import type { Catalog, CatalogSnapshot } from "./models-dev";
@@ -58,6 +62,18 @@ export type PlainRequest = {
   json(): Promise<unknown>;
 };
 
+/**
+ * 画面の中継のルート。server.ts のルート定義（"/api/computer/screen/*"）と同じパスにする。
+ * 中継先へ渡すパスは、この接頭辞を落として作る。
+ */
+export const SCREEN_RELAY_PREFIX = "/api/computer/screen/";
+
+/** 画面の中継のリクエスト。 */
+export type ScreenRelayRequest = {
+  url: string;
+  signal: AbortSignal;
+};
+
 export type ApiDeps = {
   store: Store;
   engine: AgentEngine;
@@ -65,6 +81,12 @@ export type ApiDeps = {
   settings: SettingsStore;
   /** MCP サーバーとの接続。設定画面からの操作もここを通す。 */
   mcp: McpManager;
+  /** podman で動かすコンテナ。設定画面からの起動・停止・リセットもここを通す。 */
+  container: ContainerManager;
+  /** ツールが撮った画像の置き場。画面へはここから返す。 */
+  images: ImageStore;
+  /** ユーザーへ画面を渡す待ち。チャットからの返事をここへ届ける。 */
+  handover: Handover;
   /** models.dev のカタログ。プロバイダとモデルの一覧はここから取る。 */
   catalog: Catalog;
   /** プロバイダへ接続できるかを確かめる。 */
@@ -536,6 +558,112 @@ export function createApiHandlers(deps: ApiDeps) {
         "Authorization is complete. Close this tab and return to Terasma.",
       ]);
     },
+
+    /**
+     * 保存した画像を返す。
+     * 中身がハッシュで決まるので、URL ごと長くキャッシュさせてよい。
+     */
+    readImage(req: ApiRequest<{ sha256: string }>): Response {
+      const found = deps.images.find(req.params.sha256);
+      if (found === null) return jsonError(404, "invalid_request", "画像がありません");
+
+      // Bun の Response は Uint8Array をそのまま body に取れる（DOM の型定義が追いついていない）。
+      return new Response(found.data as unknown as BodyInit, {
+        headers: {
+          "Content-Type": found.mime,
+          "Cache-Control": deps.images.cacheControl,
+        },
+      });
+    },
+
+    /**
+     * 引き受け（画面を渡している間）の返事。
+     * チャットに書いた文か、「操作を完了した」を、待っているツールの戻り値にする。
+     */
+    async answerHandover(req: PlainRequest): Promise<Response> {
+      const body = await readJsonBody(req);
+      const sessionId = typeof body?.["sessionId"] === "string" ? body["sessionId"] : "";
+      if (sessionId.length === 0) {
+        return jsonError(400, "invalid_request", "sessionId を指定してください");
+      }
+
+      const kind = body?.["kind"];
+      if (kind === "text") {
+        const raw = body?.["text"];
+        const text = typeof raw === "string" ? raw.trim() : "";
+        if (text.length === 0) return jsonError(400, "invalid_request", "送る文が空です");
+
+        if (!deps.handover.answer(sessionId, { kind: "text", text })) {
+          return jsonError(409, "handover_not_pending", "この会話は操作を待っていません");
+        }
+        return new Response(null, { status: 204 });
+      }
+
+      if (kind === "done") {
+        if (!deps.handover.answer(sessionId, { kind: "done" })) {
+          return jsonError(409, "handover_not_pending", "この会話は操作を待っていません");
+        }
+        return new Response(null, { status: 204 });
+      }
+
+      return jsonError(400, "invalid_request", 'kind は "text" か "done" にしてください');
+    },
+
+    /** コンテナのいまの状態。設定画面とチャット画面がこれを見て案内を出す。 */
+    async readContainer(): Promise<Response> {
+      return Response.json(await deps.container.status());
+    },
+
+    /** コンテナを起動する。イメージが無ければ作り、コンテナが無ければ作るところまで行う。 */
+    async startContainer(): Promise<Response> {
+      return containerResponse(() => deps.container.start());
+    },
+
+    /** コンテナを止める。止まっていれば何もしない。 */
+    async stopContainer(): Promise<Response> {
+      return containerResponse(() => deps.container.stop());
+    },
+
+    /** コンテナを作り直す。wipeHome を選んだときだけ、マウントしたフォルダの中身も消す。 */
+    async resetContainer(req: PlainRequest): Promise<Response> {
+      const body = await readJsonBody(req);
+      return containerResponse(() => deps.container.reset({ wipeHome: body?.["wipeHome"] === true }));
+    },
+
+    /**
+     * 画面の中継。コンテナの noVNC（websockify が配る HTML と JS）を Terasuma の待ち受けから返す。
+     *
+     * ブラウザへ見せる待ち受けを Terasuma の 1 つに保つため、コンテナのポートは直接見せない。
+     * LAN へ公開したときのトークン認証も、この 1 か所に掛けられる。
+     */
+    async relayScreen(req: ScreenRelayRequest): Promise<Response> {
+      const status = await deps.container.status();
+      if (status.state !== "running" || status.vncPort === null) {
+        return jsonError(409, "container_not_running", "コンテナが動いていないため、画面を表示できません");
+      }
+
+      const incoming = new URL(req.url);
+      // 中継の接頭辞を落として、コンテナのルートからのパスにする。問い合わせはそのまま渡す。
+      const path = incoming.pathname.slice(SCREEN_RELAY_PREFIX.length);
+
+      let upstream: Response;
+      try {
+        upstream = await fetch(`http://127.0.0.1:${status.vncPort}/${path}${incoming.search}`, {
+          signal: req.signal,
+        });
+      } catch (error) {
+        return jsonError(502, "container_not_running", `画面を取れませんでした: ${describeError(error)}`);
+      }
+
+      return new Response(upstream.body, {
+        status: upstream.status,
+        headers: {
+          "Content-Type": upstream.headers.get("Content-Type") ?? "application/octet-stream",
+          // noVNC の JS は頻繁には変わらないが、古いものが残ると原因が分かりにくい。
+          "Cache-Control": "no-store",
+        },
+      });
+    },
   };
 
   /** 保存の前後に使う接続確認。失敗した場合はそのまま返せるレスポンスを返す。 */
@@ -599,8 +727,9 @@ async function readMcpForm(
 
   const rawId = body?.["id"];
   const id = typeof rawId === "string" ? rawId.trim() : "";
-  if (!isMcpServerId(id)) {
-    return jsonError(400, "invalid_request", "id は英小文字・数字・ハイフンで指定してください");
+  const idProblem = mcpServerIdProblem(id);
+  if (idProblem !== null) {
+    return jsonError(400, "invalid_request", `id に使えない値です: ${idProblem}`);
   }
 
   const type = body?.["type"];
@@ -669,6 +798,32 @@ function providerFailureResponse(error: unknown): Response {
 function mcpFailureResponse(error: unknown): Response {
   if (error instanceof McpServerNotFound) return jsonError(404, "mcp_server_not_found", error.message);
   return jsonError(500, "internal_error", describeError(error));
+}
+
+/** コンテナの操作の失敗を、そのまま返せるレスポンスにする。 */
+async function containerResponse(operation: () => Promise<ContainerStatusView>): Promise<Response> {
+  try {
+    return Response.json(await operation());
+  } catch (error) {
+    if (error instanceof ContainerError) {
+      return jsonError(containerStatus(error.code), error.code, error.message);
+    }
+    return jsonError(500, "internal_error", describeError(error));
+  }
+}
+
+/** コンテナの失敗を、画面が扱いやすい HTTP の状態にする。 */
+function containerStatus(code: ContainerErrorCode): number {
+  switch (code) {
+    // podman が無いのは、この端末ではもう用意できないという意味。
+    case "container_unavailable":
+      return 503;
+    // 操作の前提（動いていること）が満たされていない。
+    case "container_not_running":
+      return 409;
+    default:
+      return 502;
+  }
 }
 
 /** リクエストからプロバイダ id を読む。 */
@@ -821,7 +976,7 @@ async function* runTurn(
   };
 
   try {
-    const stream = await engine.stream({ history, signal });
+    const stream = await engine.stream({ history, signal, sessionId });
 
     for await (const event of stream.events) {
       switch (event.type) {
@@ -859,20 +1014,47 @@ async function* runTurn(
 }
 
 /**
+ * 待ちの接続に流す心拍の間隔。
+ * Bun の待ち受けは、何も流さない接続を既定の 10 秒で切る（実測で 12 秒）。
+ * ユーザーの操作を待つ間や、モデルが長く考えている間も切れないよう、これより短くする。
+ */
+const HEARTBEAT_INTERVAL_MS = 5_000;
+
+/** 何も流れない間に流すコメント行（SSE の仕様上、読む側は無視する）。 */
+const HEARTBEAT_FRAME = ": heartbeat\n\n";
+
+/**
  * クライアントが読むたびに、次のイベントを 1 つずつ返す。
  * pull ベースなので、相手が読まなくなれば cancel が呼ばれ、生成側も止まる。
+ *
+ * 次のイベントが来ないまま間隔が空いたら、コメント行を流して接続を保つ。
+ * 止まった待ち（ユーザーの操作、長い思考）で切れないようにするため。
  */
 function sseResponse(events: AsyncGenerator<ChatEvent>): Response {
   const encoder = new TextEncoder();
+  let pending: Promise<IteratorResult<ChatEvent>> | null = null;
 
   const body = new ReadableStream<Uint8Array>({
     async pull(controller) {
-      const next = await events.next();
-      if (next.done === true) {
+      // 前回の pull で待ち続けている分があれば、それをそのまま使う。
+      pending ??= events.next();
+
+      const outcome = await Promise.race([
+        pending.then((result) => ({ kind: "event" as const, result })),
+        delay(HEARTBEAT_INTERVAL_MS).then(() => ({ kind: "heartbeat" as const })),
+      ]);
+
+      if (outcome.kind === "heartbeat") {
+        controller.enqueue(encoder.encode(HEARTBEAT_FRAME));
+        return;
+      }
+
+      pending = null;
+      if (outcome.result.done === true) {
         controller.close();
         return;
       }
-      controller.enqueue(encoder.encode(encodeChatEvent(next.value)));
+      controller.enqueue(encoder.encode(encodeChatEvent(outcome.result.value)));
     },
     async cancel() {
       await events.return(undefined);
@@ -886,6 +1068,10 @@ function sseResponse(events: AsyncGenerator<ChatEvent>): Response {
       "X-Accel-Buffering": "no",
     },
   });
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /** 本文が無い・JSON でない場合は「本文なし」として扱い、呼び出し側で invalid_request にする。 */

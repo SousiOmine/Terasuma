@@ -1,0 +1,26 @@
+FROM debian:bookworm-slim
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      xvfb x11-utils x11vnc openbox xdotool scrot imagemagick \
+      novnc websockify socat \
+      xterm fonts-noto-cjk dbus-x11 \
+      chromium \
+      sudo curl ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+
+# エージェントが使うユーザー。root で動かすと Chromium の sandbox が使えず、
+# マウントしたフォルダの中身が root の持ち物になる。
+RUN useradd --create-home --uid 1000 --shell /bin/bash agent \
+ && echo 'agent ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/agent \
+ && chmod 0440 /etc/sudoers.d/agent
+
+COPY entry.sh /usr/local/bin/entry.sh
+RUN chmod 0755 /usr/local/bin/entry.sh
+
+# 画面を触るコマンド（xdotool / import / chromium）は、この値が無いと
+# どの X サーバーを見ればよいか分からず失敗する。entry.sh の export は exec には届かない。
+ENV DISPLAY=:99
+
+USER agent
+WORKDIR /home/agent
+CMD ["/usr/local/bin/entry.sh"]

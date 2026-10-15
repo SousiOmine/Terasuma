@@ -2,13 +2,14 @@ import { IconPlayerStopFilled, IconSend } from "@tabler/icons-preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { isSendKey } from "../composerKeys";
 import { t } from "../i18n";
-import { isStreaming, sendMessage, stopStreaming } from "../state";
+import { handoverQuestion, isStreaming, sendMessage, stopStreaming } from "../state";
 
 const MAX_TEXTAREA_HEIGHT = 200;
 
 export function Composer() {
   const [draft, setDraft] = useState("");
-  const streaming = isStreaming.value;
+  // 引き受けている間は、送信先がツールの戻り値に変わるだけで、送信はできる。
+  const streaming = isStreaming.value && handoverQuestion.value === null;
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // 入力に合わせて高さを伸ばす。CSS だけでは全ブラウザで揃わないため、実際の高さを測って設定する。

@@ -1,4 +1,4 @@
-import type { ChatMessage, MessagePart } from "../shared/types";
+import type { ChatMessage, ImageRef, MessagePart } from "../shared/types";
 
 /**
  * モデルへ渡す system プロンプト。
@@ -12,6 +12,7 @@ export const SYSTEM_PROMPT = [
   "You are Terasuma, a general-purpose assistant running on the user's own machine.",
   "Answer directly and concisely.",
   "Always reply in the language the user writes in.",
+  "You can operate a Debian container with a desktop through the computer_ tools: its screen, keyboard, mouse, and shell.",
 ].join("\n");
 
 /** モデルへ渡す assistant の内容の一部。 */
@@ -19,7 +20,6 @@ export type AssistantContentPart =
   | { type: "text"; text: string }
   | { type: "tool-call"; toolCallId: string; toolName: string; input: unknown };
 
-/** モデルへ渡すツールの結果。 */
 export type ToolResultContentPart = {
   type: "tool-result";
   toolCallId: string;
@@ -28,13 +28,26 @@ export type ToolResultContentPart = {
   output: { type: "text" | "error-text"; value: string };
 };
 
+/** モデルへ渡す user の内容の一部。ツールが撮った画像もここで渡す。 */
+export type UserContentPart =
+  | { type: "text"; text: string }
+  | { type: "image"; image: Uint8Array; mediaType: string };
+
+/**
+ * 保存した画像を読み出す口。
+ * 履歴を組み立てる側がファイルの場所を知らずに済むよう、ここだけを渡す。
+ */
+export type ImageReader = {
+  read(ref: ImageRef): Uint8Array | null;
+};
+
 /**
  * モデルへ渡す会話 1 件分。
  * ツールを使ったターンは assistant（本文とツール呼び出し）と tool（その結果）の 2 件になる。
  */
 export type ModelInputMessage =
   | { role: "system"; content: string }
-  | { role: "user"; content: string }
+  | { role: "user"; content: string | UserContentPart[] }
   | { role: "assistant"; content: string | AssistantContentPart[] }
   | { role: "tool"; content: ToolResultContentPart[] };
 
@@ -47,7 +60,7 @@ export function toolNameFor(server: string, tool: string): string {
  * 保存済み履歴を、モデルへ渡す形に開く。
  * 要約・言い換え・並べ替えはしない（プロンプトキャッシュを当て続けるため、末尾への追記だけにする）。
  */
-export function toModelMessages(history: readonly ChatMessage[]): ModelInputMessage[] {
+export function toModelMessages(history: readonly ChatMessage[], images: ImageReader): ModelInputMessage[] {
   const messages: ModelInputMessage[] = [];
 
   for (const message of history) {
@@ -64,11 +77,49 @@ export function toModelMessages(history: readonly ChatMessage[]): ModelInputMess
 
     messages.push({ role: "assistant", content: toAssistantParts(parts, message.content) });
 
-    const results = toToolResults(parts);
+    const results = toToolResults(parts, images);
     if (results.length > 0) messages.push({ role: "tool", content: results });
+
+    // 画像は tool の結果に混ぜられない。OpenAI 互換のプロバイダは tool の本文に画像を
+    // 置けず、渡しても文字列に潰される（実測）。結果の直後に user メッセージとして置き、
+    // どの呼び出しの画像なのかを本文で示す。
+    for (const image of toImageMessages(parts, images)) messages.push(image);
   }
 
   return messages;
+}
+
+/** ツールが返した画像を、モデルへ渡す user メッセージにする。 */
+function toImageMessages(parts: readonly MessagePart[], images: ImageReader): ModelInputMessage[] {
+  return parts.flatMap((part) =>
+    part.type === "tool-result" && part.image !== undefined
+      ? screenMessage(part.image, images, `${toolNameFor(part.server, part.tool)} call`)
+      : [],
+  );
+}
+
+/**
+ * 撮った画像を、モデルへ渡す user メッセージにする。
+ * 画像は tool の本文に置けないので（OpenAI 互換のプロバイダは文字列へ潰す）、
+ * 結果の直後に別のメッセージとして置く。
+ */
+export function screenMessage(
+  image: ImageRef,
+  images: ImageReader,
+  label = "computer_screenshot call",
+): ModelInputMessage[] {
+  const data = images.read(image);
+  if (data === null) return [];
+
+  return [
+    {
+      role: "user",
+      content: [
+        { type: "text", text: `(screen image from the ${label})` },
+        { type: "image", image: data, mediaType: image.mime },
+      ],
+    },
+  ];
 }
 
 /**
@@ -78,8 +129,8 @@ export function toModelMessages(history: readonly ChatMessage[]): ModelInputMess
  * メッセージ列は「system 1 件 + toModelMessages() の結果」になる。ここはそのあるべき形を
  * 1 箇所で表現したもので、キャッシュ保護の回帰テスト（tests/prompt-cache.test.ts）が参照する。
  */
-export function buildModelInput(history: readonly ChatMessage[]): ModelInputMessage[] {
-  return [{ role: "system", content: SYSTEM_PROMPT }, ...toModelMessages(history)];
+export function buildModelInput(history: readonly ChatMessage[], images: ImageReader): ModelInputMessage[] {
+  return [{ role: "system", content: SYSTEM_PROMPT }, ...toModelMessages(history, images)];
 }
 
 /** 本文とツール呼び出しを、保存された順のまま並べる。 */
@@ -102,7 +153,7 @@ function toAssistantParts(parts: readonly MessagePart[], content: string): strin
 }
 
 /** ツール呼び出しに対する結果を、呼び出しの順に並べる。 */
-function toToolResults(parts: readonly MessagePart[]): ToolResultContentPart[] {
+function toToolResults(parts: readonly MessagePart[], images: ImageReader): ToolResultContentPart[] {
   const results = new Map<string, Extract<MessagePart, { type: "tool-result" }>>();
   for (const part of parts) {
     if (part.type === "tool-result") results.set(part.id, part);
@@ -122,8 +173,29 @@ function toToolResults(parts: readonly MessagePart[]): ToolResultContentPart[] {
           ? // 「停止」で結果が残らなかった呼び出し。結果を欠いたまま渡すとプロバイダが
             // 呼び出しと結果の対応を取れずに失敗するので、中断した事実だけを伝える。
             { type: "error-text", value: "この呼び出しは中断されたため、結果がありません" }
-          : { type: result.failed ? "error-text" : "text", value: result.output },
+          : toToolResultOutput(result, images),
     });
   }
   return blocks;
+}
+
+/**
+ * ツールの結果を、モデルへ渡す形にする。
+ * 画像はここには入れない（tool の本文に画像を置けるプロバイダが無いため、別の user メッセージで渡す）。
+ */
+function toToolResultOutput(
+  result: Extract<MessagePart, { type: "tool-result" }>,
+  images: ImageReader,
+): ToolResultContentPart["output"] {
+  const asText = (value: string): ToolResultContentPart["output"] => ({
+    type: result.failed ? "error-text" : "text",
+    value,
+  });
+
+  // 参照はあるのに実体が無い状態。黙って本文だけにすると、画像を見たつもりで話が進む。
+  if (result.image !== undefined && images.read(result.image) === null) {
+    return asText(`${result.output}\n(保存した画像を読み出せませんでした)`);
+  }
+
+  return asText(result.output);
 }

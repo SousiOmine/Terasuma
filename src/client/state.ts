@@ -1,6 +1,7 @@
 import { computed, signal } from "@preact/signals";
 import type { ChatEvent, ChatMessage, MessagePart, Session } from "../shared/types";
 import * as api from "./api";
+import { loadContainer, showContainerError } from "./containerSettings";
 import { toErrorState } from "./errors";
 import { locale, setLocale } from "./i18n";
 import { loadModelSettings } from "./modelSettings";
@@ -11,7 +12,7 @@ export type ClientErrorCode = api.ClientErrorCode;
 export type View = "chat" | "settings";
 
 /** 設定画面のカテゴリ。導線から特定のカテゴリを直接開くために signal で持つ。 */
-export type SettingsCategory = "general" | "model" | "advanced";
+export type SettingsCategory = "general" | "model" | "container" | "advanced";
 
 export const view = signal<View>("chat");
 export const settingsCategory = signal<SettingsCategory>("general");
@@ -36,6 +37,57 @@ export const activeSession = computed(
 /** 削除の確認ダイアログが対象にしている会話の id。null ならダイアログは閉じている。 */
 const pendingDeleteSessionId = signal<string | null>(null);
 
+/**
+ * 右ペイン（コンテナの画面）を開いているかどうか。既定は閉じている。
+ * 閉じている間は noVNC の接続も張らない（見ていない画面のために繋ぎっぱなしにしない）。
+ */
+export const computerPaneOpen = signal(false);
+
+/**
+ * 画面を操作できるかどうか。
+ * ふだんは見るだけで、エージェントから引き受けている間だけ操作できる。
+ */
+export const computerViewOnly = signal(true);
+
+/**
+ * いまユーザーへ渡している頼み。null なら渡していない。
+ * エージェントが computer_ask_user を呼んだ時点で入り、結果が届くと消える。
+ */
+export const handoverQuestion = signal<string | null>(null);
+
+/**
+ * 引き受けの返事を届ける。送った文は、そのまま computer_ask_user の戻り値になる。
+ * これが済むと、ターンの中でツールの結果が流れてくる（画面も見るだけに戻る）。
+ */
+export async function answerHandover(
+  answer: { kind: "done" } | { kind: "text"; text: string },
+): Promise<void> {
+  const sessionId = activeSessionId.value;
+  if (sessionId === null || handoverQuestion.value === null) return;
+
+  clearError();
+  try {
+    await api.answerHandover(sessionId, answer);
+  } catch (error) {
+    reportError(error);
+  }
+}
+
+/** 右ペインを開く。引き受けが始まったときにも使う。 */
+export function openComputerPane(): void {
+  computerPaneOpen.value = true;
+}
+
+/** 右ペインを閉じる。 */
+export function closeComputerPane(): void {
+  computerPaneOpen.value = false;
+}
+
+/** チャットの右上のボタン。 */
+export function toggleComputerPane(): void {
+  computerPaneOpen.value = !computerPaneOpen.value;
+}
+
 /** 確認ダイアログに出す会話。一覧から消えた id なら null になり、ダイアログも閉じる。 */
 export const pendingDeleteSession = computed(
   () => sessions.value.find((session) => session.id === pendingDeleteSessionId.value) ?? null,
@@ -45,6 +97,10 @@ let controller: AbortController | null = null;
 
 export async function bootstrap(): Promise<void> {
   setLocale(locale.value);
+
+  // コンテナの状態は、チャット画面の案内（podman が無い場合）に使う。
+  // 読めなくてもチャットは使えるので、待たずに進め、失敗は設定画面のエラーに残す。
+  void loadContainer().catch(showContainerError);
 
   try {
     // モデル設定は、チャット画面の「使うモデルがありません」の案内にも使う。
@@ -90,7 +146,16 @@ export async function openSession(id: string): Promise<void> {
 
 export async function sendMessage(rawContent: string): Promise<void> {
   const content = rawContent.trim();
-  if (content.length === 0 || isStreaming.value) return;
+  if (content.length === 0) return;
+
+  // 引き受けている間の入力は、新しい発言ではなくツールの戻り値になる。
+  // 新しい発言として扱うと、ターンが 2 つ重なって会話の並びが崩れる。
+  if (handoverQuestion.value !== null) {
+    await answerHandover({ kind: "text", text: content });
+    return;
+  }
+
+  if (isStreaming.value) return;
 
   const sessionId = activeSessionId.value ?? crypto.randomUUID();
   activeSessionId.value = sessionId;
@@ -189,7 +254,13 @@ function applyEvent(event: ChatEvent): void {
       streamingParts.value = appendText(streamingParts.value, event.delta);
       break;
     case "tool-call":
+      // 画面を渡す頼みが来たら、その場で操作できる状態にする。
+      if (isAskUser(event.part)) beginHandover(questionOf(event.part.args));
+      streamingParts.value = [...streamingParts.value, event.part];
+      break;
     case "tool-result":
+      // 引き受けの結果が届いたら、見るだけに戻す。
+      if (isAskUser(event.part) && event.part.failed === false) endHandover();
       streamingParts.value = [...streamingParts.value, event.part];
       break;
     case "assistant-done":
@@ -201,6 +272,32 @@ function applyEvent(event: ChatEvent): void {
       errorDetail.value = event.detail;
       break;
   }
+}
+
+/** 画面を渡す呼び出しかどうか。 */
+function isAskUser(part: MessagePart): boolean {
+  return part.type !== "text" && part.server === "computer" && part.tool === "ask_user";
+}
+
+/** 呼び出しの引数から、ユーザーへ見せる頼みを取り出す。 */
+function questionOf(args: unknown): string | null {
+  if (typeof args !== "object" || args === null) return null;
+
+  const question = (args as { question?: unknown }).question;
+  return typeof question === "string" && question.trim().length > 0 ? question : null;
+}
+
+/** 引き受けを始める。ペインを開き、操作できるようにする。 */
+function beginHandover(question: string | null): void {
+  handoverQuestion.value = question;
+  computerViewOnly.value = false;
+  openComputerPane();
+}
+
+/** 引き受けを終える。見るだけに戻す。 */
+function endHandover(): void {
+  handoverQuestion.value = null;
+  computerViewOnly.value = true;
 }
 
 /** 本文は末尾に足す。無ければ新しく始める（signal は差し替えて再描画させる）。 */

@@ -9,6 +9,8 @@ import { startServer } from "../src/server/server";
 import { createSettingsStore, type SettingsStore } from "../src/server/settings";
 import { createStore } from "../src/server/store";
 import type { McpServerStatusView, McpServersView, McpTestView } from "../src/shared/types";
+import { createHandover } from "../src/server/handover";
+import { createContainerStub, createImageStub } from "./support";
 
 const UNKNOWN: McpServerStatusView = { state: "unknown", tools: [], detail: null };
 
@@ -98,6 +100,9 @@ async function withMcpServer<T>(
     engine: createMockEngine({ chunkSize: 10_000, delayMs: 0 }),
     settings,
     mcp: stub.manager,
+    container: createContainerStub(),
+    images: createImageStub(),
+    handover: createHandover(),
   });
 
   const request = (requestPath: string, init?: RequestInit) =>

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { ModelSettings } from "../src/config";
 import { createMastraEngine, type SettingsReader } from "../src/server/engine";
 import type { ChatMessage } from "../src/shared/types";
-import { createMcpStub } from "./support";
+import { createComputerStub, createImageStub, createMcpStub } from "./support";
 
 /**
  * OpenAI 互換のストリーミング応答を返す偽のプロバイダ。
@@ -77,9 +77,10 @@ function portOf(server: { port?: number }): number {
 
 async function runEngine(settings: ModelSettings): Promise<string> {
   const reader: SettingsReader = { read: () => settings };
-  const stream = await createMastraEngine(reader, createMcpStub()).stream({
+  const stream = await createMastraEngine(reader, createMcpStub(), createComputerStub(), createImageStub()).stream({
     history: history(),
     signal: new AbortController().signal,
+    sessionId: "s1",
   });
 
   let text = "";

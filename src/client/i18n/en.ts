@@ -21,7 +21,19 @@ export const en = {
 
   "chat.model.unset": "No model is configured. Add a provider in Settings.",
   "chat.model.providerMissing": "The provider for the default model is missing. Choose another model in Settings.",
-  "chat.model.openSettings": "Open Settings",
+  "chat.openSettings": "Open Settings",
+
+  "chat.container.unavailable": "The container is not available. podman was not found.",
+
+  "chat.computer.title": "Container screen",
+  "chat.computer.show": "Show screen",
+  "chat.computer.hide": "Hide screen",
+  "chat.computer.viewOnly": "View only",
+  "chat.computer.notRunning": "The container is not running, so the screen can not be shown.",
+  "chat.computer.connecting": "Connecting…",
+  "chat.computer.disconnected": "Could not connect to the screen.",
+  "chat.computer.yourTurn": "Your turn",
+  "chat.computer.done": "I finished",
 
   "composer.placeholder": "Send a message",
   "composer.send": "Send",
@@ -34,6 +46,33 @@ export const en = {
   "settings.language.description": "Language used in the interface.",
 
   "settings.advanced": "Advanced",
+
+  "settings.container": "Container",
+  "settings.container.description":
+    "The virtual desktop the agent operates. Apps and screen interaction happen inside it.",
+  "settings.container.state.label": "Status",
+  "settings.container.state.checking": "Checking…",
+  "settings.container.state.podman_missing": "podman is not installed",
+  "settings.container.state.image_missing": "Image is not built yet",
+  "settings.container.state.container_missing": "Container is not created yet",
+  "settings.container.state.stopped": "Stopped",
+  "settings.container.state.running": "Running",
+  "settings.container.vncPort": "Screen relay port",
+  "settings.container.podmanMissing": "Install podman to let the agent work inside the container.",
+  "settings.container.firstBuild": "The first start builds the image and can take a few minutes.",
+  "settings.container.start": "Start",
+  "settings.container.starting": "Starting…",
+  "settings.container.stop": "Stop",
+  "settings.container.stopping": "Stopping…",
+  "settings.container.reset": "Reset",
+  "settings.container.resetting": "Recreating…",
+  "settings.container.resetTitle": "Recreate the container?",
+  "settings.container.resetMessage":
+    "Apps and settings the agent added are lost. Files stay unless you choose to clear the home folder.",
+  "settings.container.resetWipeHome": "Also clear the home folder",
+  "settings.container.confirmReset": "Recreate",
+  "settings.container.cancel": "Cancel",
+
   "settings.mcp.title": "MCP servers",
   "settings.mcp.description": "Connections to MCP servers that provide tools.",
   "settings.mcp.empty": "No MCP servers yet.",
@@ -174,6 +213,12 @@ export const en = {
   "error.mcp_server_exists": "This MCP server is already added.",
   "error.mcp_authorization_failed": "Authorization for the MCP server could not be started.",
   "error.mcp_unreachable": "Could not connect to the MCP server.",
+  "error.container_unavailable": "podman was not found.",
+  "error.container_build_failed": "The container image could not be built.",
+  "error.container_start_failed": "The container could not be started.",
+  "error.container_stop_failed": "The container could not be stopped.",
+  "error.container_not_running": "The container is not running.",
+  "error.handover_not_pending": "This conversation is not waiting for you.",
   "error.settings_write_failed": "The settings could not be saved.",
   "error.internal_error": "Something went wrong.",
   "error.network": "The server is not reachable.",
@@ -184,6 +229,7 @@ export const en = {
   "chat.tool.failed": "Failed",
   "chat.tool.args": "Arguments",
   "chat.tool.result": "Result",
+  "chat.tool.screen": "Screen",
 } as const;
 
 export type MessageKey = keyof typeof en;

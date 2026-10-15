@@ -1,5 +1,5 @@
 import { IconTool } from "@tabler/icons-preact";
-import type { MessagePart, MessageRole } from "../../shared/types";
+import type { ImageRef, MessagePart, MessageRole } from "../../shared/types";
 import { t } from "../i18n";
 
 export type MessageBubbleProps = {
@@ -64,8 +64,27 @@ function ToolBlock({ part }: { part: MessagePart }) {
       {part.type === "tool-call" ? (
         <ToolText label={t("chat.tool.args")} text={formatArgs(part.args)} />
       ) : (
-        <ToolText label={t("chat.tool.result")} text={part.output} />
+        <>
+          <ToolText label={t("chat.tool.result")} text={part.output} />
+          {part.image !== undefined && <ToolImage image={part.image} />}
+        </>
       )}
+    </div>
+  );
+}
+
+/** ツールが撮った画像。会話に残して、あとから見返せるようにする。 */
+function ToolImage({ image }: { image: ImageRef }) {
+  return (
+    <div class="border-t border-neutral-200 px-3 py-1.5 dark:border-neutral-800">
+      <img
+        src={`/api/images/${image.sha256}`}
+        width={image.width}
+        height={image.height}
+        alt={t("chat.tool.screen")}
+        loading="lazy"
+        class="mt-0.5 h-auto w-full rounded-md border border-neutral-200 dark:border-neutral-800"
+      />
     </div>
   );
 }

@@ -1,3 +1,4 @@
+import type { ComponentChildren } from "preact";
 import { Button } from "./Button";
 import { Modal } from "./Modal";
 
@@ -14,6 +15,8 @@ export type ConfirmDialogProps = {
   danger?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
+  /** 確認の前に選ばせる項目など、本文へ足す内容。 */
+  children?: ComponentChildren;
 };
 
 /** 画面の中央に出す確認ダイアログ。 */
@@ -26,6 +29,7 @@ export function ConfirmDialog({
   danger = false,
   onConfirm,
   onCancel,
+  children,
 }: ConfirmDialogProps) {
   return (
     <Modal
@@ -44,6 +48,7 @@ export function ConfirmDialog({
         <p class="truncate rounded-lg bg-neutral-100 px-3 py-2 text-sm dark:bg-neutral-800">{subject}</p>
       )}
       <p class="mt-2 text-xs text-neutral-500 dark:text-neutral-400">{message}</p>
+      {children}
     </Modal>
   );
 }

@@ -1,10 +1,14 @@
 import { Agent } from "@mastra/core/agent";
+import type { MastraDBMessage } from "@mastra/core/agent/message-list";
 import { getProviderConfig } from "@mastra/core/llm";
 import type { OpenAICompatibleConfig } from "@mastra/core/llm";
 import type { ChunkType } from "@mastra/core/stream";
 import type { AppConfig, ModelSettings } from "../config";
 import { modelProvider, type ModelId } from "../shared/model";
 import type { ChatMessage, MessagePart, TokenUsage } from "../shared/types";
+import type { ImageRef } from "../shared/types";
+import type { ComputerToolset } from "./computer";
+import type { ImageStore } from "./images";
 import type { McpToolset } from "./mcp";
 import { SYSTEM_PROMPT, toModelMessages } from "./prompt";
 import { reasoningProviderOptions } from "./reasoning";
@@ -25,11 +29,21 @@ export type EngineInput = {
   /** セッションの保存済み履歴。seq 昇順で、末尾が今回のユーザー発言。 */
   history: readonly ChatMessage[];
   signal: AbortSignal;
+  /** このターンのセッション。コンテナの引き受け（computer_ask_user）をこの単位で待つ。 */
+  sessionId: string;
 };
 
 /** モデルへ渡すツールの供給元。接続を持たないテストでもここを差し替えれば済む。 */
 export type ToolsetProvider = {
   toolset(): Promise<McpToolset>;
+};
+
+/**
+ * コンテナのツールの供給元。ターンの対象セッションと、
+ * ツールが撮った画像を受け取る口を渡す。
+ */
+export type ComputerToolsetProvider = {
+  toolset(input: { sessionId: string; onImage: (image: ImageRef) => void }): Promise<ComputerToolset>;
 };
 
 /**
@@ -114,12 +128,24 @@ export function resolveModel(settings: ModelSettings): ModelResolution {
   return { ok: true, model: { kind: "builtin", id: model, apiKey: provider.apiKey, reasoningEffort } };
 }
 
-export function createEngine(options: { config: AppConfig; settings: SettingsReader; mcp: ToolsetProvider }): AgentEngine {
+export function createEngine(options: {
+  config: AppConfig;
+  settings: SettingsReader;
+  mcp: ToolsetProvider;
+  computer: ComputerToolsetProvider;
+  /** 撮った画像の置き場。履歴から画像を読み直してモデルへ渡す。 */
+  images: ImageStore;
+}): AgentEngine {
   if (options.config.engine === "mock") return createMockEngine();
-  return createMastraEngine(options.settings, options.mcp);
+  return createMastraEngine(options.settings, options.mcp, options.computer, options.images);
 }
 
-export function createMastraEngine(settings: SettingsReader, mcp: ToolsetProvider): AgentEngine {
+export function createMastraEngine(
+  settings: SettingsReader,
+  mcp: ToolsetProvider,
+  computer: ComputerToolsetProvider,
+  images: ImageStore,
+): AgentEngine {
   // モデル一覧の定期再取得は常駐アプリには不要（既定で 1 時間ごとに通信する）。
   // Mastra が初期化時に読むため、Agent を作る前に必ず設定する。
   process.env.MASTRA_AUTO_REFRESH_PROVIDERS ??= "false";
@@ -145,14 +171,14 @@ export function createMastraEngine(settings: SettingsReader, mcp: ToolsetProvide
 
   return {
     name: "mastra",
-    async stream({ history, signal }) {
+    async stream({ history, signal, sessionId }) {
       // 設定は設定画面から変わるので、ターンのたびに読み直す。
       const resolution = resolveModel(settings.read());
       if (!resolution.ok) throw new Error(resolution.detail);
 
       // 保存済み履歴をそのまま渡す。要約も並べ替えもしない
       // （プロンプトキャッシュが当たり続けるようにするため）。
-      const messages = toModelMessages(history);
+      const messages = toModelMessages(history, images);
 
       // 思考強度はプロバイダごとに渡し方が違うので、ここで組み立てて呼び出しごとに渡す。
       const providerOptions = reasoningProviderOptions(
@@ -160,13 +186,31 @@ export function createMastraEngine(settings: SettingsReader, mcp: ToolsetProvide
         resolution.model.reasoningEffort,
       );
 
-      // MCP のツールは呼び出しごとに渡す（設定画面でサーバーを足しても Agent を作り直さずに済む）。
-      const tools = await mcp.toolset();
+      // このターンで撮った画像。次のステップの直前に user メッセージとして足す。
+      const capturedImages: ImageRef[] = [];
+
+      // MCP とコンテナのツールは呼び出しごとに渡す
+      // （設定画面でサーバーを足しても、コンテナを止めても Agent を作り直さずに済む）。
+      const [mcpTools, computerTools] = await Promise.all([
+        mcp.toolset(),
+        computer.toolset({ sessionId, onImage: (image) => capturedImages.push(image) }),
+      ]);
+      const tools = { ...mcpTools, ...computerTools };
 
       const result = await agentFor(resolution.model).stream(messages, {
         abortSignal: signal,
         ...(providerOptions === null ? {} : { providerOptions }),
-        ...(Object.keys(tools).length === 0 ? {} : { toolsets: { mcp: tools } }),
+        ...(Object.keys(tools).length === 0 ? {} : { toolsets: { tools } }),
+        // tool の本文に画像を置けるプロバイダが無い（OpenAI 互換は文字列へ潰す）。
+        // ステップの直前に user メッセージとして足し、どの呼び出しの画像かを本文で示す。
+        prepareStep: ({ messages: current }) => {
+          if (capturedImages.length === 0) return undefined;
+
+          const added = capturedImages.splice(0).flatMap((image) => stepImageMessage(image, images));
+          if (added.length === 0) return undefined;
+
+          return { messages: [...current, ...added] };
+        },
       });
 
       return {
@@ -205,14 +249,13 @@ function toEngineEvent(chunk: ChunkType): EngineEvent | null {
       const { server, tool } = splitToolName(chunk.payload.toolName);
       return {
         type: "tool-result",
-        part: {
-          type: "tool-result",
-          id: chunk.payload.toolCallId,
+        part: toolResultPart(
+          chunk.payload.toolCallId,
           server,
           tool,
-          failed: chunk.payload.isError === true,
-          output: toolOutputText(chunk.payload.result),
-        },
+          chunk.payload.isError === true,
+          chunk.payload.result,
+        ),
       };
     }
 
@@ -220,14 +263,7 @@ function toEngineEvent(chunk: ChunkType): EngineEvent | null {
       const { server, tool } = splitToolName(chunk.payload.toolName);
       return {
         type: "tool-result",
-        part: {
-          type: "tool-result",
-          id: chunk.payload.toolCallId,
-          server,
-          tool,
-          failed: true,
-          output: describe(chunk.payload.error),
-        },
+        part: toolResultPart(chunk.payload.toolCallId, server, tool, true, chunk.payload.error),
       };
     }
 
@@ -249,8 +285,55 @@ function splitToolName(name: string): { server: string; tool: string } {
   return { server: name.slice(0, boundary), tool: name.slice(boundary + 1) };
 }
 
+/**
+ * ツールの結果を、保存する形にする。
+ * コンテナのツールは画像を返すことがあるので、その参照も一緒に持たせる。
+ */
+function toolResultPart(
+  id: string,
+  server: string,
+  tool: string,
+  failed: boolean,
+  value: unknown,
+): Extract<MessagePart, { type: "tool-result" }> {
+  const image = readImageRef(value);
+
+  return {
+    type: "tool-result",
+    id,
+    server,
+    tool,
+    failed,
+    output: toolOutputText(value),
+    ...(image === undefined ? {} : { image }),
+  };
+}
+
+/**
+ * ツールの戻り値から画像の参照を取り出す。
+ * コンテナのツールが返す形（{ text, image }）だけを扱い、それ以外は画像なしとして扱う。
+ */
+function readImageRef(value: unknown): ImageRef | undefined {
+  if (typeof value !== "object" || value === null) return undefined;
+
+  const image = (value as { image?: unknown }).image;
+  if (typeof image !== "object" || image === null) return undefined;
+
+  const { sha256, mime, width, height } = image as Record<string, unknown>;
+  if (typeof sha256 !== "string" || typeof mime !== "string") return undefined;
+  if (typeof width !== "number" || typeof height !== "number") return undefined;
+
+  return { sha256, mime, width, height };
+}
+
 /** ツールの戻り値を、モデルと画面に見せる文字列にする。 */
 function toolOutputText(value: unknown): string {
+  // コンテナのツールは本文を text に入れて返す。
+  if (typeof value === "object" && value !== null) {
+    const text = (value as { text?: unknown }).text;
+    if (typeof text === "string") return text;
+  }
+
   const text = mcpContentText(value);
   if (text !== null) return text;
 
@@ -347,6 +430,32 @@ async function* chunkText(
     if (delayMs > 0) await new Promise((resolve) => setTimeout(resolve, delayMs));
     yield { type: "text-delta", delta: text.slice(index, index + chunkSize) };
   }
+}
+
+/**
+ * 撮った画像を、Mastra の 1 ターン内で次のステップへ渡せる形にする。
+ *
+ * tool の本文に画像を置けるプロバイダが無い（OpenAI 互換は content を文字列へ潰す）ため、
+ * ツールの結果の直後に user メッセージとして足す。どの呼び出しの画像かは本文に書く。
+ */
+function stepImageMessage(image: ImageRef, images: ImageStore): MastraDBMessage[] {
+  const data = images.read(image);
+  if (data === null) return [];
+
+  return [
+    {
+      id: crypto.randomUUID(),
+      role: "user",
+      createdAt: new Date(),
+      content: {
+        format: 2,
+        parts: [
+          { type: "text", text: "(screen image from the computer_screenshot call)" },
+          { type: "file", mimeType: image.mime, data: Buffer.from(data).toString("base64") },
+        ],
+      },
+    },
+  ];
 }
 
 function describe(error: unknown): string {

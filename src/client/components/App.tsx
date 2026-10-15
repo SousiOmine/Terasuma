@@ -1,5 +1,6 @@
 import { view } from "../state";
 import { ChatView } from "./ChatView";
+import { ComputerPane } from "./ComputerPane";
 import { SettingsView } from "./SettingsView";
 import { DeleteSessionDialog, Sidebar } from "./Sidebar";
 
@@ -12,6 +13,8 @@ export function App() {
       <div class="flex h-full overflow-hidden">
         <Sidebar />
         <ChatView />
+        {/* 右ペインは開いているときだけ出す（閉じている間は noVNC も繋がない）。 */}
+        <ComputerPane />
       </div>
       <DeleteSessionDialog />
     </>

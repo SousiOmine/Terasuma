@@ -2,6 +2,7 @@ import { IconArrowLeft } from "@tabler/icons-preact";
 import type { Locale, MessageKey } from "../i18n";
 import { LOCALES, locale, setLocale, t } from "../i18n";
 import { closeSettings, settingsCategory, type SettingsCategory } from "../state";
+import { ContainerSettingsView } from "./ContainerSettingsView";
 import { McpSettingsView } from "./McpSettingsView";
 import { ModelSettingsView } from "./ModelSettingsView";
 
@@ -9,6 +10,7 @@ import { ModelSettingsView } from "./ModelSettingsView";
 const CATEGORIES: readonly { id: SettingsCategory; labelKey: MessageKey }[] = [
   { id: "general", labelKey: "settings.general" },
   { id: "model", labelKey: "settings.model" },
+  { id: "container", labelKey: "settings.container" },
   { id: "advanced", labelKey: "settings.advanced" },
 ];
 
@@ -65,6 +67,7 @@ export function SettingsView() {
         <section class="min-w-0 flex-1 overflow-y-auto px-6 py-8">
           {category === "general" && <GeneralSettings />}
           {category === "model" && <ModelSettingsView />}
+          {category === "container" && <ContainerSettingsView />}
           {category === "advanced" && <McpSettingsView />}
         </section>
       </div>

@@ -2,12 +2,13 @@ import { describe, expect, test } from "bun:test";
 import type { AppConfig } from "../src/config";
 import type { AgentEngine, EngineInput, EngineStream } from "../src/server/engine";
 import { createMockEngine } from "../src/server/engine";
+import { createHandover } from "../src/server/handover";
 import { startServer } from "../src/server/server";
 import { createStore } from "../src/server/store";
 import type { Store } from "../src/server/store";
 import { decodeChatEvents } from "../src/shared/sse";
 import type { ApiErrorCode, ChatEvent, ChatMessage, Session } from "../src/shared/types";
-import { TEST_SETTINGS, createMcpStub, withTempSettings } from "./support";
+import { TEST_SETTINGS, createContainerStub, createImageStub, createMcpStub, withTempSettings } from "./support";
 
 const config: AppConfig = {
   host: "127.0.0.1",
@@ -40,7 +41,7 @@ type Harness = {
 async function withServer<T>(engine: AgentEngine, run: (harness: Harness) => Promise<T>): Promise<T> {
   return withTempSettings(TEST_SETTINGS, async (settings) => {
     const store = createStore(":memory:");
-    const { server } = startServer({ config, store, engine, settings, mcp: createMcpStub() });
+    const { server } = startServer({ config, store, engine, settings, mcp: createMcpStub(), container: createContainerStub(), images: createImageStub(), handover: createHandover() });
     const base = server.url;
 
     const request = (path: string, init?: RequestInit) => fetch(new URL(path, base), init);
@@ -376,7 +377,7 @@ describe("チャット API", () => {
 
       // 保存された本文は、最後まで生成した場合の接頭辞になっている。
       const reference = createMockEngine({ chunkSize: 10_000, delayMs: 0 });
-      const full = await reference.stream({ history: [user], signal: new AbortController().signal });
+      const full = await reference.stream({ history: [user], signal: new AbortController().signal, sessionId: "abort-1" });
       let fullText = "";
       for await (const event of full.events) {
         if (event.type === "text-delta") fullText += event.delta;

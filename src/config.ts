@@ -123,14 +123,28 @@ export const LOOPBACK_HOST = "127.0.0.1";
 /** id に使える文字。AI へ渡す名前の先頭部分になるため、記号と空白は許さない。 */
 const ID_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
 
+/**
+ * MCP サーバーの id に使えない名前。
+ * ツール名は "<サーバー id>_<ツール名>" になるので、コンテナの内蔵ツール
+ * （"computer_..."）と同じ名前が作れてしまう。同じ名前になると、どちらのツールか
+ * モデルにも画面にも区別が付かないので、ここで止める。
+ */
+const RESERVED_MCP_SERVER_IDS: readonly string[] = ["computer"];
+
 /** プロバイダ id に使える文字。モデル ID の先頭部分になるため、スラッシュと空白は許さない。 */
 export function isProviderId(value: string): boolean {
   return ID_PATTERN.test(value);
 }
 
-/** MCP サーバー id に使える文字。ツール名の先頭に付くため、アンダースコアも許さない。 */
-export function isMcpServerId(value: string): boolean {
-  return ID_PATTERN.test(value);
+/** MCP サーバー id を受け付けられない理由。使える場合は null。 */
+export function mcpServerIdProblem(value: string): string | null {
+  if (RESERVED_MCP_SERVER_IDS.includes(value)) {
+    return `${JSON.stringify(value)} は Terasuma の内蔵ツール（${RESERVED_MCP_SERVER_IDS.map((id) => `${id}_...`).join(", ")}）と同じ名前になるため使えません`;
+  }
+  if (!ID_PATTERN.test(value)) {
+    return `${JSON.stringify(value)} は英小文字・数字・ハイフンで指定してください`;
+  }
+  return null;
 }
 
 /**
@@ -435,10 +449,9 @@ function readMcpServers(source: Record<string, unknown>, path: string): McpServe
 
   const servers: McpServersSettings = {};
   for (const [id, entry] of Object.entries(value as Record<string, unknown>)) {
-    if (!isMcpServerId(id)) {
-      throw new Error(
-        `${path} の mcpServers に使えない id があります: ${JSON.stringify(id)}（英小文字・数字・ハイフンで指定してください）`,
-      );
+    const problem = mcpServerIdProblem(id);
+    if (problem !== null) {
+      throw new Error(`${path} の mcpServers に使えない id があります: ${problem}`);
     }
     servers[id] = readMcpServerEntry(id, entry, path);
   }

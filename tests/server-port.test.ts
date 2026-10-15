@@ -3,7 +3,8 @@ import type { AppConfig } from "../src/config";
 import { createMockEngine } from "../src/server/engine";
 import { startServer, type StartedServer } from "../src/server/server";
 import { createStore } from "../src/server/store";
-import { TEST_SETTINGS, createMcpStub, withTempSettings } from "./support";
+import { createHandover } from "../src/server/handover";
+import { TEST_SETTINGS, createContainerStub, createImageStub, createMcpStub, withTempSettings } from "./support";
 
 /** ポートだけを差し替えて使う設定。 */
 function makeConfig(port: number): AppConfig {
@@ -28,6 +29,9 @@ async function withServerOn<T>(port: number, run: (started: StartedServer) => Pr
       engine: createMockEngine({ chunkSize: 10_000, delayMs: 0 }),
       settings,
       mcp: createMcpStub(),
+      container: createContainerStub(),
+      images: createImageStub(),
+      handover: createHandover(),
     });
 
     try {
@@ -39,7 +43,7 @@ async function withServerOn<T>(port: number, run: (started: StartedServer) => Pr
 }
 
 /** TCP で待ち受けているサーバのポートを取り出す（型の上では undefined になり得るため確かめる）。 */
-function listeningPort(server: StartedServer["server"]): number {
+function listeningPort(server: { port?: number }): number {
   if (server.port === undefined) throw new Error("ポートが割り当てられていない");
   return server.port;
 }
@@ -97,6 +101,9 @@ describe("サーバの起動ポート", () => {
           engine: createMockEngine({ chunkSize: 10_000, delayMs: 0 }),
           settings,
           mcp: createMcpStub(),
+          container: createContainerStub(),
+          images: createImageStub(),
+          handover: createHandover(),
         });
 
       expect(attempt).toThrow();

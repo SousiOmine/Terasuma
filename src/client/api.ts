@@ -6,6 +6,7 @@ import type {
   CatalogProviderView,
   ChatEvent,
   ChatMessage,
+  ContainerStatusView,
   McpAuthorizationView,
   McpServerForm,
   McpServersView,
@@ -48,6 +49,12 @@ const MCP_PATH = "/api/mcp/servers";
 
 /** MCP サーバーを追加する前の接続確認。 */
 const MCP_TEST_PATH = "/api/mcp/test";
+
+/** podman で動かすコンテナ。 */
+const CONTAINER_PATH = "/api/container";
+
+/** 画面を渡している間の返事。 */
+const HANDOVER_PATH = "/api/computer/handover";
 
 export class ApiError extends Error {
   readonly code: ClientErrorCode;
@@ -246,6 +253,43 @@ export async function cancelMcpAuthorization(serverId: string): Promise<McpServe
 
 function mcpServerPath(serverId: string): string {
   return `${MCP_PATH}/${encodeURIComponent(serverId)}`;
+}
+
+/**
+ * 引き受け中の返事を届ける。チャットに書いた文か、「操作を完了した」のどちらか。
+ * どちらも computer_ask_user の戻り値になる。
+ */
+export async function answerHandover(
+  sessionId: string,
+  answer: { kind: "done" } | { kind: "text"; text: string },
+): Promise<void> {
+  let response: Response;
+  try {
+    response = await fetch(HANDOVER_PATH, jsonRequest("POST", { sessionId, ...answer }));
+  } catch (error) {
+    throw new ApiError("network", describe(error));
+  }
+
+  if (!response.ok) throw await toApiError(response);
+}
+
+/** コンテナのいまの状態（podman に問い合わせた結果）。 */
+export async function fetchContainer(): Promise<ContainerStatusView> {
+  return request<ContainerStatusView>(CONTAINER_PATH);
+}
+
+/** コンテナを起動する。イメージが無ければ作り、コンテナが無ければ作るところまで行う。 */
+export async function startContainer(): Promise<ContainerStatusView> {
+  return request<ContainerStatusView>(`${CONTAINER_PATH}/start`, { method: "POST" });
+}
+
+export async function stopContainer(): Promise<ContainerStatusView> {
+  return request<ContainerStatusView>(`${CONTAINER_PATH}/stop`, { method: "POST" });
+}
+
+/** コンテナを作り直す。ホームの中身も消すかどうかを選べる。 */
+export async function resetContainer(wipeHome: boolean): Promise<ContainerStatusView> {
+  return request<ContainerStatusView>(`${CONTAINER_PATH}/reset`, jsonRequest("POST", { wipeHome }));
 }
 
 /** JSON を送るリクエストの共通部分。 */

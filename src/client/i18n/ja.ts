@@ -20,7 +20,19 @@ export const ja: Record<MessageKey, string> = {
 
   "chat.model.unset": "使用するモデルが設定されていません。設定からプロバイダを追加してください。",
   "chat.model.providerMissing": "既定のモデルを使うプロバイダがありません。設定で選び直してください。",
-  "chat.model.openSettings": "設定を開く",
+  "chat.openSettings": "設定を開く",
+
+  "chat.container.unavailable": "コンテナを操作できません。podman が見つかりません。",
+
+  "chat.computer.title": "コンテナの画面",
+  "chat.computer.show": "画面を表示",
+  "chat.computer.hide": "画面を閉じる",
+  "chat.computer.viewOnly": "見るだけ",
+  "chat.computer.notRunning": "コンテナが動いていないため、画面を表示できません。",
+  "chat.computer.connecting": "接続しています…",
+  "chat.computer.disconnected": "画面に接続できませんでした。",
+  "chat.computer.yourTurn": "操作してください",
+  "chat.computer.done": "操作を完了した",
 
   "composer.placeholder": "メッセージを入力",
   "composer.send": "送信",
@@ -33,6 +45,33 @@ export const ja: Record<MessageKey, string> = {
   "settings.language.description": "画面の表示に使う言語",
 
   "settings.advanced": "詳細設定",
+
+  "settings.container": "コンテナ",
+  "settings.container.description":
+    "エージェントが操作する仮想デスクトップ。アプリの実行も画面の操作も、この中だけで起きます。",
+  "settings.container.state.label": "状態",
+  "settings.container.state.checking": "確認しています…",
+  "settings.container.state.podman_missing": "podman が見つかりません",
+  "settings.container.state.image_missing": "イメージがまだありません",
+  "settings.container.state.container_missing": "コンテナがまだありません",
+  "settings.container.state.stopped": "停止しています",
+  "settings.container.state.running": "動いています",
+  "settings.container.vncPort": "画面の中継ポート",
+  "settings.container.podmanMissing": "podman を入れると、コンテナの中でエージェントを動かせます。",
+  "settings.container.firstBuild": "初回はイメージを作るため、数分かかることがあります。",
+  "settings.container.start": "起動",
+  "settings.container.starting": "起動しています…",
+  "settings.container.stop": "停止",
+  "settings.container.stopping": "停止しています…",
+  "settings.container.reset": "リセット",
+  "settings.container.resetting": "作り直しています…",
+  "settings.container.resetTitle": "コンテナを作り直しますか？",
+  "settings.container.resetMessage":
+    "エージェントが入れたアプリと設定は消えます。置いたファイルは、「ホームの中身も消す」を選ばない限り残ります。",
+  "settings.container.resetWipeHome": "ホームの中身も消す",
+  "settings.container.confirmReset": "作り直す",
+  "settings.container.cancel": "やめる",
+
   "settings.mcp.title": "MCP サーバー",
   "settings.mcp.description": "ツールを提供する MCP サーバーへの接続",
   "settings.mcp.empty": "まだ MCP サーバーがありません。",
@@ -174,6 +213,12 @@ export const ja: Record<MessageKey, string> = {
   "error.mcp_server_exists": "この MCP サーバーはすでに追加されています。",
   "error.mcp_authorization_failed": "MCP サーバーの認可を始められませんでした。",
   "error.mcp_unreachable": "MCP サーバーに接続できませんでした。",
+  "error.container_unavailable": "podman が見つかりません。",
+  "error.container_build_failed": "コンテナのイメージを作れませんでした。",
+  "error.container_start_failed": "コンテナを起動できませんでした。",
+  "error.container_stop_failed": "コンテナを停止できませんでした。",
+  "error.container_not_running": "コンテナが動いていません。",
+  "error.handover_not_pending": "この会話は操作を待っていません。",
   "error.settings_write_failed": "設定を保存できませんでした。",
   "error.internal_error": "問題が発生しました。",
   "error.network": "サーバーに接続できません。",
@@ -184,4 +229,5 @@ export const ja: Record<MessageKey, string> = {
   "chat.tool.failed": "失敗",
   "chat.tool.args": "引数",
   "chat.tool.result": "結果",
+  "chat.tool.screen": "画面",
 };

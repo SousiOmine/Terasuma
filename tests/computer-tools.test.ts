@@ -1,0 +1,306 @@
+import { describe, expect, test } from "bun:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import type { ImageRef } from "../src/shared/types";
+import { createComputerToolset, createComputerTools, SHELL_TIMEOUT_MS } from "../src/server/computer";
+import { ContainerError, createContainerManager, type ContainerManager, type ShellResult } from "../src/server/container";
+import { createHandover } from "../src/server/handover";
+import { createImageStore, type ImageStore } from "../src/server/images";
+import { createPodmanStub, testPng, type PodmanStubBehaviour } from "./support";
+
+/**
+ * computer ツールセットを、podman を差し替えた状態で直接呼ぶ。
+ * モデルへ渡る形（Mastra 経由）は tests/engine-tools.test.ts で確かめる。
+ * 画面の撮影と xdotool の呼び出しは差し替えて、組み立てた引数を見る。
+ */
+
+type ToolContext = {
+  /** 呼び出すツール一式。 */
+  tools: ReturnType<typeof createComputerTools>;
+  /** xdotool に渡された引数。 */
+  execCalls: string[][];
+  /** bash -lc に渡されたスクリプト。 */
+  shellCalls: string[];
+  images: ImageStore;
+  homeDir: string;
+};
+
+type ToolBehaviour = PodmanStubBehaviour & {
+  /** xdotool の呼び出し（`podman exec`）の代わりに返す結果。 */
+  execResult?: ShellResult;
+  /** `bash -lc` の代わりに返す結果。 */
+  shell?: ShellResult;
+  /** 画面の撮影の代わりに返す PNG。 */
+  screenshot?: Uint8Array;
+};
+
+const OK: ShellResult = { exitCode: 0, stdout: "", stderr: "", truncated: false, timedOut: false };
+
+async function withTools<T>(behaviour: ToolBehaviour, run: (context: ToolContext) => Promise<T>): Promise<T> {
+  const dir = mkdtempSync(join(tmpdir(), "terasuma-computer-"));
+  const stub = createPodmanStub(behaviour);
+  const base = createContainerManager({
+    dataDir: dir,
+    containerDir: join(dir, "container-files"),
+    command: stub.run,
+  });
+
+  const execCalls: string[][] = [];
+  const shellCalls: string[] = [];
+
+  const container: ContainerManager = {
+    ...base,
+    exec: async (args) => {
+      execCalls.push([...args]);
+      return behaviour.execResult ?? OK;
+    },
+    shell: async (script) => {
+      shellCalls.push(script);
+      return behaviour.shell ?? OK;
+    },
+    screenshot: async () => behaviour.screenshot ?? testPng(1280, 800),
+  };
+
+  const images = createImageStore(dir);
+  const tools = createComputerTools({ container, images, handover: createHandover(), sessionId: "s1" });
+
+  try {
+    return await run({ tools, execCalls, shellCalls, images, homeDir: join(dir, "container", "home") });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+/** ツールをモデルを介さずにそのまま呼ぶ。 */
+async function callTool(tools: ToolContext["tools"], name: string, input: unknown): Promise<unknown> {
+  const tool = tools[name];
+  if (tool?.execute === undefined) throw new Error(`${name} が無い`);
+  return tool.execute(input as never, {} as never);
+}
+
+/** ツール名の一覧を作るときの土台。 */
+function toolsetFor(behaviour: ToolBehaviour) {
+  const dir = mkdtempSync(join(tmpdir(), "terasuma-computer-"));
+  const stub = createPodmanStub(behaviour);
+  const container = createContainerManager({
+    dataDir: dir,
+    containerDir: join(dir, "container-files"),
+    command: stub.run,
+  });
+
+  return { provider: createComputerToolset({ container, images: createImageStore(dir), handover: createHandover() }), dir };
+}
+
+describe("computer ツールセット", () => {
+  test("ツール名は computer_ で始まる（MCP と同じ名前空間に並ぶ）", async () => {
+    await withTools({}, async ({ tools }) => {
+      const names = Object.keys(tools);
+      expect(names.length).toBeGreaterThan(0);
+      for (const name of names) expect(name).toMatch(/^computer_/);
+
+      // 画面を見てから操作するための一式が揃っていること。
+      expect(names).toContain("computer_screenshot");
+      expect(names).toContain("computer_click");
+      expect(names).toContain("computer_shell");
+    });
+  });
+
+  test("podman が無い端末では、ツールを 1 つも渡さない", async () => {
+    const { provider, dir } = toolsetFor({ podman: false });
+    try {
+      expect(await provider.toolset({ sessionId: "s1", onImage: () => undefined })).toEqual({});
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("コンテナが止まっているだけなら、ツールは渡す（理由を伝えられるように）", async () => {
+    const { provider, dir } = toolsetFor({ running: false });
+    try {
+      expect(
+        Object.keys(await provider.toolset({ sessionId: "s1", onImage: () => undefined })),
+      ).toContain("computer_screenshot");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("画面の撮影", () => {
+  test("撮った画像を保存して、大きさを返す", async () => {
+    await withTools({}, async ({ tools, images }) => {
+      const output = (await callTool(tools, "computer_screenshot", {})) as { text: string; image: ImageRef };
+
+      expect(output.text).toBe("The screen is 1280x800 pixels.");
+      expect(images.read(output.image)).toEqual(testPng(1280, 800));
+    });
+  });
+
+  test("モデルへ渡すのは本文だけ（画像は組み立て側が別に渡す）", async () => {
+    await withTools({}, async ({ tools }) => {
+      const tool = tools["computer_screenshot"];
+      if (tool?.execute === undefined) throw new Error("computer_screenshot が無い");
+
+      const output = await tool.execute({} as never, {} as never);
+      // tool の本文に画像を置けるプロバイダが無いので、ここでは参照を出さない。
+      expect(tool.toModelOutput?.(output)).toEqual({ type: "text", value: "The screen is 1280x800 pixels." });
+
+      // 保存した画像は、あとから組み立てる側（prompt.ts）が読める形で残っている。
+      const image = (output as { image: ImageRef }).image;
+      expect(image.sha256).toMatch(/^[0-9a-f]{64}$/);
+    });
+  });
+});
+
+describe("画面の操作", () => {
+  test("クリックは座標へ移動してから押す", async () => {
+    await withTools({}, async ({ tools, execCalls }) => {
+      expect(await callTool(tools, "computer_click", { x: 100, y: 200 })).toBe("clicked left 1 time(s) at 100,200");
+      expect(execCalls).toEqual([
+        ["xdotool", "mousemove", "100", "200"],
+        ["xdotool", "click", "--repeat", "1", "1"],
+      ]);
+    });
+  });
+
+  test("右クリックと連打もそのまま渡す", async () => {
+    await withTools({}, async ({ tools, execCalls }) => {
+      await callTool(tools, "computer_click", { x: 5, y: 6, button: "right", count: 2 });
+      expect(execCalls[1]).toEqual(["xdotool", "click", "--repeat", "2", "3"]);
+    });
+  });
+
+  test("ホイールは向きごとの番号で回す", async () => {
+    await withTools({}, async ({ tools, execCalls }) => {
+      await callTool(tools, "computer_scroll", { x: 10, y: 20, direction: "down" });
+      expect(execCalls).toEqual([
+        ["xdotool", "mousemove", "10", "20"],
+        ["xdotool", "click", "--repeat", "3", "5"],
+      ]);
+    });
+  });
+
+  test("打ち込む文字はシェルを介さずそのまま渡す", async () => {
+    await withTools({}, async ({ tools, execCalls }) => {
+      await callTool(tools, "computer_type", { text: "こんにちは 世界; rm -rf /" });
+      expect(execCalls).toEqual([["xdotool", "type", "--delay", "20", "--", "こんにちは 世界; rm -rf /"]]);
+    });
+  });
+
+  test("キーは組み合わせごと渡す", async () => {
+    await withTools({}, async ({ tools, execCalls }) => {
+      await callTool(tools, "computer_key", { key: "ctrl+c" });
+      expect(execCalls).toEqual([["xdotool", "key", "--", "ctrl+c"]]);
+    });
+  });
+
+  test("ウィンドウ一覧は、入力先が分かる形に整える", async () => {
+    await withTools(
+      {
+        shell: {
+          exitCode: 0,
+          stdout: [
+            "active|12345|xterm|WINDOW=12345 X=0 Y=0 WIDTH=1280 HEIGHT=800 SCREEN=0",
+            "window|67890|Chromium|WINDOW=67890 X=10 Y=20 WIDTH=800 HEIGHT=600 SCREEN=0",
+          ].join("\n"),
+          stderr: "",
+          truncated: false,
+          timedOut: false,
+        },
+      },
+      async ({ tools }) => {
+        expect(await callTool(tools, "computer_windows", {})).toBe(
+          "* 12345 xterm at 0,0 size 1280x800\n  67890 Chromium at 10,20 size 800x600",
+        );
+      },
+    );
+  });
+
+  test("ウィンドウが無ければ、そう返す", async () => {
+    await withTools({}, async ({ tools }) => {
+      expect(await callTool(tools, "computer_windows", {})).toBe("no visible windows");
+    });
+  });
+
+  test("アプリの起動は、引数を引用してから切り離して走らせる", async () => {
+    await withTools({}, async ({ tools, shellCalls }) => {
+      expect(await callTool(tools, "computer_open", { command: "xterm", args: ["-e", "echo こんにちは; ls"] })).toBe(
+        "started xterm",
+      );
+
+      expect(shellCalls).toHaveLength(1);
+      expect(shellCalls[0]).toBe("nohup 'xterm' '-e' 'echo こんにちは; ls' >/dev/null 2>&1 &");
+    });
+  });
+
+  test("待つのは指定した秒数だけ", async () => {
+    await withTools({}, async ({ tools }) => {
+      const started = Date.now();
+      expect(await callTool(tools, "computer_wait", { seconds: 0.05 })).toBe("waited 0.05 second(s)");
+      expect(Date.now() - started).toBeGreaterThanOrEqual(40);
+    });
+  });
+
+  test("xdotool が失敗したら、理由をそのまま投げる", async () => {
+    await withTools(
+      { execResult: { exitCode: 1, stdout: "", stderr: "window not found", truncated: false, timedOut: false } },
+      async ({ tools }) => {
+        const failure = await callTool(tools, "computer_click", { x: 1, y: 2 }).catch((error: unknown) => error);
+        expect(failure).toBeInstanceOf(Error);
+        expect((failure as Error).message).toBe("window not found");
+      },
+    );
+  });
+});
+
+describe("コンテナの中での実行", () => {
+  test("終了コードと標準出力・標準エラーを 1 つの結果にまとめる", async () => {
+    await withTools(
+      { shell: { exitCode: 1, stdout: "hello\n", stderr: "警告\n", truncated: false, timedOut: false } },
+      async ({ tools }) => {
+        expect(await callTool(tools, "computer_shell", { command: "echo hello" })).toBe(
+          "exit code: 1\n--- stdout ---\nhello\n--- stderr ---\n警告",
+        );
+      },
+    );
+  });
+
+  test("何も出力しないコマンドでも結果を返す", async () => {
+    await withTools({}, async ({ tools }) => {
+      expect(await callTool(tools, "computer_shell", { command: "true" })).toBe("exit code: 0");
+    });
+  });
+
+  test("切り詰めと打ち切りは、結果にその事実を残す", async () => {
+    await withTools(
+      { shell: { exitCode: -1, stdout: "長い出力", stderr: "", truncated: true, timedOut: true } },
+      async ({ tools }) => {
+        const output = (await callTool(tools, "computer_shell", { command: "yes" })) as string;
+        expect(output).toContain("cut off");
+        expect(output).toContain(`${SHELL_TIMEOUT_MS / 1000} seconds`);
+      },
+    );
+  });
+
+  test("コンテナが動いていなければ、実行せずに理由を投げる", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "terasuma-computer-"));
+    const stub = createPodmanStub({ running: false });
+    const container = createContainerManager({
+      dataDir: dir,
+      containerDir: join(dir, "container-files"),
+      command: stub.run,
+    });
+    const tools = createComputerTools({ container, images: createImageStore(dir), handover: createHandover(), sessionId: "s1" });
+
+    try {
+      const failure = await callTool(tools, "computer_shell", { command: "uname -a" }).catch(
+        (error: unknown) => error,
+      );
+      expect(failure).toBeInstanceOf(ContainerError);
+      expect((failure as ContainerError).code).toBe("container_not_running");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});

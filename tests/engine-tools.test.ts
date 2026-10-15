@@ -2,14 +2,24 @@ import { describe, expect, test } from "bun:test";
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import type { ModelSettings } from "../src/config";
-import { createMastraEngine, type EngineEvent, type SettingsReader, type ToolsetProvider } from "../src/server/engine";
+import { createComputerTools } from "../src/server/computer";
+import type { ContainerManager } from "../src/server/container";
+import {
+  createMastraEngine,
+  type ComputerToolsetProvider,
+  type EngineEvent,
+  type SettingsReader,
+  type ToolsetProvider,
+} from "../src/server/engine";
 import type { ChatMessage } from "../src/shared/types";
+import { createHandover } from "../src/server/handover";
+import { createComputerStub, createContainerStub, createImageStub } from "./support";
 
 /**
  * 1 回目の呼び出しではツールを呼び、2 回目では本文を返す偽のプロバイダ。
  * モデルへツールが渡り、呼び出しが実行されて結果が戻るまでを 1 つの流れで確かめる。
  */
-function startFakeProvider() {
+function startFakeProvider(call: { name: string; args: string } = { name: "local_echo", args: '{"text":"hi"}' }) {
   const bodies: Record<string, unknown>[] = [];
 
   const server = Bun.serve({
@@ -41,7 +51,7 @@ function startFakeProvider() {
                     index: 0,
                     id: "call-1",
                     type: "function",
-                    function: { name: "local_echo", arguments: '{"text":"hi"}' },
+                    function: { name: call.name, arguments: call.args },
                   },
                 ],
               },
@@ -66,6 +76,22 @@ function startFakeProvider() {
   });
 
   return { server, bodies };
+}
+
+/** shell だけを差し替えたコンテナ。実行されたコマンドを記録する。 */
+function createShellContainer(stdout: string): { container: ContainerManager; commands: string[] } {
+  const commands: string[] = [];
+
+  return {
+    commands,
+    container: {
+      ...createContainerStub(),
+      shell: async (script) => {
+        commands.push(script);
+        return { exitCode: 0, stdout, stderr: "", truncated: false, timedOut: false };
+      },
+    },
+  };
 }
 
 /** 記録できるツールを 1 つ持つ供給元。 */
@@ -123,11 +149,16 @@ function toolNames(body: Record<string, unknown> | undefined): string[] {
   });
 }
 
-async function run(provider: ToolsetProvider, settings: ModelSettings): Promise<EngineEvent[]> {
+async function run(
+  provider: ToolsetProvider,
+  settings: ModelSettings,
+  computer: ComputerToolsetProvider = createComputerStub(),
+): Promise<EngineEvent[]> {
   const reader: SettingsReader = { read: () => settings };
-  const stream = await createMastraEngine(reader, provider).stream({
+  const stream = await createMastraEngine(reader, provider, computer, createImageStub()).stream({
     history: history(),
     signal: new AbortController().signal,
+    sessionId: "s1",
   });
 
   const events: EngineEvent[] = [];
@@ -179,6 +210,45 @@ describe("MCP のツール呼び出し（Mastra 経由）", () => {
     try {
       await run({ toolset: async () => ({}) }, settingsFor(portOf(fake.server)));
       expect(fake.bodies[0]?.["tools"]).toBeUndefined();
+    } finally {
+      await fake.server.stop(true);
+    }
+  });
+
+  test("コンテナのツールもモデルへ渡り、computer_shell が実行される", async () => {
+    const fake = startFakeProvider({ name: "computer_shell", args: '{"command":"uname -a"}' });
+    const { container, commands } = createShellContainer("Linux test 7.0.0\n");
+
+    try {
+      const events = await run({ toolset: async () => ({}) }, settingsFor(portOf(fake.server)), {
+        toolset: async () => createComputerTools({ container, images: createImageStub(), handover: createHandover(), sessionId: "s1" }),
+      });
+
+      // MCP と同じ名前空間（"<ツールセット名>_<ツール名>"）でモデルへ渡る。
+      expect(toolNames(fake.bodies[0])).toContain("computer_shell");
+      expect(commands).toEqual(["uname -a"]);
+
+      expect(events).toEqual([
+        {
+          type: "tool-call",
+          part: { type: "tool-call", id: "call-1", server: "computer", tool: "shell", args: { command: "uname -a" } },
+        },
+        {
+          type: "tool-result",
+          part: {
+            type: "tool-result",
+            id: "call-1",
+            server: "computer",
+            tool: "shell",
+            failed: false,
+            output: "exit code: 0\n--- stdout ---\nLinux test 7.0.0",
+          },
+        },
+        { type: "text-delta", delta: "呼び出しました" },
+      ]);
+
+      // 2 回目の呼び出しには、シェルの結果が載っている。
+      expect(JSON.stringify(fake.bodies[1])).toContain("Linux test 7.0.0");
     } finally {
       await fake.server.stop(true);
     }

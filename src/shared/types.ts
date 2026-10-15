@@ -40,7 +40,23 @@ export type MessagePart =
       failed: boolean;
       /** ツールが返した内容（モデルへ渡るのと同じ文字列）。 */
       output: string;
+      /** ツールが返した画像。画像を返さないツールでは無い。 */
+      image?: ImageRef;
     };
+
+/**
+ * 保存した画像の在り処。
+ * 実体はデータディレクトリにファイルで置き、メッセージにはこの参照だけを持たせる
+ * （base64 を保存すると、会話を読み直すたびに大きな文字列を運ぶことになる）。
+ */
+export type ImageRef = {
+  /** ファイル名になる。画像の中身の sha256。 */
+  sha256: string;
+  /** image/png など。 */
+  mime: string;
+  width: number;
+  height: number;
+};
 
 export type ChatMessage = {
   id: string;
@@ -69,6 +85,7 @@ export type Session = {
 /**
  * API が返す機械可読なコード。画面に出す文言はクライアント側の i18n で解決する。
  * provider_* は、プロバイダの設定と接続確認で起きる失敗。
+ * container_* は、コンテナの準備と操作で起きる失敗。
  */
 export type ApiErrorCode =
   | "invalid_request"
@@ -84,6 +101,12 @@ export type ApiErrorCode =
   | "mcp_server_not_found"
   | "mcp_server_exists"
   | "mcp_authorization_failed"
+  | "container_unavailable"
+  | "container_build_failed"
+  | "container_start_failed"
+  | "container_stop_failed"
+  | "container_not_running"
+  | "handover_not_pending"
   | "settings_write_failed"
   | "internal_error";
 
@@ -231,4 +254,29 @@ export type McpServerForm = {
 export type McpAuthorizationView = {
   /** ブラウザで開く認可画面の URL。すでに認可済みなら null。 */
   url: string | null;
+};
+
+/**
+ * コンテナの状態。
+ * どこまで準備できているかを、podman への問い合わせだけで決める（Terasuma 側に台帳を持たない）。
+ */
+export type ContainerState =
+  /** podman が見つからない。 */
+  | "podman_missing"
+  /** イメージがまだ作られていない。 */
+  | "image_missing"
+  /** イメージはあるが、コンテナがまだ無い。 */
+  | "container_missing"
+  /** コンテナはあるが、動いていない。 */
+  | "stopped"
+  /** 動いている。 */
+  | "running";
+
+/** コンテナのいまの状態。設定画面とチャット画面はこれを見て案内を出す。 */
+export type ContainerStatusView = {
+  state: ContainerState;
+  /** 画面の中継に使うホスト側のポート。動いていないときは null。 */
+  vncPort: number | null;
+  /** 状態を決められなかったときの理由。無ければ null。 */
+  detail: string | null;
 };
