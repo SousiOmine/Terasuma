@@ -66,7 +66,10 @@ export type ChatMessage = {
   role: MessageRole;
   /** 本文（parts があるときは text 部分を連結したもの）。 */
   content: string;
-  /** ツール呼び出しを含むメッセージだけが持つ。含まないメッセージでは null。 */
+  /**
+   * ツール呼び出しを含むメッセージだけが持つ。含まないメッセージでは null。
+   * 画面には出さず、モデルへ渡す履歴にだけ使う。
+   */
   parts: MessagePart[] | null;
   /** epoch ミリ秒 */
   createdAt: number;
@@ -185,7 +188,8 @@ export type AddProviderForm = ProviderForm & {
 /**
  * 1 ターン分のストリーミングで流れるイベント。
  * ツール呼び出しの本体（引数・結果）はメッセージとして保存されるので、
- * ここでは流れてくる順に組み立てるための断片だけを運ぶ。
+ * ここでは流れてくる順にそのまま運ぶ。画面には本文だけを出すが、
+ * 引き受け（computer_ask_user）の始まりと終わりはツールのイベントで見る。
  */
 export type ChatEvent =
   | { type: "user-message"; message: ChatMessage }

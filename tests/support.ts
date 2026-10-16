@@ -69,8 +69,6 @@ export function createImageStub(): ImageStore {
       throw new Error("テスト用の差し替えでは画像を保存できません");
     },
     read: () => null,
-    find: () => null,
-    cacheControl: "no-store",
   };
 }
 

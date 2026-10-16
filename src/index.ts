@@ -51,7 +51,6 @@ const { server, portChanged } = startServer({
   settings,
   mcp,
   container,
-  images,
   handover,
 });
 boundPort = server.port ?? null;

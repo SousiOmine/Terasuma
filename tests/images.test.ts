@@ -46,25 +46,18 @@ describe("画像の置き場", () => {
     });
   });
 
-  test("保存した画像は、参照からもハッシュからも読める", () => {
+  test("保存した画像は、参照から読める", () => {
     withStore(({ store }) => {
       const png = testPng(100, 50);
       const ref = store.save(png, "image/png");
 
       expect(store.read(ref)).toEqual(png);
-
-      const found = store.find(ref.sha256);
-      expect(found?.mime).toBe("image/png");
-      expect(found?.data).toEqual(png);
     });
   });
 
   test("無い画像は null を返す（例外にしない）", () => {
     withStore(({ store }) => {
-      expect(store.find("0".repeat(64))).toBeNull();
-      // ハッシュの形でない値は、パスを組み立てる前に断る。
-      expect(store.find("../../etc/passwd")).toBeNull();
-      expect(store.find("短い")).toBeNull();
+      expect(store.read({ sha256: "0".repeat(64), mime: "image/png", width: 1, height: 1 })).toBeNull();
     });
   });
 

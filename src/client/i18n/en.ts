@@ -17,7 +17,7 @@ export const en = {
 
   "chat.empty.title": "What can I help you with?",
   "chat.loading": "Loading…",
-  "chat.replying": "Replying…",
+  "chat.working": "Working…",
 
   "chat.model.unset": "No model is configured. Add a provider in Settings.",
   "chat.model.providerMissing": "The provider for the default model is missing. Choose another model in Settings.",
@@ -218,12 +218,6 @@ export const en = {
   "error.network": "The server is not reachable.",
   "error.input": "Check the input.",
   "error.dismiss": "Dismiss",
-
-  "chat.tool.running": "Running…",
-  "chat.tool.failed": "Failed",
-  "chat.tool.args": "Arguments",
-  "chat.tool.result": "Result",
-  "chat.tool.screen": "Screen",
 } as const;
 
 export type MessageKey = keyof typeof en;

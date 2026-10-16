@@ -8,7 +8,7 @@ import { createStore } from "../src/server/store";
 import type { Store } from "../src/server/store";
 import { decodeChatEvents } from "../src/shared/sse";
 import type { ApiErrorCode, ChatEvent, ChatMessage, Session } from "../src/shared/types";
-import { TEST_SETTINGS, createContainerStub, createImageStub, createMcpStub, withTempSettings } from "./support";
+import { TEST_SETTINGS, createContainerStub, createMcpStub, withTempSettings } from "./support";
 
 const config: AppConfig = {
   host: "127.0.0.1",
@@ -49,7 +49,7 @@ async function withServer<T>(
 ): Promise<T> {
   return withTempSettings(TEST_SETTINGS, async (settings) => {
     const store = makeStore();
-    const { server } = startServer({ config, store, engine, settings, mcp: createMcpStub(), container: createContainerStub(), images: createImageStub(), handover: createHandover() });
+    const { server } = startServer({ config, store, engine, settings, mcp: createMcpStub(), container: createContainerStub(), handover: createHandover() });
     const base = server.url;
 
     const request = (path: string, init?: RequestInit) => fetch(new URL(path, base), init);

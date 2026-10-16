@@ -12,7 +12,6 @@ import type {
 import { resolveModel, type AgentEngine } from "./engine";
 import { ContainerError, type ContainerErrorCode, type ContainerManager } from "./container";
 import type { Handover } from "./handover";
-import type { ImageStore } from "./images";
 import { describeError } from "../shared/errors";
 import { jsonError } from "./errors";
 import {
@@ -70,8 +69,6 @@ export type ApiDeps = {
   mcp: McpManager;
   /** podman で動かすコンテナ。設定画面からの起動とリセットもここを通す。 */
   container: ContainerManager;
-  /** ツールが撮った画像の置き場。画面へはここから返す。 */
-  images: ImageStore;
   /** ユーザーへ画面を渡す待ち。チャットからの返事をここへ届ける。 */
   handover: Handover;
   /** models.dev のカタログ。プロバイダとモデルの一覧はここから取る。 */
@@ -560,23 +557,6 @@ export function createApiHandlers(deps: ApiDeps) {
         "このタブを閉じて、Terasuma の画面に戻ってください。",
         "Authorization is complete. Close this tab and return to Terasma.",
       ]);
-    },
-
-    /**
-     * 保存した画像を返す。
-     * 中身がハッシュで決まるので、URL ごと長くキャッシュさせてよい。
-     */
-    readImage(req: ApiRequest<{ sha256: string }>): Response {
-      const found = deps.images.find(req.params.sha256);
-      if (found === null) return jsonError(404, "invalid_request", "画像がありません");
-
-      // Bun の Response は Uint8Array をそのまま body に取れる（DOM の型定義が追いついていない）。
-      return new Response(found.data as unknown as BodyInit, {
-        headers: {
-          "Content-Type": found.mime,
-          "Cache-Control": deps.images.cacheControl,
-        },
-      });
     },
 
     /**

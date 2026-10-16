@@ -8,7 +8,7 @@ import type { ImageRef } from "../shared/types";
  *
  * 会話には参照（ハッシュ・種類・大きさ）だけを残し、実体はここに置く。
  * 同じ中身なら同じファイルを使い回すので、同じ画面を何度撮っても増えない。
- * 画面へは /api/images/<sha256> で返す。
+ * 画面には出さず、モデルへ渡すときにここから読み直す。
  */
 
 /**
@@ -19,29 +19,17 @@ import type { ImageRef } from "../shared/types";
 const IMAGE_MIME = "image/png";
 const IMAGE_EXTENSION = "png";
 
-/** 中身がハッシュで決まるので、URL ごと長く持たせてよい。 */
-const CACHE_CONTROL = "public, max-age=31536000, immutable";
-
 /** ファイル名に使えるハッシュの形。パスを組み立てる前に必ずこれで確かめる。 */
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
 
 /** ディレクトリ名。データディレクトリの直下に置く。 */
 const IMAGES_DIR_NAME = "images";
 
-export type FoundImage = {
-  data: Uint8Array;
-  mime: string;
-};
-
 export type ImageStore = {
   /** 画像を保存して参照を返す。同じ中身なら同じ参照になる。 */
   save(data: Uint8Array, mime: string): ImageRef;
   /** 参照から実体を読む。ファイルが無ければ null。 */
   read(ref: ImageRef): Uint8Array | null;
-  /** 配信のために、ハッシュから実体を探す。 */
-  find(sha256: string): FoundImage | null;
-  /** 配信のときに付けるヘッダ。 */
-  cacheControl: string;
 };
 
 export function createImageStore(dataDir: string): ImageStore {
@@ -52,8 +40,6 @@ export function createImageStore(dataDir: string): ImageStore {
   }
 
   return {
-    cacheControl: CACHE_CONTROL,
-
     save(data, mime) {
       if (mime !== IMAGE_MIME) {
         throw new Error(`扱えない画像の種類です: ${mime}（いまは ${IMAGE_MIME} だけを扱えます）`);
@@ -79,14 +65,6 @@ export function createImageStore(dataDir: string): ImageStore {
 
       const file = fileFor(ref.sha256);
       return existsSync(file) ? readFileSync(file) : null;
-    },
-
-    find(sha256) {
-      // ハッシュ以外を受け付けない（パスを組み立てる材料にするため）。
-      if (!SHA256_PATTERN.test(sha256)) return null;
-
-      const file = fileFor(sha256);
-      return existsSync(file) ? { data: readFileSync(file), mime: IMAGE_MIME } : null;
     },
   };
 }

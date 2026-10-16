@@ -5,7 +5,7 @@ import { startServer } from "../src/server/server";
 import { createStore } from "../src/server/store";
 import type { ContainerManager } from "../src/server/container";
 import { createHandover } from "../src/server/handover";
-import { TEST_SETTINGS, createContainerStub, createImageStub, createMcpStub, withTempSettings } from "./support";
+import { TEST_SETTINGS, createContainerStub, createMcpStub, withTempSettings } from "./support";
 
 /**
  * 画面の中継の確認。
@@ -59,7 +59,6 @@ async function withScreenServer<T>(
       settings,
       mcp: createMcpStub(),
       container,
-      images: createImageStub(),
       handover: createHandover(),
     });
 

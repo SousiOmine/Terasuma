@@ -1,5 +1,5 @@
 import { computed, signal } from "@preact/signals";
-import type { ChatEvent, ChatMessage, MessagePart, Session } from "../shared/types";
+import type { ChatEvent, ChatMessage, Session } from "../shared/types";
 import * as api from "./api";
 import { loadContainer, showContainerError } from "./containerSettings";
 import { toErrorState } from "./errors";
@@ -19,10 +19,10 @@ export const sessions = signal<readonly Session[]>([]);
 export const activeSessionId = signal<string | null>(null);
 export const messages = signal<readonly ChatMessage[]>([]);
 /**
- * 生成中の応答。本文とツールの出来事を、保存されるのと同じ並びで組み立てる。
- * 完了すると messages へ移り、ここは空に戻る。
+ * 生成中の本文。完了すると messages へ移り、ここは空に戻る。
+ * ツールの呼び出しと結果は画面に出さないので、ここには持たない（引き受けの判定にだけ使う）。
  */
-export const streamingParts = signal<readonly MessagePart[]>([]);
+export const streamingText = signal("");
 export const isStreaming = signal(false);
 export const isLoadingMessages = signal(false);
 export const errorCode = signal<api.ClientErrorCode | null>(null);
@@ -134,7 +134,7 @@ export function startNewChat(): void {
   // セッション行はサーバ側で最初の送信時に作られる。ここでは id だけ先に決めておく。
   activeSessionId.value = crypto.randomUUID();
   messages.value = [];
-  streamingParts.value = [];
+  streamingText.value = "";
 }
 
 export async function openSession(id: string): Promise<void> {
@@ -174,7 +174,7 @@ export async function sendMessage(rawContent: string): Promise<void> {
   const abort = new AbortController();
   controller = abort;
   isStreaming.value = true;
-  streamingParts.value = [];
+  streamingText.value = "";
 
   try {
     for await (const event of api.streamTurn(sessionId, content, abort.signal)) {
@@ -184,7 +184,7 @@ export async function sendMessage(rawContent: string): Promise<void> {
     reportError(error);
   } finally {
     isStreaming.value = false;
-    streamingParts.value = [];
+    streamingText.value = "";
     controller = null;
   }
 
@@ -258,24 +258,22 @@ function applyEvent(event: ChatEvent): void {
       messages.value = [...messages.value, event.message];
       break;
     case "assistant-start":
-      streamingParts.value = [];
+      streamingText.value = "";
       break;
     case "text-delta":
-      streamingParts.value = appendText(streamingParts.value, event.delta);
+      streamingText.value += event.delta;
       break;
     case "tool-call":
-      // 画面を渡す頼みが来たら、その場で操作できる状態にする。
+      // ツールの呼び出しは画面に出さない。画面を渡す頼みが来たときだけ、その場で操作できる状態にする。
       if (isAskUser(event.part)) beginHandover(questionOf(event.part.args));
-      streamingParts.value = [...streamingParts.value, event.part];
       break;
     case "tool-result":
-      // 引き受けの結果が届いたら、見るだけに戻す。
+      // こちらも画面には出さない。引き受けの結果が届いたら、見るだけに戻す。
       if (isAskUser(event.part) && event.part.failed === false) endHandover();
-      streamingParts.value = [...streamingParts.value, event.part];
       break;
     case "assistant-done":
       messages.value = [...messages.value, event.message];
-      streamingParts.value = [];
+      streamingText.value = "";
       break;
     case "error":
       errorCode.value = event.code;
@@ -285,8 +283,8 @@ function applyEvent(event: ChatEvent): void {
 }
 
 /** 画面を渡す呼び出しかどうか。 */
-function isAskUser(part: MessagePart): boolean {
-  return part.type !== "text" && part.server === "computer" && part.tool === "ask_user";
+function isAskUser(part: { server: string; tool: string }): boolean {
+  return part.server === "computer" && part.tool === "ask_user";
 }
 
 /** 呼び出しの引数から、ユーザーへ見せる頼みを取り出す。 */
@@ -310,14 +308,6 @@ function endHandover(): void {
   handoverActive.value = false;
   handoverQuestion.value = null;
   computerViewOnly.value = true;
-}
-
-/** 本文は末尾に足す。無ければ新しく始める（signal は差し替えて再描画させる）。 */
-function appendText(parts: readonly MessagePart[], delta: string): readonly MessagePart[] {
-  const last = parts.at(-1);
-  if (last?.type !== "text") return [...parts, { type: "text", text: delta }];
-
-  return [...parts.slice(0, -1), { type: "text", text: last.text + delta }];
 }
 
 function reportError(error: unknown): void {

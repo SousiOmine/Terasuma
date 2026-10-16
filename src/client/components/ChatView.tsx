@@ -13,7 +13,7 @@ import {
   isStreaming,
   messages,
   openSettings,
-  streamingParts,
+  streamingText,
   toggleComputerPane,
 } from "../state";
 import { Composer } from "./Composer";
@@ -22,7 +22,7 @@ import { MessageBubble } from "./MessageBubble";
 
 export function ChatView() {
   const items = messages.value;
-  const pending = streamingParts.value;
+  const pending = streamingText.value;
   const streaming = isStreaming.value;
   const loading = isLoadingMessages.value;
   const error = errorCode.value;
@@ -41,18 +41,17 @@ export function ChatView() {
   const bubbles = useMemo(
     () =>
       items.map((message) => (
-        <MessageBubble key={message.id} role={message.role} content={message.content} parts={message.parts} />
+        <MessageBubble key={message.id} role={message.role} content={message.content} />
       )),
     [items],
   );
 
   // 新しい内容が来たら末尾へ寄せる。会話が伸びる操作は送信とストリーミングだけなので十分。
-  // 本文は少しずつ伸びるので、部品の数だけでは足りない（文字数も見る）。
-  const pendingLength = pending.reduce((total, part) => total + (part.type === "text" ? part.text.length : 1), 0);
+  // 本文は少しずつ伸びるので、メッセージの数だけでは足りない（文字数も見る）。
   useEffect(() => {
     const node = scrollRef.current;
     if (node !== null && stickToBottom.current) node.scrollTop = node.scrollHeight;
-  }, [items.length, pendingLength, loading]);
+  }, [items.length, pending.length, loading]);
 
   const handleScroll = (): void => {
     const node = scrollRef.current;
@@ -63,7 +62,7 @@ export function ChatView() {
   };
 
   const title = activeSession.value?.title ?? t("sidebar.untitled");
-  const showEmpty = !loading && items.length === 0 && pending.length === 0;
+  const showEmpty = !loading && items.length === 0 && !streaming;
 
   return (
     <main class="flex min-w-0 flex-1 flex-col">
@@ -125,8 +124,7 @@ export function ChatView() {
         ) : (
           <div class="mx-auto flex w-full max-w-3xl flex-col gap-6 px-5 py-8">
             {bubbles}
-            {pending.length > 0 && <MessageBubble role="assistant" content="" parts={pending} />}
-            {streaming && pending.length === 0 && <Replying />}
+            {streaming && <MessageBubble role="assistant" content={pending} working />}
             {loading && <p class="text-sm text-neutral-500 dark:text-neutral-400">{t("chat.loading")}</p>}
           </div>
         )}
@@ -169,8 +167,4 @@ function EmptyState() {
       <h2 class="text-lg font-medium">{t("chat.empty.title")}</h2>
     </div>
   );
-}
-
-function Replying() {
-  return <p class="text-sm text-neutral-500 dark:text-neutral-400">{t("chat.replying")}</p>;
 }

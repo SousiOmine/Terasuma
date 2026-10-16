@@ -16,7 +16,7 @@ import type { ProviderCheckResult } from "../src/shared/types";
 import { createSettingsStore, type SettingsStore } from "../src/server/settings";
 import { createStore } from "../src/server/store";
 import { createHandover } from "../src/server/handover";
-import { createContainerStub, createImageStub, createMcpStub } from "./support";
+import { createContainerStub, createMcpStub } from "./support";
 import type { ModelSettingsView, ProviderView, ReasoningView } from "../src/shared/types";
 
 /** テストで使うカタログの中身。deepseek はカタログのプロバイダ、custom-1 は独自エンドポイント。 */
@@ -151,7 +151,6 @@ async function withModelServer<T>(
     settings,
     mcp: createMcpStub(),
     container: createContainerStub(),
-    images: createImageStub(),
     handover: createHandover(),
     catalog: catalog.catalog,
     checkConnection: check.checkConnection,

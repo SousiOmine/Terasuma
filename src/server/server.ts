@@ -5,7 +5,6 @@ import type { AppConfig } from "../config";
 import { type ContainerManager } from "./container";
 import type { AgentEngine } from "./engine";
 import type { Handover } from "./handover";
-import type { ImageStore } from "./images";
 import { describeError } from "../shared/errors";
 import { jsonError } from "./errors";
 import type { McpManager } from "./mcp";
@@ -31,8 +30,6 @@ export type ServerOptions = {
   mcp: McpManager;
   /** podman で動かすコンテナ。設定画面からの操作もここを通る。 */
   container: ContainerManager;
-  /** ツールが撮った画像の置き場。配信もここから行う。 */
-  images: ImageStore;
   /** ユーザーへ画面を渡す待ち。 */
   handover: Handover;
   /** models.dev のカタログ。テストで差し替える。 */
@@ -76,14 +73,13 @@ const ANY_FREE_PORT = 0;
  * ルートはここでリテラルのパスとして並べる（Bun のルータは文字列リテラルからパラメータ型を作る）。
  */
 export function startServer(options: ServerOptions): StartedServer {
-  const { config, store, engine, settings, mcp, container, images, handover } = options;
+  const { config, store, engine, settings, mcp, container, handover } = options;
   const api = createApiHandlers({
     store,
     engine,
     settings,
     mcp,
     container,
-    images,
     handover,
     catalog: options.catalog ?? createCatalog({ cachePath: join(config.dataDir, CATALOG_FILE_NAME) }),
     checkConnection: options.checkConnection ?? createConnectionChecker(),
@@ -152,10 +148,6 @@ export function startServer(options: ServerOptions): StartedServer {
         "/api/mcp/servers/:id/authorize": {
           POST: api.authorizeMcpServer,
           DELETE: api.cancelMcpAuthorization,
-        },
-        // ツールが撮った画像。中身がハッシュで決まるので、URL ごと長くキャッシュさせてよい。
-        "/api/images/:sha256": {
-          GET: api.readImage,
         },
         "/api/container": {
           GET: api.readContainer,

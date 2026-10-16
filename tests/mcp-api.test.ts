@@ -10,7 +10,7 @@ import { createSettingsStore, type SettingsStore } from "../src/server/settings"
 import { createStore } from "../src/server/store";
 import type { McpServerStatusView, McpServersView, McpTestView } from "../src/shared/types";
 import { createHandover } from "../src/server/handover";
-import { createContainerStub, createImageStub } from "./support";
+import { createContainerStub } from "./support";
 
 const UNKNOWN: McpServerStatusView = { state: "unknown", tools: [], detail: null };
 
@@ -101,7 +101,6 @@ async function withMcpServer<T>(
     settings,
     mcp: stub.manager,
     container: createContainerStub(),
-    images: createImageStub(),
     handover: createHandover(),
   });
 

@@ -8,7 +8,7 @@ import { startServer } from "../src/server/server";
 import { createStore } from "../src/server/store";
 import type { ContainerStatusView } from "../src/shared/types";
 import { createHandover } from "../src/server/handover";
-import { TEST_SETTINGS, createImageStub, createMcpStub, createPodmanStub, withTempSettings, type PodmanStubBehaviour } from "./support";
+import { TEST_SETTINGS, createMcpStub, createPodmanStub, withTempSettings, type PodmanStubBehaviour } from "./support";
 
 /** コンテナの API を、podman を差し替えた状態で HTTP 越しに確かめる。 */
 async function withContainerServer<T>(
@@ -41,7 +41,6 @@ async function withContainerServer<T>(
         settings,
         mcp: createMcpStub(),
         container,
-        images: createImageStub(),
         handover: createHandover(),
       });
 

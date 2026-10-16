@@ -16,7 +16,7 @@ export const ja: Record<MessageKey, string> = {
 
   "chat.empty.title": "何をお手伝いしましょうか",
   "chat.loading": "読み込み中…",
-  "chat.replying": "応答を生成しています…",
+  "chat.working": "作業中…",
 
   "chat.model.unset": "使用するモデルが設定されていません。設定からプロバイダを追加してください。",
   "chat.model.providerMissing": "既定のモデルを使うプロバイダがありません。設定で選び直してください。",
@@ -218,10 +218,4 @@ export const ja: Record<MessageKey, string> = {
   "error.network": "サーバーに接続できません。",
   "error.input": "入力を確認してください。",
   "error.dismiss": "閉じる",
-
-  "chat.tool.running": "実行中…",
-  "chat.tool.failed": "失敗",
-  "chat.tool.args": "引数",
-  "chat.tool.result": "結果",
-  "chat.tool.screen": "画面",
 };
