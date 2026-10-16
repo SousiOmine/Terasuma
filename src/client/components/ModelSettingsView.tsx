@@ -224,7 +224,7 @@ export function ModelSettingsView() {
               : "settings.model.providers.deleteMessage",
           )}
           confirmLabel={t("settings.model.providers.delete")}
-          cancelLabel={t("sidebar.cancel")}
+          cancelLabel={t("common.cancel")}
           danger
           onConfirm={() => void confirmDelete()}
           onCancel={() => setDeleting(null)}

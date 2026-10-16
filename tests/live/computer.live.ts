@@ -8,6 +8,7 @@
  */
 import { expect, test } from "bun:test";
 import { join } from "node:path";
+import { DEFAULT_TERA_ID } from "../../src/server/store";
 import type { MessagePart } from "../../src/shared/types";
 import {
   CONTAINER_TIMEOUT_MS,
@@ -55,7 +56,7 @@ test(
       expect(written.exitCode, `ページを置けなかった: ${written.stderr}`).toBe(0);
 
       const events = await harness.send(
-        "live-desktop",
+        DEFAULT_TERA_ID,
         [
           "コンピュータ（Debian のデスクトップ）を操作してください。",
           `1. computer_open ツールで chromium を起動し、引数に file:///home/agent/${PAGE_NAME} を渡して表示させてください。`,
@@ -81,7 +82,7 @@ test(
       if (image === undefined) throw new Error(`撮った画像の参照が残っていない: ${result.part.output}`);
       console.log(`  画面: ${join(harness.dataDir, "images", `${image.sha256}.png`)}（${image.width}x${image.height}）`);
 
-      const parts = (await harness.messages("live-desktop"))[1]?.parts ?? [];
+      const parts = (await harness.messages(DEFAULT_TERA_ID))[1]?.parts ?? [];
       const saved = parts.find(
         (part): part is Extract<MessagePart, { type: "tool-result" }> =>
           part.type === "tool-result" && part.id === shot.part.id,

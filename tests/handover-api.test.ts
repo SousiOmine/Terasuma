@@ -45,20 +45,20 @@ async function withHandoverServer<T>(
   });
 }
 
-function handoverRequest(sessionId: string, body: Record<string, unknown>): RequestInit {
+function handoverRequest(teraId: string, body: Record<string, unknown>): RequestInit {
   return {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ sessionId, ...body }),
+    body: JSON.stringify({ teraId, ...body }),
   };
 }
 
 describe("引き受けの API", () => {
   test("チャットの文が、待っているツールの戻り値になる", async () => {
     await withHandoverServer(async ({ request, handover }) => {
-      const waiting = handover.wait("s1", new AbortController().signal);
+      const waiting = handover.wait("t1", new AbortController().signal);
 
-      const response = await request("/api/computer/handover", handoverRequest("s1", { kind: "text", text: "認証できた" }));
+      const response = await request("/api/computer/handover", handoverRequest("t1", { kind: "text", text: "認証できた" }));
       expect(response.status).toBe(204);
       expect(await waiting).toBe("認証できた");
     });
@@ -66,17 +66,17 @@ describe("引き受けの API", () => {
 
   test("「操作を完了した」も同じ経路で返せる", async () => {
     await withHandoverServer(async ({ request, handover }) => {
-      const waiting = handover.wait("s1", new AbortController().signal);
+      const waiting = handover.wait("t1", new AbortController().signal);
 
-      const response = await request("/api/computer/handover", handoverRequest("s1", { kind: "done" }));
+      const response = await request("/api/computer/handover", handoverRequest("t1", { kind: "done" }));
       expect(response.status).toBe(204);
       expect(await waiting).toContain("操作を完了しました");
     });
   });
 
-  test("待っていないセッションへの返事は 409", async () => {
+  test("待っていない Tera への返事は 409", async () => {
     await withHandoverServer(async ({ request }) => {
-      const response = await request("/api/computer/handover", handoverRequest("s1", { kind: "done" }));
+      const response = await request("/api/computer/handover", handoverRequest("t1", { kind: "done" }));
       expect(response.status).toBe(409);
       expect(((await response.json()) as { code: string }).code).toBe("handover_not_pending");
     });
@@ -85,12 +85,12 @@ describe("引き受けの API", () => {
   test("壊れた入力は 400 で弾く", async () => {
     await withHandoverServer(async ({ request, handover }) => {
       // 待っている状態でも、空の文は通さない（ツールの戻り値が空になるため）。
-      const waiting = handover.wait("s1", new AbortController().signal);
+      const waiting = handover.wait("t1", new AbortController().signal);
 
-      const empty = await request("/api/computer/handover", handoverRequest("s1", { kind: "text", text: "   " }));
+      const empty = await request("/api/computer/handover", handoverRequest("t1", { kind: "text", text: "   " }));
       expect(empty.status).toBe(400);
 
-      const unknownKind = await request("/api/computer/handover", handoverRequest("s1", { kind: "whatever" }));
+      const unknownKind = await request("/api/computer/handover", handoverRequest("t1", { kind: "whatever" }));
       expect(unknownKind.status).toBe(400);
 
       const noSession = await request("/api/computer/handover", {
@@ -101,7 +101,7 @@ describe("引き受けの API", () => {
       expect(noSession.status).toBe(400);
 
       // どれも受け付けていないので、待ちは残ったまま。
-      expect(handover.answer("s1", { kind: "done" })).toBe(true);
+      expect(handover.answer("t1", { kind: "done" })).toBe(true);
       expect(await waiting).toBe("ユーザーは操作を完了しました");
     });
   });

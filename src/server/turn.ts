@@ -21,15 +21,15 @@ export type TurnDeps = {
  */
 export async function* runTurn(
   deps: TurnDeps,
-  sessionId: string,
+  teraId: string,
   content: string,
   signal: AbortSignal,
   running: Set<string>,
 ): AsyncGenerator<ChatEvent> {
   try {
-    yield* turnEvents(deps, sessionId, content, signal);
+    yield* turnEvents(deps, teraId, content, signal);
   } finally {
-    running.delete(sessionId);
+    running.delete(teraId);
   }
 }
 
@@ -39,16 +39,16 @@ export async function* runTurn(
  */
 async function* turnEvents(
   deps: TurnDeps,
-  sessionId: string,
+  teraId: string,
   content: string,
   signal: AbortSignal,
 ): AsyncGenerator<ChatEvent> {
   const { store, engine } = deps;
 
-  store.ensureSession(sessionId, content);
+  // Tera は起動時に用意されている（無い id は、ここへ来る前に断っている）。
   const userMessage = store.appendMessage({
     id: crypto.randomUUID(),
-    sessionId,
+    teraId,
     role: "user",
     content,
   });
@@ -59,7 +59,7 @@ async function* turnEvents(
 
   // 保存済み履歴をそのまま渡す。要約も並べ替えもしない
   // （プロンプトキャッシュが当たり続けるようにするため）。
-  const history = store.listMessages(sessionId);
+  const history = store.listMessages(teraId);
 
   /** 生成中の本文とツールの出来事。保存される並びそのものになる。 */
   const parts: MessagePart[] = [];
@@ -93,7 +93,7 @@ async function* turnEvents(
 
     finalMessage = store.appendMessage({
       id: assistantId,
-      sessionId,
+      teraId,
       role: "assistant",
       content: storedText(),
       parts: storedParts(),
@@ -102,7 +102,7 @@ async function* turnEvents(
   };
 
   try {
-    const stream = await engine.stream({ history, signal, sessionId });
+    const stream = await engine.stream({ history, signal, teraId });
 
     for await (const event of stream.events) {
       switch (event.type) {

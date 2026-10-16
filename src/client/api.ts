@@ -19,7 +19,7 @@ import type {
   ProviderCredentials,
   ProviderForm,
   ReasoningView,
-  Session,
+  Tera,
 } from "../shared/types";
 
 /** サーバが返すコードに、クライアント側だけで発生するコードを足したもの。 */
@@ -52,25 +52,16 @@ export class ApiError extends Error {
   }
 }
 
-export async function listSessions(): Promise<readonly Session[]> {
-  const body = await request<{ sessions: Session[] }>("/api/sessions");
-  return body.sessions;
+/** 画面に並べる Tera の一覧。 */
+export async function listTeras(): Promise<readonly Tera[]> {
+  const body = await request<{ teras: Tera[] }>("/api/teras");
+  return body.teras;
 }
 
-export async function listMessages(sessionId: string): Promise<readonly ChatMessage[]> {
-  const body = await request<{ messages: ChatMessage[] }>(messagesPath(sessionId));
+/** その Tera の履歴（古い順）。 */
+export async function listMessages(teraId: string): Promise<readonly ChatMessage[]> {
+  const body = await request<{ messages: ChatMessage[] }>(messagesPath(teraId));
   return body.messages;
-}
-
-export async function deleteSession(sessionId: string): Promise<void> {
-  let response: Response;
-  try {
-    response = await fetch(sessionPath(sessionId), { method: "DELETE" });
-  } catch (error) {
-    throw new ApiError("network", describeError(error));
-  }
-
-  if (!response.ok) throw await toApiError(response);
 }
 
 /**
@@ -78,13 +69,13 @@ export async function deleteSession(sessionId: string): Promise<void> {
  * 途中で AbortSignal が立った場合は、例外にせずそのまま終了する（利用者の「停止」操作）。
  */
 export async function* streamTurn(
-  sessionId: string,
+  teraId: string,
   content: string,
   signal: AbortSignal,
 ): AsyncGenerator<ChatEvent> {
   let response: Response;
   try {
-    response = await fetch(messagesPath(sessionId), {
+    response = await fetch(messagesPath(teraId), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ content }),
@@ -120,12 +111,12 @@ export async function* streamTurn(
   }
 }
 
-function sessionPath(sessionId: string): string {
-  return `/api/sessions/${encodeURIComponent(sessionId)}`;
+function teraPath(teraId: string): string {
+  return `/api/teras/${encodeURIComponent(teraId)}`;
 }
 
-function messagesPath(sessionId: string): string {
-  return `${sessionPath(sessionId)}/messages`;
+function messagesPath(teraId: string): string {
+  return `${teraPath(teraId)}/messages`;
 }
 
 /**
@@ -244,12 +235,12 @@ function mcpServerPath(serverId: string): string {
  * どちらも computer_ask_user の戻り値になる。
  */
 export async function answerHandover(
-  sessionId: string,
+  teraId: string,
   answer: { kind: "done" } | { kind: "text"; text: string },
 ): Promise<void> {
   let response: Response;
   try {
-    response = await fetch(HANDOVER_PATH, jsonRequest("POST", { sessionId, ...answer }));
+    response = await fetch(HANDOVER_PATH, jsonRequest("POST", { teraId, ...answer }));
   } catch (error) {
     throw new ApiError("network", describeError(error));
   }

@@ -83,9 +83,9 @@ export function createApiHandlers(deps: ApiDeps) {
   const { store, settings } = deps;
 
   /**
-   * いま応答を生成しているセッション。
-   * 同じセッションでターンが重なると、履歴の並びと引き受けの待ちが壊れる。
-   * 画面は 1 つのターンしか始めないが、別のタブから同じ会話を開けるため、ここでも断る。
+   * いま応答を生成している Tera。
+   * 同じ Tera でターンが重なると、履歴の並びと引き受けの待ちが壊れる。
+   * 画面は 1 つのターンしか始めないが、別のタブから同じ Tera を開けるため、ここでも断る。
    */
   const turnRunning = new Set<string>();
 
@@ -148,27 +148,21 @@ export function createApiHandlers(deps: ApiDeps) {
   }
 
   return {
-    listSessions(): Response {
-      return Response.json({ sessions: store.listSessions() });
-    },
-
-    deleteSession(req: ApiRequest<{ id: string }>): Response {
-      if (!store.deleteSession(req.params.id)) {
-        return jsonError(404, "session_not_found");
-      }
-      return new Response(null, { status: 204 });
+    /** 画面に並べる Tera の一覧。いまは既定の 1 体だけ。 */
+    listTeras(): Response {
+      return Response.json({ teras: store.listTeras() });
     },
 
     listMessages(req: ApiRequest<{ id: string }>): Response {
-      if (store.getSession(req.params.id) === null) {
-        return jsonError(404, "session_not_found");
+      if (store.getTera(req.params.id) === null) {
+        return jsonError(404, "tera_not_found");
       }
       return Response.json({ messages: store.listMessages(req.params.id) });
     },
 
     /**
      * ユーザー発言を保存し、そのターンの応答を SSE で流す。
-     * セッションはクライアントが生成した id で、初回送信時にここで作られる。
+     * 会話は Tera ごとに 1 本なので、履歴はこの Tera に追記されていく。
      */
     async sendMessage(req: ApiRequest<{ id: string }>): Promise<Response> {
       const body = await readJsonBody(req);
@@ -178,7 +172,11 @@ export function createApiHandlers(deps: ApiDeps) {
         return jsonError(400, "invalid_request", "content must be a non-empty string");
       }
 
-      // モデルを呼べない状態なら、セッションも作らずに理由を返す。
+      if (store.getTera(req.params.id) === null) {
+        return jsonError(404, "tera_not_found");
+      }
+
+      // モデルを呼べない状態なら、ターンを始めずに理由を返す。
       // 呼び出しの中で初めて失敗すると、画面には「モデルから応答を得られませんでした」としか出せない。
       const resolution = resolveModel(settings.read());
       if (!resolution.ok) {
@@ -186,7 +184,7 @@ export function createApiHandlers(deps: ApiDeps) {
       }
 
       if (turnRunning.has(req.params.id)) {
-        return jsonError(409, "turn_in_progress", "この会話はほかで応答を生成しています");
+        return jsonError(409, "turn_in_progress", "この Tera はほかで応答を生成しています");
       }
 
       turnRunning.add(req.params.id);
@@ -565,9 +563,9 @@ export function createApiHandlers(deps: ApiDeps) {
      */
     async answerHandover(req: ApiRequest): Promise<Response> {
       const body = await readJsonBody(req);
-      const sessionId = typeof body?.["sessionId"] === "string" ? body["sessionId"] : "";
-      if (sessionId.length === 0) {
-        return jsonError(400, "invalid_request", "sessionId を指定してください");
+      const teraId = typeof body?.["teraId"] === "string" ? body["teraId"] : "";
+      if (teraId.length === 0) {
+        return jsonError(400, "invalid_request", "teraId を指定してください");
       }
 
       const kind = body?.["kind"];
@@ -576,15 +574,15 @@ export function createApiHandlers(deps: ApiDeps) {
         const text = typeof raw === "string" ? raw.trim() : "";
         if (text.length === 0) return jsonError(400, "invalid_request", "送る文が空です");
 
-        if (!deps.handover.answer(sessionId, { kind: "text", text })) {
-          return jsonError(409, "handover_not_pending", "この会話は操作を待っていません");
+        if (!deps.handover.answer(teraId, { kind: "text", text })) {
+          return jsonError(409, "handover_not_pending", "この Tera は操作を待っていません");
         }
         return new Response(null, { status: 204 });
       }
 
       if (kind === "done") {
-        if (!deps.handover.answer(sessionId, { kind: "done" })) {
-          return jsonError(409, "handover_not_pending", "この会話は操作を待っていません");
+        if (!deps.handover.answer(teraId, { kind: "done" })) {
+          return jsonError(409, "handover_not_pending", "この Tera は操作を待っていません");
         }
         return new Response(null, { status: 204 });
       }

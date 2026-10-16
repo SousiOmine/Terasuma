@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createImageStore } from "../src/server/images";
 import { buildModelInput, SYSTEM_PROMPT } from "../src/server/prompt";
+import { DEFAULT_TERA_ID } from "../src/server/store";
 import type { ImageRef } from "../src/shared/types";
 import { createImageStub, makeStore, testPng } from "./support";
 
@@ -18,11 +19,10 @@ describe("プロンプトキャッシュ保護", () => {
 
   test("履歴は保存された順にそのまま並ぶ", () => {
     const store = makeStore();
-    store.ensureSession("s1", null);
-    store.appendMessage({ id: "m1", sessionId: "s1", role: "user", content: "質問" });
-    store.appendMessage({ id: "m2", sessionId: "s1", role: "assistant", content: "回答" });
+    store.appendMessage({ id: "m1", teraId: DEFAULT_TERA_ID, role: "user", content: "質問" });
+    store.appendMessage({ id: "m2", teraId: DEFAULT_TERA_ID, role: "assistant", content: "回答" });
 
-    expect(buildModelInput(store.listMessages("s1"), createImageStub())).toEqual([
+    expect(buildModelInput(store.listMessages(DEFAULT_TERA_ID), createImageStub())).toEqual([
       { role: "system", content: SYSTEM_PROMPT },
       { role: "user", content: "質問" },
       { role: "assistant", content: "回答" },
@@ -31,23 +31,21 @@ describe("プロンプトキャッシュ保護", () => {
 
   test("同じ履歴からは常に同じ入力が組み立てられる", () => {
     const store = makeStore();
-    store.ensureSession("s1", null);
-    store.appendMessage({ id: "m1", sessionId: "s1", role: "user", content: "質問" });
+    store.appendMessage({ id: "m1", teraId: DEFAULT_TERA_ID, role: "user", content: "質問" });
 
     // 日時や件数などを混ぜると、ここで差分が出てテストが失敗する。
-    expect(buildModelInput(store.listMessages("s1"), createImageStub())).toEqual(buildModelInput(store.listMessages("s1"), createImageStub()));
+    expect(buildModelInput(store.listMessages(DEFAULT_TERA_ID), createImageStub())).toEqual(buildModelInput(store.listMessages(DEFAULT_TERA_ID), createImageStub()));
   });
 
   test("次のターンの入力は、前のターンの入力で始まる", () => {
     const store = makeStore();
-    store.ensureSession("s1", null);
 
-    store.appendMessage({ id: "m1", sessionId: "s1", role: "user", content: "最初の質問" });
-    const turn1 = buildModelInput(store.listMessages("s1"), createImageStub());
+    store.appendMessage({ id: "m1", teraId: DEFAULT_TERA_ID, role: "user", content: "最初の質問" });
+    const turn1 = buildModelInput(store.listMessages(DEFAULT_TERA_ID), createImageStub());
 
-    store.appendMessage({ id: "m2", sessionId: "s1", role: "assistant", content: "最初の回答" });
-    store.appendMessage({ id: "m3", sessionId: "s1", role: "user", content: "次の質問" });
-    const turn2 = buildModelInput(store.listMessages("s1"), createImageStub());
+    store.appendMessage({ id: "m2", teraId: DEFAULT_TERA_ID, role: "assistant", content: "最初の回答" });
+    store.appendMessage({ id: "m3", teraId: DEFAULT_TERA_ID, role: "user", content: "次の質問" });
+    const turn2 = buildModelInput(store.listMessages(DEFAULT_TERA_ID), createImageStub());
 
     expect(turn2.slice(0, turn1.length)).toEqual(turn1);
     // シリアライズしたバイト列としても接頭辞になっていること（実際のキャッシュ条件）。
@@ -58,11 +56,10 @@ describe("プロンプトキャッシュ保護", () => {
 describe("ツールを使ったターンの入力", () => {
   /** ツールを 1 回使った 1 ターン分の履歴。 */
   function toolHistory(store: ReturnType<typeof makeStore>) {
-    store.ensureSession("s1", null);
-    store.appendMessage({ id: "m1", sessionId: "s1", role: "user", content: "調べて" });
+    store.appendMessage({ id: "m1", teraId: DEFAULT_TERA_ID, role: "user", content: "調べて" });
     store.appendMessage({
       id: "m2",
-      sessionId: "s1",
+      teraId: DEFAULT_TERA_ID,
       role: "assistant",
       content: "調べます。",
       parts: [
@@ -77,7 +74,7 @@ describe("ツールを使ったターンの入力", () => {
     const store = makeStore();
     toolHistory(store);
 
-    expect(buildModelInput(store.listMessages("s1"), createImageStub())).toEqual([
+    expect(buildModelInput(store.listMessages(DEFAULT_TERA_ID), createImageStub())).toEqual([
       { role: "system", content: SYSTEM_PROMPT },
       { role: "user", content: "調べて" },
       {
@@ -103,17 +100,16 @@ describe("ツールを使ったターンの入力", () => {
 
   test("結果が残らなかった呼び出しは、中断したことを伝える", () => {
     const store = makeStore();
-    store.ensureSession("s1", null);
-    store.appendMessage({ id: "m1", sessionId: "s1", role: "user", content: "調べて" });
+    store.appendMessage({ id: "m1", teraId: DEFAULT_TERA_ID, role: "user", content: "調べて" });
     store.appendMessage({
       id: "m2",
-      sessionId: "s1",
+      teraId: DEFAULT_TERA_ID,
       role: "assistant",
       content: "",
       parts: [{ type: "tool-call", id: "call-1", server: "local", tool: "echo", args: { text: "hi" } }],
     });
 
-    const input = buildModelInput(store.listMessages("s1"), createImageStub());
+    const input = buildModelInput(store.listMessages(DEFAULT_TERA_ID), createImageStub());
     expect(input[3]).toEqual({
       role: "tool",
       content: [
@@ -130,10 +126,10 @@ describe("ツールを使ったターンの入力", () => {
   test("失敗したツールの結果は error-text として渡す", () => {
     const store = makeStore();
     toolHistory(store);
-    store.appendMessage({ id: "m3", sessionId: "s1", role: "user", content: "もう一度" });
+    store.appendMessage({ id: "m3", teraId: DEFAULT_TERA_ID, role: "user", content: "もう一度" });
     store.appendMessage({
       id: "m4",
-      sessionId: "s1",
+      teraId: DEFAULT_TERA_ID,
       role: "assistant",
       content: "",
       parts: [
@@ -142,7 +138,7 @@ describe("ツールを使ったターンの入力", () => {
       ],
     });
 
-    const input = buildModelInput(store.listMessages("s1"), createImageStub());
+    const input = buildModelInput(store.listMessages(DEFAULT_TERA_ID), createImageStub());
     expect(input.at(-1)).toEqual({
       role: "tool",
       content: [
@@ -159,10 +155,10 @@ describe("ツールを使ったターンの入力", () => {
   test("ツールを使った後も、次の入力は前の入力で始まる", () => {
     const store = makeStore();
     toolHistory(store);
-    const turn1 = buildModelInput(store.listMessages("s1"), createImageStub());
+    const turn1 = buildModelInput(store.listMessages(DEFAULT_TERA_ID), createImageStub());
 
-    store.appendMessage({ id: "m3", sessionId: "s1", role: "user", content: "次の質問" });
-    const turn2 = buildModelInput(store.listMessages("s1"), createImageStub());
+    store.appendMessage({ id: "m3", teraId: DEFAULT_TERA_ID, role: "user", content: "次の質問" });
+    const turn2 = buildModelInput(store.listMessages(DEFAULT_TERA_ID), createImageStub());
 
     expect(turn2.slice(0, turn1.length)).toEqual(turn1);
     expect(JSON.stringify(turn2).startsWith(JSON.stringify(turn1).slice(0, -1))).toBe(true);
@@ -173,11 +169,10 @@ describe("画像つきのツール結果", () => {
   /** 画面を撮ったことにして、画像つきの結果を 1 つ持つ履歴を作る。 */
   function screenshotHistory(result: { image?: ImageRef }) {
     const store = makeStore();
-    store.ensureSession("s1", null);
-    store.appendMessage({ id: "m1", sessionId: "s1", role: "user", content: "画面を見て" });
+    store.appendMessage({ id: "m1", teraId: DEFAULT_TERA_ID, role: "user", content: "画面を見て" });
     store.appendMessage({
       id: "m2",
-      sessionId: "s1",
+      teraId: DEFAULT_TERA_ID,
       role: "assistant",
       content: "見ます。",
       parts: [
@@ -194,7 +189,7 @@ describe("画像つきのツール結果", () => {
         },
       ],
     });
-    return store.listMessages("s1");
+    return store.listMessages(DEFAULT_TERA_ID);
   }
 
   test("結果は本文で渡し、画像は続く user メッセージで渡す", () => {

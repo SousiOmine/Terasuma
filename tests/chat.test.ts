@@ -4,10 +4,10 @@ import type { AgentEngine, EngineInput, EngineStream } from "../src/server/engin
 import { createMockEngine } from "../src/server/engine";
 import { createHandover } from "../src/server/handover";
 import { startServer } from "../src/server/server";
-import { createStore } from "../src/server/store";
+import { createStore, DEFAULT_TERA_ID } from "../src/server/store";
 import type { Store } from "../src/server/store";
 import { decodeChatEvents } from "../src/shared/sse";
-import type { ApiErrorCode, ChatEvent, ChatMessage, Session } from "../src/shared/types";
+import type { ApiErrorCode, ChatEvent, ChatMessage, Tera } from "../src/shared/types";
 import { TEST_SETTINGS, createContainerStub, createMcpStub, withTempSettings } from "./support";
 
 const config: AppConfig = {
@@ -29,9 +29,9 @@ function fastMock() {
 type Harness = {
   store: Store;
   request(path: string, init?: RequestInit): Promise<Response>;
-  send(sessionId: string, content: string): Promise<ChatEvent[]>;
-  sessions(): Promise<Session[]>;
-  messages(sessionId: string): Promise<ChatMessage[]>;
+  send(teraId: string, content: string): Promise<ChatEvent[]>;
+  teras(): Promise<Tera[]>;
+  messages(teraId: string): Promise<ChatMessage[]>;
 };
 
 /**
@@ -57,8 +57,8 @@ async function withServer<T>(
     const harness: Harness = {
       store,
       request,
-      async send(sessionId, content) {
-        const response = await request(`/api/sessions/${sessionId}/messages`, {
+      async send(teraId, content) {
+        const response = await request(`/api/teras/${teraId}/messages`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ content }),
@@ -69,12 +69,12 @@ async function withServer<T>(
         expect(decoded.rest).toBe("");
         return decoded.events;
       },
-      async sessions() {
-        const response = await request("/api/sessions");
-        return ((await response.json()) as { sessions: Session[] }).sessions;
+      async teras() {
+        const response = await request("/api/teras");
+        return ((await response.json()) as { teras: Tera[] }).teras;
       },
-      async messages(sessionId) {
-        const response = await request(`/api/sessions/${sessionId}/messages`);
+      async messages(teraId) {
+        const response = await request(`/api/teras/${teraId}/messages`);
         return ((await response.json()) as { messages: ChatMessage[] }).messages;
       },
     };
@@ -178,7 +178,7 @@ async function waitFor(condition: () => Promise<boolean>, timeoutMs = 3_000): Pr
 describe("チャット API", () => {
   test("1 ターンが user-message → assistant-start → text-delta* → assistant-done の順で流れる", async () => {
     await withServer(fastMock(), async (harness) => {
-      const events = await harness.send("s1", "こんにちは");
+      const events = await harness.send(DEFAULT_TERA_ID, "こんにちは");
 
       expect(events[0]?.type).toBe("user-message");
       expect(events[1]?.type).toBe("assistant-start");
@@ -191,22 +191,42 @@ describe("チャット API", () => {
     });
   });
 
-  test("送信のたびにセッションが作られ、二度目は作り直されない", async () => {
+  test("送信しても Tera は増えず、1 本の履歴が伸びる", async () => {
     await withServer(fastMock(), async (harness) => {
-      await harness.send("s1", "最初のメッセージ");
-      await harness.send("s1", "二番目のメッセージ");
+      await harness.send(DEFAULT_TERA_ID, "最初のメッセージ");
+      await harness.send(DEFAULT_TERA_ID, "二番目のメッセージ");
 
-      const sessions = await harness.sessions();
-      expect(sessions).toHaveLength(1);
-      expect(sessions[0]?.title).toBe("最初のメッセージ");
+      const teras = await harness.teras();
+      expect(teras.map((tera) => tera.id)).toEqual([DEFAULT_TERA_ID]);
+
+      const messages = await harness.messages(DEFAULT_TERA_ID);
+      expect(messages.map((message) => message.role)).toEqual(["user", "assistant", "user", "assistant"]);
+    });
+  });
+
+  test("会話は Tera ごとに分かれる", async () => {
+    await withServer(fastMock(), async (harness) => {
+      // いまは画面から Tera を増やせないので、2 体目はストアに直接用意する。
+      harness.store.ensureTera("second", "2 体目");
+
+      await harness.send(DEFAULT_TERA_ID, "既定の Tera へ");
+      await harness.send("second", "2 体目の Tera へ");
+
+      const userMessagesOf = async (teraId: string) =>
+        (await harness.messages(teraId))
+          .filter((message) => message.role === "user")
+          .map((message) => message.content);
+
+      expect(await userMessagesOf(DEFAULT_TERA_ID)).toEqual(["既定の Tera へ"]);
+      expect(await userMessagesOf("second")).toEqual(["2 体目の Tera へ"]);
     });
   });
 
   test("履歴は seq 昇順で、ユーザーとアシスタントが交互に保存される", async () => {
     await withServer(fastMock(), async (harness) => {
-      await harness.send("s1", "質問");
+      await harness.send(DEFAULT_TERA_ID, "質問");
 
-      const messages = await harness.messages("s1");
+      const messages = await harness.messages(DEFAULT_TERA_ID);
       expect(messages.map((message) => message.role)).toEqual(["user", "assistant"]);
       expect(messages.map((message) => message.seq)).toEqual([1, 2]);
       expect(messages[1]?.usage).not.toBeNull();
@@ -216,8 +236,8 @@ describe("チャット API", () => {
   test("モデルへ渡る履歴は、前のターンの履歴で始まる（キャッシュが当たる条件）", async () => {
     const recording = createRecordingEngine(fastMock());
     await withServer(recording, async (harness) => {
-      await harness.send("s1", "最初の質問");
-      await harness.send("s1", "次の質問");
+      await harness.send(DEFAULT_TERA_ID, "最初の質問");
+      await harness.send(DEFAULT_TERA_ID, "次の質問");
 
       const [first, second] = recording.inputs;
       if (first === undefined || second === undefined) throw new Error("入力が記録されていない");
@@ -229,7 +249,7 @@ describe("チャット API", () => {
 
   test("ツール呼び出しと結果がイベントとして流れ、本文と一緒に保存される", async () => {
     await withServer(createToolEngine(), async (harness) => {
-      const events = await harness.send("s1", "調べて");
+      const events = await harness.send(DEFAULT_TERA_ID, "調べて");
 
       expect(events.map((event) => event.type)).toEqual([
         "user-message",
@@ -258,16 +278,16 @@ describe("チャット API", () => {
       ]);
 
       // 読み直しても同じ並びで戻る。
-      const messages = await harness.messages("s1");
+      const messages = await harness.messages(DEFAULT_TERA_ID);
       expect(messages[1]?.parts).toEqual(done.parts);
     });
   });
 
   test("ツールを使わなかったターンは部品を持たない（本文だけ）", async () => {
     await withServer(fastMock(), async (harness) => {
-      await harness.send("s1", "こんにちは");
+      await harness.send(DEFAULT_TERA_ID, "こんにちは");
 
-      const messages = await harness.messages("s1");
+      const messages = await harness.messages(DEFAULT_TERA_ID);
       expect(messages[1]?.parts).toBeNull();
     });
   });
@@ -275,8 +295,8 @@ describe("チャット API", () => {
   test("次のターンの履歴には、前のターンのツール呼び出しと結果が入っている", async () => {
     const recording = createRecordingEngine(createToolEngine());
     await withServer(recording, async (harness) => {
-      await harness.send("s1", "調べて");
-      await harness.send("s1", "もう一度");
+      await harness.send(DEFAULT_TERA_ID, "調べて");
+      await harness.send(DEFAULT_TERA_ID, "もう一度");
 
       const second = recording.inputs[1];
       if (second === undefined) throw new Error("2 ターン目の入力が無い");
@@ -297,21 +317,9 @@ describe("チャット API", () => {
     });
   });
 
-  test("削除するとセッションも履歴も消える", async () => {    await withServer(fastMock(), async (harness) => {
-      await harness.send("s1", "消される会話");
-
-      const deleted = await harness.request("/api/sessions/s1", { method: "DELETE" });
-      expect(deleted.status).toBe(204);
-      expect(await harness.sessions()).toEqual([]);
-      // 履歴も一緒に消えているので、参照は 404 になる。
-      expect((await harness.request("/api/sessions/s1/messages")).status).toBe(404);
-      expect(harness.store.listMessages("s1")).toEqual([]);
-    });
-  });
-
   test("空の本文は 400 invalid_request で弾く", async () => {
     await withServer(fastMock(), async (harness) => {
-      const response = await harness.request("/api/sessions/s1/messages", {
+      const response = await harness.request(`/api/teras/${DEFAULT_TERA_ID}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content: "   " }),
@@ -322,19 +330,27 @@ describe("チャット API", () => {
     });
   });
 
-  test("存在しないセッションの参照は 404 session_not_found", async () => {
+  test("存在しない Tera は、参照も送信も 404 tera_not_found", async () => {
     await withServer(fastMock(), async (harness) => {
-      const response = await harness.request("/api/sessions/missing/messages");
+      const response = await harness.request("/api/teras/missing/messages");
       expect(response.status).toBe(404);
-      expect(((await response.json()) as { code: string }).code).toBe("session_not_found");
+      expect(((await response.json()) as { code: string }).code).toBe("tera_not_found");
+
+      const posted = await harness.request("/api/teras/missing/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: "こんにちは" }),
+      });
+      expect(posted.status).toBe(404);
+      expect(((await posted.json()) as { code: string }).code).toBe("tera_not_found");
     });
   });
 
-  test("同じ会話で応答を生成している間は、次の送信を 409 で断る", async () => {
+  test("同じ Tera で応答を生成している間は、次の送信を 409 で断る", async () => {
     // ゆっくり流し、1 つ目が終わらないうちに 2 つ目を送れるようにする。
     await withServer(createMockEngine({ chunkSize: 1, delayMs: 5 }), async (harness) => {
       const send = (content: string) =>
-        harness.request("/api/sessions/busy-1/messages", {
+        harness.request(`/api/teras/${DEFAULT_TERA_ID}/messages`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ content }),
@@ -355,7 +371,7 @@ describe("チャット API", () => {
       await third.text();
 
       // 断られた分は履歴に残らない（user だけが 2 件増える）。
-      const messages = await harness.messages("busy-1");
+      const messages = await harness.messages(DEFAULT_TERA_ID);
       expect(messages.filter((message) => message.role === "user").map((message) => message.content)).toEqual([
         "1 つ目の質問",
         "3 つ目の質問",
@@ -367,7 +383,7 @@ describe("チャット API", () => {
     const base = createStore(":memory:");
     const broken: Store = {
       ...base,
-      listSessions() {
+      listTeras() {
         throw new Error("一覧を読めませんでした");
       },
     };
@@ -375,7 +391,7 @@ describe("チャット API", () => {
     await withServer(
       fastMock(),
       async (harness) => {
-        const response = await harness.request("/api/sessions");
+        const response = await harness.request("/api/teras");
 
         expect(response.status).toBe(500);
         expect(response.headers.get("content-type")).toContain("application/json");
@@ -399,37 +415,37 @@ describe("チャット API", () => {
     };
 
     await withServer(limitEngine, async (harness) => {
-      const events = await harness.send("s1", "操作を続けて");
+      const events = await harness.send(DEFAULT_TERA_ID, "操作を続けて");
 
       expect(joinedDeltas(events)).toContain("画面を確認しています。");
       expect(joinedDeltas(events)).toContain("上限");
 
       // 保存された本文にも残る（画面を読み直しても、モデルも理由が分かる）。
-      const messages = await harness.messages("s1");
+      const messages = await harness.messages(DEFAULT_TERA_ID);
       expect(messages[1]?.content).toContain("上限");
     });
   });
 
   test("モデルが即座に失敗したら error を返し、空のメッセージを残さない", async () => {
     await withServer(createFailingEngine("immediate"), async (harness) => {
-      const events = await harness.send("s1", "届かない質問");
+      const events = await harness.send(DEFAULT_TERA_ID, "届かない質問");
 
       expect(failingEvent(events).code).toBe("model_error");
       expect(failingEvent(events).detail).toBe("モデルに接続できなかった");
 
-      const messages = await harness.messages("s1");
+      const messages = await harness.messages(DEFAULT_TERA_ID);
       expect(messages.map((message) => message.role)).toEqual(["user"]);
     });
   });
 
   test("モデルが途中で失敗したら error を返し、そこまでの本文は保存する", async () => {
     await withServer(createFailingEngine("mid-stream"), async (harness) => {
-      const events = await harness.send("s1", "途中で切れる質問");
+      const events = await harness.send(DEFAULT_TERA_ID, "途中で切れる質問");
 
       expect(joinedDeltas(events)).toBe("部分的な");
       expect(failingEvent(events).code).toBe("model_error");
 
-      const messages = await harness.messages("s1");
+      const messages = await harness.messages(DEFAULT_TERA_ID);
       expect(messages.map((message) => message.role)).toEqual(["user", "assistant"]);
       expect(messages[1]?.content).toBe("部分的な");
     });
@@ -440,7 +456,7 @@ describe("チャット API", () => {
     const slow = createMockEngine({ chunkSize: 2, delayMs: 10 });
     await withServer(slow, async (harness) => {
       const controller = new AbortController();
-      const response = await harness.request("/api/sessions/abort-1/messages", {
+      const response = await harness.request(`/api/teras/${DEFAULT_TERA_ID}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content: "長めの応答をください" }),
@@ -456,16 +472,16 @@ describe("チャット API", () => {
       controller.abort();
       await reader.cancel().catch(() => undefined);
 
-      await waitFor(async () => (await harness.messages("abort-1")).length === 2);
+      await waitFor(async () => (await harness.messages(DEFAULT_TERA_ID)).length === 2);
 
-      const [user, assistant] = await harness.messages("abort-1");
+      const [user, assistant] = await harness.messages(DEFAULT_TERA_ID);
       if (user === undefined || assistant === undefined) throw new Error("保存されていない");
       expect(assistant.role).toBe("assistant");
       expect(assistant.content.length).toBeGreaterThan(0);
 
       // 保存された本文は、最後まで生成した場合の接頭辞になっている。
       const reference = createMockEngine({ chunkSize: 10_000, delayMs: 0 });
-      const full = await reference.stream({ history: [user], signal: new AbortController().signal, sessionId: "abort-1" });
+      const full = await reference.stream({ history: [user], signal: new AbortController().signal, teraId: DEFAULT_TERA_ID });
       let fullText = "";
       for await (const event of full.events) {
         if (event.type === "text-delta") fullText += event.delta;

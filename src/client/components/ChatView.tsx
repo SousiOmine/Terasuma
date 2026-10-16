@@ -4,7 +4,7 @@ import { containerStatus } from "../containerSettings";
 import { t } from "../i18n";
 import { modelProblem } from "../modelSettings";
 import {
-  activeSession,
+  activeTera,
   clearError,
   computerPaneOpen,
   errorCode,
@@ -61,7 +61,8 @@ export function ChatView() {
     stickToBottom.current = node.scrollHeight - node.scrollTop - node.clientHeight < 40;
   };
 
-  const title = activeSession.value?.title ?? t("sidebar.untitled");
+  // 見出しは相手（Tera）の名前。いまは既定の 1 体しか居ないので、常に同じ名前になる。
+  const title = activeTera.value?.name ?? "";
   const showEmpty = !loading && items.length === 0 && !streaming;
 
   return (

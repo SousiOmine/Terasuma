@@ -71,7 +71,7 @@ async function withTools<T>(behaviour: ToolBehaviour, run: (context: ToolContext
   };
 
   const images = createImageStore(dir);
-  const tools = createComputerTools({ container, images, handover: createHandover(), sessionId: "s1" });
+  const tools = createComputerTools({ container, images, handover: createHandover(), teraId: "t1" });
 
   try {
     return await run({ tools, execCalls, execSignals, shellCalls, shellSignals, images, homeDir: join(dir, "container", "home") });
@@ -122,7 +122,7 @@ describe("computer ツールセット", () => {
   test("podman が無い端末では、ツールを 1 つも渡さない", async () => {
     const { provider, dir } = toolsetFor({ podman: false });
     try {
-      expect(await provider.toolset({ sessionId: "s1", onImage: () => undefined })).toEqual({});
+      expect(await provider.toolset({ teraId: "t1", onImage: () => undefined })).toEqual({});
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -132,7 +132,7 @@ describe("computer ツールセット", () => {
     const { provider, dir } = toolsetFor({ running: false });
     try {
       expect(
-        Object.keys(await provider.toolset({ sessionId: "s1", onImage: () => undefined })),
+        Object.keys(await provider.toolset({ teraId: "t1", onImage: () => undefined })),
       ).toContain("computer_screenshot");
     } finally {
       rmSync(dir, { recursive: true, force: true });
@@ -304,7 +304,7 @@ describe("コンテナの中での実行", () => {
       containerDir: join(dir, "container-files"),
       command: stub.run,
     });
-    const tools = createComputerTools({ container, images: createImageStore(dir), handover: createHandover(), sessionId: "s1" });
+    const tools = createComputerTools({ container, images: createImageStore(dir), handover: createHandover(), teraId: "t1" });
 
     try {
       const failure = await callTool(tools, "computer_shell", { command: "uname -a" }).catch(

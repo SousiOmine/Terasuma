@@ -3,82 +3,69 @@ import { Database } from "bun:sqlite";
 import { rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createStore, deriveTitle, TITLE_MAX_LENGTH } from "../src/server/store";
+import { createStore, DEFAULT_TERA_ID } from "../src/server/store";
 import { makeStore } from "./support";
 
-describe("deriveTitle", () => {
-  test("空文字と空白だけの入力は null", () => {
-    expect(deriveTitle("")).toBeNull();
-    expect(deriveTitle("   \n  \n")).toBeNull();
-  });
-
-  test("最初の空でない行を使う", () => {
-    expect(deriveTitle("\n  こんにちは  \n続き")).toBe("こんにちは");
-  });
-
-  test("長すぎる場合は切り詰める", () => {
-    const title = deriveTitle("あ".repeat(TITLE_MAX_LENGTH + 10));
-    expect(title).toBe(`${"あ".repeat(TITLE_MAX_LENGTH)}…`);
-  });
-});
+/** 一時ファイルの DB を片付ける。WAL と共有メモリのファイルも残さない。 */
+function removeDatabase(path: string): void {
+  for (const suffix of ["", "-wal", "-shm"]) rmSync(`${path}${suffix}`, { force: true });
+}
 
 describe("store", () => {
-  test("ensureSession は最初の発言からタイトルを作り、以後は上書きしない", () => {
+  test("起動すると、既定の Tera が 1 体だけ用意される", () => {
     const store = makeStore();
 
-    const created = store.ensureSession("s1", "最初のメッセージ");
-    expect(created.title).toBe("最初のメッセージ");
+    const teras = store.listTeras();
+    expect(teras).toHaveLength(1);
+    expect(teras[0]?.id).toBe(DEFAULT_TERA_ID);
+    expect(teras[0]?.name).toBe("Tera");
+  });
 
-    const again = store.ensureSession("s1", "二番目のメッセージ");
-    expect(again.title).toBe("最初のメッセージ");
+  test("ensureTera は無ければ作り、既にあれば名前も作成日時も変えない", () => {
+    const store = makeStore();
+
+    const created = store.ensureTera("second", "2 体目");
+    expect(created.name).toBe("2 体目");
+
+    const again = store.ensureTera("second", "別の名前");
+    expect(again.name).toBe("2 体目");
     expect(again.createdAt).toBe(created.createdAt);
   });
 
-  test("appendMessage は連番を振り、セッションの更新時刻を進める", () => {
+  test("appendMessage は連番を振り、Tera の更新時刻を進める", () => {
     const store = makeStore();
-    const session = store.ensureSession("s1", null);
-    expect(session.title).toBeNull();
+    const before = store.getTera(DEFAULT_TERA_ID);
+    if (before === null) throw new Error("既定の Tera が無い");
 
-    const first = store.appendMessage({ id: "m1", sessionId: "s1", role: "user", content: "こんにちは" });
-    const second = store.appendMessage({ id: "m2", sessionId: "s1", role: "assistant", content: "やあ" });
+    const first = store.appendMessage({ id: "m1", teraId: DEFAULT_TERA_ID, role: "user", content: "こんにちは" });
+    const second = store.appendMessage({ id: "m2", teraId: DEFAULT_TERA_ID, role: "assistant", content: "やあ" });
 
     expect(first.seq).toBe(1);
     expect(second.seq).toBe(2);
-    expect(store.getSession("s1")?.title).toBe("こんにちは");
-    expect(store.getSession("s1")?.updatedAt).toBeGreaterThan(session.createdAt);
-  });
-
-  test("assistant の発言からはタイトルを作らない", () => {
-    const store = makeStore();
-    store.ensureSession("s1", null);
-    store.appendMessage({ id: "m1", sessionId: "s1", role: "assistant", content: "先に喋る" });
-
-    expect(store.getSession("s1")?.title).toBeNull();
+    expect(store.getTera(DEFAULT_TERA_ID)?.updatedAt).toBeGreaterThan(before.createdAt);
   });
 
   test("listMessages は seq 昇順で返す", () => {
     const store = makeStore();
-    store.ensureSession("s1", null);
-    store.appendMessage({ id: "m1", sessionId: "s1", role: "user", content: "1" });
-    store.appendMessage({ id: "m2", sessionId: "s1", role: "assistant", content: "2" });
-    store.appendMessage({ id: "m3", sessionId: "s1", role: "user", content: "3" });
+    store.appendMessage({ id: "m1", teraId: DEFAULT_TERA_ID, role: "user", content: "1" });
+    store.appendMessage({ id: "m2", teraId: DEFAULT_TERA_ID, role: "assistant", content: "2" });
+    store.appendMessage({ id: "m3", teraId: DEFAULT_TERA_ID, role: "user", content: "3" });
 
-    expect(store.listMessages("s1").map((message) => message.content)).toEqual(["1", "2", "3"]);
-    expect(store.listMessages("s1").map((message) => message.seq)).toEqual([1, 2, 3]);
+    expect(store.listMessages(DEFAULT_TERA_ID).map((message) => message.content)).toEqual(["1", "2", "3"]);
+    expect(store.listMessages(DEFAULT_TERA_ID).map((message) => message.seq)).toEqual([1, 2, 3]);
   });
 
   test("usage を保存して読み戻せる", () => {
     const store = makeStore();
-    store.ensureSession("s1", null);
     store.appendMessage({
       id: "m1",
-      sessionId: "s1",
+      teraId: DEFAULT_TERA_ID,
       role: "assistant",
       content: "本文",
       usage: { inputTokens: 10, outputTokens: 20, cachedInputTokens: 5 },
     });
 
-    expect(store.listMessages("s1")[0]?.usage).toEqual({
+    expect(store.listMessages(DEFAULT_TERA_ID)[0]?.usage).toEqual({
       inputTokens: 10,
       outputTokens: 20,
       cachedInputTokens: 5,
@@ -87,11 +74,10 @@ describe("store", () => {
 
   test("ツールの部分を保存して、並びのまま読み戻せる", () => {
     const store = makeStore();
-    store.ensureSession("s1", null);
-    store.appendMessage({ id: "m1", sessionId: "s1", role: "user", content: "調べて" });
+    store.appendMessage({ id: "m1", teraId: DEFAULT_TERA_ID, role: "user", content: "調べて" });
     store.appendMessage({
       id: "m2",
-      sessionId: "s1",
+      teraId: DEFAULT_TERA_ID,
       role: "assistant",
       content: "調べます。分かりました。",
       parts: [
@@ -102,7 +88,7 @@ describe("store", () => {
       ],
     });
 
-    const [user, assistant] = store.listMessages("s1");
+    const [user, assistant] = store.listMessages(DEFAULT_TERA_ID);
     expect(user?.parts).toBeNull();
     expect(assistant?.parts).toEqual([
       { type: "text", text: "調べます。" },
@@ -112,11 +98,67 @@ describe("store", () => {
     ]);
   });
 
-  test("ツールを持たなかった頃の DB を開くと、parts 列を足して読める", () => {
+  test("usage が無ければ null", () => {
+    const store = makeStore();
+    store.appendMessage({ id: "m1", teraId: DEFAULT_TERA_ID, role: "user", content: "本文" });
+
+    expect(store.listMessages(DEFAULT_TERA_ID)[0]?.usage).toBeNull();
+  });
+
+  test("存在しない Tera は null", () => {
+    const store = makeStore();
+
+    expect(store.getTera("missing")).toBeNull();
+  });
+
+  test("履歴は Tera ごとに分かれる", () => {
+    const store = makeStore();
+    store.ensureTera("second", "2 体目");
+
+    store.appendMessage({ id: "m1", teraId: DEFAULT_TERA_ID, role: "user", content: "既定へ" });
+    store.appendMessage({ id: "m2", teraId: "second", role: "user", content: "2 体目へ" });
+
+    expect(store.listMessages(DEFAULT_TERA_ID).map((message) => message.content)).toEqual(["既定へ"]);
+    expect(store.listMessages("second").map((message) => message.content)).toEqual(["2 体目へ"]);
+  });
+
+  test("listTeras は更新の新しい順に並ぶ", () => {
+    const store = makeStore();
+    store.ensureTera("second", "2 体目");
+    // second を作ったあとに既定へ追記するので、既定の方が新しくなる。
+    store.appendMessage({ id: "m1", teraId: DEFAULT_TERA_ID, role: "user", content: "あとから" });
+
+    expect(store.listTeras().map((tera) => tera.id)).toEqual([DEFAULT_TERA_ID, "second"]);
+  });
+
+  test("開き直しても、既定の Tera と履歴はそのまま", () => {
     const path = join(tmpdir(), `terasuma-store-${crypto.randomUUID()}.db`);
 
     try {
-      // parts 列が無い、前の版のスキーマ。
+      const first = createStore(path);
+      const created = first.getTera(DEFAULT_TERA_ID);
+      first.appendMessage({ id: "m1", teraId: DEFAULT_TERA_ID, role: "user", content: "残る本文" });
+      first.close();
+
+      const second = createStore(path);
+      try {
+        const again = second.getTera(DEFAULT_TERA_ID);
+        expect(again?.name).toBe("Tera");
+        expect(again?.createdAt).toBe(created?.createdAt);
+        expect(second.listMessages(DEFAULT_TERA_ID).map((message) => message.content)).toEqual(["残る本文"]);
+      } finally {
+        second.close();
+      }
+    } finally {
+      removeDatabase(path);
+    }
+  });
+
+  test("セッションごとに会話を分けていた頃の DB は、Tera の形に作り替える", () => {
+    const path = join(tmpdir(), `terasuma-store-${crypto.randomUUID()}.db`);
+
+    try {
+      // 前の版のスキーマ。会話はセッションに属し、parts 列を持っていた。
       const legacy = new Database(path, { create: true });
       legacy.exec(`
         CREATE TABLE sessions (
@@ -124,59 +166,36 @@ describe("store", () => {
         );
         CREATE TABLE messages (
           id TEXT PRIMARY KEY, session_id TEXT NOT NULL, seq INTEGER NOT NULL, role TEXT NOT NULL,
-          content TEXT NOT NULL, created_at INTEGER NOT NULL,
+          content TEXT NOT NULL, parts TEXT, created_at INTEGER NOT NULL,
           input_tokens INTEGER, output_tokens INTEGER, cached_input_tokens INTEGER,
           UNIQUE (session_id, seq)
         );
       `);
       legacy.run("INSERT INTO sessions VALUES ('s1', '古い会話', 1, 2)");
-      legacy.run("INSERT INTO messages (id, session_id, seq, role, content, created_at) VALUES ('m1', 's1', 1, 'assistant', '古い本文', 3)");
+      legacy.run(
+        "INSERT INTO messages (id, session_id, seq, role, content, created_at) VALUES ('m1', 's1', 1, 'user', '古い本文', 3)",
+      );
       legacy.close();
 
       const store = createStore(path);
       try {
-        const messages = store.listMessages("s1");
-        expect(messages[0]?.content).toBe("古い本文");
-        expect(messages[0]?.parts).toBeNull();
+        // 会話の持ち主が変わるので、古い会話は引き継がない。
+        expect(store.listTeras().map((tera) => tera.id)).toEqual([DEFAULT_TERA_ID]);
+        expect(store.listMessages(DEFAULT_TERA_ID)).toEqual([]);
+
+        // 作り替えたあとは、これまでどおり書き込める（連番も 1 から）。
+        const appended = store.appendMessage({
+          id: "m2",
+          teraId: DEFAULT_TERA_ID,
+          role: "user",
+          content: "新しい本文",
+        });
+        expect(appended.seq).toBe(1);
       } finally {
         store.close();
       }
     } finally {
-      rmSync(path, { force: true });
+      removeDatabase(path);
     }
-  });
-
-  test("usage が無ければ null", () => {    const store = makeStore();
-    store.ensureSession("s1", null);
-    store.appendMessage({ id: "m1", sessionId: "s1", role: "user", content: "本文" });
-
-    expect(store.listMessages("s1")[0]?.usage).toBeNull();
-  });
-
-  test("存在しないセッションの操作は失敗を返す", () => {
-    const store = makeStore();
-
-    expect(store.getSession("missing")).toBeNull();
-    expect(store.deleteSession("missing")).toBe(false);
-  });
-
-  test("deleteSession はメッセージも一緒に消す", () => {
-    const store = makeStore();
-    store.ensureSession("s1", null);
-    store.appendMessage({ id: "m1", sessionId: "s1", role: "user", content: "本文" });
-
-    expect(store.deleteSession("s1")).toBe(true);
-    expect(store.getSession("s1")).toBeNull();
-    expect(store.listMessages("s1")).toEqual([]);
-  });
-
-  test("listSessions は更新の新しい順に並ぶ", () => {
-    const store = makeStore();
-    store.ensureSession("s1", null);
-    store.ensureSession("s2", null);
-    // s2 の方が後に作られ、その後 s1 を更新する。
-    store.appendMessage({ id: "m1", sessionId: "s1", role: "user", content: "あとから" });
-
-    expect(store.listSessions().map((session) => session.id)).toEqual(["s1", "s2"]);
   });
 });

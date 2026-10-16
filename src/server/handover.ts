@@ -4,7 +4,7 @@
  * ログインや二段階認証のように、人の手が要る場面で使う。
  * 待っている間、エージェントは画面を撮らずに待つ（入力を覗かないため）。
  *
- * 引き受けはセッションごとに 1 つだけ持つ。別のタブで別の会話が動いていても混ざらない。
+ * 引き受けは Tera ごとに 1 つだけ持つ。別のタブで別の Tera が動いていても混ざらない。
  * 待ちはターンの中で作られるので、停止やタブの切断で signal が立ち、そこで終わる。
  */
 
@@ -23,17 +23,17 @@ export type Handover = {
    * ユーザーに渡して待つ。返事か「操作を完了した」で解決する。
    * ターンが止まった場合（signal）は、待たずに終わったことを伝える。
    */
-  wait(sessionId: string, signal: AbortSignal): Promise<string>;
+  wait(teraId: string, signal: AbortSignal): Promise<string>;
   /** ユーザーからの返事。待っているものが無ければ false。 */
-  answer(sessionId: string, answer: HandoverAnswer): boolean;
+  answer(teraId: string, answer: HandoverAnswer): boolean;
 };
 
 export function createHandover(): Handover {
-  /** セッション id → 待ちを終わらせる関数。 */
+  /** Tera の id → 待ちを終わらせる関数。 */
   const waiting = new Map<string, (answer: HandoverAnswer) => void>();
 
   return {
-    wait(sessionId, signal) {
+    wait(teraId, signal) {
       return new Promise<string>((resolve, reject) => {
         // すでに止まったターンから呼ばれることがある（停止と ask_user が競合した場合）。
         // ここで断らないと、誰も返事をしない待ちが残り、ターンが片付かない。
@@ -43,24 +43,24 @@ export function createHandover(): Handover {
         }
 
         const settle = (answer: HandoverAnswer): void => {
-          waiting.delete(sessionId);
+          waiting.delete(teraId);
           signal.removeEventListener("abort", onAbort);
           resolve(answer.kind === "done" ? HANDOVER_DONE : answer.text);
         };
 
         const onAbort = (): void => {
-          waiting.delete(sessionId);
+          waiting.delete(teraId);
           reject(new Error("画面を渡す前にターンが終わりました"));
         };
 
-        // 同じセッションで二重に待つことはない（ターンは 1 つずつ進む）。
-        waiting.set(sessionId, settle);
+        // 同じ Tera で二重に待つことはない（ターンは 1 つずつ進む）。
+        waiting.set(teraId, settle);
         signal.addEventListener("abort", onAbort, { once: true });
       });
     },
 
-    answer(sessionId, answer) {
-      const settle = waiting.get(sessionId);
+    answer(teraId, answer) {
+      const settle = waiting.get(teraId);
       if (settle === undefined) return false;
 
       settle(answer);

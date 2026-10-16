@@ -60,8 +60,9 @@ export type ImageRef = {
 
 export type ChatMessage = {
   id: string;
-  sessionId: string;
-  /** セッション内の連番。1 から始まり、履歴の並び順を確定させる。 */
+  /** このメッセージを持つ Tera。 */
+  teraId: string;
+  /** Tera の中の連番。1 から始まり、履歴の並び順を確定させる。 */
   seq: number;
   role: MessageRole;
   /** 本文（parts があるときは text 部分を連結したもの）。 */
@@ -76,10 +77,14 @@ export type ChatMessage = {
   usage: TokenUsage | null;
 };
 
-export type Session = {
+/**
+ * エージェント 1 体。会話の履歴を 1 本だけ持ち、モデルへ何を渡すかはこの単位で決める。
+ * いまは既定の 1 体だけを起動時に用意する（増やす導線と、役割や人格は別の機会に足す）。
+ */
+export type Tera = {
   id: string;
-  /** 最初のユーザー発言から作る。表示文言は言語ごとに変わるため、未設定は null で持つ。 */
-  title: string | null;
+  /** 画面に出す名前。 */
+  name: string;
   /** epoch ミリ秒 */
   createdAt: number;
   updatedAt: number;
@@ -95,7 +100,7 @@ export type Session = {
  */
 export const API_ERROR_CODES = [
   "invalid_request",
-  "session_not_found",
+  "tera_not_found",
   "model_error",
   "model_not_configured",
   "provider_not_found",

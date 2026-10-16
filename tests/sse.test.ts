@@ -46,7 +46,7 @@ describe("SSE", () => {
       type: "assistant-done",
       message: {
         id: "a1",
-        sessionId: "s1",
+        teraId: "t1",
         seq: 2,
         role: "assistant",
         content: "1行目\n2行目\n```ts\nconst a = 1;\n```",

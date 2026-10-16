@@ -81,7 +81,7 @@ describe("サーバの起動ポート", () => {
         expect(server.port).not.toBe(port);
 
         // 選ばれたポートで、API が普通に応答する。
-        const response = await fetch(new URL("/api/sessions", server.url));
+        const response = await fetch(new URL("/api/teras", server.url));
         expect(response.status).toBe(200);
       });
     } finally {

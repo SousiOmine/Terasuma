@@ -51,7 +51,7 @@ export function createComputerToolset(options: ComputerToolsetOptions): Computer
     async toolset(input) {
       const status = await options.container.status();
       if (status.state === "podman_missing") return {};
-      return createComputerTools({ ...options, sessionId: input.sessionId, onImage: input.onImage });
+      return createComputerTools({ ...options, teraId: input.teraId, onImage: input.onImage });
     },
   };
 }
@@ -65,8 +65,8 @@ export type ComputerToolsetOptions = {
 };
 
 export type ComputerToolsOptions = ComputerToolsetOptions & {
-  /** ターンの対象セッション。 */
-  sessionId: string;
+  /** ターンの対象の Tera。 */
+  teraId: string;
   /**
    * 撮った画像を、このターンの次のステップでモデルへ渡すために知らせる。
    * tool の本文に画像を置けるプロバイダが無いので、渡す口はここで作る。
@@ -75,7 +75,7 @@ export type ComputerToolsOptions = ComputerToolsetOptions & {
 };
 
 export function createComputerTools(options: ComputerToolsOptions): ComputerToolset {
-  const { container, images, handover, sessionId, onImage } = options;
+  const { container, images, handover, teraId, onImage } = options;
 
   /** xdotool を 1 回呼ぶ。失敗と打ち切りは例外にして、モデルが理由を読めるようにする。 */
   async function xdotool(args: readonly string[], signal?: AbortSignal): Promise<ShellResult> {
@@ -232,7 +232,7 @@ export function createComputerTools(options: ComputerToolsOptions): ComputerTool
         args: z.array(z.string()).optional().describe("Arguments for the command"),
       }),
       execute: async ({ command, args }: { command: string; args?: string[] }, context: ToolContext) => {
-        // exec のセッションが終わっても残るよう、nohup で切り離して起動する。
+        // exec の呼び出しが終わっても残るよう、nohup で切り離して起動する。
         const line = `nohup ${[command, ...(args ?? [])].map(quote).join(" ")} >/dev/null 2>&1 &`;
         const result = await container.shell(line, { timeoutMs: ACTION_TIMEOUT_MS, signal: context.abortSignal });
         if (result.exitCode !== 0) {
@@ -259,7 +259,7 @@ export function createComputerTools(options: ComputerToolsOptions): ComputerTool
         if (signal === undefined) throw new Error("ターンの中断を受け取れないため、ユーザーを待てません");
 
         // 何を頼むかは、呼び出しの引数としてそのまま画面へ流れる。
-        return handover.wait(sessionId, signal);
+        return handover.wait(teraId, signal);
       },
     }),
 

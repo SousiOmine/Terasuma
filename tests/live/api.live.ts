@@ -5,6 +5,7 @@
  * ネットワークと API キーが要り、通信費もわずかにかかるため、既定のテストからは外している。
  */
 import { expect, test } from "bun:test";
+import { DEFAULT_TERA_ID } from "../../src/server/store";
 import {
   CONTAINER_TIMEOUT_MS,
   TURN_TIMEOUT_MS,
@@ -17,11 +18,13 @@ import {
   withLiveServer,
 } from "./support";
 
+// 会話は Tera ごとに 1 本なので、どの確認も既定の Tera（起動時に用意される 1 体）へ送る。
+
 test(
   "既定のモデルと 1 ターンやり取りできる",
   async () => {
     await withLiveServer(async (harness) => {
-      const first = await harness.send("live-chat", "「テラス」とだけ返してください。");
+      const first = await harness.send(DEFAULT_TERA_ID, "「テラス」とだけ返してください。");
       expect(first[0]?.type).toBe("user-message");
       expect(first[1]?.type).toBe("assistant-start");
 
@@ -36,12 +39,12 @@ test(
 
       // 2 ターン目は、1 ターン目の履歴をそのまま積んで送る。
       // 保存済みの履歴がプロバイダに通るかどうかは、ここでしか分からない。
-      const second = await harness.send("live-chat", "いま何と答えましたか。一言で。");
+      const second = await harness.send(DEFAULT_TERA_ID, "いま何と答えましたか。一言で。");
       const secondDone = expectTurnSucceeded(second);
       expect(joinedDeltas(second).length, "2 ターン目の本文が空だった").toBeGreaterThan(0);
       report("2 ターン目", secondDone);
 
-      const saved = await harness.messages("live-chat");
+      const saved = await harness.messages(DEFAULT_TERA_ID);
       expect(saved.map((message) => message.role)).toEqual(["user", "assistant", "user", "assistant"]);
       expect(saved[1]?.content).toBe(done.content);
       expect(saved[3]?.content).toBe(secondDone.content);
@@ -59,7 +62,7 @@ test(
       expect(status.state, `コンテナを起こせなかった: ${status.detail ?? ""}`).toBe("running");
 
       const events = await harness.send(
-        "live-tool",
+        DEFAULT_TERA_ID,
         "computer_shell ツールで `echo terasuma-live-ok` を実行し、その標準出力だけをそのまま返してください。",
       );
       const done = expectTurnSucceeded(events);
@@ -77,7 +80,7 @@ test(
       expect(done.content.length, "ツールを使った後の本文が空だった").toBeGreaterThan(0);
 
       // 呼び出しと結果は、本文と同じメッセージの一部として残る。
-      const parts = (await harness.messages("live-tool"))[1]?.parts ?? [];
+      const parts = (await harness.messages(DEFAULT_TERA_ID))[1]?.parts ?? [];
       const savedCall = parts.findIndex((part) => part.type === "tool-call" && part.id === call.part.id);
       const savedResult = parts.findIndex((part) => part.type === "tool-result" && part.id === call.part.id);
       expect(savedCall, "呼び出しが保存されていない").toBeGreaterThanOrEqual(0);

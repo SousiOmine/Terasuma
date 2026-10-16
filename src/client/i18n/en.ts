@@ -5,15 +5,9 @@
 export const en = {
   "app.name": "Terasuma",
 
-  "sidebar.new": "New chat",
-  "sidebar.untitled": "New chat",
-  "sidebar.empty": "No conversations yet",
-  "sidebar.menu": "Conversation menu",
-  "sidebar.delete": "Delete",
-  "sidebar.deleteTitle": "Delete this conversation?",
-  "sidebar.deleteMessage": "This cannot be undone.",
-  "sidebar.confirmDelete": "Delete",
-  "sidebar.cancel": "Cancel",
+  "common.cancel": "Cancel",
+
+  "tera.empty": "No Teras yet",
 
   "chat.empty.title": "What can I help you with?",
   "chat.loading": "Loading…",
@@ -195,7 +189,7 @@ export const en = {
   "provider.custom.name": "OpenAI-compatible endpoint",
 
   "error.invalid_request": "The message could not be sent.",
-  "error.session_not_found": "This conversation no longer exists.",
+  "error.tera_not_found": "This Tera does not exist.",
   "error.model_error": "The model did not respond.",
   "error.model_not_configured": "No model is configured.",
   "error.provider_not_found": "This provider is not configured.",

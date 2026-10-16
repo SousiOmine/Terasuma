@@ -144,7 +144,7 @@ export function McpSettingsView() {
           subject={deleting.id}
           message={t("settings.mcp.deleteMessage")}
           confirmLabel={t("settings.mcp.delete")}
-          cancelLabel={t("sidebar.cancel")}
+          cancelLabel={t("common.cancel")}
           danger
           onConfirm={() => void confirmDelete()}
           onCancel={() => setDeleting(null)}

@@ -1,22 +1,16 @@
 import { Database } from "bun:sqlite";
-import type { ChatMessage, MessagePart, MessageRole, Session, TokenUsage } from "../shared/types";
+import type { ChatMessage, MessagePart, MessageRole, Tera, TokenUsage } from "../shared/types";
 
-export const TITLE_MAX_LENGTH = 40;
-
-/** 最初のユーザー発言からセッションのタイトルを作る。空なら null（表示文言はクライアントが決める）。 */
-export function deriveTitle(text: string): string | null {
-  const firstLine = text
-    .split("\n")
-    .map((line) => line.trim())
-    .find((line) => line.length > 0);
-
-  if (firstLine === undefined) return null;
-  return firstLine.length > TITLE_MAX_LENGTH ? `${firstLine.slice(0, TITLE_MAX_LENGTH)}…` : firstLine;
-}
+/**
+ * 既定の Tera。起動時に 1 体だけ用意する。
+ * 増やす導線はまだ無いので、会話の持ち主は当面この 1 つになる。
+ */
+export const DEFAULT_TERA_ID = "default";
+const DEFAULT_TERA_NAME = "Tera";
 
 export type AppendMessageInput = {
   id: string;
-  sessionId: string;
+  teraId: string;
   role: MessageRole;
   content: string;
   /** ツール呼び出しを含むときだけ渡す。含まないメッセージは null。 */
@@ -25,27 +19,26 @@ export type AppendMessageInput = {
 };
 
 export type Store = {
-  listSessions(): Session[];
-  getSession(id: string): Session | null;
-  /** 無ければ作る。既にあればタイトルも作成日時も変えない。 */
-  ensureSession(id: string, titleSource: string | null): Session;
-  deleteSession(id: string): boolean;
-  listMessages(sessionId: string): ChatMessage[];
-  /** 履歴の末尾に追記する。セッション行が先に存在している必要がある。 */
+  listTeras(): Tera[];
+  getTera(id: string): Tera | null;
+  /** 無ければ作る。既にあれば名前も作成日時も変えない（起動のたびに呼ばれる）。 */
+  ensureTera(id: string, name: string): Tera;
+  listMessages(teraId: string): ChatMessage[];
+  /** 履歴の末尾に追記する。Tera の行が先に存在している必要がある。 */
   appendMessage(input: AppendMessageInput): ChatMessage;
   close(): void;
 };
 
-type SessionRow = {
+type TeraRow = {
   id: string;
-  title: string | null;
+  name: string;
   created_at: number;
   updated_at: number;
 };
 
 type MessageRow = {
   id: string;
-  session_id: string;
+  tera_id: string;
   seq: number;
   role: string;
   content: string;
@@ -56,8 +49,8 @@ type MessageRow = {
   cached_input_tokens: number | null;
 };
 
-function toSession(row: SessionRow): Session {
-  return { id: row.id, title: row.title, createdAt: row.created_at, updatedAt: row.updated_at };
+function toTera(row: TeraRow): Tera {
+  return { id: row.id, name: row.name, createdAt: row.created_at, updatedAt: row.updated_at };
 }
 
 function toMessage(row: MessageRow): ChatMessage {
@@ -72,7 +65,7 @@ function toMessage(row: MessageRow): ChatMessage {
 
   return {
     id: row.id,
-    sessionId: row.session_id,
+    teraId: row.tera_id,
     seq: row.seq,
     role: row.role as MessageRole,
     content: row.content,
@@ -106,17 +99,19 @@ export function createStore(dbPath: string, options: CreateStoreOptions = {}): S
   // ON DELETE CASCADE が働くよう、接続ごとに有効にする必要がある。
   db.exec("PRAGMA foreign_keys = ON");
 
+  dropLegacyTables(db);
+
   db.exec(`
-    CREATE TABLE IF NOT EXISTS sessions (
+    CREATE TABLE IF NOT EXISTS teras (
       id         TEXT PRIMARY KEY,
-      title      TEXT,
+      name       TEXT NOT NULL,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
     );
 
     CREATE TABLE IF NOT EXISTS messages (
       id                  TEXT PRIMARY KEY,
-      session_id          TEXT NOT NULL REFERENCES sessions (id) ON DELETE CASCADE,
+      tera_id             TEXT NOT NULL REFERENCES teras (id) ON DELETE CASCADE,
       seq                 INTEGER NOT NULL,
       role                TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
       content             TEXT NOT NULL,
@@ -125,50 +120,39 @@ export function createStore(dbPath: string, options: CreateStoreOptions = {}): S
       input_tokens        INTEGER,
       output_tokens       INTEGER,
       cached_input_tokens INTEGER,
-      UNIQUE (session_id, seq)
+      UNIQUE (tera_id, seq)
     );
 
-    CREATE INDEX IF NOT EXISTS idx_messages_session_seq ON messages (session_id, seq);
-    CREATE INDEX IF NOT EXISTS idx_sessions_updated_at ON sessions (updated_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_messages_tera_seq ON messages (tera_id, seq);
+    CREATE INDEX IF NOT EXISTS idx_teras_updated_at ON teras (updated_at DESC);
   `);
 
-  // ツール呼び出しを持たなかった頃に作られた DB には parts 列が無い。
-  // 保存済みの会話を捨てずに済むよう、列だけを足す。
-  const messageColumns = db.query<{ name: string }, []>("PRAGMA table_info(messages)").all();
-  if (!messageColumns.some((column) => column.name === "parts")) {
-    db.exec("ALTER TABLE messages ADD COLUMN parts TEXT");
-  }
-
-  const selectSession = db.query<SessionRow, [string]>(
-    "SELECT id, title, created_at, updated_at FROM sessions WHERE id = ?",
+  const selectTera = db.query<TeraRow, [string]>(
+    "SELECT id, name, created_at, updated_at FROM teras WHERE id = ?",
   );
-  const selectSessions = db.query<SessionRow, []>(
-    "SELECT id, title, created_at, updated_at FROM sessions ORDER BY updated_at DESC, created_at DESC",
+  const selectTeras = db.query<TeraRow, []>(
+    "SELECT id, name, created_at, updated_at FROM teras ORDER BY updated_at DESC, created_at DESC",
   );
-  const insertSession = db.query<unknown, [string, string | null, number, number]>(
-    `INSERT INTO sessions (id, title, created_at, updated_at)
+  const insertTera = db.query<unknown, [string, string, number, number]>(
+    `INSERT INTO teras (id, name, created_at, updated_at)
      VALUES (?, ?, ?, ?)
      ON CONFLICT (id) DO NOTHING`,
   );
-  const setSessionTitleIfEmpty = db.query<unknown, [string, number, string]>(
-    "UPDATE sessions SET title = ?, updated_at = ? WHERE id = ? AND title IS NULL",
+  const touchTera = db.query<unknown, [number, string]>(
+    "UPDATE teras SET updated_at = ? WHERE id = ?",
   );
-  const touchSession = db.query<unknown, [number, string]>(
-    "UPDATE sessions SET updated_at = ? WHERE id = ?",
-  );
-  const deleteSessionStmt = db.query<unknown, [string]>("DELETE FROM sessions WHERE id = ?");
 
   const selectMessages = db.query<MessageRow, [string]>(
-    `SELECT id, session_id, seq, role, content, parts, created_at, input_tokens, output_tokens, cached_input_tokens
-     FROM messages WHERE session_id = ? ORDER BY seq ASC`,
+    `SELECT id, tera_id, seq, role, content, parts, created_at, input_tokens, output_tokens, cached_input_tokens
+     FROM messages WHERE tera_id = ? ORDER BY seq ASC`,
   );
   const insertMessage = db.query<
     { seq: number },
     [string, string, string, string, string, string | null, number, number | null, number | null, number | null]
   >(
     `INSERT INTO messages
-       (id, session_id, seq, role, content, parts, created_at, input_tokens, output_tokens, cached_input_tokens)
-     VALUES (?, ?, (SELECT COALESCE(MAX(seq), 0) + 1 FROM messages WHERE session_id = ?), ?, ?, ?, ?, ?, ?, ?)
+       (id, tera_id, seq, role, content, parts, created_at, input_tokens, output_tokens, cached_input_tokens)
+     VALUES (?, ?, (SELECT COALESCE(MAX(seq), 0) + 1 FROM messages WHERE tera_id = ?), ?, ?, ?, ?, ?, ?, ?)
      RETURNING seq`,
   );
 
@@ -179,8 +163,8 @@ export function createStore(dbPath: string, options: CreateStoreOptions = {}): S
     // 連番は INSERT の中で決める（読み出してから書くまでの往復を減らす）。
     const inserted = insertMessage.get(
       input.id,
-      input.sessionId,
-      input.sessionId,
+      input.teraId,
+      input.teraId,
       input.role,
       input.content,
       parts === null ? null : JSON.stringify(parts),
@@ -191,16 +175,11 @@ export function createStore(dbPath: string, options: CreateStoreOptions = {}): S
     );
     const seq = inserted?.seq ?? 1;
 
-    touchSession.run(at, input.sessionId);
-
-    if (input.role === "user") {
-      const title = deriveTitle(input.content);
-      if (title !== null) setSessionTitleIfEmpty.run(title, at, input.sessionId);
-    }
+    touchTera.run(at, input.teraId);
 
     return {
       id: input.id,
-      sessionId: input.sessionId,
+      teraId: input.teraId,
       seq,
       role: input.role,
       content: input.content,
@@ -210,32 +189,27 @@ export function createStore(dbPath: string, options: CreateStoreOptions = {}): S
     };
   });
 
-  return {
-    listSessions() {
-      return selectSessions.all().map(toSession);
+  const store: Store = {
+    listTeras() {
+      return selectTeras.all().map(toTera);
     },
 
-    getSession(id) {
-      const row = selectSession.get(id);
-      return row === null ? null : toSession(row);
+    getTera(id) {
+      const row = selectTera.get(id);
+      return row === null ? null : toTera(row);
     },
 
-    ensureSession(id, titleSource) {
+    ensureTera(id, name) {
       const at = now();
-      const title = titleSource === null ? null : deriveTitle(titleSource);
-      insertSession.run(id, title, at, at);
+      insertTera.run(id, name, at, at);
 
-      const row = selectSession.get(id);
-      if (row === null) throw new Error(`セッションを作成できなかった: ${id}`);
-      return toSession(row);
+      const row = selectTera.get(id);
+      if (row === null) throw new Error(`Tera を作成できなかった: ${id}`);
+      return toTera(row);
     },
 
-    deleteSession(id) {
-      return deleteSessionStmt.run(id).changes > 0;
-    },
-
-    listMessages(sessionId) {
-      return selectMessages.all(sessionId).map(toMessage);
+    listMessages(teraId) {
+      return selectMessages.all(teraId).map(toMessage);
     },
 
     appendMessage(input) {
@@ -246,4 +220,22 @@ export function createStore(dbPath: string, options: CreateStoreOptions = {}): S
       db.close();
     },
   };
+
+  // 会話の持ち主が無いと何も始まらないので、起動時に 1 体だけ用意する。
+  store.ensureTera(DEFAULT_TERA_ID, DEFAULT_TERA_NAME);
+  return store;
+}
+
+/**
+ * セッションごとに会話を分けていた頃のテーブルを落とす。
+ *
+ * 会話の持ち主がセッションから Tera へ変わり、1 つの Tera に 1 本の履歴という形になった。
+ * 古い会話はどの Tera の履歴なのか決められないため、引き継がずに捨てる。
+ * messages を先に落とす（sessions を参照しているため）。
+ */
+function dropLegacyTables(db: Database): void {
+  const columns = db.query<{ name: string }, []>("PRAGMA table_info(messages)").all();
+  if (columns.length === 0 || columns.some((column) => column.name === "tera_id")) return;
+
+  db.exec("DROP TABLE IF EXISTS messages; DROP TABLE IF EXISTS sessions;");
 }

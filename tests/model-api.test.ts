@@ -14,7 +14,7 @@ import {
 import { startServer } from "../src/server/server";
 import type { ProviderCheckResult } from "../src/shared/types";
 import { createSettingsStore, type SettingsStore } from "../src/server/settings";
-import { createStore } from "../src/server/store";
+import { createStore, DEFAULT_TERA_ID } from "../src/server/store";
 import { createHandover } from "../src/server/handover";
 import { createContainerStub, createMcpStub } from "./support";
 import type { ModelSettingsView, ProviderView, ReasoningView } from "../src/shared/types";
@@ -771,10 +771,10 @@ describe("思考強度", () => {
 });
 
 describe("チャットとモデル設定の関係", () => {
-  test("モデルが未設定なら、送信はセッションを作らずに断る", async () => {
+  test("モデルが未設定なら、送信はターンを始めずに断る", async () => {
     await withModelServer({ providers: { deepseek: { apiKey: "sk-1" } } }, async (harness) => {
       const response = await harness.request(
-        "/api/sessions/s1/messages",
+        `/api/teras/${DEFAULT_TERA_ID}/messages`,
         jsonRequest("POST", { content: "こんにちは" }),
       );
 
@@ -783,8 +783,13 @@ describe("チャットとモデル設定の関係", () => {
       expect(body.code).toBe("model_not_configured");
       expect(body.detail).toContain("既定のモデル");
 
-      const sessions = await harness.request("/api/sessions");
-      expect(await sessions.json()).toEqual({ sessions: [] });
+      // Tera は既定の 1 体のままで、履歴も空のまま。
+      const teras = await harness.request("/api/teras");
+      const listed = (await teras.json()) as { teras: { id: string }[] };
+      expect(listed.teras.map((tera) => tera.id)).toEqual([DEFAULT_TERA_ID]);
+
+      const messages = await harness.request(`/api/teras/${DEFAULT_TERA_ID}/messages`);
+      expect(await messages.json()).toEqual({ messages: [] });
     });
   });
 
@@ -793,7 +798,7 @@ describe("チャットとモデル設定の関係", () => {
       { model: "deepseek/deepseek-flash", providers: { deepseek: { apiKey: "sk-1" } } },
       async (harness) => {
         const response = await harness.request(
-          "/api/sessions/s1/messages",
+          `/api/teras/${DEFAULT_TERA_ID}/messages`,
           jsonRequest("POST", { content: "こんにちは" }),
         );
 

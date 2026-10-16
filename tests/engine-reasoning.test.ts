@@ -49,7 +49,7 @@ function history(): ChatMessage[] {
   return [
     {
       id: "m1",
-      sessionId: "s1",
+      teraId: "t1",
       seq: 1,
       role: "user",
       content: "こんにちは",
@@ -80,7 +80,7 @@ async function runEngine(settings: ModelSettings): Promise<string> {
   const stream = await createMastraEngine(reader, createMcpStub(), createComputerStub(), createImageStub()).stream({
     history: history(),
     signal: new AbortController().signal,
-    sessionId: "s1",
+    teraId: "t1",
   });
 
   let text = "";

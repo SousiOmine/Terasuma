@@ -87,7 +87,7 @@ export function ModelPickerDialog({ onClose }: ModelPickerDialogProps) {
       onClose={onClose}
       footer={
         <>
-          <Button onClick={onClose}>{t("sidebar.cancel")}</Button>
+          <Button onClick={onClose}>{t("common.cancel")}</Button>
           <Button variant="primary" disabled={busy || model === null} onClick={() => run(save)}>
             {t(busy ? "settings.model.picker.saving" : "settings.model.picker.confirm")}
           </Button>

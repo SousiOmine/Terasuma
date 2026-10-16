@@ -29,11 +29,11 @@ export type EngineStream = {
 };
 
 export type EngineInput = {
-  /** セッションの保存済み履歴。seq 昇順で、末尾が今回のユーザー発言。 */
+  /** Tera の保存済み履歴。seq 昇順で、末尾が今回のユーザー発言。 */
   history: readonly ChatMessage[];
   signal: AbortSignal;
-  /** このターンのセッション。コンテナの引き受け（computer_ask_user）をこの単位で待つ。 */
-  sessionId: string;
+  /** このターンの Tera。コンテナの引き受け（computer_ask_user）をこの単位で待つ。 */
+  teraId: string;
 };
 
 /** モデルへ渡すツールの供給元。接続を持たないテストでもここを差し替えれば済む。 */
@@ -42,11 +42,11 @@ export type ToolsetProvider = {
 };
 
 /**
- * コンテナのツールの供給元。ターンの対象セッションと、
+ * コンテナのツールの供給元。ターンの対象の Tera と、
  * ツールが撮った画像を受け取る口を渡す。
  */
 export type ComputerToolsetProvider = {
-  toolset(input: { sessionId: string; onImage: (image: ImageRef) => void }): Promise<ComputerToolset>;
+  toolset(input: { teraId: string; onImage: (image: ImageRef) => void }): Promise<ComputerToolset>;
 };
 
 /**
@@ -181,7 +181,7 @@ export function createMastraEngine(
 
   return {
     name: "mastra",
-    async stream({ history, signal, sessionId }) {
+    async stream({ history, signal, teraId }) {
       // 設定は設定画面から変わるので、ターンのたびに読み直す。
       const resolution = resolveModel(settings.read());
       if (!resolution.ok) throw new Error(resolution.detail);
@@ -203,7 +203,7 @@ export function createMastraEngine(
       // （設定画面でサーバーを足しても、コンテナを止めても Agent を作り直さずに済む）。
       const [mcpTools, computerTools] = await Promise.all([
         mcp.toolset(),
-        computer.toolset({ sessionId, onImage: (image) => capturedImages.push(image) }),
+        computer.toolset({ teraId, onImage: (image) => capturedImages.push(image) }),
       ]);
       const tools = { ...mcpTools, ...computerTools };
 

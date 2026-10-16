@@ -4,15 +4,9 @@ import type { MessageKey } from "./en";
 export const ja: Record<MessageKey, string> = {
   "app.name": "Terasuma",
 
-  "sidebar.new": "新しいチャット",
-  "sidebar.untitled": "新しいチャット",
-  "sidebar.empty": "まだ会話がありません",
-  "sidebar.menu": "会話のメニュー",
-  "sidebar.delete": "削除",
-  "sidebar.deleteTitle": "会話を削除しますか？",
-  "sidebar.deleteMessage": "この操作は取り消せません。",
-  "sidebar.confirmDelete": "削除する",
-  "sidebar.cancel": "やめる",
+  "common.cancel": "やめる",
+
+  "tera.empty": "まだ Tera がありません",
 
   "chat.empty.title": "何をお手伝いしましょうか",
   "chat.loading": "読み込み中…",
@@ -195,7 +189,7 @@ export const ja: Record<MessageKey, string> = {
   "provider.custom.name": "OpenAI 互換のエンドポイント",
 
   "error.invalid_request": "送信できませんでした。",
-  "error.session_not_found": "この会話はすでに存在しません。",
+  "error.tera_not_found": "この Tera はありません。",
   "error.model_error": "モデルから応答を得られませんでした。",
   "error.model_not_configured": "使用するモデルが設定されていません。",
   "error.provider_not_found": "このプロバイダは設定されていません。",

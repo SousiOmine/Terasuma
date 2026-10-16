@@ -40,8 +40,9 @@ export type LiveHarness = {
   dataDir: string;
   /** コンテナ。デスクトップを触る確認で、アプリの起動時と同じように先に起こす。 */
   container: ContainerManager;
-  send(sessionId: string, content: string): Promise<ChatEvent[]>;
-  messages(sessionId: string): Promise<ChatMessage[]>;
+  send(teraId: string, content: string): Promise<ChatEvent[]>;
+  /** その Tera の履歴（古い順）。 */
+  messages(teraId: string): Promise<ChatMessage[]>;
 };
 
 /**
@@ -91,8 +92,8 @@ export async function withLiveServer(run: (harness: LiveHarness) => Promise<void
       model: resolution.model.id,
       dataDir: config.dataDir,
       container,
-      async send(sessionId, content) {
-        const response = await fetch(new URL(`/api/sessions/${sessionId}/messages`, base), {
+      async send(teraId, content) {
+        const response = await fetch(new URL(`/api/teras/${teraId}/messages`, base), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ content }),
@@ -103,8 +104,8 @@ export async function withLiveServer(run: (harness: LiveHarness) => Promise<void
         expect(decoded.rest).toBe("");
         return decoded.events;
       },
-      async messages(sessionId) {
-        const response = await fetch(new URL(`/api/sessions/${sessionId}/messages`, base));
+      async messages(teraId) {
+        const response = await fetch(new URL(`/api/teras/${teraId}/messages`, base));
         return ((await response.json()) as { messages: ChatMessage[] }).messages;
       },
     });

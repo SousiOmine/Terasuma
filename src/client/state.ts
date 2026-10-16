@@ -1,5 +1,5 @@
 import { computed, signal } from "@preact/signals";
-import type { ChatEvent, ChatMessage, Session } from "../shared/types";
+import type { ChatEvent, ChatMessage, Tera } from "../shared/types";
 import * as api from "./api";
 import { loadContainer, showContainerError } from "./containerSettings";
 import { toErrorState } from "./errors";
@@ -15,8 +15,9 @@ export type SettingsCategory = "general" | "model" | "container" | "advanced";
 
 export const view = signal<View>("chat");
 export const settingsCategory = signal<SettingsCategory>("general");
-export const sessions = signal<readonly Session[]>([]);
-export const activeSessionId = signal<string | null>(null);
+/** 画面に並べる Tera。いまは既定の 1 体だけ。 */
+export const teras = signal<readonly Tera[]>([]);
+export const activeTeraId = signal<string | null>(null);
 export const messages = signal<readonly ChatMessage[]>([]);
 /**
  * 生成中の本文。完了すると messages へ移り、ここは空に戻る。
@@ -28,13 +29,10 @@ export const isLoadingMessages = signal(false);
 export const errorCode = signal<api.ClientErrorCode | null>(null);
 export const errorDetail = signal<string | null>(null);
 
-/** 一覧にまだ載っていない新規セッションでは null になる（その場合は「新しいチャット」と表示する）。 */
-export const activeSession = computed(
-  () => sessions.value.find((session) => session.id === activeSessionId.value) ?? null,
+/** 一覧をまだ読めていないときは null になる。 */
+export const activeTera = computed(
+  () => teras.value.find((tera) => tera.id === activeTeraId.value) ?? null,
 );
-
-/** 削除の確認ダイアログが対象にしている会話の id。null ならダイアログは閉じている。 */
-const pendingDeleteSessionId = signal<string | null>(null);
 
 /**
  * 右ペイン（コンテナの画面）を開いているかどうか。既定は閉じている。
@@ -67,12 +65,12 @@ export const handoverQuestion = signal<string | null>(null);
 export async function answerHandover(
   answer: { kind: "done" } | { kind: "text"; text: string },
 ): Promise<void> {
-  const sessionId = activeSessionId.value;
-  if (sessionId === null || !handoverActive.value) return;
+  const teraId = activeTeraId.value;
+  if (teraId === null || !handoverActive.value) return;
 
   clearError();
   try {
-    await api.answerHandover(sessionId, answer);
+    await api.answerHandover(teraId, answer);
   } catch (error) {
     reportError(error);
   }
@@ -93,11 +91,6 @@ export function toggleComputerPane(): void {
   computerPaneOpen.value = !computerPaneOpen.value;
 }
 
-/** 確認ダイアログに出す会話。一覧から消えた id なら null になり、ダイアログも閉じる。 */
-export const pendingDeleteSession = computed(
-  () => sessions.value.find((session) => session.id === pendingDeleteSessionId.value) ?? null,
-);
-
 let controller: AbortController | null = null;
 
 export async function bootstrap(): Promise<void> {
@@ -110,42 +103,30 @@ export async function bootstrap(): Promise<void> {
   try {
     // モデル設定は、チャット画面の「使うモデルがありません」の案内にも使う。
     await loadModelSettings();
-    await refreshSessions();
-    const latest = sessions.value[0];
-    if (latest === undefined) {
-      startNewChat();
-    } else {
-      await openSession(latest.id);
-    }
+    await refreshTeras();
+
+    // いまは 1 体だけなので、開く Tera は一覧の先頭で決まる。
+    const first = teras.value[0];
+    if (first !== undefined) await openTera(first.id);
   } catch (error) {
     // サーバに繋がらない場合も、入力できる画面は出しておく（送信時にあらためて失敗を伝える）。
     reportError(error);
-    startNewChat();
   }
 }
 
-export async function refreshSessions(): Promise<void> {
-  sessions.value = await api.listSessions();
+export async function refreshTeras(): Promise<void> {
+  teras.value = await api.listTeras();
 }
 
-export function startNewChat(): void {
+export async function openTera(id: string): Promise<void> {
   stopStreaming();
   clearError();
-  // セッション行はサーバ側で最初の送信時に作られる。ここでは id だけ先に決めておく。
-  activeSessionId.value = crypto.randomUUID();
-  messages.value = [];
-  streamingText.value = "";
-}
-
-export async function openSession(id: string): Promise<void> {
-  stopStreaming();
-  clearError();
-  activeSessionId.value = id;
+  activeTeraId.value = id;
   isLoadingMessages.value = true;
   try {
     messages.value = await api.listMessages(id);
   } catch (error) {
-    // 履歴を読めない会話を開いたとき、前の会話を残したままにすると
+    // 履歴を読めない Tera を開いたとき、前の履歴を残したままにすると
     // 見出しと本文が食い違う。空にして、理由を画面に出す。
     messages.value = [];
     reportError(error);
@@ -167,8 +148,14 @@ export async function sendMessage(rawContent: string): Promise<void> {
 
   if (isStreaming.value) return;
 
-  const sessionId = activeSessionId.value ?? crypto.randomUUID();
-  activeSessionId.value = sessionId;
+  // 送り先は起動時に読んだ一覧から決まる。読めていないときは送り先が無い。
+  const teraId = activeTeraId.value;
+  if (teraId === null) {
+    errorCode.value = "tera_not_found";
+    errorDetail.value = null;
+    return;
+  }
+
   clearError();
 
   const abort = new AbortController();
@@ -177,7 +164,7 @@ export async function sendMessage(rawContent: string): Promise<void> {
   streamingText.value = "";
 
   try {
-    for await (const event of api.streamTurn(sessionId, content, abort.signal)) {
+    for await (const event of api.streamTurn(teraId, content, abort.signal)) {
       applyEvent(event);
     }
   } catch (error) {
@@ -187,54 +174,11 @@ export async function sendMessage(rawContent: string): Promise<void> {
     streamingText.value = "";
     controller = null;
   }
-
-  // タイトルはサーバが最初の発言から決めるので一覧を取り直す。
-  // 会話自体は成立しているため、ここでの失敗は画面に出さない。
-  try {
-    await refreshSessions();
-  } catch {
-    // 一覧が古いままでも会話は続けられる。
-  }
 }
 
 export function stopStreaming(): void {
   controller?.abort();
   controller = null;
-}
-
-/** 削除の確認ダイアログを開く。削除そのものは confirmDeleteSession で行う。 */
-export function requestDeleteSession(id: string): void {
-  pendingDeleteSessionId.value = id;
-}
-
-/** 削除の確認ダイアログを閉じる。 */
-export function cancelDeleteSession(): void {
-  pendingDeleteSessionId.value = null;
-}
-
-/** 確認ダイアログで「削除する」を選んだときの削除実行。 */
-export async function confirmDeleteSession(): Promise<void> {
-  const target = pendingDeleteSession.value;
-  if (target === null) return;
-
-  // 削除の成否にかかわらずダイアログは閉じる。失敗は reportError が画面に出す。
-  cancelDeleteSession();
-  await removeSession(target.id);
-}
-
-async function removeSession(id: string): Promise<void> {
-  try {
-    await api.deleteSession(id);
-    await refreshSessions();
-
-    if (activeSessionId.value !== id) return;
-
-    const latest = sessions.value[0];
-    if (latest === undefined) startNewChat();
-    else await openSession(latest.id);
-  } catch (error) {
-    reportError(error);
-  }
 }
 
 export function clearError(): void {

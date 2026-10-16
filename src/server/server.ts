@@ -93,13 +93,11 @@ export function startServer(options: ServerOptions): StartedServer {
       development: config.isDevelopment,
       routes: {
         "/": index,
-        "/api/sessions": {
-          GET: api.listSessions,
+        // Tera（会話の持ち主）と、その 1 本の履歴。
+        "/api/teras": {
+          GET: api.listTeras,
         },
-        "/api/sessions/:id": {
-          DELETE: api.deleteSession,
-        },
-        "/api/sessions/:id/messages": {
+        "/api/teras/:id/messages": {
           GET: api.listMessages,
           POST: api.sendMessage,
         },
