@@ -9,6 +9,7 @@
     "start:dist": "cd dist && bun index.js",
     "build": "bun scripts/build.ts",
     "test": "bun test",
+    "test:live": "bun test ./tests/live/*.live.ts",
     "typecheck": "bunx tsc --noEmit",
     "check": "bun run typecheck && bun test"
   },
