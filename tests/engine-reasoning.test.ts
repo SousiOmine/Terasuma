@@ -78,7 +78,7 @@ function portOf(server: { port?: number }): number {
 async function runEngine(settings: ModelSettings): Promise<string> {
   const reader: SettingsReader = { read: () => settings };
   const stream = await createMastraEngine(reader, createMcpStub(), createComputerStub(), createImageStub()).stream({
-    history: history(),
+    context: { observations: null, messages: history() },
     signal: new AbortController().signal,
     teraId: "t1",
   });

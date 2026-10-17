@@ -16,7 +16,7 @@ import type { ProviderCheckResult } from "../src/shared/types";
 import { createSettingsStore, type SettingsStore } from "../src/server/settings";
 import { createStore, DEFAULT_TERA_ID } from "../src/server/store";
 import { createHandover } from "../src/server/handover";
-import { createContainerStub, createMcpStub } from "./support";
+import { createContainerStub, createMcpStub, createMemoryStub } from "./support";
 import type { ModelSettingsView, ProviderView, ReasoningView } from "../src/shared/types";
 
 /** テストで使うカタログの中身。deepseek はカタログのプロバイダ、custom-1 は独自エンドポイント。 */
@@ -135,6 +135,7 @@ async function withModelServer<T>(
   const catalog = createCatalogStub();
   const check = createCheckStub();
   const lister = createListerStub();
+  const store = createStore(":memory:");
   const { server } = startServer({
     config: {
       host: "127.0.0.1",
@@ -146,8 +147,9 @@ async function withModelServer<T>(
       engine: "mock",
       isDevelopment: false,
     },
-    store: createStore(":memory:"),
+    store,
     engine: createMockEngine({ chunkSize: 10_000, delayMs: 0 }),
+    memory: createMemoryStub(store),
     settings,
     mcp: createMcpStub(),
     container: createContainerStub(),

@@ -8,7 +8,7 @@ import { startServer } from "../src/server/server";
 import { createStore } from "../src/server/store";
 import type { ContainerStatusView } from "../src/shared/types";
 import { createHandover } from "../src/server/handover";
-import { TEST_SETTINGS, createMcpStub, createPodmanStub, withTempSettings, type PodmanStubBehaviour } from "./support";
+import { TEST_SETTINGS, createMcpStub, createMemoryStub, createPodmanStub, withTempSettings, type PodmanStubBehaviour } from "./support";
 
 /** コンテナの API を、podman を差し替えた状態で HTTP 越しに確かめる。 */
 async function withContainerServer<T>(
@@ -25,6 +25,7 @@ async function withContainerServer<T>(
 
   try {
     return await withTempSettings(TEST_SETTINGS, async (settings) => {
+      const store = createStore(":memory:");
       const { server } = startServer({
         config: {
           host: "127.0.0.1",
@@ -36,8 +37,9 @@ async function withContainerServer<T>(
           engine: "mock",
           isDevelopment: false,
         },
-        store: createStore(":memory:"),
+        store,
         engine: createMockEngine({ chunkSize: 10_000, delayMs: 0 }),
+        memory: createMemoryStub(store),
         settings,
         mcp: createMcpStub(),
         container,

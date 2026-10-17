@@ -25,6 +25,7 @@ import {
 import { authorizationPage, toMcpView, toSettingsView } from "./views";
 import { runTurn, sseResponse } from "./turn";
 import { McpServerNotFound, type McpManager } from "./mcp";
+import type { Memory } from "./memory";
 import type { Catalog, CatalogSnapshot } from "./models-dev";
 import {
   ProviderRequestError,
@@ -71,6 +72,8 @@ export type ApiDeps = {
   container: ContainerManager;
   /** ユーザーへ画面を渡す待ち。チャットからの返事をここへ届ける。 */
   handover: Handover;
+  /** 観察の記録。ターンの前に落ち着かせ、ターンの後に更新する。 */
+  memory: Memory;
   /** models.dev のカタログ。プロバイダとモデルの一覧はここから取る。 */
   catalog: Catalog;
   /** プロバイダへ接続できるかを確かめる。 */

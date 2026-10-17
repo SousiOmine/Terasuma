@@ -8,7 +8,7 @@ import { createStore, DEFAULT_TERA_ID } from "../src/server/store";
 import type { Store } from "../src/server/store";
 import { decodeChatEvents } from "../src/shared/sse";
 import type { ApiErrorCode, ChatEvent, ChatMessage, Tera } from "../src/shared/types";
-import { TEST_SETTINGS, createContainerStub, createMcpStub, withTempSettings } from "./support";
+import { TEST_SETTINGS, createContainerStub, createMcpStub, createMemoryStub, withTempSettings } from "./support";
 
 const config: AppConfig = {
   host: "127.0.0.1",
@@ -49,7 +49,16 @@ async function withServer<T>(
 ): Promise<T> {
   return withTempSettings(TEST_SETTINGS, async (settings) => {
     const store = makeStore();
-    const { server } = startServer({ config, store, engine, settings, mcp: createMcpStub(), container: createContainerStub(), handover: createHandover() });
+    const { server } = startServer({
+      config,
+      store,
+      engine,
+      memory: createMemoryStub(store),
+      settings,
+      mcp: createMcpStub(),
+      container: createContainerStub(),
+      handover: createHandover(),
+    });
     const base = server.url;
 
     const request = (path: string, init?: RequestInit) => fetch(new URL(path, base), init);
@@ -116,6 +125,9 @@ function createRecordingEngine(inner: AgentEngine): AgentEngine & { inputs: Engi
       inputs.push(input);
       return inner.stream(input);
     },
+    complete(input) {
+      return inner.complete(input);
+    },
   };
 }
 
@@ -134,6 +146,9 @@ function createFailingEngine(mode: "immediate" | "mid-stream"): AgentEngine {
         })(),
         usage: Promise.resolve(null),
       });
+    },
+    complete() {
+      return Promise.reject(new Error("テスト用のエンジンでは記憶を作れません"));
     },
   };
 }
@@ -162,6 +177,9 @@ function createToolEngine(): AgentEngine {
         })(),
         usage: Promise.resolve({ inputTokens: 3, outputTokens: 4, cachedInputTokens: 0 }),
       });
+    },
+    complete() {
+      return Promise.reject(new Error("テスト用のエンジンでは記憶を作れません"));
     },
   };
 }
@@ -242,8 +260,29 @@ describe("チャット API", () => {
       const [first, second] = recording.inputs;
       if (first === undefined || second === undefined) throw new Error("入力が記録されていない");
 
-      expect(second.history.slice(0, first.history.length)).toEqual([...first.history]);
-      expect(JSON.stringify(second.history).startsWith(JSON.stringify(first.history).slice(0, -1))).toBe(true);
+      expect(second.context.messages.slice(0, first.context.messages.length)).toEqual([...first.context.messages]);
+      expect(JSON.stringify(second.context.messages).startsWith(JSON.stringify(first.context.messages).slice(0, -1))).toBe(true);
+    });
+  });
+
+  test("記憶があるときは、観察の記録と、そのあとの生の履歴が渡る", async () => {
+    const recording = createRecordingEngine(fastMock());
+    await withServer(recording, async (harness) => {
+      await harness.send(DEFAULT_TERA_ID, "最初の質問");
+
+      // 記憶は閾値（3 万トークン）まで会話しないと作られない。
+      // ここでは作られた後の状態を直接置いて、渡り方だけを確かめる。
+      harness.store.writeObservations(DEFAULT_TERA_ID, {
+        text: "Date: 2026-10-16\n* 🔴 (09:00) 京都に住んでいる。",
+        throughSeq: 2,
+      });
+
+      await harness.send(DEFAULT_TERA_ID, "次の質問");
+
+      const input = recording.inputs[1];
+      if (input === undefined) throw new Error("2 ターン目の入力が無い");
+      expect(input.context.observations).toContain("京都に住んでいる");
+      expect(input.context.messages.map((message) => message.content)).toEqual(["次の質問"]);
     });
   });
 
@@ -301,7 +340,7 @@ describe("チャット API", () => {
       const second = recording.inputs[1];
       if (second === undefined) throw new Error("2 ターン目の入力が無い");
 
-      expect(second.history[1]?.parts).toEqual([
+      expect(second.context.messages[1]?.parts).toEqual([
         { type: "text", text: "調べます。" },
         { type: "tool-call", id: "call-1", server: "local", tool: "echo", args: { text: "hi" } },
         {
@@ -412,6 +451,7 @@ describe("チャット API", () => {
         })(),
         usage: Promise.resolve(null),
       }),
+      complete: () => Promise.reject(new Error("テスト用のエンジンでは記憶を作れません")),
     };
 
     await withServer(limitEngine, async (harness) => {
@@ -481,7 +521,11 @@ describe("チャット API", () => {
 
       // 保存された本文は、最後まで生成した場合の接頭辞になっている。
       const reference = createMockEngine({ chunkSize: 10_000, delayMs: 0 });
-      const full = await reference.stream({ history: [user], signal: new AbortController().signal, teraId: DEFAULT_TERA_ID });
+      const full = await reference.stream({
+        context: { observations: null, messages: [user] },
+        signal: new AbortController().signal,
+        teraId: DEFAULT_TERA_ID,
+      });
       let fullText = "";
       for await (const event of full.events) {
         if (event.type === "text-delta") fullText += event.delta;

@@ -18,9 +18,10 @@ import { createHandover } from "../../src/server/handover";
 import { createImageStore } from "../../src/server/images";
 import { createMcpManager } from "../../src/server/mcp";
 import { OAUTH_CALLBACK_PATH } from "../../src/server/mcp-oauth";
+import { createMemory, type Memory } from "../../src/server/memory";
 import { startServer } from "../../src/server/server";
 import { createSettingsStore } from "../../src/server/settings";
-import { createStore } from "../../src/server/store";
+import { createStore, type Store } from "../../src/server/store";
 import { decodeChatEvents } from "../../src/shared/sse";
 import type { ChatEvent, ChatMessage, TokenUsage } from "../../src/shared/types";
 
@@ -40,6 +41,10 @@ export type LiveHarness = {
   dataDir: string;
   /** コンテナ。デスクトップを触る確認で、アプリの起動時と同じように先に起こす。 */
   container: ContainerManager;
+  /** 本番と同じストア。長い履歴や観察の記録を直に置いて確かめるときに使う。 */
+  store: Store;
+  /** 記憶。閾値（3 万トークン）をまたぐ確認で、更新を待つために使う。 */
+  memory: Memory;
   send(teraId: string, content: string): Promise<ChatEvent[]>;
   /** その Tera の履歴（古い順）。 */
   messages(teraId: string): Promise<ChatMessage[]>;
@@ -83,7 +88,8 @@ export async function withLiveServer(run: (harness: LiveHarness) => Promise<void
   });
 
   const engine = createEngine({ config, settings, mcp, computer, images });
-  const { server } = startServer({ config, store, engine, settings, mcp, container, handover });
+  const memory = createMemory({ store, engine, log: (message) => console.log(message) });
+  const { server } = startServer({ config, store, engine, memory, settings, mcp, container, handover });
   boundPort = server.port ?? null;
 
   try {
@@ -92,6 +98,8 @@ export async function withLiveServer(run: (harness: LiveHarness) => Promise<void
       model: resolution.model.id,
       dataDir: config.dataDir,
       container,
+      store,
+      memory,
       async send(teraId, content) {
         const response = await fetch(new URL(`/api/teras/${teraId}/messages`, base), {
           method: "POST",

@@ -89,3 +89,57 @@ test(
   },
   CONTAINER_TIMEOUT_MS,
 );
+
+test(
+  "観察の記録がモデルへ渡る（system メッセージとして通る）",
+  async () => {
+    await withLiveServer(async (harness) => {
+      // 記憶は閾値（3 万トークン）まで会話しないと作られないので、
+      // ここでは作られたあとの状態を直接置いて、渡り方だけを確かめる。
+      harness.store.writeObservations(DEFAULT_TERA_ID, {
+        text: ["Date: 2026-10-16", "* 🔴 (09:00) ユーザーの名前は「そら」で、京都に住んでいる。"].join("\n"),
+        throughSeq: 0,
+      });
+
+      const events = await harness.send(DEFAULT_TERA_ID, "私の名前と、住んでいる場所を一言で。");
+      const done = expectTurnSucceeded(events);
+      report("応答", done);
+
+      // 観察の記録は system メッセージとして渡す（位置が特殊なので、通るかどうかはここでしか分からない）。
+      expect(done.content, "観察の記録がモデルへ渡っていない").toContain("そら");
+      expect(done.content).toContain("京都");
+    });
+  },
+  TURN_TIMEOUT_MS,
+);
+
+test(
+  "閾値を超えた履歴が、実際のモデルで観察の記録に畳まれる",
+  async () => {
+    await withLiveServer(async (harness) => {
+      // 1 件あたり 1,000 トークンほど（半角 4 文字で 1 トークン）の履歴を 35 件置く。
+      // 画面から作ると 30 往復かかるので、履歴は直に置く。
+      for (let index = 1; index <= 35; index += 1) {
+        harness.store.appendMessage({
+          id: `seed-${index}`,
+          teraId: DEFAULT_TERA_ID,
+          role: index % 2 === 1 ? "user" : "assistant",
+          content: `記録 ${index}: ${"terasuma observational memory check ".repeat(120)}`,
+        });
+      }
+
+      await harness.memory.update(DEFAULT_TERA_ID);
+      const observations = harness.store.readObservations(DEFAULT_TERA_ID);
+
+      // 観察と反映は、ツールを使わない 1 回の生成で行う。ここが通らないと記憶は育たないので、
+      // 実際のモデルが指示どおりの記録を返すかどうかを、ここで確かめる。
+      console.log(`  観察: throughSeq=${observations.throughSeq} / ${observations.text.length} 文字`);
+      console.log(`  観察: ${preview(observations.text, 160)}`);
+
+      expect(observations.throughSeq, "観察が進んでいない").toBeGreaterThan(0);
+      expect(observations.text, "記録に日付の見出しが無い").toContain("Date:");
+      expect(/^\s*[*-] /m.test(observations.text), "記録に観察の行が無い").toBe(true);
+    });
+  },
+  TURN_TIMEOUT_MS,
+);

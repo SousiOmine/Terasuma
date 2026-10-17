@@ -199,3 +199,66 @@ describe("store", () => {
     }
   });
 });
+describe("観察の記録", () => {
+  test("まだ観察していなければ、記録は空で、すべてが未観察", () => {
+    const store = makeStore();
+    expect(store.readObservations(DEFAULT_TERA_ID)).toEqual({ text: "", throughSeq: 0 });
+  });
+
+  test("書いた記録は読み直せて、上書きもできる", () => {
+    const store = makeStore();
+    store.writeObservations(DEFAULT_TERA_ID, { text: "Date: 2026-10-16\n* 🔴 (09:00) 京都に住んでいる。", throughSeq: 2 });
+    expect(store.readObservations(DEFAULT_TERA_ID)).toEqual({
+      text: "Date: 2026-10-16\n* 🔴 (09:00) 京都に住んでいる。",
+      throughSeq: 2,
+    });
+
+    store.writeObservations(DEFAULT_TERA_ID, { text: "書き直した記録", throughSeq: 4 });
+    expect(store.readObservations(DEFAULT_TERA_ID)).toEqual({ text: "書き直した記録", throughSeq: 4 });
+  });
+
+  test("listMessagesSince は、その seq より後のメッセージだけを返す", () => {
+    const store = makeStore();
+    for (const seq of [1, 2, 3]) {
+      store.appendMessage({ id: `m${seq}`, teraId: DEFAULT_TERA_ID, role: "user", content: `${seq}` });
+    }
+
+    expect(store.listMessagesSince(DEFAULT_TERA_ID, 0).map((message) => message.content)).toEqual(["1", "2", "3"]);
+    expect(store.listMessagesSince(DEFAULT_TERA_ID, 2).map((message) => message.content)).toEqual(["3"]);
+    expect(store.listMessagesSince(DEFAULT_TERA_ID, 3)).toEqual([]);
+  });
+
+  test("記録は Tera ごとに分かれる", () => {
+    const store = makeStore();
+    store.ensureTera("second", "2 体目");
+    store.writeObservations(DEFAULT_TERA_ID, { text: "既定の記録", throughSeq: 1 });
+
+    expect(store.readObservations(DEFAULT_TERA_ID)).toEqual({ text: "既定の記録", throughSeq: 1 });
+    expect(store.readObservations("second")).toEqual({ text: "", throughSeq: 0 });
+  });
+
+  test("いない Tera へは書けない", () => {
+    const store = makeStore();
+    // 記録は Tera の行に紐づく。書けてしまうと、どの Tera の記録か分からないまま残る。
+    expect(() => store.writeObservations("missing", { text: "記録", throughSeq: 1 })).toThrow();
+  });
+
+  test("開き直しても記録はそのまま", () => {
+    const path = join(tmpdir(), `terasuma-store-${crypto.randomUUID()}.db`);
+
+    try {
+      const first = createStore(path);
+      first.writeObservations(DEFAULT_TERA_ID, { text: "残る記録", throughSeq: 2 });
+      first.close();
+
+      const second = createStore(path);
+      try {
+        expect(second.readObservations(DEFAULT_TERA_ID)).toEqual({ text: "残る記録", throughSeq: 2 });
+      } finally {
+        second.close();
+      }
+    } finally {
+      removeDatabase(path);
+    }
+  });
+});

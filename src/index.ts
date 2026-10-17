@@ -8,6 +8,7 @@ import { createHandover } from "./server/handover";
 import { createImageStore } from "./server/images";
 import { createMcpManager } from "./server/mcp";
 import { OAUTH_CALLBACK_PATH } from "./server/mcp-oauth";
+import { createMemory } from "./server/memory";
 import { startServer } from "./server/server";
 import { createSettingsStore } from "./server/settings";
 import { createStore } from "./server/store";
@@ -44,10 +45,16 @@ const handover = createHandover();
 const computer = createComputerToolset({ container, images, handover });
 
 const engine = createEngine({ config, settings, mcp, computer, images });
+
+// 古いやり取りは、ターンが終わったあとに背景で観察の記録へ畳む。
+// 失敗は端末に出す（会話は生の履歴のまま続く）。
+const memory = createMemory({ store, engine, log: (message) => console.log(message) });
+
 const { server, portChanged } = startServer({
   config,
   store,
   engine,
+  memory,
   settings,
   mcp,
   container,

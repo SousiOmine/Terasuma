@@ -4,7 +4,7 @@ import { createMockEngine } from "../src/server/engine";
 import { startServer, type StartedServer } from "../src/server/server";
 import { createStore } from "../src/server/store";
 import { createHandover } from "../src/server/handover";
-import { TEST_SETTINGS, createContainerStub, createMcpStub, withTempSettings } from "./support";
+import { TEST_SETTINGS, createContainerStub, createMcpStub, createMemoryStub, withTempSettings } from "./support";
 
 /** ポートだけを差し替えて使う設定。 */
 function makeConfig(port: number): AppConfig {
@@ -23,10 +23,12 @@ function makeConfig(port: number): AppConfig {
 /** 指定したポートでサーバを起動し、テストが終わったら必ず止める。 */
 async function withServerOn<T>(port: number, run: (started: StartedServer) => Promise<T>): Promise<T> {
   return withTempSettings(TEST_SETTINGS, async (settings) => {
+    const store = createStore(":memory:");
     const started = startServer({
       config: makeConfig(port),
-      store: createStore(":memory:"),
+      store,
       engine: createMockEngine({ chunkSize: 10_000, delayMs: 0 }),
+      memory: createMemoryStub(store),
       settings,
       mcp: createMcpStub(),
       container: createContainerStub(),
@@ -93,11 +95,13 @@ describe("サーバの起動ポート", () => {
     // ポート番号が範囲外なのは設定の検証で弾かれる値だが、listen 以外の失敗を
     // 空きポートで握り潰さないことをここで確かめる（握り潰すと設定ミスに気づけない）。
     await withTempSettings(TEST_SETTINGS, async (settings) => {
+      const store = createStore(":memory:");
       const attempt = () =>
         startServer({
           config: makeConfig(70_000),
-          store: createStore(":memory:"),
+          store,
           engine: createMockEngine({ chunkSize: 10_000, delayMs: 0 }),
+          memory: createMemoryStub(store),
           settings,
           mcp: createMcpStub(),
           container: createContainerStub(),

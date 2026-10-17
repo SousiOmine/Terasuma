@@ -2,6 +2,7 @@ import { encodeChatEvent } from "../shared/sse";
 import type { ChatEvent, ChatMessage, MessagePart, TokenUsage } from "../shared/types";
 import { describeError } from "../shared/errors";
 import type { AgentEngine } from "./engine";
+import type { Memory } from "./memory";
 import type { Store } from "./store";
 
 /**
@@ -13,6 +14,8 @@ import type { Store } from "./store";
 export type TurnDeps = {
   store: Store;
   engine: AgentEngine;
+  /** 観察の記録。ターンの前に落ち着かせ、ターンの後に更新する。 */
+  memory: Memory;
 };
 
 /**
@@ -30,6 +33,10 @@ export async function* runTurn(
     yield* turnEvents(deps, teraId, content, signal);
   } finally {
     running.delete(teraId);
+
+    // ターンが終わってから、背景で記憶を更新する。
+    // 次のターンはこの更新の終わりを待ってから始まるので、ふつうは待たされない。
+    void deps.memory.update(teraId);
   }
 }
 
@@ -43,7 +50,11 @@ async function* turnEvents(
   content: string,
   signal: AbortSignal,
 ): AsyncGenerator<ChatEvent> {
-  const { store, engine } = deps;
+  const { store, engine, memory } = deps;
+
+  // 前のターンの後に始めた記憶の更新がまだ走っていれば、終わるまで待つ。
+  // 待たずに始めると、更新が今回の発言まで観察してしまい、生のままではモデルへ渡らなくなる。
+  await memory.settle(teraId);
 
   // Tera は起動時に用意されている（無い id は、ここへ来る前に断っている）。
   const userMessage = store.appendMessage({
@@ -57,9 +68,9 @@ async function* turnEvents(
   const assistantId = crypto.randomUUID();
   yield { type: "assistant-start", id: assistantId, createdAt: Date.now() };
 
-  // 保存済み履歴をそのまま渡す。要約も並べ替えもしない
+  // 観察の記録と、まだ観察していない生の履歴。生の履歴には要約も並べ替えもしない
   // （プロンプトキャッシュが当たり続けるようにするため）。
-  const history = store.listMessages(teraId);
+  const context = memory.context(teraId);
 
   /** 生成中の本文とツールの出来事。保存される並びそのものになる。 */
   const parts: MessagePart[] = [];
@@ -102,7 +113,7 @@ async function* turnEvents(
   };
 
   try {
-    const stream = await engine.stream({ history, signal, teraId });
+    const stream = await engine.stream({ context, signal, teraId });
 
     for await (const event of stream.events) {
       switch (event.type) {

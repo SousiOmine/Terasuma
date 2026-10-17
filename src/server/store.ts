@@ -18,14 +18,30 @@ export type AppendMessageInput = {
   usage?: TokenUsage | null;
 };
 
+/**
+ * Tera ごとの観察の記録（Observational Memory）。
+ * 古いやり取りをここへ畳んでいくことで、モデルへ渡す文脈を有界に保つ。
+ */
+export type Observations = {
+  /** 日付つきの観察の記録。まだ 1 度も観察していなければ空文字。 */
+  text: string;
+  /** この seq までのメッセージは観察済み。まだ観察していなければ 0。 */
+  throughSeq: number;
+};
+
 export type Store = {
   listTeras(): Tera[];
   getTera(id: string): Tera | null;
   /** 無ければ作る。既にあれば名前も作成日時も変えない（起動のたびに呼ばれる）。 */
   ensureTera(id: string, name: string): Tera;
   listMessages(teraId: string): ChatMessage[];
+  /** seq より後のメッセージ（古い順）。まだ観察していない生の履歴を取り出す。 */
+  listMessagesSince(teraId: string, seq: number): ChatMessage[];
   /** 履歴の末尾に追記する。Tera の行が先に存在している必要がある。 */
   appendMessage(input: AppendMessageInput): ChatMessage;
+  readObservations(teraId: string): Observations;
+  /** 観察の記録を置き換える。throughSeq は呼ぶ側が前に進める（戻さない）。 */
+  writeObservations(teraId: string, observations: Observations): void;
   close(): void;
 };
 
@@ -125,6 +141,12 @@ export function createStore(dbPath: string, options: CreateStoreOptions = {}): S
 
     CREATE INDEX IF NOT EXISTS idx_messages_tera_seq ON messages (tera_id, seq);
     CREATE INDEX IF NOT EXISTS idx_teras_updated_at ON teras (updated_at DESC);
+
+    CREATE TABLE IF NOT EXISTS observations (
+      tera_id     TEXT PRIMARY KEY REFERENCES teras (id) ON DELETE CASCADE,
+      text        TEXT NOT NULL,
+      through_seq INTEGER NOT NULL
+    );
   `);
 
   const selectTera = db.query<TeraRow, [string]>(
@@ -146,6 +168,10 @@ export function createStore(dbPath: string, options: CreateStoreOptions = {}): S
     `SELECT id, tera_id, seq, role, content, parts, created_at, input_tokens, output_tokens, cached_input_tokens
      FROM messages WHERE tera_id = ? ORDER BY seq ASC`,
   );
+  const selectMessagesSince = db.query<MessageRow, [string, number]>(
+    `SELECT id, tera_id, seq, role, content, parts, created_at, input_tokens, output_tokens, cached_input_tokens
+     FROM messages WHERE tera_id = ? AND seq > ? ORDER BY seq ASC`,
+  );
   const insertMessage = db.query<
     { seq: number },
     [string, string, string, string, string, string | null, number, number | null, number | null, number | null]
@@ -154,6 +180,14 @@ export function createStore(dbPath: string, options: CreateStoreOptions = {}): S
        (id, tera_id, seq, role, content, parts, created_at, input_tokens, output_tokens, cached_input_tokens)
      VALUES (?, ?, (SELECT COALESCE(MAX(seq), 0) + 1 FROM messages WHERE tera_id = ?), ?, ?, ?, ?, ?, ?, ?)
      RETURNING seq`,
+  );
+
+  const selectObservations = db.query<{ text: string; through_seq: number }, [string]>(
+    "SELECT text, through_seq FROM observations WHERE tera_id = ?",
+  );
+  const upsertObservations = db.query<unknown, [string, string, number]>(
+    `INSERT INTO observations (tera_id, text, through_seq) VALUES (?, ?, ?)
+     ON CONFLICT (tera_id) DO UPDATE SET text = excluded.text, through_seq = excluded.through_seq`,
   );
 
   const append = db.transaction((input: AppendMessageInput): ChatMessage => {
@@ -210,6 +244,19 @@ export function createStore(dbPath: string, options: CreateStoreOptions = {}): S
 
     listMessages(teraId) {
       return selectMessages.all(teraId).map(toMessage);
+    },
+
+    listMessagesSince(teraId, seq) {
+      return selectMessagesSince.all(teraId, seq).map(toMessage);
+    },
+
+    readObservations(teraId) {
+      const row = selectObservations.get(teraId);
+      return row === null ? { text: "", throughSeq: 0 } : { text: row.text, throughSeq: row.through_seq };
+    },
+
+    writeObservations(teraId, observations) {
+      upsertObservations.run(teraId, observations.text, observations.throughSeq);
     },
 
     appendMessage(input) {

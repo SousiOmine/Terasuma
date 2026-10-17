@@ -3,7 +3,7 @@ import { createMockEngine } from "../src/server/engine";
 import { createHandover, type Handover } from "../src/server/handover";
 import { startServer } from "../src/server/server";
 import { createStore } from "../src/server/store";
-import { TEST_SETTINGS, createContainerStub, createMcpStub, withTempSettings } from "./support";
+import { TEST_SETTINGS, createContainerStub, createMcpStub, createMemoryStub, withTempSettings } from "./support";
 
 /** 引き受けの受け渡しを、HTTP 越しに確かめる。 */
 async function withHandoverServer<T>(
@@ -15,6 +15,7 @@ async function withHandoverServer<T>(
   const handover = createHandover();
 
   return withTempSettings(TEST_SETTINGS, async (settings) => {
+    const store = createStore(":memory:");
     const { server } = startServer({
       config: {
         host: "127.0.0.1",
@@ -26,8 +27,9 @@ async function withHandoverServer<T>(
         engine: "mock",
         isDevelopment: false,
       },
-      store: createStore(":memory:"),
+      store,
       engine: createMockEngine({ chunkSize: 10_000, delayMs: 0 }),
+      memory: createMemoryStub(store),
       settings,
       mcp: createMcpStub(),
       container: createContainerStub(),

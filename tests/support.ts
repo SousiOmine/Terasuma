@@ -7,7 +7,8 @@ import type { ComputerToolsetProvider } from "../src/server/engine";
 import type { ImageStore } from "../src/server/images";
 import type { McpManager } from "../src/server/mcp";
 import { createSettingsStore, type SettingsStore } from "../src/server/settings";
-import { createStore } from "../src/server/store";
+import { createStore, type Store } from "../src/server/store";
+import { createMemory, type Memory } from "../src/server/memory";
 import type { ContainerStatusView } from "../src/shared/types";
 
 /** 時刻を固定したストア。updated_at の比較を決定的にするため。 */
@@ -75,6 +76,23 @@ export function createImageStub(): ImageStore {
 /** コンテナのツールを渡さないテストのための差し替え。 */
 export function createComputerStub(): ComputerToolsetProvider {
   return { toolset: async () => ({}) };
+}
+
+/**
+ * サーバを起こすだけのテストのための記憶。ストアは本物を使い、観察と反映の呼び出しだけを持たない。
+ * 閾値（3 万トークン）に届かない履歴しかしないテストでは、どちらも走らない。
+ * 文脈の組み立て（観察の記録 + 未観察の履歴）は本番と同じものを通す。
+ */
+export function createMemoryStub(store: Store): Memory {
+  return createMemory({
+    store,
+    engine: {
+      complete: () => {
+        throw new Error("テスト用の差し替えでは記憶を作れません");
+      },
+    },
+    log: () => undefined,
+  });
 }
 
 /** podman を差し替えるときに決める初期状態。 */

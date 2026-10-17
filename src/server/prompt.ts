@@ -7,6 +7,7 @@ import type { ChatMessage, ImageRef, MessagePart } from "../shared/types";
  * ここには絶対に可変値を入れない。日時・ユーザー名・件数・ファイル一覧などを混ぜると、
  * 先頭が一致しなくなり、毎回キャッシュが当たらなくなる。
  * 可変の情報をモデルへ渡したくなったら、履歴の末尾（最後の user メッセージの後ろ）に置くこと。
+ * 観察の記録（TeraContext）は、この定数ではなく 2 件目の system メッセージとして渡す。
  */
 export const SYSTEM_PROMPT = [
   "You are Terasuma, a general-purpose assistant running on the user's own machine.",
@@ -14,6 +15,34 @@ export const SYSTEM_PROMPT = [
   "Always reply in the language the user writes in.",
   "You can operate the computer (a separate Debian desktop) through the computer_ tools: its screen, keyboard, mouse, and shell.",
 ].join("\n");
+
+/**
+ * モデルへ渡す文脈。system プロンプトの後ろに、記憶（観察の記録）と生の履歴をこの順で置く。
+ *
+ * 記憶は古いやり取りを畳んだもの、生の履歴はそれをまだ畳んでいない直近のやり取り。
+ * 合わせて 1 本の会話になり、続きは常に末尾へ足される。
+ */
+export type TeraContext = {
+  /** 観察の記録。まだ 1 度も観察していなければ null。 */
+  observations: string | null;
+  /** まだ観察していない生の履歴（古い順）。末尾が今回のユーザー発言。 */
+  messages: readonly ChatMessage[];
+};
+
+/**
+ * 観察の記録を、モデルへ渡す本文にする。
+ * 前置きは定数で、変わるのは記録そのものだけ（記録は末尾へ足されていくので、前のターンと頭から一致する）。
+ */
+export function observationsText(log: string): string {
+  return [
+    "Below is your memory of earlier conversations with this user, kept as dated observations.",
+    "Use it as context. Do not quote it back, and do not mention that you have it.",
+    "",
+    "<observations>",
+    log,
+    "</observations>",
+  ].join("\n");
+}
 
 /** モデルへ渡す assistant の内容の一部。 */
 export type AssistantContentPart =
@@ -58,12 +87,18 @@ export function toolNameFor(server: string, tool: string): string {
 
 /**
  * 保存済み履歴を、モデルへ渡す形に開く。
- * 要約・言い換え・並べ替えはしない（プロンプトキャッシュを当て続けるため、末尾への追記だけにする）。
+ * 生の履歴は要約・言い換え・並べ替えをしない（プロンプトキャッシュを当て続けるため、末尾への追記だけにする）。
+ * 古いやり取りは、観察の記録として先頭に 1 件だけ置く。
  */
-export function toModelMessages(history: readonly ChatMessage[], images: ImageReader): ModelInputMessage[] {
+export function toModelMessages(context: TeraContext, images: ImageReader): ModelInputMessage[] {
   const messages: ModelInputMessage[] = [];
 
-  for (const message of history) {
+  // 記憶は system プロンプトの直後に置く。記録が増えない限り、この前置きは前のターンと一致する。
+  if (context.observations !== null) {
+    messages.push({ role: "system", content: observationsText(context.observations) });
+  }
+
+  for (const message of context.messages) {
     if (message.role === "user") {
       messages.push({ role: "user", content: message.content });
       continue;
@@ -137,8 +172,8 @@ export function screenMessage(
  * メッセージ列は「system 1 件 + toModelMessages() の結果」になる。ここはそのあるべき形を
  * 1 箇所で表現したもので、キャッシュ保護の回帰テスト（tests/prompt-cache.test.ts）が参照する。
  */
-export function buildModelInput(history: readonly ChatMessage[], images: ImageReader): ModelInputMessage[] {
-  return [{ role: "system", content: SYSTEM_PROMPT }, ...toModelMessages(history, images)];
+export function buildModelInput(context: TeraContext, images: ImageReader): ModelInputMessage[] {
+  return [{ role: "system", content: SYSTEM_PROMPT }, ...toModelMessages(context, images)];
 }
 
 /** 本文とツール呼び出しを、保存された順のまま並べる。 */

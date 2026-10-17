@@ -5,12 +5,12 @@ import type { OpenAICompatibleConfig } from "@mastra/core/llm";
 import type { ChunkType } from "@mastra/core/stream";
 import type { AppConfig, ModelSettings } from "../config";
 import { modelProvider, type ModelId } from "../shared/model";
-import type { ChatMessage, MessagePart, TokenUsage } from "../shared/types";
+import type { MessagePart, TokenUsage } from "../shared/types";
 import type { ImageRef } from "../shared/types";
 import type { ComputerToolset } from "./computer";
 import type { ImageStore } from "./images";
 import type { McpToolset } from "./mcp";
-import { SYSTEM_PROMPT, screenImageText, toModelMessages } from "./prompt";
+import { SYSTEM_PROMPT, screenImageText, toModelMessages, type TeraContext } from "./prompt";
 import { reasoningProviderOptions } from "./reasoning";
 import { describeError } from "../shared/errors";
 
@@ -29,11 +29,23 @@ export type EngineStream = {
 };
 
 export type EngineInput = {
-  /** Tera の保存済み履歴。seq 昇順で、末尾が今回のユーザー発言。 */
-  history: readonly ChatMessage[];
+  /** Tera の文脈（観察の記録と、まだ観察していない生の履歴）。末尾が今回のユーザー発言。 */
+  context: TeraContext;
   signal: AbortSignal;
   /** このターンの Tera。コンテナの引き受け（computer_ask_user）をこの単位で待つ。 */
   teraId: string;
+};
+
+/**
+ * ツールを使わない 1 回の呼び出し。観察と反映（記憶の更新）が使う。
+ * 会話のターンとは別に走るので、ターンの中断（停止）には巻き込まれない。
+ */
+export type CompleteInput = {
+  /** この呼び出しだけの system プロンプト。 */
+  instructions: string;
+  prompt: string;
+  /** 記憶の更新の期限。過ぎたら打ち切る。 */
+  signal: AbortSignal;
 };
 
 /** モデルへ渡すツールの供給元。接続を持たないテストでもここを差し替えれば済む。 */
@@ -58,6 +70,8 @@ export type ComputerToolsetProvider = {
 export interface AgentEngine {
   readonly name: string;
   stream(input: EngineInput): Promise<EngineStream>;
+  /** ツールを使わない 1 回の生成。記憶の観察と反映に使う。 */
+  complete(input: CompleteInput): Promise<string>;
 }
 
 /** 設定を読む口。設定画面から変わるので、呼び出しのたびに読む。 */
@@ -181,14 +195,14 @@ export function createMastraEngine(
 
   return {
     name: "mastra",
-    async stream({ history, signal, teraId }) {
+    async stream({ context, signal, teraId }) {
       // 設定は設定画面から変わるので、ターンのたびに読み直す。
       const resolution = resolveModel(settings.read());
       if (!resolution.ok) throw new Error(resolution.detail);
 
-      // 保存済み履歴をそのまま渡す。要約も並べ替えもしない
+      // 観察の記録を先頭に、生の履歴をその後ろに置く。生の履歴には要約も並べ替えもしない
       // （プロンプトキャッシュが当たり続けるようにするため）。
-      const messages = toModelMessages(history, images);
+      const messages = toModelMessages(context, images);
 
       // 思考強度はプロバイダごとに渡し方が違うので、ここで組み立てて呼び出しごとに渡す。
       const providerOptions = reasoningProviderOptions(
@@ -228,6 +242,25 @@ export function createMastraEngine(
         events: toEngineEvents(result.fullStream),
         usage: result.usage.then(normalizeUsage, () => null),
       };
+    },
+
+    /**
+     * ツールを使わない 1 回の生成（観察と反映）。
+     * 指示もプロンプトも呼び出しごとに変わるので、Agent は使い回さずその場で作る。
+     */
+    async complete({ instructions, prompt, signal }) {
+      const resolution = resolveModel(settings.read());
+      if (!resolution.ok) throw new Error(resolution.detail);
+
+      const agent = new Agent({
+        id: "terasuma-memory",
+        name: "Terasuma Memory",
+        instructions,
+        model: toModelConfig(resolution.model),
+      });
+
+      const result = await agent.generate(prompt, { abortSignal: signal, maxSteps: 1 });
+      return result.text;
     },
   };
 }
@@ -411,19 +444,20 @@ export function createMockEngine(options: { chunkSize?: number; delayMs?: number
 
   return {
     name: "mock",
-    stream({ history, signal }) {
-      const lastUser = [...history].reverse().find((message) => message.role === "user");
-      const userTurns = history.filter((message) => message.role === "user").length;
+    stream({ context, signal }) {
+      const lastUser = [...context.messages].reverse().find((message) => message.role === "user");
+      const userTurns = context.messages.filter((message) => message.role === "user").length;
 
       const reply = [
         "[mock engine]",
-        `これは偽の応答です。受け取った会話は ${history.length} 件（うちユーザー発言 ${userTurns} 件）。`,
+        `これは偽の応答です。受け取った会話は ${context.messages.length} 件（うちユーザー発言 ${userTurns} 件）。`,
+        `観察の記録: ${context.observations === null ? "まだありません" : `${context.observations.length} 文字`}`,
         `直前の発言: ${lastUser?.content ?? "(なし)"}`,
       ].join("\n");
 
       // 数値は文字数から作った当てずっぽう。実際のキャッシュの値ではない。
       const usage: TokenUsage = {
-        inputTokens: history.reduce((total, message) => total + message.content.length, 0),
+        inputTokens: context.messages.reduce((total, message) => total + message.content.length, 0),
         outputTokens: reply.length,
         cachedInputTokens: 0,
       };
@@ -432,6 +466,14 @@ export function createMockEngine(options: { chunkSize?: number; delayMs?: number
         events: chunkText(reply, chunkSize, delayMs, signal),
         usage: Promise.resolve(usage),
       });
+    },
+
+    /**
+     * モックの観察。中身は作れないので、記憶の更新が動いたことだけが分かる記録を返す。
+     * モックは画面の確認用で、記憶の中身を確かめるためのものではない（テストは偽のエンジンを渡す）。
+     */
+    complete({ prompt }) {
+      return Promise.resolve(`* 🟢 [mock] ${prompt.length} 文字を観察しました（モックのため中身は残しません）`);
     },
   };
 }
