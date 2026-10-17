@@ -19,6 +19,7 @@ import { createImageStore } from "../../src/server/images";
 import { createMcpManager } from "../../src/server/mcp";
 import { OAUTH_CALLBACK_PATH } from "../../src/server/mcp-oauth";
 import { createMemory, type Memory } from "../../src/server/memory";
+import { CATALOG_FILE_NAME, createCatalog, modelContextTokens } from "../../src/server/models-dev";
 import { startServer } from "../../src/server/server";
 import { createSettingsStore } from "../../src/server/settings";
 import { createStore, type Store } from "../../src/server/store";
@@ -88,8 +89,17 @@ export async function withLiveServer(run: (harness: LiveHarness) => Promise<void
   });
 
   const engine = createEngine({ config, settings, mcp, computer, images });
-  const memory = createMemory({ store, engine, log: (message) => console.log(message) });
-  const { server } = startServer({ config, store, engine, memory, settings, mcp, container, handover });
+
+  // 畳むかどうかはモデルの文脈長に対する割合で決める（index.ts と同じ組み立て）。
+  const catalog = createCatalog({ cachePath: join(config.dataDir, CATALOG_FILE_NAME) });
+  const memory = createMemory({
+    store,
+    engine,
+    log: (message) => console.log(message),
+    contextLimit: () => modelContextTokens(catalog.snapshot(), settings.read().model),
+  });
+
+  const { server } = startServer({ config, store, engine, memory, catalog, settings, mcp, container, handover });
   boundPort = server.port ?? null;
 
   try {

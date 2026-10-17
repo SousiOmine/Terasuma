@@ -34,9 +34,8 @@ export async function* runTurn(
   } finally {
     running.delete(teraId);
 
-    // ターンが終わってから、背景で記憶を更新する。
-    // 次のターンはこの更新の終わりを待ってから始まるので、ふつうは待たされない。
-    void deps.memory.update(teraId);
+    // ターンが終わってから、次に記憶を作る時を決める（要れば今すぐ、要らなければ 3 時間後に予約）。
+    deps.memory.check(teraId);
   }
 }
 
@@ -51,10 +50,6 @@ async function* turnEvents(
   signal: AbortSignal,
 ): AsyncGenerator<ChatEvent> {
   const { store, engine, memory } = deps;
-
-  // 前のターンの後に始めた記憶の更新がまだ走っていれば、終わるまで待つ。
-  // 待たずに始めると、更新が今回の発言まで観察してしまい、生のままではモデルへ渡らなくなる。
-  await memory.settle(teraId);
 
   // Tera は起動時に用意されている（無い id は、ここへ来る前に断っている）。
   const userMessage = store.appendMessage({

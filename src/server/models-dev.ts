@@ -8,6 +8,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { getProviderConfig } from "@mastra/core/llm";
+import { modelParts, type ModelId } from "../shared/model";
 import type { FetchLike } from "./provider-models";
 import { describeError } from "../shared/errors";
 
@@ -26,6 +27,8 @@ export type CatalogReasoningOption =
 
 export type CatalogModel = {
   id: string;
+  /** 一度に扱える文脈の長さ（トークン）。models.dev が持たないモデルでは null。 */
+  contextTokens: number | null;
   reasoningOptions: readonly CatalogReasoningOption[];
 };
 
@@ -227,6 +230,7 @@ function readModels(provider: unknown): readonly CatalogModel[] {
 
     models.push({
       id,
+      contextTokens: readContextTokens(entry["limit"]),
       reasoningOptions: readReasoningOptions(entry["reasoning_options"]),
     });
   }
@@ -267,6 +271,26 @@ export function effortValues(model: CatalogModel | null): readonly string[] {
     if (option.type === "effort") return option.values;
   }
   return [];
+}
+
+/**
+ * 既定のモデルの文脈長（トークン）。カタログから分からなければ null。
+ * 分からないモデル（接続先を自分で決めたものなど）の扱いは、呼ぶ側が決める。
+ */
+export function modelContextTokens(snapshot: CatalogSnapshot | null, model: ModelId | null): number | null {
+  if (snapshot === null || model === null) return null;
+
+  const { provider, model: name } = modelParts(model);
+  const entry = snapshot.models.get(provider)?.find((candidate) => candidate.id === name);
+  return entry?.contextTokens ?? null;
+}
+
+/** models.dev の limit.context。正の数でなければ「分からない」として null にする。 */
+function readContextTokens(raw: unknown): number | null {
+  if (typeof raw !== "object" || raw === null) return null;
+
+  const value = (raw as Record<string, unknown>)["context"];
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? Math.floor(value) : null;
 }
 
 function readText(source: Record<string, unknown>, key: string): string | null {

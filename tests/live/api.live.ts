@@ -117,9 +117,9 @@ test(
   "閾値を超えた履歴が、実際のモデルで観察の記録に畳まれる",
   async () => {
     await withLiveServer(async (harness) => {
-      // 1 件あたり 1,000 トークンほど（半角 4 文字で 1 トークン）の履歴を 35 件置く。
-      // 画面から作ると 30 往復かかるので、履歴は直に置く。
-      for (let index = 1; index <= 35; index += 1) {
+      // 1 件あたり 1,000 トークンほど（半角 4 文字で 1 トークン）の履歴を 36 件置く。
+      // 画面から作ると 30 往復かかるので、履歴は直に置く（最後はアシスタントの発言にして、畳める形にする）。
+      for (let index = 1; index <= 36; index += 1) {
         harness.store.appendMessage({
           id: `seed-${index}`,
           teraId: DEFAULT_TERA_ID,

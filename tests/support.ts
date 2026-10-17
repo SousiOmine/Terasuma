@@ -92,6 +92,8 @@ export function createMemoryStub(store: Store): Memory {
       },
     },
     log: () => undefined,
+    // 文脈長が分からないモデルの見積もり（12.8 万トークン）で動かす。
+    contextLimit: () => null,
   });
 }
 

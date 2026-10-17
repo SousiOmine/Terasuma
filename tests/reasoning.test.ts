@@ -4,11 +4,11 @@ import { reasoningProviderOptions, selectableEfforts } from "../src/server/reaso
 
 /** 思考強度として effort の値を持つモデル。 */
 function modelWithEffort(values: string[]): CatalogModel {
-  return { id: "m", reasoningOptions: [{ type: "effort", values }] };
+  return { id: "m", contextTokens: null, reasoningOptions: [{ type: "effort", values }] };
 }
 
 /** 思考強度を持たない（toggle だけの）モデル。 */
-const togglable: CatalogModel = { id: "m", reasoningOptions: [{ type: "toggle" }] };
+const togglable: CatalogModel = { id: "m", contextTokens: null, reasoningOptions: [{ type: "toggle" }] };
 
 describe("思考強度の選択肢", () => {
   test("モデルが挙げた値のうち、こちらから渡せるものだけを出す", () => {

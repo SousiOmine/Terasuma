@@ -5,25 +5,31 @@ import { DEFAULT_TERA_ID, type Store } from "../src/server/store";
 import type { ChatMessage } from "../src/shared/types";
 import { makeStore } from "./support";
 
+const HOUR_MS = 60 * 60 * 1000;
+/** 記憶の引き金（3 時間）。実装と同じ値を使う。 */
+const IDLE_MS = 3 * HOUR_MS;
+
 /**
- * 観察と反映の閾値は 3 万 / 4 万トークンなので、閾値をまたぐ履歴を作って確かめる。
- * 本文はすべて半角にして、トークンの目安（半角 4 文字で 1 トークン）を狙って作る。
+ * トークンの目安（半角 4 文字で 1 トークン）を狙って本文を作る。
  * 先頭には何番目のメッセージかが分かる番号を置く（観察へ渡る本文は切り詰められるので、頭に置く）。
  */
 function body(tokens: number, index: number): string {
   return index.toString().padStart(8, "0") + "a".repeat(Math.max(0, tokens * 4 - 8));
 }
 
-/** ストアに、同じ大きさのメッセージを並べる。 */
-function seed(store: Store, tokensEach: number, count: number): void {
+/** ストアに、同じ大きさのメッセージを並べる（user と assistant が交互）。最後のメッセージの時刻を返す。 */
+function seed(store: Store, tokensEach: number, count: number): number {
+  let at = 0;
   for (let index = 1; index <= count; index += 1) {
-    store.appendMessage({
+    const message = store.appendMessage({
       id: `m${index}`,
       teraId: DEFAULT_TERA_ID,
-      role: "user",
+      role: index % 2 === 1 ? "user" : "assistant",
       content: body(tokensEach, index),
     });
+    at = message.createdAt;
   }
+  return at;
 }
 
 /** complete の呼び出しを記録し、決めた応答を返すエンジン。 */
@@ -40,7 +46,24 @@ function createMemoryEngine(reply: (input: CompleteInput) => string | Promise<st
   };
 }
 
-/** 応答を待たせるための門。更新が走っている間の振る舞いを確かめるのに使う。 */
+/** テスト用の記憶。文脈長と時刻を決めて作る。 */
+function memoryWith(
+  store: Store,
+  engine: Pick<MemoryEngine, "complete">,
+  options: { limit?: number | null; now?: () => number; log?: (message: string) => void } = {},
+): Memory {
+  return createMemory({
+    store,
+    engine,
+    log: options.log ?? (() => undefined),
+    contextLimit: () => options.limit ?? null,
+    now: options.now,
+  });
+}
+
+type MemoryEngine = { complete(input: CompleteInput): Promise<string> };
+
+/** 応答を待たせるための門。更新が重ならないことを確かめるのに使う。 */
 function createGate() {
   let open = (): void => undefined;
   const gate = new Promise<void>((resolve) => {
@@ -49,74 +72,160 @@ function createGate() {
   return { gate, open: () => open() };
 }
 
-describe("記憶の更新", () => {
-  test("閾値に届かなければ、観察も反映もしない", async () => {
+async function waitFor(condition: () => boolean, timeoutMs = 2_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (condition()) return;
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  throw new Error("待機条件が満たされなかった");
+}
+
+describe("畳み始める時", () => {
+  test("放置もされておらず、文脈長にも届かなければ、観察しない", async () => {
     const store = makeStore();
-    seed(store, 1_000, 20); // 2 万トークン
+    const last = seed(store, 1_000, 5); // 5,000 トークン
 
     const fake = createMemoryEngine(() => "* 🔴 (09:00) 観察した");
-    const memory = createMemory({ store, engine: fake.engine, log: () => undefined });
+    const memory = memoryWith(store, fake.engine, { now: () => last });
 
-    await memory.update(DEFAULT_TERA_ID);
+    memory.check(DEFAULT_TERA_ID);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(fake.calls).toHaveLength(0);
+    expect(memory.context(DEFAULT_TERA_ID).messages).toHaveLength(5);
+    memory.close();
+  });
+
+  test("最後のやり取りから 3 時間たったら、記憶を作る", async () => {
+    const store = makeStore();
+    const last = seed(store, 1_000, 10); // 10,000 トークン（最後は assistant）
+
+    const fake = createMemoryEngine(() => "* 🔴 (09:00) 観察した");
+    // 3 時間たった時刻に合わせる（予約はすぐ発火する）。
+    const memory = memoryWith(store, fake.engine, { limit: 1_000_000, now: () => last + IDLE_MS });
+
+    memory.check(DEFAULT_TERA_ID);
+    await waitFor(() => store.readObservations(DEFAULT_TERA_ID).throughSeq > 0);
+    await memory.update(DEFAULT_TERA_ID); // 走っている更新に合流して、終わりまで待つ
+
+    expect(fake.calls.length).toBeGreaterThan(0);
+    // 直近 6,000 トークン（6 件）は生のまま残る。
+    expect(store.readObservations(DEFAULT_TERA_ID).throughSeq).toBe(4);
+    expect(memory.context(DEFAULT_TERA_ID).messages).toHaveLength(6);
+    memory.close();
+  });
+
+  test("最後のやり取りから 3 時間たっていても、畳むものが無ければ何もしない", async () => {
+    const store = makeStore();
+    const last = seed(store, 1_000, 5); // 5,000 トークン（直近として残す分に収まる）
+
+    const fake = createMemoryEngine(() => "* 🔴 (09:00) 観察した");
+    const memory = memoryWith(store, fake.engine, { limit: 1_000_000, now: () => last + IDLE_MS });
+
+    memory.check(DEFAULT_TERA_ID);
+    await new Promise((resolve) => setTimeout(resolve, 20));
 
     expect(fake.calls).toHaveLength(0);
     expect(store.readObservations(DEFAULT_TERA_ID)).toEqual({ text: "", throughSeq: 0 });
-    expect(memory.context(DEFAULT_TERA_ID).messages).toHaveLength(20);
+    memory.close();
   });
 
-  test("閾値を超えたら、古い方から観察し、直近は生のまま残す", async () => {
+  test("文脈長に届きそうなら、放置を待たずに畳む", async () => {
     const store = makeStore();
-    seed(store, 1_000, 40); // 4 万トークン
-
-    const fake = createMemoryEngine(() => "Date: 2026-10-16\n* 🔴 (09:00) 観察した");
-    const memory = createMemory({ store, engine: fake.engine, log: () => undefined });
-
-    await memory.update(DEFAULT_TERA_ID);
-
-    // 一度に観察するのは 3 万トークンまで。1 件 1,000 トークンなので 30 件。
-    expect(fake.calls).toHaveLength(1);
-    expect(store.readObservations(DEFAULT_TERA_ID)).toEqual({
-      text: "Date: 2026-10-16\n* 🔴 (09:00) 観察した",
-      throughSeq: 30,
-    });
-
-    // 観察へ渡した本文は 30 件目まで。31 件目からは渡っていない。
-    const prompt = fake.calls[0]?.prompt ?? "";
-    expect(prompt).toContain("00000001");
-    expect(prompt).toContain("00000030");
-    expect(prompt).not.toContain("00000031");
-
-    // 直近（残り 10 件）は生のまま残る。
-    const context = memory.context(DEFAULT_TERA_ID);
-    expect(context.observations).toBe("Date: 2026-10-16\n* 🔴 (09:00) 観察した");
-    expect(context.messages.map((message) => message.seq)).toEqual([31, 32, 33, 34, 35, 36, 37, 38, 39, 40]);
-  });
-
-  test("1 回の更新で観察するのは 3 往復まで（続きは次の更新で進む）", async () => {
-    const store = makeStore();
-    seed(store, 1_000, 200); // 20 万トークン
+    const last = seed(store, 1_000, 10); // 10,000 トークン（最後は assistant）
 
     const fake = createMemoryEngine(() => "* 🔴 (09:00) 観察した");
-    const memory = createMemory({ store, engine: fake.engine, log: () => undefined });
+    // 10,000 トークンのモデルなので、10,000 は上限（7,500）を超えている。
+    const memory = memoryWith(store, fake.engine, { limit: 10_000, now: () => last });
 
+    memory.check(DEFAULT_TERA_ID);
     await memory.update(DEFAULT_TERA_ID);
-    expect(fake.calls).toHaveLength(3);
-    expect(store.readObservations(DEFAULT_TERA_ID).throughSeq).toBe(90);
 
-    await memory.update(DEFAULT_TERA_ID);
-    expect(fake.calls).toHaveLength(6);
-    expect(store.readObservations(DEFAULT_TERA_ID).throughSeq).toBe(180);
+    expect(fake.calls.length).toBeGreaterThan(0);
+    // 直近 6,000 トークン（6 件）は生のまま残る。
+    expect(store.readObservations(DEFAULT_TERA_ID).throughSeq).toBe(4);
+    expect(memory.context(DEFAULT_TERA_ID).messages).toHaveLength(6);
+    memory.close();
   });
 
-  test("記録が閾値を超えたら、書き直して縮める", async () => {
+  test("文脈長に当たりそうにない長い履歴は、そのまま見せる", async () => {
     const store = makeStore();
-    // 反映の閾値（4 万トークン）を超える記録を置く。
-    const log = `Date: 2026-10-16\n* 🔴 (09:00) ${"b".repeat(4 * 41_000)}`;
+    const last = seed(store, 1_000, 40); // 40,000 トークン（短い間にできた長い履歴）
+
+    const fake = createMemoryEngine(() => "* 🔴 (09:00) 観察した");
+    // 1M トークンのモデルなら、この程度では上限に当たらない。
+    const memory = memoryWith(store, fake.engine, { limit: 1_000_000, now: () => last });
+
+    memory.check(DEFAULT_TERA_ID);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(fake.calls).toHaveLength(0);
+    expect(store.readObservations(DEFAULT_TERA_ID)).toEqual({ text: "", throughSeq: 0 });
+    expect(memory.context(DEFAULT_TERA_ID).messages).toHaveLength(40);
+    memory.close();
+  });
+
+  test("文脈長が分からないモデルは、既定の見積もり（12.8 万トークン）で見る", async () => {
+    const store = makeStore();
+    const last = seed(store, 1_000, 100); // 100,000 トークン > 128,000 の 75%
+
+    const fake = createMemoryEngine(() => "* 🔴 (09:00) 観察した");
+    const memory = memoryWith(store, fake.engine, { limit: null, now: () => last });
+
+    memory.check(DEFAULT_TERA_ID);
+    await memory.update(DEFAULT_TERA_ID);
+
+    expect(fake.calls.length).toBeGreaterThan(0);
+    expect(store.readObservations(DEFAULT_TERA_ID).throughSeq).toBe(94);
+    memory.close();
+  });
+});
+
+describe("観察と反映", () => {
+  test("返事がまだ返っていない発言は、畳まない", async () => {
+    const store = makeStore();
+    seed(store, 1_000, 8); // 最後は assistant
+    store.appendMessage({
+      id: "m9",
+      teraId: DEFAULT_TERA_ID,
+      role: "user",
+      content: body(1_000, 9),
+    });
+
+    const fake = createMemoryEngine(() => "* 🔴 (09:00) 観察した");
+    const memory = memoryWith(store, fake.engine, { limit: 1_000_000 });
+
+    await memory.update(DEFAULT_TERA_ID);
+
+    // 9 件目（これからモデルが読む発言）は観察へ渡さない。
+    const prompt = fake.calls[0]?.prompt ?? "";
+    expect(prompt).toContain("00000001");
+    expect(prompt).not.toContain("00000009");
+
+    // 観察したのは 1・2 件目まで。残りは生のまま（9 件目を含む）。
+    expect(store.readObservations(DEFAULT_TERA_ID).throughSeq).toBe(2);
+    expect(store.listMessagesSince(DEFAULT_TERA_ID, 2).map((message) => message.role)).toEqual([
+      "user",
+      "assistant",
+      "user",
+      "assistant",
+      "user",
+      "assistant",
+      "user",
+    ]);
+  });
+
+  test("記録が文脈長の 25% を超えたら、書き直して縮める", async () => {
+    const store = makeStore();
+    // 25,000 トークン（100,000 トークンのモデルの 25%）を超える記録。
+    const log = `Date: 2026-10-16\n* 🔴 (09:00) ${"b".repeat(4 * 30_000)}`;
     store.writeObservations(DEFAULT_TERA_ID, { text: log, throughSeq: 7 });
 
     const fake = createMemoryEngine(() => "Date: 2026-10-16\n* 🔴 (09:00) 縮めた記録");
-    const memory = createMemory({ store, engine: fake.engine, log: () => undefined });
+    const memory = memoryWith(store, fake.engine, { limit: 100_000, now: () => 0 });
 
+    memory.check(DEFAULT_TERA_ID);
     await memory.update(DEFAULT_TERA_ID);
 
     // 反映には、いまの記録そのものが渡る（観察の呼び出しではない）。
@@ -128,6 +237,26 @@ describe("記憶の更新", () => {
       text: "Date: 2026-10-16\n* 🔴 (09:00) 縮めた記録",
       throughSeq: 7,
     });
+    memory.close();
+  });
+
+  test("1 回の観察で見せるのは、文脈長の 25% まで", async () => {
+    const store = makeStore();
+    seed(store, 1_000, 200); // 200,000 トークン
+
+    const fake = createMemoryEngine(() => "* 🔴 (09:00) 観察した");
+    const memory = memoryWith(store, fake.engine, { limit: 100_000, now: () => 0 });
+
+    await memory.update(DEFAULT_TERA_ID);
+
+    // 100,000 トークンのモデルなので、1 回に見せるのは 25,000 トークン（25 件）まで。
+    const prompt = fake.calls[0]?.prompt ?? "";
+    expect(prompt).toContain("00000025");
+    expect(prompt).not.toContain("00000026");
+
+    // 何回かに分けて進み、直近 6 件は生のまま残る。
+    expect(fake.calls.length).toBeGreaterThan(1);
+    expect(store.readObservations(DEFAULT_TERA_ID).throughSeq).toBe(194);
   });
 
   test("観察に失敗したら、記録は変えずに理由を出す", async () => {
@@ -135,11 +264,11 @@ describe("記憶の更新", () => {
     seed(store, 1_000, 40);
 
     const logs: string[] = [];
-    const memory = createMemory({
+    const memory = memoryWith(
       store,
-      engine: { complete: () => Promise.reject(new Error("繋がらない")) },
-      log: (message) => logs.push(message),
-    });
+      { complete: () => Promise.reject(new Error("繋がらない")) },
+      { log: (message) => void logs.push(message) },
+    );
 
     await memory.update(DEFAULT_TERA_ID);
 
@@ -155,11 +284,7 @@ describe("記憶の更新", () => {
       seed(store, 1_000, 40);
 
       const logs: string[] = [];
-      const memory = createMemory({
-        store,
-        engine: { complete: () => Promise.resolve(reply) },
-        log: (message) => logs.push(message),
-      });
+      const memory = memoryWith(store, { complete: () => Promise.resolve(reply) }, { log: (message) => void logs.push(message) });
 
       await memory.update(DEFAULT_TERA_ID);
 
@@ -178,7 +303,7 @@ describe("記憶の更新", () => {
       await gate.gate;
       return "* 🔴 (09:00) 観察した";
     });
-    const memory = createMemory({ store, engine: fake.engine, log: () => undefined });
+    const memory = memoryWith(store, fake.engine, { limit: 1_000_000 });
 
     const first = memory.update(DEFAULT_TERA_ID);
     const second = memory.update(DEFAULT_TERA_ID);
@@ -188,33 +313,7 @@ describe("記憶の更新", () => {
     await first;
 
     expect(fake.calls).toHaveLength(1);
-    expect(store.readObservations(DEFAULT_TERA_ID).throughSeq).toBe(30);
-  });
-
-  test("settle は、走っている更新が終わるまで待つ", async () => {
-    const store = makeStore();
-    seed(store, 1_000, 40);
-
-    const gate = createGate();
-    const fake = createMemoryEngine(async () => {
-      await gate.gate;
-      return "* 🔴 (09:00) 観察した";
-    });
-    const memory = createMemory({ store, engine: fake.engine, log: () => undefined });
-
-    const updating = memory.update(DEFAULT_TERA_ID);
-    // 待っている間は、まだ記録が書かれていない。
-    expect(store.readObservations(DEFAULT_TERA_ID).throughSeq).toBe(0);
-
-    gate.open();
-    await memory.settle(DEFAULT_TERA_ID);
-
-    // settle が返った時点で、更新は終わっている。
-    expect(store.readObservations(DEFAULT_TERA_ID).throughSeq).toBe(30);
-    await updating;
-
-    // 走っていなければ、待たずに返る。
-    await memory.settle(DEFAULT_TERA_ID);
+    expect(store.readObservations(DEFAULT_TERA_ID).throughSeq).toBe(34);
   });
 });
 
@@ -227,13 +326,17 @@ describe("記録の育ち方", () => {
     });
     seed(store, 1_000, 80); // 2 往復する長さ
 
-    const replies = ["Date: 2026-10-16\n* 🟡 (10:00) 足した記録", "Date: 2026-10-17\n* 🔴 (09:00) 別の日の記録"];
+    const replies = [
+      "Date: 2026-10-16\n* 🟡 (10:00) 足した記録",
+      "Date: 2026-10-17\n* 🔴 (09:00) 別の日の記録",
+      "Date: 2026-10-17\n* 🟢 (11:00) さらに足した記録",
+    ];
     let index = 0;
-    const memory = createMemory({
+    const memory = memoryWith(
       store,
-      engine: { complete: () => Promise.resolve(replies[index++] ?? "") },
-      log: () => undefined,
-    });
+      { complete: () => Promise.resolve(replies[index++] ?? "") },
+      { limit: 100_000 },
+    );
 
     await memory.update(DEFAULT_TERA_ID);
 
@@ -293,11 +396,7 @@ describe("文脈の組み立て", () => {
     seed(store, 1_000, 5);
     store.writeObservations(DEFAULT_TERA_ID, { text: "* 🔴 (09:00) 観察した", throughSeq: 2 });
 
-    const memory: Memory = createMemory({
-      store,
-      engine: { complete: () => Promise.resolve("") },
-      log: () => undefined,
-    });
+    const memory = memoryWith(store, { complete: () => Promise.resolve("") });
 
     expect(memory.context(DEFAULT_TERA_ID)).toEqual({
       observations: "* 🔴 (09:00) 観察した",
@@ -309,11 +408,7 @@ describe("文脈の組み立て", () => {
     const store = makeStore();
     seed(store, 1_000, 1);
 
-    const memory = createMemory({
-      store,
-      engine: { complete: () => Promise.resolve("") },
-      log: () => undefined,
-    });
+    const memory = memoryWith(store, { complete: () => Promise.resolve("") });
 
     expect(memory.context(DEFAULT_TERA_ID).observations).toBeNull();
   });

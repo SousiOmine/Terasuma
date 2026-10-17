@@ -10,34 +10,43 @@ import type { Store } from "./store";
  * 会話が長くなっても、モデルへ渡す文脈を有界に保つための仕組み。
  * 背景で走る 2 つの呼び出しが、古いやり取りを日付つきの短い記録に置き換えていく。
  *
- * - 観察（Observer）: まだ記録していないやり取りが閾値を超えたら、古い方から観察して記録に足す
- * - 反映（Reflector）: 記録そのものが閾値を超えたら、書式はそのままで書き直して縮める
+ * - 観察（Observer）: まだ記録していないやり取りを、古い方から観察して記録に足す
+ * - 反映（Reflector）: 記録そのものが大きくなったら、書式はそのままで書き直して縮める
  *
- * どちらも会話には割り込まない。ターンが終わってから背景で走り、次のターンの頭で待つ。
- * 記録は追記だけで育つので、前置き（system プロンプト + 観察の記録）は記録が増えない限り変わらない。
- * これがプロンプトキャッシュの当たり続ける条件になっている。
+ * 畳み始めるのは、次のどちらか。どちらも会話には割り込まない（ターンが終わってから背景で走る）。
+ *
+ * 1. 最後のやり取りから 3 時間たったとき（記憶を生成する）。放置された会話を、
+ *    次のセッションへ持ち越せる形にしておくため。
+ * 2. 記録と生の履歴が、モデルの文脈長の 75% を超えたとき。次のターンが上限に当たる前に場所を空けるため。
+ *
+ * 2 は「上限に当たりそうなとき」だけ動く。短い間に長い履歴ができても、
+ * 文脈長に収まるうちはそのまま見せる（畳むほど、細かい言い回しは失われる）。
+ * 文脈長はモデルごとに違うので、カタログの値を割合で使う。
+ *
+ * 記録は末尾へ足していくだけで、書き直すのは反映のときだけ。
+ * これで前置き（system プロンプト + 観察の記録）が変わりにくくなり、プロンプトキャッシュが当たり続ける。
  */
 
-/** 観察を始める閾値（未観察の履歴のトークンの目安）。既定値は Mastra の Observational Memory と同じ。 */
-const OBSERVE_TOKENS = 30_000;
+/** 最後のやり取りからこれだけたったら、記憶を生成する。 */
+const IDLE_MS = 3 * 60 * 60 * 1000;
 
-/**
- * 生のまま残す直近の量。閾値の 20%（Mastra の bufferActivation: 0.8 と同じ割合）。
- * いま話している内容の細かい言い回しは、畳まずにそのまま見せる。
- */
-const RETAIN_TOKENS = OBSERVE_TOKENS / 5;
+/** 文脈長が分からないモデルの見積もり（接続先を自分で決めたモデルなど）。 */
+const DEFAULT_CONTEXT_TOKENS = 128_000;
 
-/** 反映を始める閾値（観察の記録のトークンの目安）。既定値は Mastra と同じ。 */
-const REFLECT_TOKENS = 40_000;
+/** 記録と生の履歴が、文脈長のこの割合に届いたら畳む（残りは返事と道具の定義に使う）。 */
+const CONTEXT_SHARE = 0.75;
 
-/**
- * 1 回の更新で観察する回数。
- * これを超える長さは、次の更新で続きから進む（1 回の更新で際限なく呼ばないため）。
- */
-const MAX_OBSERVE_ROUNDS = 3;
+/** 1 回の観察で見せる量の上限（文脈長に対する割合）。 */
+const CHUNK_SHARE = 0.25;
 
-/** 1 回の更新の上限。過ぎたら打ち切る（止まった呼び出しで次のターンを待たせ続けないため）。 */
-const UPDATE_TIMEOUT_MS = 120_000;
+/** 記録が文脈長のこの割合を超えたら、書き直して縮める。 */
+const REFLECT_SHARE = 0.25;
+
+/** 直近は生のまま残す。続きを細かい言い回しまで見せるため。 */
+const RETAIN_TOKENS = 6_000;
+
+/** 1 回の更新の上限。過ぎたら打ち切る（続きは次の更新で進む）。 */
+const UPDATE_TIMEOUT_MS = 10 * 60 * 1000;
 
 /** 観察に見せる 1 件の本文の上限。長いツールの出力で呼び出しが膨らむのを防ぐ。 */
 const OBSERVER_MAX_CHARS = 2_000;
@@ -48,10 +57,12 @@ const IMAGE_TOKENS = 1_000;
 export type Memory = {
   /** モデルへ渡す文脈（観察の記録と、まだ観察していない生の履歴）。 */
   context(teraId: string): TeraContext;
-  /** 走っている更新があれば、終わるまで待つ。ターンを始める前に呼ぶ。 */
-  settle(teraId: string): Promise<void>;
-  /** 閾値を超えていれば観察し、そのあと反映する。同じ Tera で重ねて走らせない。 */
+  /** ターンが終わったあとに呼ぶ。畳む必要があれば始め、要らなければ 3 時間後に予約する。 */
+  check(teraId: string): void;
+  /** いま観察と反映を行う（予約からもテストからも呼ぶ）。同じ Tera で重ねて走らせない。 */
   update(teraId: string): Promise<void>;
+  /** 予約を片付ける。 */
+  close(): void;
 };
 
 export type CreateMemoryOptions = {
@@ -60,12 +71,61 @@ export type CreateMemoryOptions = {
   engine: Pick<AgentEngine, "complete">;
   /** 失敗を端末へ出す口。会話は止めないが、黙らない。 */
   log: (message: string) => void;
+  /** 既定のモデルの文脈長（トークン）。分からなければ null。 */
+  contextLimit: () => number | null;
+  /** 時刻。テストで差し替える。 */
+  now?: () => number;
 };
 
 export function createMemory(options: CreateMemoryOptions): Memory {
-  const { store, engine, log } = options;
+  const { store, engine, log, contextLimit } = options;
+  const now = options.now ?? Date.now;
   /** 走っている更新。同じ Tera で 2 つ重ねないための 1 箇所。 */
   const running = new Map<string, Promise<void>>();
+  /** 3 時間後の予約。ターンのたびに引き直す。 */
+  const timers = new Map<string, ReturnType<typeof setTimeout>>();
+
+  /** 文脈長。分からないモデルは既定値で見積もる。 */
+  function limitTokens(): number {
+    return contextLimit() ?? DEFAULT_CONTEXT_TOKENS;
+  }
+
+  function check(teraId: string): void {
+    cancel(teraId);
+
+    const memory = store.readObservations(teraId);
+    const pending = store.listMessagesSince(teraId, memory.throughSeq);
+    const limit = limitTokens();
+    const logTokens = estimateTokens(memory.text);
+
+    // 記録だけで大きいか、記録と生の履歴で文脈長の 75% を超えていれば、放置を待たずに畳む。
+    if (logTokens > limit * REFLECT_SHARE || logTokens + sumTokens(pending) > limit * CONTEXT_SHARE) {
+      void update(teraId);
+      return;
+    }
+
+    // まだ畳んでいないやり取りが無ければ、待つものも無い。
+    const last = pending.at(-1);
+    if (last === undefined) return;
+
+    // それ以外は、最後のやり取りから 3 時間たつまで待つ。
+    const at = last.createdAt + IDLE_MS;
+    timers.set(
+      teraId,
+      setTimeout(() => {
+        timers.delete(teraId);
+        void update(teraId);
+      }, Math.max(0, at - now())),
+    );
+  }
+
+  function cancel(teraId: string): void {
+    const timer = timers.get(teraId);
+    if (timer === undefined) return;
+
+    clearTimeout(timer);
+    timers.delete(teraId);
+  }
 
   function update(teraId: string): Promise<void> {
     const current = running.get(teraId);
@@ -76,13 +136,8 @@ export function createMemory(options: CreateMemoryOptions): Memory {
     return job;
   }
 
-  function settle(teraId: string): Promise<void> {
-    // 走っていなければ、待つものは無い。
-    return running.get(teraId) ?? Promise.resolve();
-  }
-
   async function run(teraId: string): Promise<void> {
-    // 更新そのものに期限を置く（止まった呼び出しで、次のターンを待たせ続けない）。
+    // 更新そのものに期限を置く（長い履歴でも、1 回で際限なく呼び続けない）。
     const signal = AbortSignal.timeout(UPDATE_TIMEOUT_MS);
 
     try {
@@ -95,14 +150,14 @@ export function createMemory(options: CreateMemoryOptions): Memory {
     }
   }
 
-  /** 未観察の履歴が閾値を超えている間、古い方から観察して記録に足す。 */
+  /** まだ記録していないやり取りを、古い方から観察して記録に足す。 */
   async function observe(teraId: string, signal: AbortSignal): Promise<void> {
-    for (let round = 0; round < MAX_OBSERVE_ROUNDS; round += 1) {
+    for (;;) {
       const memory = store.readObservations(teraId);
-      const pending = store.listMessagesSince(teraId, memory.throughSeq);
-      if (sumTokens(pending) <= OBSERVE_TOKENS) return;
+      const pending = observable(store.listMessagesSince(teraId, memory.throughSeq));
+      if (sumTokens(pending) <= RETAIN_TOKENS) return;
 
-      const chunk = takeChunk(pending);
+      const chunk = takeChunk(pending, limitTokens() * CHUNK_SHARE);
       const added = await engine.complete({
         instructions: OBSERVER_INSTRUCTIONS,
         prompt: observerPrompt(memory.text, chunk.messages),
@@ -117,10 +172,10 @@ export function createMemory(options: CreateMemoryOptions): Memory {
     }
   }
 
-  /** 記録が閾値を超えていれば、書き直して縮める。 */
+  /** 記録が大きくなっていれば、書き直して縮める。 */
   async function reflect(teraId: string, signal: AbortSignal): Promise<void> {
     const memory = store.readObservations(teraId);
-    if (estimateTokens(memory.text) <= REFLECT_TOKENS) return;
+    if (estimateTokens(memory.text) <= limitTokens() * REFLECT_SHARE) return;
 
     const rewritten = await engine.complete({
       instructions: REFLECTOR_INSTRUCTIONS,
@@ -139,7 +194,23 @@ export function createMemory(options: CreateMemoryOptions): Memory {
     return { observations: memory.text === "" ? null : memory.text, messages };
   }
 
-  return { context, settle, update };
+  function close(): void {
+    for (const timer of timers.values()) clearTimeout(timer);
+    timers.clear();
+  }
+
+  return { context, check, update, close };
+}
+
+/**
+ * 観察してよい範囲。
+ * 返事がまだ返っていないユーザー発言は畳まない（履歴の最後が user のときの 1 件）。
+ * これからモデルが読む発言を、記録に置き換えてしまわないため。
+ */
+function observable(messages: ChatMessage[]): ChatMessage[] {
+  const last = messages.at(-1);
+  if (last === undefined || last.role !== "user") return messages;
+  return messages.slice(0, -1);
 }
 
 /** 観察する範囲。切り出したメッセージと、そこまでの seq。 */
@@ -150,14 +221,14 @@ type Chunk = {
 
 /**
  * 観察する範囲を古い方から切り出す。
- * 一度に観察するのは OBSERVE_TOKENS まで（1 回の呼び出しを膨らませすぎない）。
+ * 一度に観察するのは maxTokens まで（呼び出しを膨らませすぎない）。
  * 直近 RETAIN_TOKENS は生のまま残す。
  * 1 件で上限を超えるメッセージは、その 1 件だけを観察する（そうしないと先へ進めない）。
  */
-function takeChunk(pending: readonly ChatMessage[]): Chunk {
+function takeChunk(pending: readonly ChatMessage[], maxTokens: number): Chunk {
   const sizes = pending.map(estimateMessageTokens);
   const total = sizes.reduce((sum, size) => sum + size, 0);
-  const limit = Math.min(OBSERVE_TOKENS, total - RETAIN_TOKENS);
+  const limit = Math.min(maxTokens, total - RETAIN_TOKENS);
 
   const messages: ChatMessage[] = [];
   let used = 0;

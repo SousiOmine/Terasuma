@@ -49,11 +49,12 @@ async function withServer<T>(
 ): Promise<T> {
   return withTempSettings(TEST_SETTINGS, async (settings) => {
     const store = makeStore();
+    const memory = createMemoryStub(store);
     const { server } = startServer({
       config,
       store,
       engine,
-      memory: createMemoryStub(store),
+      memory,
       settings,
       mcp: createMcpStub(),
       container: createContainerStub(),
@@ -92,6 +93,7 @@ async function withServer<T>(
       return await run(harness);
     } finally {
       await server.stop(true);
+      memory.close();
     }
   });
 }
