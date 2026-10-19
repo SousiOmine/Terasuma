@@ -24,12 +24,15 @@ export type EngineEvent =
 
 export type EngineStream = {
   events: AsyncIterable<EngineEvent>;
-  /** ストリーム終了時に解決する。取得できない場合は null。 */
+  /**
+   * 最後のモデル呼び出し 1 回分のトークン消費。ストリーム終了時に解決する。
+   * 取得できない場合は null。
+   */
   usage: Promise<TokenUsage | null>;
 };
 
 export type EngineInput = {
-  /** Tera の文脈（観察の記録と、まだ観察していない生の履歴）。末尾が今回のユーザー発言。 */
+  /** Tera の文脈（畳んだ要約と、まだ畳んでいない生の履歴）。末尾が今回のユーザー発言。 */
   context: TeraContext;
   signal: AbortSignal;
   /** このターンの Tera。コンテナの引き受け（computer_ask_user）をこの単位で待つ。 */
@@ -37,15 +40,17 @@ export type EngineInput = {
 };
 
 /**
- * ツールを使わない 1 回の呼び出し。観察と反映（記憶の更新）が使う。
+ * ツールを使わない 1 回の呼び出し。過去の対話の要約（圧縮）が使う。
  * 会話のターンとは別に走るので、ターンの中断（停止）には巻き込まれない。
  */
 export type CompleteInput = {
   /** この呼び出しだけの system プロンプト。 */
   instructions: string;
   prompt: string;
-  /** 記憶の更新の期限。過ぎたら打ち切る。 */
+  /** 要約の期限。過ぎたら打ち切る。 */
   signal: AbortSignal;
+  /** 出力の上限。要約が際限なく長くならないようにする。 */
+  maxOutputTokens: number;
 };
 
 /** モデルへ渡すツールの供給元。接続を持たないテストでもここを差し替えれば済む。 */
@@ -70,7 +75,7 @@ export type ComputerToolsetProvider = {
 export interface AgentEngine {
   readonly name: string;
   stream(input: EngineInput): Promise<EngineStream>;
-  /** ツールを使わない 1 回の生成。記憶の観察と反映に使う。 */
+  /** ツールを使わない 1 回の生成。過去の対話の要約に使う。 */
   complete(input: CompleteInput): Promise<string>;
 }
 
@@ -200,7 +205,7 @@ export function createMastraEngine(
       const resolution = resolveModel(settings.read());
       if (!resolution.ok) throw new Error(resolution.detail);
 
-      // 観察の記録を先頭に、生の履歴をその後ろに置く。生の履歴には要約も並べ替えもしない
+      // 畳んだ要約を先頭に、生の履歴をその後ろに置く。生の履歴には要約も並べ替えもしない
       // （プロンプトキャッシュが当たり続けるようにするため）。
       const messages = toModelMessages(context, images);
 
@@ -238,28 +243,29 @@ export function createMastraEngine(
         },
       });
 
-      return {
-        events: toEngineEvents(result.fullStream),
-        usage: result.usage.then(normalizeUsage, () => null),
-      };
+      return toEngineStream(result.fullStream);
     },
 
     /**
-     * ツールを使わない 1 回の生成（観察と反映）。
+     * ツールを使わない 1 回の生成（要約）。
      * 指示もプロンプトも呼び出しごとに変わるので、Agent は使い回さずその場で作る。
      */
-    async complete({ instructions, prompt, signal }) {
+    async complete({ instructions, prompt, signal, maxOutputTokens }) {
       const resolution = resolveModel(settings.read());
       if (!resolution.ok) throw new Error(resolution.detail);
 
       const agent = new Agent({
-        id: "terasuma-memory",
-        name: "Terasuma Memory",
+        id: "terasuma-summary",
+        name: "Terasuma Summary",
         instructions,
         model: toModelConfig(resolution.model),
       });
 
-      const result = await agent.generate(prompt, { abortSignal: signal, maxSteps: 1 });
+      const result = await agent.generate(prompt, {
+        abortSignal: signal,
+        maxSteps: 1,
+        modelSettings: { maxOutputTokens },
+      });
       return result.text;
     },
   };
@@ -268,12 +274,35 @@ export function createMastraEngine(
 /**
  * Mastra のストリームを、画面と保存に必要な出来事だけに絞る。
  * 失敗はチャンクとして流れてくるので、ここで例外に戻す（黙って空の応答にしないため）。
+ *
+ * usage は最後のモデル呼び出し 1 回分を返す。Mastra の result.usage はターン内の全ステップの
+ * 合計で、文脈の大きさを測るのには使えない。ツールを使うターンでは呼び出しが何度もあるため、
+ * 「最後のステップが送った文脈」が、次に送る文脈の大きさに一番近い。
  */
-async function* toEngineEvents(chunks: AsyncIterable<ChunkType>): AsyncGenerator<EngineEvent> {
-  for await (const chunk of chunks) {
-    const event = toEngineEvent(chunk);
-    if (event !== null) yield event;
+function toEngineStream(chunks: AsyncIterable<ChunkType>): EngineStream {
+  let lastStepUsage: TokenUsage | null = null;
+  let resolveUsage: (usage: TokenUsage | null) => void = () => undefined;
+  const usage = new Promise<TokenUsage | null>((resolve) => {
+    resolveUsage = resolve;
+  });
+
+  async function* events(): AsyncGenerator<EngineEvent> {
+    try {
+      for await (const chunk of chunks) {
+        if (chunk.type === "step-finish") {
+          lastStepUsage = normalizeUsage(chunk.payload.output.usage);
+        }
+
+        const event = toEngineEvent(chunk);
+        if (event !== null) yield event;
+      }
+    } finally {
+      // 途中で止められても、待っている側を止めない（それまでに分かった値を返す）。
+      resolveUsage(lastStepUsage);
+    }
   }
+
+  return { events: events(), usage };
 }
 
 function toEngineEvent(chunk: ChunkType): EngineEvent | null {
@@ -427,8 +456,14 @@ type RawUsage = {
 
 function normalizeUsage(raw: RawUsage | undefined | null): TokenUsage | null {
   if (raw === undefined || raw === null) return null;
+
+  const inputTokens = raw.inputTokens ?? 0;
+  // 入力 0 は「報告されなかった」とみなす（空の文脈でモデルを呼ぶことはない）。
+  // 0 のまま保存すると、文脈が実際より小さいものとして扱われ、畳む時を逃す。
+  if (inputTokens === 0) return null;
+
   return {
-    inputTokens: raw.inputTokens ?? 0,
+    inputTokens,
     outputTokens: raw.outputTokens ?? 0,
     cachedInputTokens: raw.cachedInputTokens ?? 0,
   };
@@ -451,7 +486,7 @@ export function createMockEngine(options: { chunkSize?: number; delayMs?: number
       const reply = [
         "[mock engine]",
         `これは偽の応答です。受け取った会話は ${context.messages.length} 件（うちユーザー発言 ${userTurns} 件）。`,
-        `観察の記録: ${context.observations === null ? "まだありません" : `${context.observations.length} 文字`}`,
+        `畳んだ要約: ${context.summary === null ? "まだありません" : `${context.summary.length} 文字`}`,
         `直前の発言: ${lastUser?.content ?? "(なし)"}`,
       ].join("\n");
 
@@ -469,11 +504,20 @@ export function createMockEngine(options: { chunkSize?: number; delayMs?: number
     },
 
     /**
-     * モックの観察。中身は作れないので、記憶の更新が動いたことだけが分かる記録を返す。
-     * モックは画面の確認用で、記憶の中身を確かめるためのものではない（テストは偽のエンジンを渡す）。
+     * モックの要約。中身は作れないので、要約が動いたことだけが分かる定型を返す。
+     * モックは画面の確認用で、要約の中身を確かめるためのものではない（テストは偽のエンジンを渡す）。
      */
     complete({ prompt }) {
-      return Promise.resolve(`* 🟢 [mock] ${prompt.length} 文字を観察しました（モックのため中身は残しません）`);
+      return Promise.resolve(
+        [
+          "## Goal",
+          `[mock] ${prompt.length} 文字を要約しました（モックのため中身は残しません）。`,
+          "",
+          "## Progress",
+          "### In Progress",
+          "- [ ] （モックのため、実際の要約は作りません）",
+        ].join("\n"),
+      );
     },
   };
 }

@@ -7,7 +7,7 @@ import type { ChatMessage, ImageRef, MessagePart } from "../shared/types";
  * ここには絶対に可変値を入れない。日時・ユーザー名・件数・ファイル一覧などを混ぜると、
  * 先頭が一致しなくなり、毎回キャッシュが当たらなくなる。
  * 可変の情報をモデルへ渡したくなったら、履歴の末尾（最後の user メッセージの後ろ）に置くこと。
- * 観察の記録（TeraContext）は、この定数ではなく 2 件目の system メッセージとして渡す。
+ * 畳んだ要約（TeraContext）は、この定数ではなく先頭の user メッセージとして渡す。
  */
 export const SYSTEM_PROMPT = [
   "You are Terasuma, a general-purpose assistant running on the user's own machine.",
@@ -17,30 +17,31 @@ export const SYSTEM_PROMPT = [
 ].join("\n");
 
 /**
- * モデルへ渡す文脈。system プロンプトの後ろに、記憶（観察の記録）と生の履歴をこの順で置く。
+ * モデルへ渡す文脈。system プロンプトの後ろに、畳んだ要約と生の履歴をこの順で置く。
  *
- * 記憶は古いやり取りを畳んだもの、生の履歴はそれをまだ畳んでいない直近のやり取り。
+ * 要約は古いやり取りを畳んだもの、生の履歴はまだ畳んでいない直近のやり取り。
  * 合わせて 1 本の会話になり、続きは常に末尾へ足される。
  */
 export type TeraContext = {
-  /** 観察の記録。まだ 1 度も観察していなければ null。 */
-  observations: string | null;
-  /** まだ観察していない生の履歴（古い順）。末尾が今回のユーザー発言。 */
+  /** 畳んだ過去のやり取りの要約。まだ 1 度も畳んでいなければ null。 */
+  summary: string | null;
+  /** まだ畳んでいない生の履歴（古い順）。末尾が今回のユーザー発言。 */
   messages: readonly ChatMessage[];
 };
 
 /**
- * 観察の記録を、モデルへ渡す本文にする。
- * 前置きは定数で、変わるのは記録そのものだけ（記録は末尾へ足されていくので、前のターンと頭から一致する）。
+ * 畳んだ要約を、モデルへ渡す本文にする。
+ *
+ * 前置きは定数で、変わるのは要約そのものだけ。要約は圧縮のたびに書き直されるので、
+ * その間は前のターンと頭から一致し、プロンプトキャッシュが当たり続ける。
  */
-export function observationsText(log: string): string {
+export function summaryText(summary: string): string {
   return [
-    "Below is your memory of earlier conversations with this user, kept as dated observations.",
-    "Use it as context. Do not quote it back, and do not mention that you have it.",
+    "The conversation history before this point was compacted into the following summary:",
     "",
-    "<observations>",
-    log,
-    "</observations>",
+    "<summary>",
+    summary,
+    "</summary>",
   ].join("\n");
 }
 
@@ -88,14 +89,17 @@ export function toolNameFor(server: string, tool: string): string {
 /**
  * 保存済み履歴を、モデルへ渡す形に開く。
  * 生の履歴は要約・言い換え・並べ替えをしない（プロンプトキャッシュを当て続けるため、末尾への追記だけにする）。
- * 古いやり取りは、観察の記録として先頭に 1 件だけ置く。
+ * 古いやり取りは、先頭の user メッセージ 1 件に畳んで置く。
+ *
+ * 要約を system ではなく user にするのは、ターンの途中で切ったときに履歴が assistant から
+ * 始まっても、直前が user の発言になり、プロバイダ側の役割の並びが壊れないため。
  */
 export function toModelMessages(context: TeraContext, images: ImageReader): ModelInputMessage[] {
   const messages: ModelInputMessage[] = [];
 
-  // 記憶は system プロンプトの直後に置く。記録が増えない限り、この前置きは前のターンと一致する。
-  if (context.observations !== null) {
-    messages.push({ role: "system", content: observationsText(context.observations) });
+  // 要約は先頭に 1 件だけ置く。要約が変わらない限り、この前置きは前のターンと一致する。
+  if (context.summary !== null) {
+    messages.push({ role: "user", content: summaryText(context.summary) });
   }
 
   for (const message of context.messages) {

@@ -2,7 +2,7 @@ import { encodeChatEvent } from "../shared/sse";
 import type { ChatEvent, ChatMessage, MessagePart, TokenUsage } from "../shared/types";
 import { describeError } from "../shared/errors";
 import type { AgentEngine } from "./engine";
-import type { Memory } from "./memory";
+import type { Compaction } from "./compaction";
 import type { Store } from "./store";
 
 /**
@@ -14,8 +14,8 @@ import type { Store } from "./store";
 export type TurnDeps = {
   store: Store;
   engine: AgentEngine;
-  /** 観察の記録。ターンの前に落ち着かせ、ターンの後に更新する。 */
-  memory: Memory;
+  /** 過去の対話の圧縮。ターンの前に走っている分を待ち、ターンの後に次を決める。 */
+  compaction: Compaction;
 };
 
 /**
@@ -34,8 +34,8 @@ export async function* runTurn(
   } finally {
     running.delete(teraId);
 
-    // ターンが終わってから、次に記憶を作る時を決める（要れば今すぐ、要らなければ 3 時間後に予約）。
-    deps.memory.check(teraId);
+    // ターンが終わってから、次に畳む時を決める（要れば今すぐ、要らなければ 3 時間後に予約）。
+    deps.compaction.check(teraId);
   }
 }
 
@@ -49,7 +49,7 @@ async function* turnEvents(
   content: string,
   signal: AbortSignal,
 ): AsyncGenerator<ChatEvent> {
-  const { store, engine, memory } = deps;
+  const { store, engine, compaction } = deps;
 
   // Tera は起動時に用意されている（無い id は、ここへ来る前に断っている）。
   const userMessage = store.appendMessage({
@@ -63,9 +63,10 @@ async function* turnEvents(
   const assistantId = crypto.randomUUID();
   yield { type: "assistant-start", id: assistantId, createdAt: Date.now() };
 
-  // 観察の記録と、まだ観察していない生の履歴。生の履歴には要約も並べ替えもしない
+  // 畳んだ要約と、まだ畳んでいない生の履歴。生の履歴には要約も並べ替えもしない
   // （プロンプトキャッシュが当たり続けるようにするため）。
-  const context = memory.context(teraId);
+  // 走っている圧縮があれば、ここで終わるまで待つ（待っている間に止められたら、待ちをやめる）。
+  const context = await compaction.context(teraId, signal);
 
   /** 生成中の本文とツールの出来事。保存される並びそのものになる。 */
   const parts: MessagePart[] = [];

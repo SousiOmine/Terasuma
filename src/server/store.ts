@@ -19,14 +19,18 @@ export type AppendMessageInput = {
 };
 
 /**
- * Tera ごとの観察の記録（Observational Memory）。
- * 古いやり取りをここへ畳んでいくことで、モデルへ渡す文脈を有界に保つ。
+ * Tera の過去のやり取りを畳んだ要約（Compaction）。
+ * 会話が長くなっても、モデルへ渡す文脈を有界に保つ。
  */
-export type Observations = {
-  /** 日付つきの観察の記録。まだ 1 度も観察していなければ空文字。 */
-  text: string;
-  /** この seq までのメッセージは観察済み。まだ観察していなければ 0。 */
+export type CompactionState = {
+  /** 定型（Goal / Progress など）で書かれた要約。まだ 1 度も畳んでいなければ空文字。 */
+  summary: string;
+  /** この seq までのメッセージは要約に畳み込まれた。まだ畳んでいなければ 0。 */
   throughSeq: number;
+  /** 畳んだ時点の文脈のトークンの目安。 */
+  tokensBefore: number;
+  /** 要約を作った時刻。epoch ミリ秒。 */
+  createdAt: number;
 };
 
 export type Store = {
@@ -35,13 +39,13 @@ export type Store = {
   /** 無ければ作る。既にあれば名前も作成日時も変えない（起動のたびに呼ばれる）。 */
   ensureTera(id: string, name: string): Tera;
   listMessages(teraId: string): ChatMessage[];
-  /** seq より後のメッセージ（古い順）。まだ観察していない生の履歴を取り出す。 */
+  /** seq より後のメッセージ（古い順）。まだ畳んでいない生の履歴を取り出す。 */
   listMessagesSince(teraId: string, seq: number): ChatMessage[];
   /** 履歴の末尾に追記する。Tera の行が先に存在している必要がある。 */
   appendMessage(input: AppendMessageInput): ChatMessage;
-  readObservations(teraId: string): Observations;
-  /** 観察の記録を置き換える。throughSeq は呼ぶ側が前に進める（戻さない）。 */
-  writeObservations(teraId: string, observations: Observations): void;
+  readCompaction(teraId: string): CompactionState;
+  /** 要約を置き換える。throughSeq は呼ぶ側が前に進める（戻さない）。 */
+  writeCompaction(teraId: string, state: CompactionState): void;
   close(): void;
 };
 
@@ -142,10 +146,12 @@ export function createStore(dbPath: string, options: CreateStoreOptions = {}): S
     CREATE INDEX IF NOT EXISTS idx_messages_tera_seq ON messages (tera_id, seq);
     CREATE INDEX IF NOT EXISTS idx_teras_updated_at ON teras (updated_at DESC);
 
-    CREATE TABLE IF NOT EXISTS observations (
-      tera_id     TEXT PRIMARY KEY REFERENCES teras (id) ON DELETE CASCADE,
-      text        TEXT NOT NULL,
-      through_seq INTEGER NOT NULL
+    CREATE TABLE IF NOT EXISTS compaction (
+      tera_id       TEXT PRIMARY KEY REFERENCES teras (id) ON DELETE CASCADE,
+      summary       TEXT NOT NULL,
+      through_seq   INTEGER NOT NULL,
+      tokens_before INTEGER NOT NULL,
+      created_at    INTEGER NOT NULL
     );
   `);
 
@@ -182,12 +188,17 @@ export function createStore(dbPath: string, options: CreateStoreOptions = {}): S
      RETURNING seq`,
   );
 
-  const selectObservations = db.query<{ text: string; through_seq: number }, [string]>(
-    "SELECT text, through_seq FROM observations WHERE tera_id = ?",
-  );
-  const upsertObservations = db.query<unknown, [string, string, number]>(
-    `INSERT INTO observations (tera_id, text, through_seq) VALUES (?, ?, ?)
-     ON CONFLICT (tera_id) DO UPDATE SET text = excluded.text, through_seq = excluded.through_seq`,
+  const selectCompaction = db.query<
+    { summary: string; through_seq: number; tokens_before: number; created_at: number },
+    [string]
+  >("SELECT summary, through_seq, tokens_before, created_at FROM compaction WHERE tera_id = ?");
+  const upsertCompaction = db.query<unknown, [string, string, number, number, number]>(
+    `INSERT INTO compaction (tera_id, summary, through_seq, tokens_before, created_at) VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT (tera_id) DO UPDATE SET
+       summary = excluded.summary,
+       through_seq = excluded.through_seq,
+       tokens_before = excluded.tokens_before,
+       created_at = excluded.created_at`,
   );
 
   const append = db.transaction((input: AppendMessageInput): ChatMessage => {
@@ -250,13 +261,20 @@ export function createStore(dbPath: string, options: CreateStoreOptions = {}): S
       return selectMessagesSince.all(teraId, seq).map(toMessage);
     },
 
-    readObservations(teraId) {
-      const row = selectObservations.get(teraId);
-      return row === null ? { text: "", throughSeq: 0 } : { text: row.text, throughSeq: row.through_seq };
+    readCompaction(teraId) {
+      const row = selectCompaction.get(teraId);
+      return row === null
+        ? { summary: "", throughSeq: 0, tokensBefore: 0, createdAt: 0 }
+        : {
+            summary: row.summary,
+            throughSeq: row.through_seq,
+            tokensBefore: row.tokens_before,
+            createdAt: row.created_at,
+          };
     },
 
-    writeObservations(teraId, observations) {
-      upsertObservations.run(teraId, observations.text, observations.throughSeq);
+    writeCompaction(teraId, state) {
+      upsertCompaction.run(teraId, state.summary, state.throughSeq, state.tokensBefore, state.createdAt);
     },
 
     appendMessage(input) {
@@ -274,15 +292,19 @@ export function createStore(dbPath: string, options: CreateStoreOptions = {}): S
 }
 
 /**
- * セッションごとに会話を分けていた頃のテーブルを落とす。
+ * 古い形のテーブルを落とす。
  *
- * 会話の持ち主がセッションから Tera へ変わり、1 つの Tera に 1 本の履歴という形になった。
- * 古い会話はどの Tera の履歴なのか決められないため、引き継がずに捨てる。
- * messages を先に落とす（sessions を参照しているため）。
+ * セッションごとに会話を分けていた頃のテーブルは、会話の持ち主（セッション → Tera）が
+ * 変わったため引き継げない（どの Tera の履歴なのか決められない）。messages を先に落とす
+ * （sessions を参照しているため）。
+ *
+ * 観察の記録（Observational Memory）で畳んでいた頃のテーブルは、生のメッセージが残るので
+ * 落としてよい。次の圧縮で、要約を作り直す。
  */
 function dropLegacyTables(db: Database): void {
   const columns = db.query<{ name: string }, []>("PRAGMA table_info(messages)").all();
-  if (columns.length === 0 || columns.some((column) => column.name === "tera_id")) return;
+  const legacySessions = columns.length > 0 && columns.every((column) => column.name !== "tera_id");
+  if (legacySessions) db.exec("DROP TABLE IF EXISTS messages; DROP TABLE IF EXISTS sessions;");
 
-  db.exec("DROP TABLE IF EXISTS messages; DROP TABLE IF EXISTS sessions;");
+  db.exec("DROP TABLE IF EXISTS observations;");
 }

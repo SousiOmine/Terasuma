@@ -10,6 +10,7 @@ import type {
   ReasoningView,
 } from "../shared/types";
 import { resolveModel, type AgentEngine } from "./engine";
+import type { Compaction } from "./compaction";
 import { ContainerError, type ContainerErrorCode, type ContainerManager } from "./container";
 import type { Handover } from "./handover";
 import { describeError } from "../shared/errors";
@@ -25,7 +26,6 @@ import {
 import { authorizationPage, toMcpView, toSettingsView } from "./views";
 import { runTurn, sseResponse } from "./turn";
 import { McpServerNotFound, type McpManager } from "./mcp";
-import type { Memory } from "./memory";
 import type { Catalog, CatalogSnapshot } from "./models-dev";
 import {
   ProviderRequestError,
@@ -72,8 +72,8 @@ export type ApiDeps = {
   container: ContainerManager;
   /** ユーザーへ画面を渡す待ち。チャットからの返事をここへ届ける。 */
   handover: Handover;
-  /** 観察の記録。ターンの前に落ち着かせ、ターンの後に更新する。 */
-  memory: Memory;
+  /** 過去の対話の圧縮。ターンの前に走っている分を待ち、ターンの後に次を決める。 */
+  compaction: Compaction;
   /** models.dev のカタログ。プロバイダとモデルの一覧はここから取る。 */
   catalog: Catalog;
   /** プロバイダへ接続できるかを確かめる。 */

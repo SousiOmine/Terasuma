@@ -8,7 +8,7 @@ import { createStore, DEFAULT_TERA_ID } from "../src/server/store";
 import type { Store } from "../src/server/store";
 import { decodeChatEvents } from "../src/shared/sse";
 import type { ApiErrorCode, ChatEvent, ChatMessage, Tera } from "../src/shared/types";
-import { TEST_SETTINGS, createContainerStub, createMcpStub, createMemoryStub, withTempSettings } from "./support";
+import { TEST_SETTINGS, createCompactionStub, createContainerStub, createMcpStub, withTempSettings } from "./support";
 
 const config: AppConfig = {
   host: "127.0.0.1",
@@ -49,12 +49,12 @@ async function withServer<T>(
 ): Promise<T> {
   return withTempSettings(TEST_SETTINGS, async (settings) => {
     const store = makeStore();
-    const memory = createMemoryStub(store);
+    const compaction = createCompactionStub(store);
     const { server } = startServer({
       config,
       store,
       engine,
-      memory,
+      compaction,
       settings,
       mcp: createMcpStub(),
       container: createContainerStub(),
@@ -93,7 +93,7 @@ async function withServer<T>(
       return await run(harness);
     } finally {
       await server.stop(true);
-      memory.close();
+      compaction.close();
     }
   });
 }
@@ -150,7 +150,7 @@ function createFailingEngine(mode: "immediate" | "mid-stream"): AgentEngine {
       });
     },
     complete() {
-      return Promise.reject(new Error("テスト用のエンジンでは記憶を作れません"));
+      return Promise.reject(new Error("テスト用のエンジンでは要約を作れません"));
     },
   };
 }
@@ -181,7 +181,7 @@ function createToolEngine(): AgentEngine {
       });
     },
     complete() {
-      return Promise.reject(new Error("テスト用のエンジンでは記憶を作れません"));
+      return Promise.reject(new Error("テスト用のエンジンでは要約を作れません"));
     },
   };
 }
@@ -267,23 +267,25 @@ describe("チャット API", () => {
     });
   });
 
-  test("記憶があるときは、観察の記録と、そのあとの生の履歴が渡る", async () => {
+  test("畳んだ要約があるときは、要約と、そのあとの生の履歴が渡る", async () => {
     const recording = createRecordingEngine(fastMock());
     await withServer(recording, async (harness) => {
       await harness.send(DEFAULT_TERA_ID, "最初の質問");
 
-      // 記憶は閾値（3 万トークン）まで会話しないと作られない。
+      // 要約は閾値（文脈長から余白を引いた線）まで会話しないと作られない。
       // ここでは作られた後の状態を直接置いて、渡り方だけを確かめる。
-      harness.store.writeObservations(DEFAULT_TERA_ID, {
-        text: "Date: 2026-10-16\n* 🔴 (09:00) 京都に住んでいる。",
+      harness.store.writeCompaction(DEFAULT_TERA_ID, {
+        summary: "## Goal\n京都に住んでいる。",
         throughSeq: 2,
+        tokensBefore: 1_000,
+        createdAt: 1,
       });
 
       await harness.send(DEFAULT_TERA_ID, "次の質問");
 
       const input = recording.inputs[1];
       if (input === undefined) throw new Error("2 ターン目の入力が無い");
-      expect(input.context.observations).toContain("京都に住んでいる");
+      expect(input.context.summary).toContain("京都に住んでいる");
       expect(input.context.messages.map((message) => message.content)).toEqual(["次の質問"]);
     });
   });
@@ -453,7 +455,7 @@ describe("チャット API", () => {
         })(),
         usage: Promise.resolve(null),
       }),
-      complete: () => Promise.reject(new Error("テスト用のエンジンでは記憶を作れません")),
+      complete: () => Promise.reject(new Error("テスト用のエンジンでは要約を作れません")),
     };
 
     await withServer(limitEngine, async (harness) => {
@@ -524,7 +526,7 @@ describe("チャット API", () => {
       // 保存された本文は、最後まで生成した場合の接頭辞になっている。
       const reference = createMockEngine({ chunkSize: 10_000, delayMs: 0 });
       const full = await reference.stream({
-        context: { observations: null, messages: [user] },
+        context: { summary: null, messages: [user] },
         signal: new AbortController().signal,
         teraId: DEFAULT_TERA_ID,
       });

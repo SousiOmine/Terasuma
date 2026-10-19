@@ -91,22 +91,24 @@ test(
 );
 
 test(
-  "観察の記録がモデルへ渡る（system メッセージとして通る）",
+  "畳んだ要約がモデルへ渡る",
   async () => {
     await withLiveServer(async (harness) => {
-      // 記憶は閾値（3 万トークン）まで会話しないと作られないので、
+      // 要約は閾値に届くまで会話しないと作られないので、
       // ここでは作られたあとの状態を直接置いて、渡り方だけを確かめる。
-      harness.store.writeObservations(DEFAULT_TERA_ID, {
-        text: ["Date: 2026-10-16", "* 🔴 (09:00) ユーザーの名前は「そら」で、京都に住んでいる。"].join("\n"),
+      harness.store.writeCompaction(DEFAULT_TERA_ID, {
+        summary: ["## Goal", "ユーザーの名前は「そら」で、京都に住んでいる。"].join("\n"),
         throughSeq: 0,
+        tokensBefore: 0,
+        createdAt: Date.now(),
       });
 
       const events = await harness.send(DEFAULT_TERA_ID, "私の名前と、住んでいる場所を一言で。");
       const done = expectTurnSucceeded(events);
       report("応答", done);
 
-      // 観察の記録は system メッセージとして渡す（位置が特殊なので、通るかどうかはここでしか分からない）。
-      expect(done.content, "観察の記録がモデルへ渡っていない").toContain("そら");
+      // 要約は先頭の user メッセージとして渡す。プロバイダがこの並びを受け付けるかは、ここでしか分からない。
+      expect(done.content, "畳んだ要約がモデルへ渡っていない").toContain("そら");
       expect(done.content).toContain("京都");
     });
   },
@@ -114,31 +116,32 @@ test(
 );
 
 test(
-  "閾値を超えた履歴が、実際のモデルで観察の記録に畳まれる",
+  "長い履歴が、実際のモデルで定型の要約に畳まれる",
   async () => {
     await withLiveServer(async (harness) => {
-      // 1 件あたり 1,000 トークンほど（半角 4 文字で 1 トークン）の履歴を 36 件置く。
+      // 1 件あたり 1,000 トークンほど（半角 4 文字で 1 トークン）の履歴を 60 件置く。
       // 画面から作ると 30 往復かかるので、履歴は直に置く（最後はアシスタントの発言にして、畳める形にする）。
-      for (let index = 1; index <= 36; index += 1) {
+      for (let index = 1; index <= 60; index += 1) {
         harness.store.appendMessage({
           id: `seed-${index}`,
           teraId: DEFAULT_TERA_ID,
           role: index % 2 === 1 ? "user" : "assistant",
-          content: `記録 ${index}: ${"terasuma observational memory check ".repeat(120)}`,
+          content: `記録 ${index}: ${"terasuma compaction check ".repeat(150)}`,
         });
       }
 
-      await harness.memory.update(DEFAULT_TERA_ID);
-      const observations = harness.store.readObservations(DEFAULT_TERA_ID);
+      // 要約はツールを使わない 1 回の生成で行う。ここが通らないと文脈は畳まれないので、
+      // 実際のモデルが指示どおりの定型を返すかどうかを、ここで確かめる。
+      await harness.compaction.update(DEFAULT_TERA_ID, { force: true });
+      const state = harness.store.readCompaction(DEFAULT_TERA_ID);
 
-      // 観察と反映は、ツールを使わない 1 回の生成で行う。ここが通らないと記憶は育たないので、
-      // 実際のモデルが指示どおりの記録を返すかどうかを、ここで確かめる。
-      console.log(`  観察: throughSeq=${observations.throughSeq} / ${observations.text.length} 文字`);
-      console.log(`  観察: ${preview(observations.text, 160)}`);
+      console.log(`  要約: throughSeq=${state.throughSeq} / ${state.summary.length} 文字`);
+      console.log(`  要約: ${preview(state.summary, 160)}`);
 
-      expect(observations.throughSeq, "観察が進んでいない").toBeGreaterThan(0);
-      expect(observations.text, "記録に日付の見出しが無い").toContain("Date:");
-      expect(/^\s*[*-] /m.test(observations.text), "記録に観察の行が無い").toBe(true);
+      expect(state.throughSeq, "要約が進んでいない").toBeGreaterThan(0);
+      expect(state.summary, "定型の見出しが無い").toContain("## Goal");
+      // 畳んだ分は生の履歴から外れる。
+      expect(harness.store.listMessagesSince(DEFAULT_TERA_ID, state.throughSeq).length).toBeLessThan(60);
     });
   },
   TURN_TIMEOUT_MS,

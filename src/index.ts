@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { ensureDirectories, loadConfig } from "./config";
+import { createCompaction } from "./server/compaction";
 import { createComputerToolset } from "./server/computer";
 import { createContainerManager } from "./server/container";
 import { createEngine, resolveModel } from "./server/engine";
@@ -8,7 +9,6 @@ import { createHandover } from "./server/handover";
 import { createImageStore } from "./server/images";
 import { createMcpManager } from "./server/mcp";
 import { OAUTH_CALLBACK_PATH } from "./server/mcp-oauth";
-import { createMemory } from "./server/memory";
 import { CATALOG_FILE_NAME, createCatalog, modelContextTokens } from "./server/models-dev";
 import { startServer } from "./server/server";
 import { createSettingsStore } from "./server/settings";
@@ -47,13 +47,13 @@ const computer = createComputerToolset({ container, images, handover });
 
 const engine = createEngine({ config, settings, mcp, computer, images });
 
-// 畳むかどうかは、モデルの文脈長（カタログ）に対する割合で決める。
+// 畳むかどうかは、モデルの文脈長（カタログ）から決める。
 // 起動後にカタログを読んでおくので、設定画面を開かなくても文脈長が分かる。
 const catalog = createCatalog({ cachePath: join(config.dataDir, CATALOG_FILE_NAME) });
 
-// 古いやり取りは、3 時間の放置か、文脈長の 75% を超えたときに、背景で観察の記録へ畳む。
+// 古いやり取りは、3 時間の放置か、文脈長に近づいたときに、背景で要約へ畳む。
 // 失敗は端末に出す（会話は生の履歴のまま続く）。
-const memory = createMemory({
+const compaction = createCompaction({
   store,
   engine,
   log: (message) => console.log(message),
@@ -64,7 +64,7 @@ const { server, portChanged } = startServer({
   config,
   store,
   engine,
-  memory,
+  compaction,
   catalog,
   settings,
   mcp,
@@ -109,14 +109,14 @@ process.once("SIGINT", () => void shutdown("SIGINT"));
 process.once("SIGTERM", () => void shutdown("SIGTERM"));
 
 // 設定画面を開かなくてもモデルの文脈長が分かるよう、起動後にカタログを読んでおく。
-// 取れなくても起動は止めない（記憶は既定の見積もりで動き、画面は必要になったときに取りに行く）。
+// 取れなくても起動は止めない（圧縮は既定の見積もりで動き、画面は必要になったときに取りに行く）。
 void catalog.load().catch((error: unknown) => {
   console.log(`  catalog: 読めませんでした — ${describeError(error)}`);
 });
 
-// 最後のやり取りから 3 時間以上たっている（か、文脈長の 75% を超えている）Tera は、
-// ここで記憶を作り始める。ターンは待たないので、話し始めても遅くならない。
-for (const tera of store.listTeras()) memory.check(tera.id);
+// 最後のやり取りから 3 時間以上たっている（か、文脈長に近づいている）Tera は、
+// ここで要約を作り始める。ターンは待たないので、話し始めても遅くならない。
+for (const tera of store.listTeras()) compaction.check(tera.id);
 
 // ホストを再起動したあとも同じ画面に戻れるよう、起動時にコンテナも起こし直す。
 // 初回はイメージの build で数分かかるので、待たずに進め、結果だけを知らせる。

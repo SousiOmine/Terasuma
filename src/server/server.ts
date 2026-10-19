@@ -9,9 +9,8 @@ import { describeError } from "../shared/errors";
 import { jsonError } from "./errors";
 import type { McpManager } from "./mcp";
 import { OAUTH_CALLBACK_PATH } from "./mcp-oauth";
-import type { Memory } from "./memory";
-import { CATALOG_FILE_NAME, createCatalog, type Catalog } from "./models-dev";
-import {
+import type { Compaction } from "./compaction";
+import { CATALOG_FILE_NAME, createCatalog, type Catalog } from "./models-dev";import {
   createConnectionChecker,
   createModelLister,
   type ConnectionChecker,
@@ -33,8 +32,8 @@ export type ServerOptions = {
   container: ContainerManager;
   /** ユーザーへ画面を渡す待ち。 */
   handover: Handover;
-  /** 観察の記録（古いやり取りの畳み方）。テストで差し替える。 */
-  memory: Memory;
+  /** 過去の対話の圧縮（古いやり取りの畳み方）。テストで差し替える。 */
+  compaction: Compaction;
   /** models.dev のカタログ。テストで差し替える。 */
   catalog?: Catalog;
   /** プロバイダへ接続できるかの確認。テストで差し替える。 */
@@ -76,7 +75,7 @@ const ANY_FREE_PORT = 0;
  * ルートはここでリテラルのパスとして並べる（Bun のルータは文字列リテラルからパラメータ型を作る）。
  */
 export function startServer(options: ServerOptions): StartedServer {
-  const { config, store, engine, memory, settings, mcp, container, handover } = options;
+  const { config, store, engine, compaction, settings, mcp, container, handover } = options;
   const api = createApiHandlers({
     store,
     engine,
@@ -84,7 +83,7 @@ export function startServer(options: ServerOptions): StartedServer {
     mcp,
     container,
     handover,
-    memory,
+    compaction,
     catalog: options.catalog ?? createCatalog({ cachePath: join(config.dataDir, CATALOG_FILE_NAME) }),
     checkConnection: options.checkConnection ?? createConnectionChecker(),
     listModels: options.listModels ?? createModelLister(),

@@ -5,7 +5,7 @@ import { startServer } from "../src/server/server";
 import { createStore } from "../src/server/store";
 import type { ContainerManager } from "../src/server/container";
 import { createHandover } from "../src/server/handover";
-import { TEST_SETTINGS, createContainerStub, createMcpStub, createMemoryStub, withTempSettings } from "./support";
+import { TEST_SETTINGS, createContainerStub, createMcpStub, createCompactionStub, withTempSettings } from "./support";
 
 /**
  * 画面の中継の確認。
@@ -57,7 +57,7 @@ async function withScreenServer<T>(
       },
       store,
       engine: createMockEngine({ chunkSize: 10_000, delayMs: 0 }),
-      memory: createMemoryStub(store),
+      compaction: createCompactionStub(store),
       settings,
       mcp: createMcpStub(),
       container,

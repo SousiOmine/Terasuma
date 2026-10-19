@@ -8,7 +8,7 @@ import type { ImageStore } from "../src/server/images";
 import type { McpManager } from "../src/server/mcp";
 import { createSettingsStore, type SettingsStore } from "../src/server/settings";
 import { createStore, type Store } from "../src/server/store";
-import { createMemory, type Memory } from "../src/server/memory";
+import { createCompaction, type Compaction } from "../src/server/compaction";
 import type { ContainerStatusView } from "../src/shared/types";
 
 /** 時刻を固定したストア。updated_at の比較を決定的にするため。 */
@@ -79,16 +79,16 @@ export function createComputerStub(): ComputerToolsetProvider {
 }
 
 /**
- * サーバを起こすだけのテストのための記憶。ストアは本物を使い、観察と反映の呼び出しだけを持たない。
- * 閾値（3 万トークン）に届かない履歴しかしないテストでは、どちらも走らない。
- * 文脈の組み立て（観察の記録 + 未観察の履歴）は本番と同じものを通す。
+ * サーバを起こすだけのテストのための圧縮。ストアは本物を使い、要約の呼び出しだけを持たない。
+ * 閾値（文脈長から余白を引いた線）に届かない履歴しかしないテストでは、走らない。
+ * 文脈の組み立て（要約 + まだ畳んでいない履歴）は本番と同じものを通す。
  */
-export function createMemoryStub(store: Store): Memory {
-  return createMemory({
+export function createCompactionStub(store: Store): Compaction {
+  return createCompaction({
     store,
     engine: {
       complete: () => {
-        throw new Error("テスト用の差し替えでは記憶を作れません");
+        throw new Error("テスト用の差し替えでは要約を作れません");
       },
     },
     log: () => undefined,

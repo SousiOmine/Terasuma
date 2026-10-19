@@ -156,7 +156,7 @@ async function run(
 ): Promise<EngineEvent[]> {
   const reader: SettingsReader = { read: () => settings };
   const stream = await createMastraEngine(reader, provider, computer, createImageStub()).stream({
-    context: { observations: null, messages: history() },
+    context: { summary: null, messages: history() },
     signal: new AbortController().signal,
     teraId: "t1",
   });

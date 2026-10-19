@@ -4,7 +4,7 @@ import { createMockEngine } from "../src/server/engine";
 import { startServer, type StartedServer } from "../src/server/server";
 import { createStore } from "../src/server/store";
 import { createHandover } from "../src/server/handover";
-import { TEST_SETTINGS, createContainerStub, createMcpStub, createMemoryStub, withTempSettings } from "./support";
+import { TEST_SETTINGS, createContainerStub, createMcpStub, createCompactionStub, withTempSettings } from "./support";
 
 /** ポートだけを差し替えて使う設定。 */
 function makeConfig(port: number): AppConfig {
@@ -28,7 +28,7 @@ async function withServerOn<T>(port: number, run: (started: StartedServer) => Pr
       config: makeConfig(port),
       store,
       engine: createMockEngine({ chunkSize: 10_000, delayMs: 0 }),
-      memory: createMemoryStub(store),
+      compaction: createCompactionStub(store),
       settings,
       mcp: createMcpStub(),
       container: createContainerStub(),
@@ -101,7 +101,7 @@ describe("サーバの起動ポート", () => {
           config: makeConfig(70_000),
           store,
           engine: createMockEngine({ chunkSize: 10_000, delayMs: 0 }),
-          memory: createMemoryStub(store),
+          compaction: createCompactionStub(store),
           settings,
           mcp: createMcpStub(),
           container: createContainerStub(),

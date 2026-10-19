@@ -18,7 +18,7 @@ import { createHandover } from "../../src/server/handover";
 import { createImageStore } from "../../src/server/images";
 import { createMcpManager } from "../../src/server/mcp";
 import { OAUTH_CALLBACK_PATH } from "../../src/server/mcp-oauth";
-import { createMemory, type Memory } from "../../src/server/memory";
+import { createCompaction, type Compaction } from "../../src/server/compaction";
 import { CATALOG_FILE_NAME, createCatalog, modelContextTokens } from "../../src/server/models-dev";
 import { startServer } from "../../src/server/server";
 import { createSettingsStore } from "../../src/server/settings";
@@ -42,10 +42,10 @@ export type LiveHarness = {
   dataDir: string;
   /** コンテナ。デスクトップを触る確認で、アプリの起動時と同じように先に起こす。 */
   container: ContainerManager;
-  /** 本番と同じストア。長い履歴や観察の記録を直に置いて確かめるときに使う。 */
+  /** 本番と同じストア。長い履歴や要約を直に置いて確かめるときに使う。 */
   store: Store;
-  /** 記憶。閾値（3 万トークン）をまたぐ確認で、更新を待つために使う。 */
-  memory: Memory;
+  /** 過去の対話の圧縮。閾値をまたぐ確認で、更新を待つために使う。 */
+  compaction: Compaction;
   send(teraId: string, content: string): Promise<ChatEvent[]>;
   /** その Tera の履歴（古い順）。 */
   messages(teraId: string): Promise<ChatMessage[]>;
@@ -90,16 +90,16 @@ export async function withLiveServer(run: (harness: LiveHarness) => Promise<void
 
   const engine = createEngine({ config, settings, mcp, computer, images });
 
-  // 畳むかどうかはモデルの文脈長に対する割合で決める（index.ts と同じ組み立て）。
+  // 畳むかどうかはモデルの文脈長から決める（index.ts と同じ組み立て）。
   const catalog = createCatalog({ cachePath: join(config.dataDir, CATALOG_FILE_NAME) });
-  const memory = createMemory({
+  const compaction = createCompaction({
     store,
     engine,
     log: (message) => console.log(message),
     contextLimit: () => modelContextTokens(catalog.snapshot(), settings.read().model),
   });
 
-  const { server } = startServer({ config, store, engine, memory, catalog, settings, mcp, container, handover });
+  const { server } = startServer({ config, store, engine, compaction, catalog, settings, mcp, container, handover });
   boundPort = server.port ?? null;
 
   try {
@@ -109,7 +109,7 @@ export async function withLiveServer(run: (harness: LiveHarness) => Promise<void
       dataDir: config.dataDir,
       container,
       store,
-      memory,
+      compaction,
       async send(teraId, content) {
         const response = await fetch(new URL(`/api/teras/${teraId}/messages`, base), {
           method: "POST",
@@ -130,6 +130,7 @@ export async function withLiveServer(run: (harness: LiveHarness) => Promise<void
   } finally {
     await server.stop(true);
     await mcp.close();
+    compaction.close();
     store.close();
   }
 }

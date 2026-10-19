@@ -199,22 +199,44 @@ describe("store", () => {
     }
   });
 });
-describe("観察の記録", () => {
-  test("まだ観察していなければ、記録は空で、すべてが未観察", () => {
+describe("過去のやり取りの要約", () => {
+  test("まだ畳んでいなければ、要約は空で、すべてが畳んでいない", () => {
     const store = makeStore();
-    expect(store.readObservations(DEFAULT_TERA_ID)).toEqual({ text: "", throughSeq: 0 });
+    expect(store.readCompaction(DEFAULT_TERA_ID)).toEqual({
+      summary: "",
+      throughSeq: 0,
+      tokensBefore: 0,
+      createdAt: 0,
+    });
   });
 
-  test("書いた記録は読み直せて、上書きもできる", () => {
+  test("書いた要約は読み直せて、上書きもできる", () => {
     const store = makeStore();
-    store.writeObservations(DEFAULT_TERA_ID, { text: "Date: 2026-10-16\n* 🔴 (09:00) 京都に住んでいる。", throughSeq: 2 });
-    expect(store.readObservations(DEFAULT_TERA_ID)).toEqual({
-      text: "Date: 2026-10-16\n* 🔴 (09:00) 京都に住んでいる。",
+    store.writeCompaction(DEFAULT_TERA_ID, {
+      summary: "## Goal\n京都に住んでいる。",
       throughSeq: 2,
+      tokensBefore: 5_000,
+      createdAt: 100,
+    });
+    expect(store.readCompaction(DEFAULT_TERA_ID)).toEqual({
+      summary: "## Goal\n京都に住んでいる。",
+      throughSeq: 2,
+      tokensBefore: 5_000,
+      createdAt: 100,
     });
 
-    store.writeObservations(DEFAULT_TERA_ID, { text: "書き直した記録", throughSeq: 4 });
-    expect(store.readObservations(DEFAULT_TERA_ID)).toEqual({ text: "書き直した記録", throughSeq: 4 });
+    store.writeCompaction(DEFAULT_TERA_ID, {
+      summary: "## Goal\n書き直した要約。",
+      throughSeq: 4,
+      tokensBefore: 9_000,
+      createdAt: 200,
+    });
+    expect(store.readCompaction(DEFAULT_TERA_ID)).toEqual({
+      summary: "## Goal\n書き直した要約。",
+      throughSeq: 4,
+      tokensBefore: 9_000,
+      createdAt: 200,
+    });
   });
 
   test("listMessagesSince は、その seq より後のメッセージだけを返す", () => {
@@ -228,32 +250,59 @@ describe("観察の記録", () => {
     expect(store.listMessagesSince(DEFAULT_TERA_ID, 3)).toEqual([]);
   });
 
-  test("記録は Tera ごとに分かれる", () => {
+  test("要約は Tera ごとに分かれる", () => {
     const store = makeStore();
     store.ensureTera("second", "2 体目");
-    store.writeObservations(DEFAULT_TERA_ID, { text: "既定の記録", throughSeq: 1 });
+    store.writeCompaction(DEFAULT_TERA_ID, {
+      summary: "## Goal\n既定の要約。",
+      throughSeq: 1,
+      tokensBefore: 100,
+      createdAt: 10,
+    });
 
-    expect(store.readObservations(DEFAULT_TERA_ID)).toEqual({ text: "既定の記録", throughSeq: 1 });
-    expect(store.readObservations("second")).toEqual({ text: "", throughSeq: 0 });
+    expect(store.readCompaction(DEFAULT_TERA_ID).summary).toBe("## Goal\n既定の要約。");
+    expect(store.readCompaction("second")).toEqual({
+      summary: "",
+      throughSeq: 0,
+      tokensBefore: 0,
+      createdAt: 0,
+    });
   });
 
   test("いない Tera へは書けない", () => {
     const store = makeStore();
-    // 記録は Tera の行に紐づく。書けてしまうと、どの Tera の記録か分からないまま残る。
-    expect(() => store.writeObservations("missing", { text: "記録", throughSeq: 1 })).toThrow();
+    // 要約は Tera の行に紐づく。書けてしまうと、どの Tera の要約か分からないまま残る。
+    expect(() =>
+      store.writeCompaction("missing", {
+        summary: "## Goal\n要約。",
+        throughSeq: 1,
+        tokensBefore: 100,
+        createdAt: 10,
+      }),
+    ).toThrow();
   });
 
-  test("開き直しても記録はそのまま", () => {
+  test("開き直しても要約はそのまま", () => {
     const path = join(tmpdir(), `terasuma-store-${crypto.randomUUID()}.db`);
 
     try {
       const first = createStore(path);
-      first.writeObservations(DEFAULT_TERA_ID, { text: "残る記録", throughSeq: 2 });
+      first.writeCompaction(DEFAULT_TERA_ID, {
+        summary: "## Goal\n残る要約。",
+        throughSeq: 2,
+        tokensBefore: 300,
+        createdAt: 20,
+      });
       first.close();
 
       const second = createStore(path);
       try {
-        expect(second.readObservations(DEFAULT_TERA_ID)).toEqual({ text: "残る記録", throughSeq: 2 });
+        expect(second.readCompaction(DEFAULT_TERA_ID)).toEqual({
+          summary: "## Goal\n残る要約。",
+          throughSeq: 2,
+          tokensBefore: 300,
+          createdAt: 20,
+        });
       } finally {
         second.close();
       }
