@@ -27,7 +27,7 @@ import {
 import { authorizationPage, toMcpView, toSettingsView } from "./views";
 import { runTurn, sseResponse } from "./turn";
 import { McpServerNotFound, type McpManager } from "./mcp";
-import type { Catalog, CatalogSnapshot } from "./models-dev";
+import { catalogProvider, type Catalog, type CatalogSnapshot } from "./models-dev";
 import {
   ProviderRequestError,
   connectionTarget,
@@ -35,6 +35,7 @@ import {
   type ConnectionTarget,
   type ProviderModelLister,
 } from "./provider-models";
+import { providerSpecForId } from "./provider-registry";
 import { selectableEfforts } from "./reasoning";
 import type { SettingsStore } from "./settings";
 import type { Store } from "./store";
@@ -143,11 +144,12 @@ export function createApiHandlers(deps: ApiDeps) {
 
     const { provider, model: modelName } = modelParts(model);
     const entry = snapshot.models.get(provider)?.find((candidate) => candidate.id === modelName) ?? null;
+    const spec = providerSpecForId(provider, catalogProvider(snapshot, provider)?.npm ?? null);
 
     return Response.json({
       model,
       effort: settings.read().modelOptions[model]?.reasoningEffort ?? null,
-      values: selectableEfforts(provider, entry),
+      values: selectableEfforts(spec, entry),
     } satisfies ReasoningView);
   }
 
@@ -187,7 +189,7 @@ export function createApiHandlers(deps: ApiDeps) {
 
       // モデルを呼べない状態なら、ターンを始めずに理由を返す。
       // 呼び出しの中で初めて失敗すると、画面には「モデルから応答を得られませんでした」としか出せない。
-      const resolution = resolveModel(settings.read());
+      const resolution = resolveModel(settings.read(), deps.catalog.snapshot());
       if (!resolution.ok) {
         return jsonError(400, "model_not_configured", resolution.detail);
       }
@@ -264,7 +266,8 @@ export function createApiHandlers(deps: ApiDeps) {
       if (effort !== null) {
         const { provider, model: modelName } = modelParts(model);
         const entry = snapshot.models.get(provider)?.find((candidate) => candidate.id === modelName) ?? null;
-        const values = selectableEfforts(provider, entry);
+        const spec = providerSpecForId(provider, catalogProvider(snapshot, provider)?.npm ?? null);
+        const values = selectableEfforts(spec, entry);
 
         if (!values.includes(effort)) {
           return jsonError(

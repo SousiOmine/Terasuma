@@ -1,6 +1,6 @@
 import { posix } from "node:path";
-import { createTool } from "@mastra/core/tools";
-import type { Tool } from "@mastra/core/tools";
+import type { ToolSet } from "ai";
+import { tool } from "ai";
 import { z } from "zod";
 import type { ShellResult } from "./container";
 
@@ -16,7 +16,7 @@ import type { ShellResult } from "./container";
  */
 
 /** モデルへ渡すツール。キーはツール名（"read" など）。 */
-export type CodingToolset = Record<string, Tool<any, any, any, any>>;
+export type CodingToolset = ToolSet;
 
 /** ファイルとシェルを実行するコンテナ。テストではローカルの差し替えを渡す。 */
 export type CodingContainer = {
@@ -69,8 +69,7 @@ export function createCodingToolset({ container, root }: CodingToolsetOptions): 
   const where = `Paths are relative to ${root} unless absolute.`;
 
   return {
-    read: createTool({
-      id: "read",
+    read: tool({
       description: [
         "Read the contents of a text file inside the Debian computer that you operate.",
         where,
@@ -94,8 +93,7 @@ export function createCodingToolset({ container, root }: CodingToolsetOptions): 
       },
     }),
 
-    write: createTool({
-      id: "write",
+    write: tool({
       description: [
         "Write content to a file inside the Debian computer that you operate.",
         where,
@@ -118,8 +116,7 @@ export function createCodingToolset({ container, root }: CodingToolsetOptions): 
       },
     }),
 
-    edit: createTool({
-      id: "edit",
+    edit: tool({
       description: [
         "Edit a single file inside the Debian computer that you operate using exact text replacement.",
         where,
@@ -149,8 +146,7 @@ export function createCodingToolset({ container, root }: CodingToolsetOptions): 
       },
     }),
 
-    bash: createTool({
-      id: "bash",
+    bash: tool({
       description: [
         "Execute a bash command inside the Debian computer that you operate.",
         `Commands run as bash -lc in ${root}, and sudo works without a password.`,

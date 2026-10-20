@@ -33,7 +33,7 @@ describe("loadConfig", () => {
       const config = loadConfig(env);
 
       expect(config.port).toBe(DEFAULT_PORT);
-      expect(config.engine).toBe("mastra");
+      expect(config.engine).toBe("ai-sdk");
       // モデルとプロバイダは未設定から始まる。設定画面で入れるまでは使えない。
       expect(toModelSettings(readSettingsFile(config.configPath))).toEqual({
         model: null,
@@ -81,7 +81,7 @@ describe("loadConfig", () => {
       const config = loadConfig(env);
 
       expect(config.port).toBe(4567);
-      expect(config.engine).toBe("mastra");
+      expect(config.engine).toBe("ai-sdk");
     });
   });
 
@@ -161,8 +161,13 @@ describe("providers の検証", () => {
     expect(() => read({ deepseek: { apiKey: "x", label: "社内" } })).toThrow(/label/);
   });
 
-  test("カタログに無い id は baseUrl を要求する", () => {
-    expect(() => read({ mygateway: { apiKey: "x" } })).toThrow(/baseUrl/);
+  test("カタログの有無は設定の読み込みでは確かめない（呼ぶ前に resolveModel が確かめる）", () => {
+    withConfigFile(JSON.stringify({ providers: { mygateway: { apiKey: "x" } } }), (env) => {
+      const config = loadConfig(env);
+      expect(toModelSettings(readSettingsFile(config.configPath)).providers).toEqual({
+        mygateway: { apiKey: "x" },
+      });
+    });
   });
 
   test("独自エンドポイントは baseUrl と label を持てる", () => {
@@ -370,22 +375,22 @@ describe("API から来た入力の検証", () => {
     });
   });
 
-  test("normalizeProvider はカタログのプロバイダの形を強制する", () => {
-    expect(normalizeProvider("deepseek", { apiKey: "sk-1" }, "providers.deepseek")).toEqual({ apiKey: "sk-1" });
-    expect(() => normalizeProvider("deepseek", {}, "providers.deepseek")).toThrow(/apiKey/);
-    expect(() => normalizeProvider("mygateway", { apiKey: "sk-1" }, "providers.mygateway")).toThrow(/baseUrl/);
+  test("normalizeProvider はプロバイダの設定を検証する", () => {
+    expect(normalizeProvider({ apiKey: "sk-1" }, "providers.deepseek")).toEqual({ apiKey: "sk-1" });
+    expect(() => normalizeProvider({}, "providers.deepseek")).toThrow(/apiKey/);
+    // カタログの有無はこの層では分からない（呼び出しの前に resolveModel が確かめる）。
+    expect(normalizeProvider({ apiKey: "sk-1" }, "providers.mygateway")).toEqual({ apiKey: "sk-1" });
     // baseUrl を書けば独自エンドポイントとして通る。
-    expect(normalizeProvider("deepseek", { baseUrl: "https://example.test/v1" }, "providers.deepseek")).toEqual({
+    expect(normalizeProvider({ baseUrl: "https://example.test/v1" }, "providers.deepseek")).toEqual({
       baseUrl: "https://example.test/v1",
     });
   });
 
   test("normalizeProvider は独自エンドポイントの URL を確かめる", () => {
-    expect(normalizeProvider("custom-1", { baseUrl: "http://127.0.0.1:1234/v1/" }, "providers.custom-1")).toEqual({
+    expect(normalizeProvider({ baseUrl: "http://127.0.0.1:1234/v1/" }, "providers.custom-1")).toEqual({
       baseUrl: "http://127.0.0.1:1234/v1",
     });
-    expect(() => normalizeProvider("custom-1", {}, "providers.custom-1")).toThrow(/baseUrl/);
-    expect(() => normalizeProvider("custom-1", { baseUrl: "https://" }, "providers.custom-1")).toThrow(/URL/);
+    expect(() => normalizeProvider({ baseUrl: "https://" }, "providers.custom-1")).toThrow(/URL/);
   });
 
   test("isProviderId はモデル ID の先頭部分に使える形だけを通す", () => {

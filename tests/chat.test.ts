@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { AppConfig } from "../src/config";
 import type { AgentEngine, EngineInput, EngineStream } from "../src/server/engine";
 import { createMockEngine } from "../src/server/engine";
+import { parseCatalog, type Catalog } from "../src/server/models-dev";
 import { createHandover } from "../src/server/handover";
 import { startServer } from "../src/server/server";
 import { createStore, DEFAULT_TERA_ID } from "../src/server/store";
@@ -20,6 +21,23 @@ const config: AppConfig = {
   engine: "mock",
   isDevelopment: false,
 };
+
+/** テスト用のカタログ。TEST_SETTINGS の deepseek を解決できるようにする。 */
+function testCatalog(): Catalog {
+  const snapshot = parseCatalog(
+    {
+      deepseek: {
+        id: "deepseek",
+        name: "DeepSeek",
+        npm: "@ai-sdk/openai-compatible",
+        api: "https://api.deepseek.com",
+        models: { "deepseek-flash": { id: "deepseek-flash", name: "DeepSeek Flash" } },
+      },
+    },
+    1_000,
+  );
+  return { snapshot: () => snapshot, load: async () => snapshot };
+}
 
 /** モックの全文生成が目的なので、待ち時間ゼロで一気に流す。 */
 function fastMock() {
@@ -59,6 +77,7 @@ async function withServer<T>(
       mcp: createMcpStub(),
       container: createContainerStub(),
       handover: createHandover(),
+      catalog: testCatalog(),
     });
     const base = server.url;
 

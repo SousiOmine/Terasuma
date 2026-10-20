@@ -164,7 +164,7 @@ export type ProviderCheckResult = {
 
 /**
  * 設定画面に並べるプロバイダ 1 件（models.dev のカタログ）。
- * モデルの呼び出し方（どの URL に投げるか）は Mastra が持つので、ここには出さない。
+ * モデルの呼び出し方（どの URL に投げるか）はエンジンが持つので、ここには出さない。
  */
 export type CatalogProviderView = {
   /** モデル ID の先頭部分になる id。 */

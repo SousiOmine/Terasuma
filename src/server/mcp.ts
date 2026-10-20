@@ -1,7 +1,13 @@
 import { join } from "node:path";
-import type { Tool } from "@mastra/core/tools";
-import type { MCPDiscoveryErrorDetails, MastraMCPServerDefinition } from "@mastra/mcp";
-import { MCPClient } from "@mastra/mcp";
+import {
+  Client,
+  StreamableHTTPClientTransport,
+  type CallToolResult,
+  type Tool as McpToolDefinition,
+  type Transport,
+} from "@modelcontextprotocol/client";
+import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
+import { jsonSchema, tool, type JSONSchema7, type ToolSet } from "ai";
 import type { McpHttpServerSettings, McpServerSettings, McpServersSettings } from "../config";
 import type { McpAuthorizationView, McpServerStatusView, McpTestView } from "../shared/types";
 import {
@@ -16,7 +22,7 @@ import type { SettingsStore } from "./settings";
 import { describeError } from "../shared/errors";
 
 /** モデルへ渡すツール。キーは "<サーバー id>_<ツール名>"。 */
-export type McpToolset = Record<string, Tool<any, any, any, any>>;
+export type McpToolset = ToolSet;
 
 /** 設定に無い MCP サーバーを触ろうとしたときの失敗。 */
 export class McpServerNotFound extends Error {
@@ -75,14 +81,32 @@ const OAUTH_DIR_NAME = "mcp-oauth";
 /** 1 サーバー分の探索の打ち切り。繋がらないサーバーで画面を待たせ続けない。 */
 const DISCOVERY_TIMEOUT_MS = 15_000;
 
+/** 1 サーバー分の接続。設定が変わったら作り直す。 */
+type ServerConnection = {
+  /** 接続を作ったときのサーバー設定（JSON）。変わったら作り直す。 */
+  key: string;
+  client: Client;
+  /** 認可が必要になったときに URL を渡してくる口。stdio では null。 */
+  oauth: McpOAuthProvider | null;
+  /** サーバーが公開しているツール（名前空間を付ける前）。 */
+  tools: readonly McpToolDefinition[];
+};
+
+/** 1 つのサーバーへ繋ぐための材料。 */
+type ConnectionMaterial = {
+  transport: Transport;
+  oauth: McpOAuthProvider | null;
+};
+
 /**
  * MCP サーバーとの接続を持つ。
  *
  * サーバーごとの接続（ローカルの子プロセス起動・HTTP・OAuth）とツールの変換は
- * Mastra の MCPClient に任せ、ここでは次の 2 つだけを決める。
+ * 公式 SDK の Client に任せ、ここでは次の 3 つだけを決める。
  *
  * - いつ接続を作り直すか（設定が変わったときと、接続を確かめるときだけ）
  * - モデルへ渡すときのツール名（"<サーバー id>_<ツール名>"）
+ * - 接続できなかった理由を、画面に出せる状態にする
  *
  * チャットのたびに接続を試みないのは、落ちているサーバーがあると毎回そこで待たされるため。
  *
@@ -92,14 +116,15 @@ const DISCOVERY_TIMEOUT_MS = 15_000;
 export function createMcpManager(options: McpManagerOptions): McpManager {
   const { settings } = options;
 
-  let client: MCPClient | null = null;
-  /** クライアントを作ったときのサーバー設定（JSON）。これが変わったら作り直す。 */
-  let clientKey = "";
+  /** サーバー id → つながっている接続。 */
+  let connections = new Map<string, ServerConnection>();
+  /** 接続を作ったときの設定（JSON）。これが変わったら作り直す。 */
+  let settingsKey: string | null = null;
   /** サーバー id → いま分かっている状態。 */
   let statuses = new Map<string, McpServerStatusView>();
   /** モデルへ渡すツール。 */
   let tools: McpToolset = {};
-  /** 一度でも探索したかどうか。 */
+  /** 一度でも探索したかどうか。落ちているサーバーを毎ターン試しに行かないため。 */
   let discovered = false;
   /** 認可を待っているサーバー（id → 認可画面の URL）。 */
   const pending = new Map<string, string>();
@@ -117,14 +142,14 @@ export function createMcpManager(options: McpManagerOptions): McpManager {
   }
 
   /** 1 つのサーバーへ繋ぐための材料。 */
-  function connectionFor(serverId: string, server: McpServerSettings): ServerConnection {
+  function connectionFor(serverId: string, server: McpServerSettings): ConnectionMaterial {
     if (server.type === "stdio") {
       return {
-        definition: {
+        transport: new StdioClientTransport({
           command: server.command,
           ...(server.args === undefined ? {} : { args: [...server.args] }),
           ...(server.env === undefined ? {} : { env: { ...server.env } }),
-        },
+        }),
         oauth: null,
       };
     }
@@ -134,53 +159,99 @@ export function createMcpManager(options: McpManagerOptions): McpManager {
       redirectUrl: callbackUrl(),
       storage: storageFor(serverId),
     });
-    const definition: Extract<MastraMCPServerDefinition, { url: URL }> = {
-      url: new URL(server.url),
-      authProvider: oauth,
+    return {
+      transport: new StreamableHTTPClientTransport(new URL(server.url), { authProvider: oauth }),
+      oauth,
     };
-    return { definition, oauth };
   }
 
-  /** 設定に対応するクライアントを返す。設定が変わっていれば前のものを閉じて作り直す。 */
-  async function ensureClient(servers: McpServersSettings): Promise<MCPClient> {
-    const key = JSON.stringify(servers);
-    if (client !== null && key === clientKey) return client;
-
-    if (client !== null) {
-      const previous = client;
-      client = null;
-      await previous.disconnect();
+  /** すべての接続を閉じる。設定が変わったときと、終了するときに使う。 */
+  async function closeConnections(): Promise<void> {
+    const current = [...connections.values()];
+    connections = new Map();
+    for (const connection of current) {
+      await connection.client.close().catch(() => undefined);
     }
+  }
 
-    client = new MCPClient({
-      // 同じ設定で複数作ると MCPClient 側が失敗するため、この manager だけの id を渡す。
-      id: `terasuma-${crypto.randomUUID()}`,
-      servers: Object.fromEntries(
-        Object.entries(servers).map(([serverId, server]) => [serverId, connectionFor(serverId, server).definition]),
-      ),
-      timeout: DISCOVERY_TIMEOUT_MS,
-    });
-    clientKey = key;
+  /**
+   * 設定に対応する状態に揃える。設定が変わっていれば、前の接続を閉じて状態を捨てる。
+   * 接続そのものは refresh() が作る。
+   */
+  async function ensureConnections(servers: McpServersSettings): Promise<void> {
+    const key = JSON.stringify(servers);
+    if (key === settingsKey) return;
+
+    await closeConnections();
+    settingsKey = key;
     statuses = new Map();
     tools = {};
     discovered = false;
-    return client;
   }
 
-  /** すべてのサーバーへ接続してツールを取り直し、状態を置き換える。 */
+  /**
+   * すべてのサーバーへ接続してツールを取り直し、状態を置き換える。
+   * つながっているサーバーは、設定が変わっていない限り接続を使い回す。
+   */
   async function refresh(servers: McpServersSettings): Promise<void> {
-    const mcp = await ensureClient(servers);
-    const { toolsets, errors, errorDetails } = await mcp.listToolsetsWithErrors({
-      perServerTimeoutMs: DISCOVERY_TIMEOUT_MS,
-    });
+    await ensureConnections(servers);
 
-    // ツール名は "<サーバー id>_<ツール名>" としてモデルへ渡す。同じ名前になる組み合わせが
-    // あると、どちらのサーバーのツールか決められない。決められないまま渡さず、両方を失敗にする。
+    // 設定から消えたサーバーの接続を閉じる。
+    for (const serverId of [...connections.keys()]) {
+      if (servers[serverId] !== undefined) continue;
+
+      const connection = connections.get(serverId);
+      connections.delete(serverId);
+      if (connection !== undefined) await connection.client.close().catch(() => undefined);
+    }
+
+    for (const [serverId, server] of Object.entries(servers)) {
+      const key = JSON.stringify(server);
+      const existing = connections.get(serverId);
+      if (existing !== undefined && existing.key === key) continue;
+
+      if (existing !== undefined) {
+        connections.delete(serverId);
+        await existing.client.close().catch(() => undefined);
+      }
+
+      const material = connectionFor(serverId, server);
+      const client = new Client({ name: `terasuma-${serverId}`, version: "1.0.0" });
+      try {
+        await client.connect(material.transport, { timeout: DISCOVERY_TIMEOUT_MS });
+        const listed = await client.listTools(undefined, { timeout: DISCOVERY_TIMEOUT_MS });
+        connections.set(serverId, { key, client, oauth: material.oauth, tools: listed.tools });
+      } catch (error) {
+        await client.close().catch(() => undefined);
+
+        // サーバーが認可を求めたときだけ、認可の待ちとして扱う。
+        // 認可の用意が無い 401 は、内部的な失敗理由を出さずに「接続できませんでした」として扱う。
+        const authorizationUrl = material.oauth?.takeAuthorizationUrl() ?? null;
+        statuses.set(
+          serverId,
+          authorizationUrl === null
+            ? { state: "failed", tools: [], detail: describeError(error) }
+            : { state: "authorization_required", tools: [], detail: null },
+        );
+        connections.delete(serverId);
+      }
+    }
+
+    rebuild(servers);
+    discovered = true;
+  }
+
+  /**
+   * いまの接続から、状態とモデルへ渡すツールを組み直す。
+   * ツール名は "<サーバー id>_<ツール名>" としてモデルへ渡す。同じ名前になる組み合わせが
+   * あると、どちらのサーバーのツールか決められない。決められないまま渡さず、両方を失敗にする。
+   */
+  function rebuild(servers: McpServersSettings): void {
     const claimed = new Map<string, string>();
     const conflicted = new Map<string, string>();
-    for (const [serverId, serverTools] of Object.entries(toolsets)) {
-      for (const toolName of Object.keys(serverTools)) {
-        const namespaced = `${serverId}_${toolName}`;
+    for (const [serverId, connection] of connections) {
+      for (const definition of connection.tools) {
+        const namespaced = `${serverId}_${definition.name}`;
         const owner = claimed.get(namespaced);
         if (owner === undefined) {
           claimed.set(namespaced, serverId);
@@ -195,6 +266,13 @@ export function createMcpManager(options: McpManagerOptions): McpManager {
     const nextTools: McpToolset = {};
 
     for (const serverId of Object.keys(servers)) {
+      const connection = connections.get(serverId);
+      if (connection === undefined) {
+        // 接続に失敗した理由は refresh() が書いている。まだ何も分からないサーバーは unknown。
+        nextStatuses.set(serverId, statuses.get(serverId) ?? { state: "unknown", tools: [], detail: null });
+        continue;
+      }
+
       const conflict = conflicted.get(serverId);
       if (conflict !== undefined) {
         nextStatuses.set(serverId, {
@@ -205,21 +283,18 @@ export function createMcpManager(options: McpManagerOptions): McpManager {
         continue;
       }
 
-      const serverTools = toolsets[serverId];
-      if (serverTools === undefined) {
-        nextStatuses.set(serverId, failureStatus(mcp, serverId, errorDetails[serverId], errors[serverId]));
-        continue;
+      nextStatuses.set(serverId, {
+        state: "connected",
+        tools: connection.tools.map((definition) => definition.name),
+        detail: null,
+      });
+      for (const [namespaced, definition] of toolEntries(serverId, connection)) {
+        nextTools[namespaced] = definition;
       }
-
-      for (const [toolName, tool] of Object.entries(serverTools)) {
-        nextTools[`${serverId}_${toolName}`] = tool;
-      }
-      nextStatuses.set(serverId, { state: "connected", tools: Object.keys(serverTools), detail: null });
     }
 
     statuses = nextStatuses;
     tools = nextTools;
-    discovered = true;
   }
 
   /** 設定から MCP サーバー 1 件を取り出す。無ければ失敗させる。 */
@@ -237,10 +312,15 @@ export function createMcpManager(options: McpManagerOptions): McpManager {
     return server;
   }
 
+  /** いま分かっている状態。認可の待ちを最優先する。 */
+  function statusOf(serverId: string): McpServerStatusView {
+    if (pending.has(serverId)) return { state: "authorizing", tools: [], detail: null };
+    return statuses.get(serverId) ?? { state: "unknown", tools: [], detail: null };
+  }
+
   return {
     status(serverId) {
-      if (pending.has(serverId)) return { state: "authorizing", tools: [], detail: null };
-      return statuses.get(serverId) ?? { state: "unknown", tools: [], detail: null };
+      return statusOf(serverId);
     },
 
     async check(serverId) {
@@ -248,17 +328,18 @@ export function createMcpManager(options: McpManagerOptions): McpManager {
       if (servers[serverId] === undefined) throw new McpServerNotFound(serverId);
       // 認可を待っている間は繋ぎに行かない。接続を試すと認可の要求が作り直され、
       // ブラウザで開いている URL が使えなくなる。
-      if (pending.has(serverId)) return { state: "authorizing", tools: [], detail: null };
+      if (pending.has(serverId)) return statusOf(serverId);
 
-      const mcp = await ensureClient(servers);
-      try {
-        await mcp.reconnectServer(serverId);
-      } catch {
-        // 繋がらなかった理由は次の探索が必ず拾うので、ここでは重ねて報告しない。
+      // このサーバーだけ繋ぎ直す。他のサーバーの接続はそのまま使う。
+      await ensureConnections(servers);
+      const existing = connections.get(serverId);
+      if (existing !== undefined) {
+        connections.delete(serverId);
+        await existing.client.close().catch(() => undefined);
       }
 
       await refresh(servers);
-      return this.status(serverId);
+      return statusOf(serverId);
     },
 
     /**
@@ -277,39 +358,29 @@ export function createMcpManager(options: McpManagerOptions): McpManager {
         pendingTests.delete(serverId);
       }
 
-      const connection = connectionFor(serverId, server);
-      const probe = new MCPClient({
-        // 同じ設定で複数の MCPClient を作れるよう、この 1 回だけの id を渡す。
-        id: `terasuma-test-${crypto.randomUUID()}`,
-        servers: { [serverId]: connection.definition },
-        timeout: DISCOVERY_TIMEOUT_MS,
-      });
+      const material = connectionFor(serverId, server);
+      const client = new Client({ name: `terasuma-test-${serverId}`, version: "1.0.0" });
 
       try {
-        const { toolsets, errors, errorDetails } = await probe.listToolsetsWithErrors({
-          perServerTimeoutMs: DISCOVERY_TIMEOUT_MS,
-        });
-
-        const tools = toolsets[serverId];
-        if (tools !== undefined) {
-          return { state: "connected", tools: Object.keys(tools), detail: null, authorizationUrl: null };
-        }
-
-        const authorizationUrl = connection.oauth?.takeAuthorizationUrl() ?? null;
+        await client.connect(material.transport, { timeout: DISCOVERY_TIMEOUT_MS });
+        const listed = await client.listTools(undefined, { timeout: DISCOVERY_TIMEOUT_MS });
+        return {
+          state: "connected",
+          tools: listed.tools.map((definition) => definition.name),
+          detail: null,
+          authorizationUrl: null,
+        };
+      } catch (error) {
+        const authorizationUrl = material.oauth?.takeAuthorizationUrl() ?? null;
         if (authorizationUrl !== null) {
           // コールバックを受けたときに、まだ設定に無い接続先でも終わらせられるように控える。
           pendingTests.set(serverId, { server, url: authorizationUrl });
           return { state: "authorization_required", tools: [], detail: null, authorizationUrl };
         }
 
-        return {
-          state: "failed",
-          tools: [],
-          detail: errorDetails[serverId]?.message ?? errors[serverId] ?? "接続できませんでした",
-          authorizationUrl: null,
-        };
+        return { state: "failed", tools: [], detail: describeError(error), authorizationUrl: null };
       } finally {
-        await probe.disconnect();
+        await client.close().catch(() => undefined);
       }
     },
 
@@ -317,7 +388,8 @@ export function createMcpManager(options: McpManagerOptions): McpManager {
       const servers = settings.readMcp().servers;
       if (Object.keys(servers).length === 0) return {};
 
-      await ensureClient(servers);
+      await ensureConnections(servers);
+      // 一度も探索していなければ繋ぎに行く。落ちているサーバーをチャットのたびに試さない。
       if (!discovered) await refresh(servers);
       return tools;
     },
@@ -379,38 +451,53 @@ export function createMcpManager(options: McpManagerOptions): McpManager {
     },
 
     async close() {
-      const current = client;
-      client = null;
-      clientKey = "";
-      if (current !== null) await current.disconnect();
+      await closeConnections();
+      settingsKey = null;
+      statuses = new Map();
+      tools = {};
+      discovered = false;
     },
   };
 }
 
-/** 1 つのサーバーへ繋ぐための材料。 */
-type ServerConnection = {
-  definition: MastraMCPServerDefinition;
-  /** 認可が必要になったときに SDK が URL を渡してくる口。stdio では null。 */
-  oauth: McpOAuthProvider | null;
-};
+/** 1 つのサーバーのツールを、モデルへ渡す名前と定義の組にする。 */
+function toolEntries(serverId: string, connection: ServerConnection): [string, ToolSet[string]][] {
+  return connection.tools.map((definition) => [
+    `${serverId}_${definition.name}`,
+    tool({
+      description: definition.description ?? "",
+      inputSchema: jsonSchema(definition.inputSchema as unknown as JSONSchema7),
+      execute: async (input: unknown, options: { abortSignal?: AbortSignal }) => {
+        const result = await connection.client.callTool(
+          { name: definition.name, arguments: asArguments(input) },
+          options.abortSignal === undefined ? {} : { signal: options.abortSignal },
+        );
 
-/**
- * 接続できなかったときの状態。サーバーが認可を求めている場合だけ区別する。
- *
- * 認可が要るかどうかは設定ではなく、繋いだ結果で決まる。サーバーが 401 を返すと SDK が
- * 認可の要求を作り、認可が要るサーバーとして印を付ける（設定に書く必要はない）。
- */
-function failureStatus(
-  mcp: MCPClient,
-  serverId: string,
-  details: MCPDiscoveryErrorDetails | undefined,
-  fallback: string | undefined,
-): McpServerStatusView {
-  if (mcp.getServerAuthState(serverId) === "needs-auth") {
-    // 次にすることは「認可する」ボタンが示すので、SDK の内部的な失敗理由は出さない。
-    return { state: "authorization_required", tools: [], detail: null };
+        const text = callToolText(result);
+        // エラーは例外にして、モデルへ本文だけを渡す（JSON の包装を見せない）。
+        if (result.isError === true) throw new Error(text);
+        return text;
+      },
+    }),
+  ]);
+}
+
+/** ツールの入力は必ずオブジェクト。壊れた形は空として扱い、サーバー側の検証に任せる。 */
+function asArguments(input: unknown): Record<string, unknown> {
+  if (typeof input !== "object" || input === null || Array.isArray(input)) return {};
+  return input as Record<string, unknown>;
+}
+
+/** MCP の結果から、モデルと画面に見せる本文を取り出す。 */
+function callToolText(result: CallToolResult): string {
+  const texts: string[] = [];
+  for (const block of result.content) {
+    if (block.type === "text") texts.push(block.text);
   }
-  return { state: "failed", tools: [], detail: details?.message ?? fallback ?? "接続できませんでした" };
+  if (texts.length > 0) return texts.join("\n");
+
+  // テキスト以外（画像・資源）しか無い場合は、結果全体を JSON として見せる。
+  return JSON.stringify(result);
 }
 
 /**
@@ -420,4 +507,3 @@ function failureStatus(
 function sameServer(left: McpServerSettings, right: McpServerSettings): boolean {
   return JSON.stringify(left) === JSON.stringify(right);
 }
-

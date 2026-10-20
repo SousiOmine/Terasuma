@@ -33,11 +33,26 @@ function fixture() {
         "claude-sonnet-4-6": { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6", reasoning: true },
       },
     },
-    // Mastra のモデルルーターが解決できないプロバイダは、選ばせない。
-    "not-registered": {
-      id: "not-registered",
-      name: "Not Registered",
-      api: "https://example.test/v1",
+    // 依存に無いパッケージで呼ぶプロバイダは、選ばせない。
+    bedrock: {
+      id: "bedrock",
+      name: "Bedrock",
+      npm: "@ai-sdk/amazon-bedrock",
+      models: { something: { id: "something", name: "Something" } },
+    },
+    // OpenAI 互換でも、接続先が無ければ呼べない。
+    "no-api": {
+      id: "no-api",
+      name: "No API",
+      npm: "@ai-sdk/openai-compatible",
+      models: { something: { id: "something", name: "Something" } },
+    },
+    // アカウント固有の値が埋め込まれた接続先は、こちらでは解決できない。
+    placeholder: {
+      id: "placeholder",
+      name: "Placeholder",
+      npm: "@ai-sdk/openai-compatible",
+      api: "https://${ACCOUNT_ID}.example.test/v1",
       models: { something: { id: "something", name: "Something" } },
     },
   };
@@ -85,10 +100,26 @@ describe("カタログの読み取り", () => {
     expect(snapshot.models.get("deepseek")?.some((model) => model.id === "deepseek-v3")).toBe(false);
   });
 
-  test("Mastra が解決できないプロバイダは落とす", () => {
+  test("依存に無いパッケージのプロバイダは落とす", () => {
     const snapshot = parseCatalog(fixture(), 1_000);
-    expect(snapshot.providers.some((provider) => provider.id === "not-registered")).toBe(false);
-    expect(snapshot.models.get("not-registered")).toBeUndefined();
+    expect(snapshot.providers.some((provider) => provider.id === "bedrock")).toBe(false);
+    expect(snapshot.models.get("bedrock")).toBeUndefined();
+  });
+
+  test("接続先が分からない OpenAI 互換のプロバイダは落とす", () => {
+    const snapshot = parseCatalog(fixture(), 1_000);
+    expect(snapshot.providers.some((provider) => provider.id === "no-api")).toBe(false);
+  });
+
+  test("環境変数入りの接続先は、解決できないので落とす", () => {
+    const snapshot = parseCatalog(fixture(), 1_000);
+    expect(snapshot.providers.some((provider) => provider.id === "placeholder")).toBe(false);
+  });
+
+  test("どのパッケージで呼ぶかも読む", () => {
+    const snapshot = parseCatalog(fixture(), 1_000);
+    expect(snapshot.providers.find((provider) => provider.id === "deepseek")?.npm).toBe("@ai-sdk/openai-compatible");
+    expect(snapshot.providers.find((provider) => provider.id === "anthropic")?.npm).toBe("@ai-sdk/anthropic");
   });
 
   test("思考強度の指定を読む", () => {

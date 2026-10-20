@@ -1,5 +1,5 @@
-import { createTool } from "@mastra/core/tools";
-import type { Tool } from "@mastra/core/tools";
+import type { ToolSet } from "ai";
+import { tool } from "ai";
 import { z } from "zod";
 import type { ImageRef } from "../shared/types";
 import type { ContainerManager, ShellResult } from "./container";
@@ -26,7 +26,7 @@ import type { ImageStore } from "./images";
  */
 
 /** モデルへ渡すツール。キーはツール名（"computer_screenshot" など）。 */
-export type ComputerToolset = Record<string, Tool<any, any, any, any>>;
+export type ComputerToolset = ToolSet;
 
 /** 操作 1 つの待ち時間。応答が返ってこない操作でターンが終わらなくなるのを防ぐ。 */
 const ACTION_TIMEOUT_MS = 15_000;
@@ -88,8 +88,7 @@ export function createComputerTools(options: ComputerToolsOptions): ComputerTool
   }
 
   return {
-    computer_screenshot: createTool({
-      id: "computer_screenshot",
+    computer_screenshot: tool({
       description: [
         "Take a screenshot of the computer desktop and return it as an image.",
         "The screen size is fixed, so coordinates read from the image can be used as they are.",
@@ -104,12 +103,11 @@ export function createComputerTools(options: ComputerToolsOptions): ComputerTool
       },
       // 画像はここには入れない。tool の本文に画像を置けるプロバイダが無いため、
       // 保存した参照から組み立てる側（prompt.ts）が user メッセージとして渡す。
-      // outputSchema を指定しないため戻り値は unknown になる。形は execute が決めている。
-      toModelOutput: (output: unknown) => ({ type: "text", value: (output as ImageOutput).text }),
+      // モデルへ渡すのは本文だけにする。画像は保存した参照から prompt.ts が組み立てる。
+      toModelOutput: ({ output }: { output: ImageOutput }) => ({ type: "text", value: output.text }),
     }),
 
-    computer_click: createTool({
-      id: "computer_click",
+    computer_click: tool({
       description: [
         "Click at the given screen coordinates.",
         "The origin (0,0) is the top-left corner of the screenshot.",
@@ -131,8 +129,7 @@ export function createComputerTools(options: ComputerToolsOptions): ComputerTool
       },
     }),
 
-    computer_scroll: createTool({
-      id: "computer_scroll",
+    computer_scroll: tool({
       description: "Scroll the mouse wheel at the given screen coordinates.",
       inputSchema: z.object({
         x: z.number().int().min(0).describe("X coordinate in pixels"),
@@ -161,8 +158,7 @@ export function createComputerTools(options: ComputerToolsOptions): ComputerTool
       },
     }),
 
-    computer_type: createTool({
-      id: "computer_type",
+    computer_type: tool({
       description: [
         "Type text with the keyboard into the focused window.",
         "Click the target first to focus it.",
@@ -176,8 +172,7 @@ export function createComputerTools(options: ComputerToolsOptions): ComputerTool
       },
     }),
 
-    computer_key: createTool({
-      id: "computer_key",
+    computer_key: tool({
       description: [
         "Press a key or a key combination, such as \"Return\", \"Escape\", \"ctrl+c\" or \"alt+Tab\".",
         "The names are the ones xdotool accepts.",
@@ -191,8 +186,7 @@ export function createComputerTools(options: ComputerToolsOptions): ComputerTool
       },
     }),
 
-    computer_windows: createTool({
-      id: "computer_windows",
+    computer_windows: tool({
       description: [
         "List the visible windows on the desktop, with the one that has the keyboard focus.",
         "Use this to find out what is open before clicking or typing.",
@@ -207,8 +201,7 @@ export function createComputerTools(options: ComputerToolsOptions): ComputerTool
       },
     }),
 
-    computer_wait: createTool({
-      id: "computer_wait",
+    computer_wait: tool({
       description: "Wait for the given number of seconds (for example, while an application starts up).",
       inputSchema: z.object({
         seconds: z.number().min(0).max(60).describe("Seconds to wait"),
@@ -219,8 +212,7 @@ export function createComputerTools(options: ComputerToolsOptions): ComputerTool
       },
     }),
 
-    computer_open: createTool({
-      id: "computer_open",
+    computer_open: tool({
       description: [
         "Start an application on the computer desktop.",
         "The application keeps running after the call returns; take a screenshot to see it.",
@@ -240,8 +232,7 @@ export function createComputerTools(options: ComputerToolsOptions): ComputerTool
       },
     }),
 
-    computer_ask_user: createTool({
-      id: "computer_ask_user",
+    computer_ask_user: tool({
       description: [
         "Hand the computer screen over to the user and wait for them.",
         "Use this for logins, two-factor codes, identity checks, or any choice only the user can make.",

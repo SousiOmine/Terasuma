@@ -1,13 +1,12 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { getProviderConfig } from "@mastra/core/llm";
 import { resolveAppPaths } from "./paths";
 import { isModelId, type ModelId } from "./shared/model";
 import type { McpServerForm, ProviderCredentials } from "./shared/types";
 import { describeError } from "./shared/errors";
 
 /** 使う LLM 実装。mock は開発・テスト専用で、既定には決してならない。 */
-type EngineKind = "mastra" | "mock";
+type EngineKind = "ai-sdk" | "mock";
 
 /**
  * プロバイダ 1 件の設定。
@@ -170,7 +169,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     configPath,
     dataDir,
     dbPath: join(dataDir, "terasuma.db"),
-    engine: readEnvEngine(env) ?? file.engine ?? "mastra",
+    engine: readEnvEngine(env) ?? file.engine ?? "ai-sdk",
     isDevelopment: env.NODE_ENV !== "production",
   };
 }
@@ -245,8 +244,8 @@ export function readSettingsFile(path: string): FileSettings {
 
   const engine = readString(source, "engine", path);
   if (engine !== undefined) {
-    if (engine !== "mastra" && engine !== "mock") {
-      throw new Error(`${path} の engine は "mastra" か "mock" にしてください（現在の値: ${JSON.stringify(engine)}）`);
+    if (engine !== "ai-sdk" && engine !== "mock") {
+      throw new Error(`${path} の engine は "ai-sdk" か "mock" にしてください（現在の値: ${JSON.stringify(engine)}）`);
     }
     settings.engine = engine;
   }
@@ -280,18 +279,13 @@ function serialize(settings: FileSettings): string {
  * プロバイダ 1 件の設定を検証し、保存できる形に整える。
  *
  * baseUrl を持つものは OpenAI 互換の独自エンドポイントで、接続先を利用者が決める。
- * 持たないものは models.dev のカタログのプロバイダとして扱い、Mastra が URL を解決できることを確かめる。
+ * 持たないものは models.dev のカタログのプロバイダとして扱う。カタログは起動後に取り直すため、
+ * ここでは登録の有無を確かめない（呼び出しの前に resolveModel が、カタログと突き合わせて止める）。
  * 既定値で埋め合わせると「設定したつもりで繋がらない」状態になるので、ここでは何も補わない。
  */
-export function normalizeProvider(id: string, raw: ProviderSettings, source: string): ProviderSettings {
+export function normalizeProvider(raw: ProviderSettings, source: string): ProviderSettings {
   const isEndpoint = raw.baseUrl !== undefined;
-  const registered = getProviderConfig(id) !== undefined;
 
-  if (!isEndpoint && !registered) {
-    throw new Error(
-      `${source} に baseUrl を指定してください（${id} は models.dev のカタログに無いため、独自の接続先が必要です）`,
-    );
-  }
   if (!isEndpoint && raw.apiKey === undefined) {
     throw new Error(`${source} に apiKey を指定してください`);
   }
@@ -421,7 +415,6 @@ function readProviderEntry(id: string, raw: unknown, path: string): ProviderSett
   const source = raw;
 
   return normalizeProvider(
-    id,
     {
       apiKey: readProviderString(source, "apiKey", id, path),
       baseUrl: readProviderString(source, "baseUrl", id, path),
@@ -625,8 +618,8 @@ function readEnvEngine(env: NodeJS.ProcessEnv): EngineKind | undefined {
   const raw = env.TERASUMA_ENGINE?.trim();
   if (raw === undefined || raw.length === 0) return undefined;
 
-  if (raw !== "mastra" && raw !== "mock") {
-    throw new Error(`TERASUMA_ENGINE は "mastra" か "mock" で指定してください（現在の値: ${JSON.stringify(raw)}）`);
+  if (raw !== "ai-sdk" && raw !== "mock") {
+    throw new Error(`TERASUMA_ENGINE は "ai-sdk" か "mock" で指定してください（現在の値: ${JSON.stringify(raw)}）`);
   }
   return raw;
 }

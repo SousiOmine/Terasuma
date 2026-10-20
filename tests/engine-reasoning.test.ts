@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { ModelSettings } from "../src/config";
-import { createMastraEngine, type SettingsReader } from "../src/server/engine";
+import { createAiSdkEngine, type SettingsReader } from "../src/server/engine";
 import type { ChatMessage } from "../src/shared/types";
 import { createCodingStub, createComputerStub, createImageStub, createMcpStub } from "./support";
 
@@ -77,12 +77,13 @@ function portOf(server: { port?: number }): number {
 
 async function runEngine(settings: ModelSettings): Promise<string> {
   const reader: SettingsReader = { read: () => settings };
-  const stream = await createMastraEngine({
+  const stream = await createAiSdkEngine({
     settings: reader,
     mcp: createMcpStub(),
     computer: createComputerStub(),
     coding: createCodingStub(),
     images: createImageStub(),
+    catalog: { snapshot: () => null },
   }).stream({
     context: { summary: null, messages: history() },
     signal: new AbortController().signal,
@@ -97,7 +98,7 @@ async function runEngine(settings: ModelSettings): Promise<string> {
   return text;
 }
 
-describe("思考強度の受け渡し（Mastra 経由）", () => {
+describe("思考強度の受け渡し（AI SDK 経由）", () => {
   test("設定した思考強度が reasoning_effort として本文に載る", async () => {
     const fake = startFakeProvider();
     try {

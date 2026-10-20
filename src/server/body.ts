@@ -125,7 +125,7 @@ export function parseProviderSettings(
   }
 
   try {
-    return normalizeProvider(id, providerSettingsFromForm(credentials), `providers.${id}`);
+    return normalizeProvider(providerSettingsFromForm(credentials), `providers.${id}`);
   } catch (error) {
     return jsonError(400, "invalid_request", describeError(error));
   }

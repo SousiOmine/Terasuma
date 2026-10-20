@@ -1,12 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { createTool } from "@mastra/core/tools";
+import { tool } from "ai";
 import { z } from "zod";
 import type { ModelSettings } from "../src/config";
 import { createCodingToolset, type CodingToolset } from "../src/server/coding";
 import { createComputerTools } from "../src/server/computer";
 import type { ContainerManager } from "../src/server/container";
 import {
-  createMastraEngine,
+  createAiSdkEngine,
   type ComputerToolsetProvider,
   type EngineEvent,
   type SettingsReader,
@@ -162,8 +162,7 @@ function createShellContainer(stdout: string): { container: ContainerManager; co
 /** 記録できるツールを 1 つ持つ供給元。 */
 function createToolsetProvider(): ToolsetProvider & { executed: unknown[] } {
   const executed: unknown[] = [];
-  const echo = createTool({
-    id: "local_echo",
+  const echo = tool({
     description: "テスト用の echo",
     inputSchema: z.object({ text: z.string() }),
     execute: async ({ text }: { text: string }) => {
@@ -221,12 +220,13 @@ async function run(
   coding: CodingToolset = createCodingStub(),
 ): Promise<EngineEvent[]> {
   const reader: SettingsReader = { read: () => settings };
-  const stream = await createMastraEngine({
+  const stream = await createAiSdkEngine({
     settings: reader,
     mcp: provider,
     computer,
     coding,
     images: createImageStub(),
+    catalog: { snapshot: () => null },
   }).stream({
     context: { summary: null, messages: history() },
     signal: new AbortController().signal,
@@ -239,7 +239,7 @@ async function run(
   return events;
 }
 
-describe("MCP のツール呼び出し（Mastra 経由）", () => {
+describe("MCP のツール呼び出し（AI SDK 経由）", () => {
   test("ツールがモデルへ渡り、呼び出しと結果が流れて本文で終わる", async () => {
     const fake = startFakeProvider();
     const provider = createToolsetProvider();
@@ -370,11 +370,10 @@ describe("MCP のツール呼び出し（Mastra 経由）", () => {
     const fake = startFakeProvider({ name: "local_fail", args: "{}" });
     const provider: ToolsetProvider = {
       toolset: async () => ({
-        local_fail: createTool({
-          id: "local_fail",
+        local_fail: tool({
           description: "テスト用の失敗",
           inputSchema: z.object({}),
-          execute: async () => {
+          execute: async (): Promise<string> => {
             throw new Error("boom");
           },
         }),
@@ -416,7 +415,7 @@ describe("MCP のツール呼び出し（Mastra 経由）", () => {
     }
   });
 
-  // Mastra（AI SDK）は 5xx を既定で 2 回まで再試行するので、その分だけ待つ。
+  // AI SDK は 5xx を既定で 2 回まで再試行するので、その分だけ待つ。
   test("プロバイダが失敗したら、空の応答にせず失敗させる", async () => {
     // ストリームの途中でエラーがチャンクとして流れてくる場合も、黙って空文字にしない。
     const server = Bun.serve({

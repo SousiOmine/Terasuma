@@ -66,12 +66,16 @@ export async function withLiveServer(
   const config = { ...loadConfig(), port: 0 };
 
   // mock は API を呼ばないので、動かしても「繋がった」ことにはならない。黙って通さない。
-  if (config.engine !== "mastra") {
-    throw new Error(`engine が ${config.engine} です。実際の API へ繋ぐ確認は engine: "mastra" のときだけ動きます`);
+  if (config.engine !== "ai-sdk") {
+    throw new Error(`engine が ${config.engine} です。実際の API へ繋ぐ確認は engine: "ai-sdk" のときだけ動きます`);
   }
 
   const settings = createSettingsStore(config.configPath);
-  const resolution = resolveModel(settings.read());
+
+  // モデルの呼び出し方も文脈長もカタログから決める（index.ts と同じ組み立て）。
+  const catalog = createCatalog({ cachePath: join(config.dataDir, CATALOG_FILE_NAME) });
+  await catalog.load();
+  const resolution = resolveModel(settings.read(), catalog.snapshot());
   if (!resolution.ok) throw new Error(`モデルを解決できません: ${resolution.detail}`);
 
   // 何を確かめているのかが出力だけで分かるように、読んだ設定と解決したモデルを出す。
@@ -96,10 +100,9 @@ export async function withLiveServer(
       boundPort === null ? null : new URL(`http://${config.host}:${boundPort}${OAUTH_CALLBACK_PATH}`),
   });
 
-  const engine = createEngine({ config, settings, mcp, computer, coding, images });
+  const engine = createEngine({ config, settings, mcp, computer, coding, images, catalog });
 
-  // 畳むかどうかはモデルの文脈長から決める（index.ts と同じ組み立て）。
-  const catalog = createCatalog({ cachePath: join(config.dataDir, CATALOG_FILE_NAME) });
+  // 畳むかどうかはモデルの文脈長から決める。
   const compaction = createCompaction({
     store,
     engine,

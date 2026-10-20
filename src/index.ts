@@ -50,11 +50,12 @@ const computer = createComputerToolset({ container, images, handover });
 // いずれもコンピュータのコンテナの中だけで動き、ホストのファイルには触れない。
 const coding = createCodingToolset({ container, root: WORKDIR_IN_CONTAINER });
 
-const engine = createEngine({ config, settings, mcp, computer, coding, images });
-
 // 畳むかどうかは、モデルの文脈長（カタログ）から決める。
 // 起動後にカタログを読んでおくので、設定画面を開かなくても文脈長が分かる。
+// エンジンも、プロバイダの呼び出し方を決めるのにカタログを使う。
 const catalog = createCatalog({ cachePath: join(config.dataDir, CATALOG_FILE_NAME) });
+
+const engine = createEngine({ config, settings, mcp, computer, coding, images, catalog });
 
 // 古いやり取りは、3 時間の放置か、文脈長に近づいたときに、背景で要約へ畳む。
 // 失敗は端末に出す（会話は生の履歴のまま続く）。
@@ -80,7 +81,6 @@ boundPort = server.port ?? null;
 
 // モデルが未設定でも起動はする（画面から追加できる）。気づけるようにここで 1 行だけ出す。
 const model = settings.read().model;
-const resolution = resolveModel(settings.read());
 
 console.log(
   [
@@ -89,7 +89,6 @@ console.log(
     `  model  : ${model ?? "(未設定)"}`,
     // 設定と違うポートで起動したことは黙らない。開く先が表示と食い違ってしまうため。
     ...(portChanged ? [`  note   : ${config.port} は使用中だったので、空いているポートを使います`] : []),
-    ...(resolution.ok ? [] : [`  note   : ${resolution.detail}`]),
     `  config : ${config.configPath}`,
     `  data   : ${config.dataDir}`,
   ].join("\n"),
@@ -115,9 +114,17 @@ process.once("SIGTERM", () => void shutdown("SIGTERM"));
 
 // 設定画面を開かなくてもモデルの文脈長が分かるよう、起動後にカタログを読んでおく。
 // 取れなくても起動は止めない（圧縮は既定の見積もりで動き、画面は必要になったときに取りに行く）。
-void catalog.load().catch((error: unknown) => {
-  console.log(`  catalog: 読めませんでした — ${describeError(error)}`);
-});
+void catalog
+  .load()
+  .catch((error: unknown) => {
+    console.log(`  catalog: 読めませんでした — ${describeError(error)}`);
+  })
+  .finally(() => {
+    // カタログが読めたところで、既定のモデルを呼べるかを確かめる。
+    // 起動直後はカタログがまだ無いので、ここで確かめる（誤った注記を出さないため）。
+    const resolution = resolveModel(settings.read(), catalog.snapshot());
+    if (!resolution.ok) console.log(`  note   : ${resolution.detail}`);
+  });
 
 // 最後のやり取りから 3 時間以上たっている（か、文脈長に近づいている）Tera は、
 // ここで要約を作り始める。ターンは待たないので、話し始めても遅くならない。

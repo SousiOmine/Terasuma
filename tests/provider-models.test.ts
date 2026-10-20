@@ -43,7 +43,7 @@ const catalogProvider: ProviderRequest = {
   apiKey: "sk-test",
 };
 
-/** カタログのプロバイダ（api が無く、Mastra が既定の URL を使うもの）。 */
+/** カタログのプロバイダ（api が無く、AI SDK のプロバイダパッケージが既定の URL を使うもの）。 */
 const anthropic: ProviderRequest = {
   target: connectionTarget({ id: "anthropic", baseUrl: null, api: null }),
   apiKey: "sk-ant",

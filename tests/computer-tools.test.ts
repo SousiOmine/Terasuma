@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { asSchema } from "ai";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -11,7 +12,7 @@ import { createPodmanStub, testPng, type PodmanStubBehaviour } from "./support";
 
 /**
  * computer ツールセットを、podman を差し替えた状態で直接呼ぶ。
- * モデルへ渡る形（Mastra 経由）は tests/engine-tools.test.ts で確かめる。
+ * モデルへ渡る形（AI SDK 経由）は tests/engine-tools.test.ts で確かめる。
  * 画面の撮影と xdotool の呼び出しは差し替えて、組み立てた引数を見る。
  */
 
@@ -157,7 +158,10 @@ describe("画面の撮影", () => {
 
       const output = await tool.execute({} as never, {} as never);
       // tool の本文に画像を置けるプロバイダが無いので、ここでは参照を出さない。
-      expect(tool.toModelOutput?.(output)).toEqual({ type: "text", value: "The screen is 1280x800 pixels." });
+      expect(tool.toModelOutput?.({ toolCallId: "call-1", input: {}, output })).toEqual({
+        type: "text",
+        value: "The screen is 1280x800 pixels.",
+      });
 
       // 保存した画像は、あとから組み立てる側（prompt.ts）が読める形で残っている。
       const image = (output as { image: ImageRef }).image;
@@ -292,15 +296,15 @@ describe("ターンの中断", () => {
 
   test("computer_ask_user の質問は空を許さない", async () => {
     await withTools({}, async ({ tools }) => {
-      const schema = tools["computer_ask_user"]?.inputSchema;
-      if (schema === undefined) throw new Error("computer_ask_user が無い");
+      const schema = asSchema(tools["computer_ask_user"]?.inputSchema);
+      if (schema.validate === undefined) throw new Error("computer_ask_user の検証が無い");
 
       // 空の質問だと、画面には帯も「操作を完了した」も出せない。
-      const empty = await schema["~standard"].validate({ question: "" });
-      const filled = await schema["~standard"].validate({ question: "ログインしてください" });
+      const empty = await schema.validate({ question: "" });
+      const filled = await schema.validate({ question: "ログインしてください" });
 
-      expect(empty.issues?.length ?? 0).toBeGreaterThan(0);
-      expect(filled.issues).toBeUndefined();
+      expect(empty.success).toBe(false);
+      expect(filled.success).toBe(true);
     });
   });
 });

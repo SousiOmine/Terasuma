@@ -7,9 +7,9 @@
  */
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import { getProviderConfig } from "@mastra/core/llm";
 import { modelParts, type ModelId } from "../shared/model";
 import type { FetchLike } from "./provider-models";
+import { catalogRoute } from "./provider-registry";
 import { describeError } from "../shared/errors";
 
 const MODELS_DEV_URL = "https://models.dev/api.json";
@@ -35,7 +35,9 @@ export type CatalogModel = {
 export type CatalogProvider = {
   id: string;
   name: string;
-  /** models.dev が持つベース URL。無いものは Mastra のモデルルーターが既定の URL を使う。 */
+  /** models.dev が示す、呼び出しに使う AI SDK のパッケージ名。 */
+  npm: string | null;
+  /** models.dev が持つベース URL。無いものはプロバイダパッケージが既定の URL を使う。 */
   api: string | null;
 };
 
@@ -46,6 +48,12 @@ export type CatalogSnapshot = {
   /** プロバイダ id → モデル（id の昇順）。 */
   models: ReadonlyMap<string, readonly CatalogModel[]>;
 };
+
+/** カタログのプロバイダ 1 件を id で引く。 */
+export function catalogProvider(snapshot: CatalogSnapshot | null, id: string): CatalogProvider | null {
+  if (snapshot === null) return null;
+  return snapshot.providers.find((provider) => provider.id === id) ?? null;
+}
 
 export type Catalog = {
   /** 取得済みのカタログ。まだ読めていなければ null。 */
@@ -78,7 +86,8 @@ export function parseCatalog(raw: unknown, fetchedAt: number): CatalogSnapshot {
   for (const [id, value] of Object.entries(raw as Record<string, unknown>)) {
     const provider = readProvider(id, value);
     if (provider === null) continue;
-    if (getProviderConfig(id) === undefined) continue;
+    // 呼び出せないプロバイダ（依存に無いパッケージ・接続先が不明）は一覧に混ぜない。
+    if (catalogRoute(provider) === null) continue;
 
     providers.push(provider);
     models.set(id, readModels(value));
@@ -212,6 +221,7 @@ function readProvider(id: string, value: unknown): CatalogProvider | null {
   return {
     id,
     name: readText(source, "name") ?? id,
+    npm: readText(source, "npm"),
     api: readText(source, "api"),
   };
 }

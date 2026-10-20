@@ -15,7 +15,7 @@ import {
 
 /**
  * read / write / edit / bash を、モデルを介さずにそのまま呼ぶ。
- * ツールがモデルへ渡る形（Mastra 経由）は tests/engine-tools.test.ts で確かめる。
+ * ツールがモデルへ渡る形（AI SDK 経由）は tests/engine-tools.test.ts で確かめる。
  *
  * コンテナは本物を使わず、一時ディレクトリをコンテナの /home/agent とみなす。
  * コマンドも同じディレクトリで実行し、podman exec の往復だけを差し替える。

@@ -1,3 +1,4 @@
+import type { ModelMessage } from "ai";
 import type { ReplyLanguage } from "../shared/language";
 import type { ChatMessage, ImageRef, MessagePart } from "../shared/types";
 
@@ -48,23 +49,12 @@ export function summaryText(summary: string): string {
   ].join("\n");
 }
 
-/** モデルへ渡す assistant の内容の一部。 */
-export type AssistantContentPart =
-  | { type: "text"; text: string }
-  | { type: "tool-call"; toolCallId: string; toolName: string; input: unknown };
-
-export type ToolResultContentPart = {
-  type: "tool-result";
-  toolCallId: string;
-  toolName: string;
-  /** 失敗した呼び出しは error-text にして、モデルが自分で直せるようにする。 */
-  output: { type: "text" | "error-text"; value: string };
-};
-
-/** モデルへ渡す user の内容の一部。ツールが撮った画像もここで渡す。 */
-export type UserContentPart =
-  | { type: "text"; text: string }
-  | { type: "image"; image: Uint8Array; mediaType: string };
+/** assistant の content（本文だけ、または本文とツール呼び出しの並び）。 */
+type AssistantContent = Extract<ModelMessage, { role: "assistant" }>["content"];
+/** tool の content（ツール呼び出しに対する結果の並び）。 */
+type ToolContent = Extract<ModelMessage, { role: "tool" }>["content"];
+/** tool の結果 1 件分の output。 */
+type ToolResultOutput = Extract<ToolContent[number], { type: "tool-result" }>["output"];
 
 /**
  * 保存した画像を読み出す口。
@@ -73,16 +63,6 @@ export type UserContentPart =
 export type ImageReader = {
   read(ref: ImageRef): Uint8Array | null;
 };
-
-/**
- * モデルへ渡す会話 1 件分。
- * ツールを使ったターンは assistant（本文とツール呼び出し）と tool（その結果）の 2 件になる。
- */
-export type ModelInputMessage =
-  | { role: "system"; content: string }
-  | { role: "user"; content: string | UserContentPart[] }
-  | { role: "assistant"; content: string | AssistantContentPart[] }
-  | { role: "tool"; content: ToolResultContentPart[] };
 
 /** ツール呼び出しの名前。接続側が付けた "<サーバー id>_<ツール名>" を組み立て直す。 */
 export function toolNameFor(server: string, tool: string): string {
@@ -101,8 +81,8 @@ export function toModelMessages(
   context: TeraContext,
   images: ImageReader,
   replyLanguage: ReplyLanguage,
-): ModelInputMessage[] {
-  const messages: ModelInputMessage[] = [];
+): ModelMessage[] {
+  const messages: ModelMessage[] = [];
 
   // 要約は先頭に 1 件だけ置く。要約が変わらない限り、この前置きは前のターンと一致する。
   if (context.summary !== null) {
@@ -152,7 +132,7 @@ export function replyLanguageInstruction(language: ReplyLanguage): string {
 }
 
 /** ツールが返した画像を、モデルへ渡す user メッセージにする。 */
-function toImageMessages(parts: readonly MessagePart[], images: ImageReader): ModelInputMessage[] {
+function toImageMessages(parts: readonly MessagePart[], images: ImageReader): ModelMessage[] {
   return parts.flatMap((part) =>
     part.type === "tool-result" && part.image !== undefined
       ? screenMessage(part.image, images, `${toolNameFor(part.server, part.tool)} call`)
@@ -177,7 +157,7 @@ export function screenMessage(
   image: ImageRef,
   images: ImageReader,
   label = "computer_screenshot call",
-): ModelInputMessage[] {
+): ModelMessage[] {
   const data = images.read(image);
   if (data === null) return [];
 
@@ -195,15 +175,16 @@ export function screenMessage(
 /**
  * モデルへ実際に渡る入力の仕様。
  *
- * Mastra の Agent には instructions（= SYSTEM_PROMPT）を渡しているので、プロバイダが受け取る
- * メッセージ列は「system 1 件 + toModelMessages() の結果」になる。ここはそのあるべき形を
- * 1 箇所で表現したもので、キャッシュ保護の回帰テスト（tests/prompt-cache.test.ts）が参照する。
+ * AI SDK の streamText には instructions（= SYSTEM_PROMPT）を渡しているので、
+ * プロバイダが受け取るメッセージ列は「system 1 件 + toModelMessages() の結果」になる。
+ * ここはそのあるべき形を 1 箇所で表現したもので、キャッシュ保護の回帰テスト
+ * （tests/prompt-cache.test.ts）が参照する。
  */
 export function buildModelInput(
   context: TeraContext,
   images: ImageReader,
   replyLanguage: ReplyLanguage,
-): ModelInputMessage[] {
+): ModelMessage[] {
   return [
     { role: "system", content: SYSTEM_PROMPT },
     ...toModelMessages(context, images, replyLanguage),
@@ -211,10 +192,10 @@ export function buildModelInput(
 }
 
 /** 本文とツール呼び出しを、保存された順のまま並べる。 */
-function toAssistantParts(parts: readonly MessagePart[], content: string): string | AssistantContentPart[] {
+function toAssistantParts(parts: readonly MessagePart[], content: string): AssistantContent {
   if (!parts.some((part) => part.type === "tool-call")) return content;
 
-  const blocks: AssistantContentPart[] = [];
+  const blocks: Exclude<AssistantContent, string> = [];
   for (const part of parts) {
     if (part.type === "text") blocks.push({ type: "text", text: part.text });
     else if (part.type === "tool-call") {
@@ -230,13 +211,13 @@ function toAssistantParts(parts: readonly MessagePart[], content: string): strin
 }
 
 /** ツール呼び出しに対する結果を、呼び出しの順に並べる。 */
-function toToolResults(parts: readonly MessagePart[], images: ImageReader): ToolResultContentPart[] {
+function toToolResults(parts: readonly MessagePart[], images: ImageReader): ToolContent {
   const results = new Map<string, Extract<MessagePart, { type: "tool-result" }>>();
   for (const part of parts) {
     if (part.type === "tool-result") results.set(part.id, part);
   }
 
-  const blocks: ToolResultContentPart[] = [];
+  const blocks: ToolContent = [];
   for (const part of parts) {
     if (part.type !== "tool-call") continue;
 
@@ -263,8 +244,8 @@ function toToolResults(parts: readonly MessagePart[], images: ImageReader): Tool
 function toToolResultOutput(
   result: Extract<MessagePart, { type: "tool-result" }>,
   images: ImageReader,
-): ToolResultContentPart["output"] {
-  const asText = (value: string): ToolResultContentPart["output"] => ({
+): ToolResultOutput {
+  const asText = (value: string): ToolResultOutput => ({
     type: result.failed ? "error-text" : "text",
     value,
   });
