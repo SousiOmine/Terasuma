@@ -1,0 +1,266 @@
+# Terasuma のセットアップ
+
+Terasuma を Podman のコンテナとして動かす。
+イメージは GitHub Actions が GHCR に公開し、`podman auto-update` が新しいイメージに追従する。
+Terasuma は `127.0.0.1:3000` にだけ待ち受け、外からは SSH トンネルか Tailscale Serve で開く。
+
+## 前提
+
+- Linux。systemd の user ユニットと Quadlet が使えること（Podman 4.4 以降）。
+- rootless の Podman。
+- `loginctl` で linger を有効にできること（sudo）。
+- x86_64。公開イメージは `linux/amd64` のみ。
+- Tailscale を使う場合は tailnet、MagicDNS、HTTPS 証明書。
+- モデルの API キー。起動後に画面から入れる。
+
+初回はコンピュータ用イメージ（Chromium）をホストの Podman で build する。
+そのため、ネットワークと数分の待ち時間が要る。
+
+## イメージ
+
+`ghcr.io/sousiomine/terasuma:latest` は Public で公開している。
+`podman pull ghcr.io/sousiomine/terasuma:latest` で取得できる。
+`latest` のほかに `sha-<コミット>` のタグがある。
+特定の版に固定するときは `sha-` のタグを使う。
+
+自分のアカウントで公開する場合は、`.github/workflows/image.yml` の `images:` と `container/quadlet/terasuma.container` の `Image=` を書き換える。
+GHCR のパッケージを private にした場合は、各マシンで `podman login ghcr.io` が必要になる。
+
+## Quadlet を置く
+
+`container/quadlet/terasuma.container` を user の Quadlet ディレクトリに置く。
+
+```sh
+mkdir -p ~/.config/containers/systemd ~/.local/share/terasuma/workspace
+cp container/quadlet/terasuma.container ~/.config/containers/systemd/
+```
+
+`~/.local/share/terasuma/workspace` は、エージェントのファイル操作と bash の基準になる場所。
+Quadlet の中の `%h` は、systemd がホームディレクトリに展開する。
+
+ログアウト後も動かすために linger を有効にする。
+
+```sh
+sudo loginctl enable-linger "$USER"
+```
+
+unit を生成して起動する。
+
+```sh
+systemctl --user daemon-reload
+systemctl --user enable --now podman.socket
+systemctl --user start terasuma
+```
+
+`podman.socket` は、コンテナの中の Terasuma がホストの Podman に繋ぐために使う。
+unit 側にも `Requires=podman.socket` を書いてある。
+
+アプリのコンテナ名は `terasuma-app`、コンピュータのコンテナ名は `terasuma`。
+名前を分けているのは、同じ名前を使うとホストのコンテナ一覧で衝突するため。
+
+## 自動更新
+
+`podman auto-update` のタイマーを有効にする。
+
+```sh
+systemctl --user enable --now podman-auto-update.timer
+```
+
+タイマーは既定で毎日 0 時台に動く。
+`latest` の digest が変わっていれば、イメージを pull して `terasuma.service` を再起動する。
+
+今すぐ更新するときは次を実行する。
+
+```sh
+podman auto-update
+```
+
+更新の有無だけを見るときは `--dry-run` を使う。
+
+```sh
+podman auto-update --dry-run
+```
+
+版を固定したいときは、Quadlet の `Image=` を `sha-<コミット>` に変える。
+そのあと `systemctl --user daemon-reload` と `systemctl --user restart terasuma` を実行する。
+
+## 画面を開く
+
+同じマシンなら `http://127.0.0.1:3000/` を開く。
+Terasuma は `127.0.0.1` にだけ待ち受ける。
+
+別のマシンから SSH で見るなら、手元でトンネルを張る。
+
+```sh
+ssh -L 3000:127.0.0.1:3000 <ユーザー>@<ホスト>
+```
+
+### Tailscale
+
+Tailscale の Serve を使うと、アプリを loopback のまま tailnet に公開できる。
+MagicDNS と HTTPS が有効になっていることを先に確認する。
+
+```sh
+sudo tailscale serve --bg --yes 3000
+```
+
+設定は tailscaled に保存され、再起動後も残る。
+`tailscale serve status` で確認できる。
+公開先は次の URL になる。
+
+```
+https://<マシン名>.<tailnet>.ts.net/
+```
+
+tailnet の外に出したくないので、`tailscale funnel` は使わない。
+
+Serve の設定変更には root が要る。
+毎回 sudo を避けるなら、一度だけ次を実行して operator を設定する。
+
+```sh
+sudo tailscale set --operator="$USER"
+```
+
+解除するときは次のコマンドを使う。
+Serve の設定がすべて消えるので、ほかの用途で Serve を使っているときは注意する。
+
+```sh
+sudo tailscale serve reset
+```
+
+Tailscale 経由では、MCP サーバーの OAuth 認可は完了しない。
+コールバックの URL が `http://127.0.0.1:3000` で組み立てられるため、リモートのブラウザではその端末の localhost を指してしまう。
+API キーで繋ぐ MCP サーバーはこの制限を受けない。
+
+## 最初の設定
+
+画面を開き、`設定 > モデル` でプロバイダと API キー、使うモデルを設定する。
+設定は `~/.config/terasuma/config.json` に保存される。
+
+エージェントにデスクトップを操作させるときは、`設定 > コンピュータ` で起動する。
+初回は `container/Containerfile` からコンピュータ用イメージを build するため、数分かかる。
+以降は build 済みのイメージを使い回す。
+
+## データの場所
+
+Quadlet は、ホストで直接動かすときと同じパスをコンテナにマウントする。
+
+| パス | 内容 |
+|---|---|
+| `~/.config/terasuma/config.json` | モデル、プロバイダ、MCP の設定 |
+| `~/.local/share/terasuma/terasuma.db` | 会話の履歴 |
+| `~/.local/share/terasuma/images/` | ツールが撮った画像 |
+| `~/.local/share/terasuma/models-dev.json` | モデルカタログのキャッシュ |
+| `~/.local/share/terasuma/workspace/` | エージェントのファイル操作と bash の基準 |
+| `~/.local/share/terasuma/container/home/` | コンピュータのホーム |
+
+バックアップを取るときは、`~/.config/terasuma` と `~/.local/share/terasuma` をまとめてコピーすればよい。
+
+```sh
+tar czf terasuma-backup.tgz -C "$HOME" .config/terasuma .local/share/terasuma
+```
+
+## 状態とログ
+
+```sh
+systemctl --user status terasuma
+systemctl --user status podman-auto-update.timer
+podman logs -f terasuma-app
+podman ps --filter name=terasuma-app
+curl -s http://127.0.0.1:3000/api/container
+```
+
+`podman logs terasuma` はコンピュータ側のログになる。
+アプリのログは `terasuma-app` で見る。
+
+## 困ったとき
+
+### アプリが起動しない
+
+```sh
+systemctl --user status terasuma
+podman logs terasuma-app
+```
+
+イメージの取得に失敗している場合は、`ghcr.io/sousiomine/terasuma` が Public か、`podman login ghcr.io` が済んでいるかを確認する。
+
+### `podman auto-update` が systemd に繋がらない
+
+```
+Error: dial unix /run/user/1000/systemd/private: connect: connection refused
+```
+
+このエラーは、systemd の user manager の private ソケットが古くなっているときに起きる。
+user manager を re-exec してソケットを作り直す。
+
+```sh
+systemctl --user daemon-reexec
+systemctl --user reset-failed podman-auto-update.service
+podman auto-update --dry-run
+```
+
+### 自動更新が何も拾わない
+
+Quadlet から生成された unit が無いと、`podman auto-update` は対象を見つけられない。
+unit が生成されているかを確認する。
+
+```sh
+systemctl --user cat terasuma
+systemctl --user show terasuma -p Environment | grep PODMAN_SYSTEMD_UNIT
+```
+
+### コンピュータが起動しない
+
+```sh
+podman logs terasuma
+podman ps -a --filter name=terasuma
+```
+
+初回のイメージ build にはネットワークが要る。
+`設定 > コンピュータ` の状態が `image_missing` のままなら、build が失敗している。
+
+### 古いイメージが増える
+
+Podman 4.9 の `podman auto-update` は、更新前のイメージを dangling で残すことがある。
+ときどき削除する。
+
+```sh
+podman image prune -f
+```
+
+### Tailscale で開けない
+
+`tailscale serve status` に Serve の設定が出ているかを確認する。
+`serve config denied` と出たら、`sudo` を付けるか、operator を設定する。
+
+## セキュリティ
+
+Terasuma にはアプリ側の認証がない。
+`127.0.0.1` に閉じておき、外から使うときは SSH トンネルか Tailscale Serve を使う。
+
+この構成では、アプリのコンテナにホストの Podman ソケットを渡している。
+コンテナの中のエージェントは `bash` と `read`、`write`、`edit` を使える。
+そのため、Terasuma にアクセスできる人は、ホストのコンテナとファイルを操作できるのと同じ権限を持つ。
+tailnet に共有端末や信頼できない端末が入っているなら、Tailscale の ACL で Serve のポートへのアクセスを絞る。
+
+モデルの API キーは `~/.config/terasuma/config.json` に保存される。
+イメージには含まれない。
+GHCR のイメージは Public なので、誰でも pull できる。
+
+## リポジトリからイメージを作る
+
+CI を使わずにローカルで build するときは、リポジトリのルートで次を実行する。
+
+```sh
+podman build -t localhost/terasuma:dev .
+```
+
+`master` への push で `.github/workflows/image.yml` が動く。
+`check` が型検査とテストを通したあと、`publish` が `latest` と `sha-<コミット>` を GHCR へ push する。
+
+## 動作を確認した環境
+
+- Linux（systemd 255、ホストの Podman 4.9.3、イメージ内の Podman 5.4.2）
+- イメージ内の Podman から、ソケット経由でホストの Podman 4.9.3 に接続できること
+- Tailscale 1.104.1 の Serve 経由で HTML、CSS、JS、`/api/container` が返ること
+- `podman auto-update` による pull と `terasuma.service` の再起動
