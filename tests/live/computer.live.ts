@@ -80,7 +80,9 @@ test(
       // 撮った画像は保存され、参照が残っている（履歴から読み直してモデルへ渡せる）。
       const image = result.part.images?.[0];
       if (image === undefined) throw new Error(`撮った画像の参照が残っていない: ${result.part.output}`);
-      console.log(`  画面: ${join(harness.dataDir, "images", `${image.sha256}.png`)}（${image.width}x${image.height}）`);
+      console.log(
+        `  画面: ${join(harness.dataDir, "images", `${image.sha256}.png`)}（${image.width}x${image.height}）`,
+      );
 
       const parts = (await harness.messages(DEFAULT_TERA_ID))[1]?.parts ?? [];
       const saved = parts.find(

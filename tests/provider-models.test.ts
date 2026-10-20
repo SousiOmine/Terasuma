@@ -69,7 +69,9 @@ describe("接続確認の宛先", () => {
   });
 
   test("独自エンドポイントの URL を優先する", () => {
-    expect(connectionTarget({ id: "deepseek", baseUrl: "https://proxy.example.test/v1", api: "https://api.deepseek.com" })).toEqual({
+    expect(
+      connectionTarget({ id: "deepseek", baseUrl: "https://proxy.example.test/v1", api: "https://api.deepseek.com" }),
+    ).toEqual({
       url: "https://proxy.example.test/v1/models",
       auth: "bearer",
     });

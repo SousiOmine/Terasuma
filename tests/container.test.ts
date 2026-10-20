@@ -212,16 +212,7 @@ describe("コンテナの中での実行", () => {
       expect(shell).toMatchObject({ exitCode: 0, stdout: "Linux\n", stderr: "" });
 
       const exec = callsOf(calls, "exec")[0];
-      expect(exec).toEqual([
-        "podman",
-        "exec",
-        "--workdir",
-        "/home/agent",
-        "terasuma",
-        "bash",
-        "-lc",
-        "uname -a",
-      ]);
+      expect(exec).toEqual(["podman", "exec", "--workdir", "/home/agent", "terasuma", "bash", "-lc", "uname -a"]);
     });
   });
 
@@ -295,12 +286,9 @@ describe("コンテナの中での実行", () => {
   });
 
   test("上限を超えたファイルは、途中で切らずに失敗する", async () => {
-    await withManager(
-      { exec: { code: 0, stdout: "aGVsbG8=", stderr: "", truncated: true } },
-      async ({ container }) => {
-        await expect(container.readFile("/home/agent/huge.txt")).rejects.toThrow("larger than 16MB");
-      },
-    );
+    await withManager({ exec: { code: 0, stdout: "aGVsbG8=", stderr: "", truncated: true } }, async ({ container }) => {
+      await expect(container.readFile("/home/agent/huge.txt")).rejects.toThrow("larger than 16MB");
+    });
   });
 
   test("書き込みは親ディレクトリを作り、標準入力から書く", async () => {

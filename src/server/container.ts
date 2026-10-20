@@ -151,10 +151,9 @@ export function createContainerManager(options: ContainerManagerOptions): Contai
   }
 
   async function containerStatus(): Promise<string | null> {
-    const result = await run(
-      ["podman", "inspect", "--format", "{{.State.Status}}", CONTAINER_NAME],
-      { timeoutMs: INSPECT_TIMEOUT_MS },
-    );
+    const result = await run(["podman", "inspect", "--format", "{{.State.Status}}", CONTAINER_NAME], {
+      timeoutMs: INSPECT_TIMEOUT_MS,
+    });
     if (result.code !== 0) return null;
 
     const state = result.stdout.trim();
@@ -163,10 +162,9 @@ export function createContainerManager(options: ContainerManagerOptions): Contai
 
   /** 実際に publish されているポートを podman から読む（Terasuma 側で覚えない）。 */
   async function publishedVncPort(): Promise<number | null> {
-    const result = await run(
-      ["podman", "port", CONTAINER_NAME, `${VNC_PORT_IN_CONTAINER}`],
-      { timeoutMs: INSPECT_TIMEOUT_MS },
-    );
+    const result = await run(["podman", "port", CONTAINER_NAME, `${VNC_PORT_IN_CONTAINER}`], {
+      timeoutMs: INSPECT_TIMEOUT_MS,
+    });
     if (result.code !== 0) return null;
 
     // 出力は "127.0.0.1:34567" の形。番号だけを取り出す。
@@ -330,10 +328,10 @@ export function createContainerManager(options: ContainerManagerOptions): Contai
     async exec(args, { timeoutMs, signal }) {
       await requireRunning();
 
-      const result = await run(
-        ["podman", "exec", "--workdir", WORKDIR_IN_CONTAINER, CONTAINER_NAME, ...args],
-        { timeoutMs, signal },
-      );
+      const result = await run(["podman", "exec", "--workdir", WORKDIR_IN_CONTAINER, CONTAINER_NAME, ...args], {
+        timeoutMs,
+        signal,
+      });
 
       return toShellResult(result);
     },
@@ -416,9 +414,7 @@ function fileFailure(action: "read" | "write", path: string, result: CommandResu
     );
   }
   if (result.code !== 0) {
-    return new Error(
-      result.stderr.trim() || `Could not ${action} ${path} (podman exec exit code ${result.code})`,
-    );
+    return new Error(result.stderr.trim() || `Could not ${action} ${path} (podman exec exit code ${result.code})`);
   }
   return null;
 }
@@ -494,4 +490,3 @@ function describeFailure(result: CommandResult): string {
   const detail = result.stderr.trim() || result.stdout.trim() || `podman failed with exit code ${result.code}`;
   return result.timedOut ? `${detail} (did not finish in time)` : detail;
 }
-

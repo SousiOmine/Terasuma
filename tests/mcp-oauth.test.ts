@@ -90,10 +90,7 @@ describe("MCP の OAuth", () => {
 
         // 期限切れの状態を作る（更新トークンは残っている）。
         const stored = JSON.parse(storage.get(`tokens:${as.issuer}`) ?? "{}") as Record<string, unknown>;
-        storage.set(
-          `tokens:${as.issuer}`,
-          JSON.stringify({ ...stored, expires_in: 0, expiresAt: Date.now() - 1_000 }),
-        );
+        storage.set(`tokens:${as.issuer}`, JSON.stringify({ ...stored, expires_in: 0, expiresAt: Date.now() - 1_000 }));
 
         expect(await startMcpAuthorization(material)).toEqual({ kind: "authorized" });
         expect(as.tokenRequests.at(-1)?.get("grant_type")).toBe("refresh_token");

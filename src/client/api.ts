@@ -151,9 +151,7 @@ export async function fetchCatalog(): Promise<readonly CatalogProviderView[]> {
 
 /** カタログのプロバイダで使えるモデルの一覧。 */
 export async function fetchCatalogModels(providerId: string): Promise<readonly string[]> {
-  const body = await request<{ models: string[] }>(
-    `${MODEL_PATH}/catalog/${encodeURIComponent(providerId)}/models`,
-  );
+  const body = await request<{ models: string[] }>(`${MODEL_PATH}/catalog/${encodeURIComponent(providerId)}/models`);
   return body.models;
 }
 
@@ -176,10 +174,7 @@ export async function addProvider(form: AddProviderForm): Promise<ModelSettingsV
 }
 
 /** apiKey に null を渡すと、保存済みのキーをそのまま使う。 */
-export async function updateProvider(
-  providerId: string,
-  credentials: ProviderCredentials,
-): Promise<ModelSettingsView> {
+export async function updateProvider(providerId: string, credentials: ProviderCredentials): Promise<ModelSettingsView> {
   return request<ModelSettingsView>(providerPath(providerId), jsonRequest("PATCH", credentials));
 }
 
@@ -301,4 +296,3 @@ async function toApiError(response: Response): Promise<ApiError> {
 function isApiErrorCode(value: unknown): value is ApiErrorCode {
   return typeof value === "string" && (API_ERROR_CODES as readonly string[]).includes(value);
 }
-

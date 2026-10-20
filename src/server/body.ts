@@ -20,9 +20,9 @@ import { jsonError } from "./errors";
  * 画面から来た MCP サーバーの入力を、保存できる形にする。
  * id と種類ごとの規則の検証は、設定ファイルを読むときと同じ 1 箇所（config.ts）に任せる。
  */
-export async function readMcpForm(
-  req: { json(): Promise<unknown> },
-): Promise<{ id: string; server: McpServerSettings } | Response> {
+export async function readMcpForm(req: {
+  json(): Promise<unknown>;
+}): Promise<{ id: string; server: McpServerSettings } | Response> {
   const body = await readJsonBody(req);
 
   const rawId = body?.["id"];
@@ -38,7 +38,11 @@ export async function readMcpForm(
   const args = readOptionalStringList(body, "args");
   const env = readOptionalStringMap(body, "env");
   if (command === undefined || url === undefined || args === undefined || env === undefined) {
-    return jsonError(400, "invalid_request", "command, url, args, env は文字列・文字列の配列・文字列の対応表で指定してください");
+    return jsonError(
+      400,
+      "invalid_request",
+      "command, url, args, env は文字列・文字列の配列・文字列の対応表で指定してください",
+    );
   }
 
   const form: McpServerForm = { id, type, command, args, env, url };
@@ -115,10 +119,7 @@ export function readOptionalStringMap(
  * リクエストの本文から接続情報を読み、検証して保存できる形にする。
  * 弾いた場合はそのまま返せる 400 のレスポンスを返す。
  */
-export function parseProviderSettings(
-  id: string,
-  body: Record<string, unknown> | null,
-): ProviderSettings | Response {
+export function parseProviderSettings(id: string, body: Record<string, unknown> | null): ProviderSettings | Response {
   const credentials = readCredentials(body);
   if (credentials === null) {
     return jsonError(400, "invalid_request", "apiKey, baseUrl, label must be strings or null");

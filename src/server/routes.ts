@@ -547,7 +547,11 @@ export function createApiHandlers(deps: ApiDeps) {
     async mcpOAuthCallback(request: { url: string }): Promise<Response> {
       const url = new URL(request.url);
       const state = url.searchParams.get("state");
-      if (state === null) return authorizationPage(400, "認可を確認できませんでした", ["URL に state がありません。", "Invalid callback: missing state."]);
+      if (state === null)
+        return authorizationPage(400, "認可を確認できませんでした", [
+          "URL に state がありません。",
+          "Invalid callback: missing state.",
+        ]);
 
       try {
         await deps.mcp.completeAuthorization(state, {

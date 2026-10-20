@@ -110,7 +110,9 @@ describe("read", () => {
       expect(body?.split("\n").length).toBe(READ_MAX_LINES);
       expect(body?.startsWith("line 1\n")).toBe(true);
       expect(body).not.toContain(`line ${READ_MAX_LINES + 1}\n`);
-      expect(notice).toBe(`[Showing lines 1-${READ_MAX_LINES} of ${READ_MAX_LINES + 500}. Use offset=${READ_MAX_LINES + 1} to continue.]`);
+      expect(notice).toBe(
+        `[Showing lines 1-${READ_MAX_LINES} of ${READ_MAX_LINES + 500}. Use offset=${READ_MAX_LINES + 1} to continue.]`,
+      );
     });
   });
 
@@ -124,9 +126,7 @@ describe("read", () => {
   test("offset が末尾を超えたら失敗する", async () => {
     await withTools(async ({ tools, dir }) => {
       writeFileSync(join(dir, "note.txt"), "one\ntwo\n", "utf8");
-      await expect(callTool(tools, "read", { path: "note.txt", offset: 3 })).rejects.toThrow(
-        "beyond end of file",
-      );
+      await expect(callTool(tools, "read", { path: "note.txt", offset: 3 })).rejects.toThrow("beyond end of file");
     });
   });
 
@@ -199,9 +199,9 @@ describe("edit", () => {
     await withTools(async ({ tools, dir }) => {
       writeFileSync(join(dir, "note.txt"), "hello\n", "utf8");
 
-      await expect(
-        callTool(tools, "edit", { path: "note.txt", oldText: "goodbye", newText: "hi" }),
-      ).rejects.toThrow("Could not find the exact text");
+      await expect(callTool(tools, "edit", { path: "note.txt", oldText: "goodbye", newText: "hi" })).rejects.toThrow(
+        "Could not find the exact text",
+      );
     });
   });
 
@@ -219,9 +219,9 @@ describe("edit", () => {
     await withTools(async ({ tools, dir }) => {
       writeFileSync(join(dir, "note.txt"), "hello\n", "utf8");
 
-      await expect(
-        callTool(tools, "edit", { path: "note.txt", oldText: "hello", newText: "hello" }),
-      ).rejects.toThrow("No changes made");
+      await expect(callTool(tools, "edit", { path: "note.txt", oldText: "hello", newText: "hello" })).rejects.toThrow(
+        "No changes made",
+      );
     });
   });
 
@@ -257,9 +257,7 @@ describe("edit", () => {
 
   test("存在しないファイルは失敗する", async () => {
     await withTools(async ({ tools }) => {
-      await expect(
-        callTool(tools, "edit", { path: "missing.txt", oldText: "a", newText: "b" }),
-      ).rejects.toThrow();
+      await expect(callTool(tools, "edit", { path: "missing.txt", oldText: "a", newText: "b" })).rejects.toThrow();
     });
   });
 });
@@ -349,9 +347,9 @@ describe("ホストへは落ちない", () => {
 
     await expect(callTool(tools, "read", { path: "/etc/hostname" })).rejects.toThrow("not running");
     await expect(callTool(tools, "write", { path: "/home/agent/a.txt", content: "x" })).rejects.toThrow("not running");
-    await expect(
-      callTool(tools, "edit", { path: "/home/agent/a.txt", oldText: "x", newText: "y" }),
-    ).rejects.toThrow("not running");
+    await expect(callTool(tools, "edit", { path: "/home/agent/a.txt", oldText: "x", newText: "y" })).rejects.toThrow(
+      "not running",
+    );
     await expect(callTool(tools, "bash", { command: "pwd" })).rejects.toThrow("not running");
   });
 });

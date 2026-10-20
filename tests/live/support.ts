@@ -60,9 +60,7 @@ export type LiveHarness = {
  * エンジンも MCP もコンテナも本物を使う。
  * 何かを差し替えると、確かめているのがアプリなのか差し替えなのか分からなくなる。
  */
-export async function withLiveServer(
-  run: (harness: LiveHarness) => Promise<void>,
-): Promise<void> {
+export async function withLiveServer(run: (harness: LiveHarness) => Promise<void>): Promise<void> {
   const config = { ...loadConfig(), port: 0 };
 
   // mock は API を呼ばないので、動かしても「繋がった」ことにはならない。黙って通さない。
@@ -196,18 +194,12 @@ export function report(label: string, message: ChatMessage): void {
 export function toolSequence(events: ChatEvent[]): string {
   const names = events
     .filter((event): event is Extract<ChatEvent, { type: "tool-call" }> => event.type === "tool-call")
-    .map((event) =>
-      event.part.server.length === 0 ? event.part.tool : `${event.part.server}_${event.part.tool}`,
-    );
+    .map((event) => (event.part.server.length === 0 ? event.part.tool : `${event.part.server}_${event.part.tool}`));
   return names.length === 0 ? "(ツールは呼ばれていない)" : names.join(" → ");
 }
 
 /** ツールの呼び出しを取り出す。呼ばれていなければ、呼ばれた一覧を添えて落とす。 */
-export function toolCall(
-  events: ChatEvent[],
-  server: string,
-  tool: string,
-): Extract<ChatEvent, { type: "tool-call" }> {
+export function toolCall(events: ChatEvent[], server: string, tool: string): Extract<ChatEvent, { type: "tool-call" }> {
   const call = events.find(
     (event): event is Extract<ChatEvent, { type: "tool-call" }> =>
       event.type === "tool-call" && event.part.server === server && event.part.tool === tool,
@@ -221,7 +213,8 @@ export function toolCall(
 /** 呼び出し 1 つに対する結果を取り出す。返っていなければ、その旨で落とす。 */
 export function toolResultFor(events: ChatEvent[], id: string): Extract<ChatEvent, { type: "tool-result" }> {
   const result = events.find(
-    (event): event is Extract<ChatEvent, { type: "tool-result" }> => event.type === "tool-result" && event.part.id === id,
+    (event): event is Extract<ChatEvent, { type: "tool-result" }> =>
+      event.type === "tool-result" && event.part.id === id,
   );
   if (result === undefined) throw new Error(`ツールの結果が返らなかった（呼び出し ${id}）`);
   return result;

@@ -128,7 +128,8 @@ describe("設定ストア", () => {
     );
   });
 
-  test("ファイルが壊れていたら書かずに失敗する", async () => {    await withTempSettings({ model: "deepseek/deepseek-flash" }, async (store, path) => {
+  test("ファイルが壊れていたら書かずに失敗する", async () => {
+    await withTempSettings({ model: "deepseek/deepseek-flash" }, async (store, path) => {
       writeFileSync(path, "{ 壊れている", "utf8");
 
       expect(() => store.setModel("openai/gpt-5.6-sol")).toThrow(/JSON/);

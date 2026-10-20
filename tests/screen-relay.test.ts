@@ -1,11 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { SCREEN_RELAY_PREFIX } from "../src/server/routes";
-import { createMockEngine } from "../src/server/engine";
-import { startServer } from "../src/server/server";
-import { createStore } from "../src/server/store";
 import type { ContainerManager } from "../src/server/container";
-import { createHandover } from "../src/server/handover";
-import { TEST_SETTINGS, createContainerStub, createMcpStub, createCompactionStub, withTempSettings } from "./support";
+import { SCREEN_RELAY_PREFIX } from "../src/server/routes";
+import { portOf, withServer } from "./harness";
+import { createContainerStub } from "./support";
 
 /**
  * 画面の中継の確認。
@@ -33,43 +30,11 @@ function startFakeScreen() {
   return { server, requests };
 }
 
-function portOf(server: { port?: number }): number {
-  if (server.port === undefined) throw new Error("偽のサーバーのポートが取れていない");
-  return server.port;
-}
-
 async function withScreenServer<T>(
   container: ContainerManager,
   run: (request: (path: string) => Promise<Response>) => Promise<T>,
 ): Promise<T> {
-  return withTempSettings(TEST_SETTINGS, async (settings) => {
-    const store = createStore(":memory:");
-    const { server } = startServer({
-      config: {
-        host: "127.0.0.1",
-        port: 0,
-        configDir: ".",
-        configPath: "./config.json",
-        dataDir: ".",
-        dbPath: ":memory:",
-        engine: "mock",
-        isDevelopment: false,
-      },
-      store,
-      engine: createMockEngine({ chunkSize: 10_000, delayMs: 0 }),
-      compaction: createCompactionStub(store),
-      settings,
-      mcp: createMcpStub(),
-      container,
-      handover: createHandover(),
-    });
-
-    try {
-      return await run((path) => fetch(new URL(path, server.url)));
-    } finally {
-      await server.stop(true);
-    }
-  });
+  return withServer(({ request }) => run((path) => request(path)), { container });
 }
 
 describe("画面の中継", () => {

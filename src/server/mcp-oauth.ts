@@ -189,7 +189,8 @@ export class McpOAuthProvider implements OAuthClientProvider {
 
   codeVerifier(): string {
     const verifier = this.storage.get(key.codeVerifier);
-    if (verifier === undefined) throw new Error("認可コードを引き換えるための検証子がありません（認可をやり直してください）");
+    if (verifier === undefined)
+      throw new Error("認可コードを引き換えるための検証子がありません（認可をやり直してください）");
     return verifier;
   }
 

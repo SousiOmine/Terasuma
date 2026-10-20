@@ -39,10 +39,7 @@ export function ChatView() {
   // 確定した会話は、増えたときだけ組み立て直す。
   // 生成中の本文が伸びるたびに全メッセージの部品を作り直すと、長い会話ほど重くなる。
   const bubbles = useMemo(
-    () =>
-      items.map((message) => (
-        <MessageBubble key={message.id} role={message.role} content={message.content} />
-      )),
+    () => items.map((message) => <MessageBubble key={message.id} author={message.role} content={message.content} />),
     [items],
   );
 
@@ -90,9 +87,7 @@ export function ChatView() {
       {problem !== null && (
         <div class="shrink-0 border-b border-amber-200 bg-amber-50 px-5 py-2 dark:border-amber-900/60 dark:bg-amber-950/40">
           <div class="mx-auto flex w-full max-w-3xl items-center gap-3 text-sm text-amber-900 dark:text-amber-200">
-            <p class="min-w-0 flex-1">
-              {t(problem === "unset" ? "chat.model.unset" : "chat.model.providerMissing")}
-            </p>
+            <p class="min-w-0 flex-1">{t(problem === "unset" ? "chat.model.unset" : "chat.model.providerMissing")}</p>
             <button
               type="button"
               onClick={() => openSettings("model")}
@@ -125,7 +120,7 @@ export function ChatView() {
         ) : (
           <div class="mx-auto flex w-full max-w-3xl flex-col gap-6 px-5 py-8">
             {bubbles}
-            {streaming && <MessageBubble role="assistant" content={pending} working />}
+            {streaming && <MessageBubble author="assistant" content={pending} working />}
             {loading && <p class="text-sm text-neutral-500 dark:text-neutral-400">{t("chat.loading")}</p>}
           </div>
         )}
@@ -143,11 +138,7 @@ export function ChatView() {
                       {t("chat.openSettings")}
                     </button>
                   )}
-                  <button
-                    type="button"
-                    onClick={clearError}
-                    class="text-xs opacity-70 transition hover:opacity-100"
-                  >
+                  <button type="button" onClick={clearError} class="text-xs opacity-70 transition hover:opacity-100">
                     {t("error.dismiss")}
                   </button>
                 </div>

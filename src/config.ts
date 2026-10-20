@@ -220,7 +220,9 @@ export function readSettingsFile(path: string): FileSettings {
   const model = readString(source, "model", path);
   if (model !== undefined) {
     if (!isModelId(model)) {
-      throw new Error(`${path} の model は "provider/model" の形式にしてください（現在の値: ${JSON.stringify(model)}）`);
+      throw new Error(
+        `${path} の model は "provider/model" の形式にしてください（現在の値: ${JSON.stringify(model)}）`,
+      );
     }
     settings.model = model;
   }
@@ -368,7 +370,9 @@ function normalizeHttpUrl(value: string, source: string, what: string): string {
   }
 
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-    throw new Error(`${source} の ${what} は http:// か https:// で始めてください（現在の値: ${JSON.stringify(value)}）`);
+    throw new Error(
+      `${source} の ${what} は http:// か https:// で始めてください（現在の値: ${JSON.stringify(value)}）`,
+    );
   }
   return trimmed;
 }
@@ -480,9 +484,7 @@ function readMcpServerEntry(id: string, raw: unknown, path: string): McpServerSe
   if (type === "stdio") return readStdioServer(source, where);
   if (type === "http") return readHttpServer(source, where);
 
-  throw new Error(
-    `${where} の type は "stdio" か "http" にしてください（現在の値: ${JSON.stringify(type)}）`,
-  );
+  throw new Error(`${where} の type は "stdio" か "http" にしてください（現在の値: ${JSON.stringify(type)}）`);
 }
 
 function readStdioServer(source: Record<string, unknown>, where: string): McpStdioServerSettings {
@@ -623,4 +625,3 @@ function readEnvEngine(env: NodeJS.ProcessEnv): EngineKind | undefined {
   }
   return raw;
 }
-

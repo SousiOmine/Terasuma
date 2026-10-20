@@ -18,13 +18,7 @@ body {
   margin: 0;
   background-color: var(--color-neutral-50);
   color: var(--color-neutral-900);
-  font-family:
-    system-ui,
-    -apple-system,
-    "Segoe UI",
-    "Noto Sans JP",
-    "Hiragino Sans",
-    sans-serif;
+  font-family: system-ui, -apple-system, "Segoe UI", "Noto Sans JP", "Hiragino Sans", sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 

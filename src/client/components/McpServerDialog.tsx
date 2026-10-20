@@ -98,7 +98,8 @@ export function McpServerDialog({
     setBusy("checking");
     setError(null);
     setChecked(null);
-    const current = (run.current += 1);
+    const current = run.current + 1;
+    run.current = current;
     void probe(form, signature, current).finally(() => {
       inFlight.current = false;
     });
@@ -140,11 +141,7 @@ export function McpServerDialog({
    * 認可が終わるまで、接続の確認を繰り返す。
    * 認可はブラウザの別タブで進むため、こちらからは状態を尋ねるしかない。
    */
-  async function waitForAuthorization(
-    form: McpServerForm,
-    signature: string,
-    current: number,
-  ): Promise<void> {
+  async function waitForAuthorization(form: McpServerForm, signature: string, current: number): Promise<void> {
     const deadline = Date.now() + AUTHORIZATION_TIMEOUT_MS;
 
     while (run.current === current && Date.now() < deadline) {
@@ -278,7 +275,10 @@ export function McpServerDialog({
 
         {type === "stdio" ? (
           <>
-            <Field label={t("settings.mcp.form.command.label")} description={t("settings.mcp.form.command.description")}>
+            <Field
+              label={t("settings.mcp.form.command.label")}
+              description={t("settings.mcp.form.command.description")}
+            >
               <input
                 type="text"
                 value={command}
@@ -331,9 +331,7 @@ export function McpServerDialog({
             {checkedNow !== null && <CheckedNotice tools={checkedNow.tools} />}
             {authorizing !== null && <AuthorizationNotice url={authorizing} />}
             {checkedNow === null && authorizing === null && (
-              <p class="pt-2 text-xs text-neutral-500 dark:text-neutral-400">
-                {t("settings.mcp.form.needCheck")}
-              </p>
+              <p class="pt-2 text-xs text-neutral-500 dark:text-neutral-400">{t("settings.mcp.form.needCheck")}</p>
             )}
           </>
         )}

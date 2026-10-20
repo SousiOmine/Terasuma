@@ -2,7 +2,14 @@ import { IconX } from "@tabler/icons-preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { containerStatus } from "../containerSettings";
 import { t } from "../i18n";
-import { answerHandover, closeComputerPane, computerPaneOpen, computerViewOnly, handoverActive, handoverQuestion } from "../state";
+import {
+  answerHandover,
+  closeComputerPane,
+  computerPaneOpen,
+  computerViewOnly,
+  handoverActive,
+  handoverQuestion,
+} from "../state";
 
 /**
  * 右ペイン。いまはコンテナの画面を noVNC で映す。

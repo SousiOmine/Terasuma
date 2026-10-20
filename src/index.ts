@@ -32,8 +32,7 @@ const mcp = createMcpManager({
   settings,
   dataDir: config.dataDir,
   images,
-  callbackUrl: () =>
-    boundPort === null ? null : new URL(`http://${config.host}:${boundPort}${OAUTH_CALLBACK_PATH}`),
+  callbackUrl: () => (boundPort === null ? null : new URL(`http://${config.host}:${boundPort}${OAUTH_CALLBACK_PATH}`)),
 });
 
 // Containerfile と entry.sh は、リポジトリの container/ に置いてある。

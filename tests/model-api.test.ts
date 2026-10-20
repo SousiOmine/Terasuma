@@ -1,9 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
-import { CONFIG_FILE_NAME, readSettingsFile, type FileSettings } from "../src/config";
-import { createMockEngine } from "../src/server/engine";
+import { join } from "node:path";
+import { CONFIG_FILE_NAME, type FileSettings } from "../src/config";
 import { parseCatalog, type Catalog, type CatalogSnapshot } from "../src/server/models-dev";
 import {
   ProviderRequestError,
@@ -11,13 +8,10 @@ import {
   type ProviderModelLister,
   type ProviderRequest,
 } from "../src/server/provider-models";
-import { startServer } from "../src/server/server";
-import type { ProviderCheckResult } from "../src/shared/types";
-import { createSettingsStore, type SettingsStore } from "../src/server/settings";
-import { createStore, DEFAULT_TERA_ID } from "../src/server/store";
-import { createHandover } from "../src/server/handover";
-import { createContainerStub, createMcpStub, createCompactionStub } from "./support";
-import type { ModelSettingsView, ProviderView, ReasoningView } from "../src/shared/types";
+import type { SettingsStore } from "../src/server/settings";
+import { DEFAULT_TERA_ID } from "../src/server/store";
+import type { ModelSettingsView, ProviderCheckResult, ProviderView, ReasoningView } from "../src/shared/types";
+import { withServer } from "./harness";
 
 /** テストで使うカタログの中身。deepseek はカタログのプロバイダ、custom-1 は独自エンドポイント。 */
 const CATALOG_RAW = {
@@ -124,56 +118,28 @@ async function withModelServer<T>(
   run: (harness: Harness) => Promise<T>,
   options: ServerOptions = {},
 ): Promise<T> {
-  const dir = mkdtempSync(join(tmpdir(), "terasuma-model-"));
-  const path = options.configPath?.(dir) ?? join(dir, CONFIG_FILE_NAME);
-  if (initial !== null) {
-    mkdirSync(dirname(path), { recursive: true });
-    writeFileSync(path, `${JSON.stringify(initial)}\n`, "utf8");
-  }
-
-  const settings = createSettingsStore(path);
   const catalog = createCatalogStub();
   const check = createCheckStub();
   const lister = createListerStub();
-  const store = createStore(":memory:");
-  const { server } = startServer({
-    config: {
-      host: "127.0.0.1",
-      port: 0,
-      configDir: dir,
-      configPath: path,
-      dataDir: dir,
-      dbPath: ":memory:",
-      engine: "mock",
-      isDevelopment: false,
+
+  return withServer(
+    ({ request, settings, file }) =>
+      run({
+        request,
+        settings,
+        catalog,
+        check,
+        lister,
+        file,
+      }),
+    {
+      settings: initial,
+      configPath: options.configPath,
+      catalog: catalog.catalog,
+      checkConnection: check.checkConnection,
+      listModels: lister.listModels,
     },
-    store,
-    engine: createMockEngine({ chunkSize: 10_000, delayMs: 0 }),
-    compaction: createCompactionStub(store),
-    settings,
-    mcp: createMcpStub(),
-    container: createContainerStub(),
-    handover: createHandover(),
-    catalog: catalog.catalog,
-    checkConnection: check.checkConnection,
-    listModels: lister.listModels,
-  });
-
-  const harness: Harness = {
-    request: (requestPath, init) => fetch(new URL(requestPath, server.url), init),
-    settings,
-    catalog,
-    check,
-    lister,
-    file: () => readSettingsFile(path),
-  };
-
-  try {
-    return await run(harness);
-  } finally {
-    await server.stop(true);
-    rmSync(dir, { recursive: true, force: true });
-  }
+  );
 }
 
 function jsonRequest(method: string, body: unknown): RequestInit {
@@ -436,19 +402,16 @@ describe("モデル設定 API", () => {
   });
 
   test("独自エンドポイントのモデル一覧は /models から取る", async () => {
-    await withModelServer(
-      { providers: { "custom-1": { baseUrl: "http://127.0.0.1:1234/v1" } } },
-      async (harness) => {
-        const response = await harness.request("/api/model/providers/custom-1/models");
+    await withModelServer({ providers: { "custom-1": { baseUrl: "http://127.0.0.1:1234/v1" } } }, async (harness) => {
+      const response = await harness.request("/api/model/providers/custom-1/models");
 
-        expect(response.status).toBe(200);
-        expect(await response.json()).toEqual({ models: ["qwen3-max"] });
-        expect(harness.lister.requests[0]?.target).toEqual({
-          url: "http://127.0.0.1:1234/v1/models",
-          auth: "bearer",
-        });
-      },
-    );
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ models: ["qwen3-max"] });
+      expect(harness.lister.requests[0]?.target).toEqual({
+        url: "http://127.0.0.1:1234/v1/models",
+        auth: "bearer",
+      });
+    });
   });
 
   test("設定に無いプロバイダのモデル一覧は 404", async () => {
@@ -558,11 +521,7 @@ describe("モデル設定 API", () => {
         providers: { deepseek: { apiKey: "sk-1" }, "custom-1": { baseUrl: "http://127.0.0.1:1234/v1" } },
       },
       async (harness) => {
-        const view = await settingsView(
-          harness,
-          "/api/model",
-          jsonRequest("PUT", { model: "custom-1/qwen3-max" }),
-        );
+        const view = await settingsView(harness, "/api/model", jsonRequest("PUT", { model: "custom-1/qwen3-max" }));
 
         expect(view.model).toBe("custom-1/qwen3-max");
         expect(harness.file().model).toBe("custom-1/qwen3-max");
@@ -686,10 +645,7 @@ describe("思考強度", () => {
     await withModelServer(
       { model: "deepseek/deepseek-v4-pro", providers: { deepseek: { apiKey: "sk-1" } } },
       async (harness) => {
-        const changed = await reasoningView(
-          harness,
-          jsonRequest("PUT", { reasoningEffort: "high" }),
-        );
+        const changed = await reasoningView(harness, jsonRequest("PUT", { reasoningEffort: "high" }));
         expect(changed.effort).toBe("high");
         expect(harness.file().modelOptions).toEqual({
           "deepseek/deepseek-v4-pro": { reasoningEffort: "high" },
@@ -748,10 +704,7 @@ describe("思考強度", () => {
     await withModelServer(
       { model: "deepseek/deepseek-v3", providers: { deepseek: { apiKey: "sk-1" } } },
       async (harness) => {
-        const response = await harness.request(
-          "/api/model/reasoning",
-          jsonRequest("PUT", { reasoningEffort: "high" }),
-        );
+        const response = await harness.request("/api/model/reasoning", jsonRequest("PUT", { reasoningEffort: "high" }));
 
         expect(response.status).toBe(400);
         expect(((await response.json()) as { detail: string }).detail).toContain("指定できません");
@@ -761,10 +714,7 @@ describe("思考強度", () => {
 
   test("モデルが未設定なら 400 で断る", async () => {
     await withModelServer(null, async (harness) => {
-      const response = await harness.request(
-        "/api/model/reasoning",
-        jsonRequest("PUT", { reasoningEffort: "high" }),
-      );
+      const response = await harness.request("/api/model/reasoning", jsonRequest("PUT", { reasoningEffort: "high" }));
 
       expect(response.status).toBe(400);
       expect(harness.file().modelOptions).toBeUndefined();

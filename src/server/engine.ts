@@ -9,13 +9,7 @@ import type { ComputerToolset } from "./computer";
 import type { ImageStore } from "./images";
 import type { McpToolset } from "./mcp";
 import { catalogProvider, type CatalogSnapshot } from "./models-dev";
-import {
-  imagesMessage,
-  SYSTEM_PROMPT,
-  toModelMessages,
-  type PendingImages,
-  type TeraContext,
-} from "./prompt";
+import { imagesMessage, SYSTEM_PROMPT, toModelMessages, type PendingImages, type TeraContext } from "./prompt";
 import { catalogRoute, createLanguageModel, toolResultTakesImages, type ResolvedModel } from "./provider-registry";
 import { reasoningProviderOptions } from "./reasoning";
 import { readStoredImages, readToolOutput, toolResultOutput } from "./tool-output";
@@ -97,9 +91,7 @@ export type CatalogReader = {
 };
 
 /** 呼び出せるかどうかの判定。呼び出せないときは理由を添える。 */
-export type ModelResolution =
-  | { ok: true; model: ResolvedModel }
-  | { ok: false; detail: string };
+export type ModelResolution = { ok: true; model: ResolvedModel } | { ok: false; detail: string };
 
 /**
  * 既定のモデルとプロバイダの設定から、モデルの呼び出し方を決める。

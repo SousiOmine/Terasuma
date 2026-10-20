@@ -19,11 +19,9 @@ const CALLBACK_URL = "http://127.0.0.1:9/api/mcp/oauth/callback";
 function createTestServer(name: string): McpServer {
   const server = new McpServer({ name: `terasuma-test-${name}`, version: "1.0.0" });
 
-  server.registerTool(
-    "echo",
-    { description: `${name} の echo`, inputSchema: { text: z.string() } },
-    ({ text }) => ({ content: [{ type: "text", text: `echo: ${text}` }] }),
-  );
+  server.registerTool("echo", { description: `${name} の echo`, inputSchema: { text: z.string() } }, ({ text }) => ({
+    content: [{ type: "text", text: `echo: ${text}` }],
+  }));
 
   server.registerTool(
     "fail",
@@ -32,16 +30,12 @@ function createTestServer(name: string): McpServer {
   );
 
   // 画像を返すツール。ツールの戻り値に画像を載せられることを確かめる。
-  server.registerTool(
-    "shot",
-    { description: `${name} の shot`, inputSchema: {} },
-    () => ({
-      content: [
-        { type: "text" as const, text: "撮りました" },
-        { type: "image" as const, data: Buffer.from(testPng(3, 2)).toString("base64"), mimeType: "image/png" },
-      ],
-    }),
-  );
+  server.registerTool("shot", { description: `${name} の shot`, inputSchema: {} }, () => ({
+    content: [
+      { type: "text" as const, text: "撮りました" },
+      { type: "image" as const, data: Buffer.from(testPng(3, 2)).toString("base64"), mimeType: "image/png" },
+    ],
+  }));
 
   return server;
 }
@@ -169,7 +163,8 @@ describe("MCP サーバーとの接続", () => {
     }
   });
 
-  test("認可の用意が無い 401 は、認可ではなく失敗として扱う", async () => {    const unauthorized = Bun.serve({
+  test("認可の用意が無い 401 は、認可ではなく失敗として扱う", async () => {
+    const unauthorized = Bun.serve({
       hostname: "127.0.0.1",
       port: 0,
       fetch: () => new Response("unauthorized", { status: 401 }),
@@ -230,15 +225,12 @@ describe("MCP サーバーとの接続", () => {
   });
 
   test("繋がらないサーバーは理由を添えて failed になる", async () => {
-    await withManager(
-      { broken: { type: "stdio", command: "/nonexistent/terasuma-mcp-server" } },
-      async (manager) => {
-        const status = await manager.check("broken");
-        expect(status.state).toBe("failed");
-        expect(status.detail).not.toBeNull();
-        expect(status.tools).toEqual([]);
-      },
-    );
+    await withManager({ broken: { type: "stdio", command: "/nonexistent/terasuma-mcp-server" } }, async (manager) => {
+      const status = await manager.check("broken");
+      expect(status.state).toBe("failed");
+      expect(status.detail).not.toBeNull();
+      expect(status.tools).toEqual([]);
+    });
   });
 
   test("設定に無いサーバーは触れない", async () => {

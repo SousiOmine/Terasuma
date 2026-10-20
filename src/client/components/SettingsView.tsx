@@ -83,9 +83,7 @@ function GeneralSettings() {
       <div class="mt-6 flex items-center justify-between gap-6 border-b border-neutral-200 pb-5 dark:border-neutral-800">
         <div class="min-w-0">
           <p class="text-sm font-medium">{t("settings.language.label")}</p>
-          <p class="mt-0.5 text-xs text-neutral-500 dark:text-neutral-400">
-            {t("settings.language.description")}
-          </p>
+          <p class="mt-0.5 text-xs text-neutral-500 dark:text-neutral-400">{t("settings.language.description")}</p>
         </div>
 
         <div class="flex shrink-0 gap-1 rounded-lg bg-neutral-200/60 p-0.5 dark:bg-neutral-800">

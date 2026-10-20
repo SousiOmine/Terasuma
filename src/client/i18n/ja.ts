@@ -157,8 +157,7 @@ export const ja: Record<MessageKey, string> = {
   "settings.wizard.chooseDescription": "接続するプロバイダを選んでください。",
   "settings.wizard.search": "プロバイダを絞り込む",
   "settings.wizard.noMatch": "一致するプロバイダがありません。",
-  "settings.wizard.catalogHint":
-    "このプロバイダで使えるモデルは models.dev のカタログから取得します。",
+  "settings.wizard.catalogHint": "このプロバイダで使えるモデルは models.dev のカタログから取得します。",
   "settings.wizard.checkSkipped":
     "このプロバイダは接続確認に使う一覧（/models）を公開していないため、確認せずに追加します。",
   "settings.wizard.apiKey.label": "API キー",
@@ -168,8 +167,7 @@ export const ja: Record<MessageKey, string> = {
   "settings.wizard.apiKey.keep": "変更しないときは空のままにします。",
   "settings.wizard.apiKey.optional": "API キーが要らないエンドポイントでは空のままにします。",
   "settings.wizard.baseUrl.label": "ベース URL",
-  "settings.wizard.baseUrl.description":
-    "OpenAI 互換のエンドポイントの URL（例: http://127.0.0.1:11434/v1）",
+  "settings.wizard.baseUrl.description": "OpenAI 互換のエンドポイントの URL（例: http://127.0.0.1:11434/v1）",
   "settings.wizard.name.label": "名前",
   "settings.wizard.name.description": "設定画面に表示されるプロバイダ名を入力",
   "settings.wizard.name.placeholder": "社内ゲートウェイ",

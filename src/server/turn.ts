@@ -244,4 +244,3 @@ export function sseResponse(events: AsyncGenerator<ChatEvent>): Response {
     },
   });
 }
-

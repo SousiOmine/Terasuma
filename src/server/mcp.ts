@@ -465,11 +465,7 @@ export function createMcpManager(options: McpManagerOptions): McpManager {
 }
 
 /** 1 つのサーバーのツールを、モデルへ渡す名前と定義の組にする。 */
-function toolEntries(
-  serverId: string,
-  connection: ServerConnection,
-  images: ImageStore,
-): [string, ToolSet[string]][] {
+function toolEntries(serverId: string, connection: ServerConnection, images: ImageStore): [string, ToolSet[string]][] {
   return connection.tools.map((definition) => [
     `${serverId}_${definition.name}`,
     tool({

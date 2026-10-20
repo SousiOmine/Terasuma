@@ -41,7 +41,11 @@ describe("resolveAppPaths", () => {
   });
 
   test("XDG の環境変数があればそちらを使う", () => {
-    const paths = resolveAppPaths({ XDG_CONFIG_HOME: "/opt/conf", XDG_DATA_HOME: "/opt/data" }, "linux", "/home/tester");
+    const paths = resolveAppPaths(
+      { XDG_CONFIG_HOME: "/opt/conf", XDG_DATA_HOME: "/opt/data" },
+      "linux",
+      "/home/tester",
+    );
 
     expect(paths.configDir).toBe(posix.join("/opt/conf", "terasuma"));
     expect(paths.dataDir).toBe(posix.join("/opt/data", "terasuma"));

@@ -2,15 +2,16 @@ import type { MessageRole } from "../../shared/types";
 import { t } from "../i18n";
 
 export type MessageBubbleProps = {
-  role: MessageRole;
+  /** 発言者。user か assistant。 */
+  author: MessageRole;
   /** 本文。ツールの呼び出しと結果は画面に出さないので、本文だけで足りる。 */
   content: string;
   /** 生成中かどうか。true の間は、本文の下に小さく「作業中…」を出す。 */
   working?: boolean;
 };
 
-export function MessageBubble({ role, content, working = false }: MessageBubbleProps) {
-  if (role === "user") {
+export function MessageBubble({ author, content, working = false }: MessageBubbleProps) {
+  if (author === "user") {
     return (
       <div class="flex justify-end">
         <div class="max-w-[85%] rounded-2xl rounded-br-sm bg-neutral-900 px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap break-words text-white dark:bg-neutral-100 dark:text-neutral-900">
@@ -40,9 +41,7 @@ export function MessageBubble({ role, content, working = false }: MessageBubbleP
  */
 function Working({ hasText }: { hasText: boolean }) {
   return (
-    <p
-      class={`flex items-center gap-1.5 text-xs text-neutral-500 dark:text-neutral-400 ${hasText ? "mt-2" : ""}`}
-    >
+    <p class={`flex items-center gap-1.5 text-xs text-neutral-500 dark:text-neutral-400 ${hasText ? "mt-2" : ""}`}>
       <span class="h-1.5 w-1.5 animate-pulse rounded-full bg-neutral-400 dark:bg-neutral-500" />
       {t("chat.working")}
     </p>

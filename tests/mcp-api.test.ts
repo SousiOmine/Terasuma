@@ -1,16 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { CONFIG_FILE_NAME, readSettingsFile, type FileSettings, type McpServerSettings } from "../src/config";
-import { createMockEngine } from "../src/server/engine";
+import type { FileSettings, McpServerSettings } from "../src/config";
 import type { AuthorizationCallback, McpManager } from "../src/server/mcp";
-import { startServer } from "../src/server/server";
-import { createSettingsStore, type SettingsStore } from "../src/server/settings";
-import { createStore } from "../src/server/store";
 import type { McpServerStatusView, McpServersView, McpTestView } from "../src/shared/types";
-import { createHandover } from "../src/server/handover";
-import { createContainerStub, createCompactionStub } from "./support";
+import { withServer } from "./harness";
 
 const UNKNOWN: McpServerStatusView = { state: "unknown", tools: [], detail: null };
 
@@ -79,53 +71,24 @@ async function withMcpServer<T>(
   initial: FileSettings,
   run: (harness: Harness, stub: ReturnType<typeof createManagerStub>) => Promise<T>,
 ): Promise<T> {
-  const dir = mkdtempSync(join(tmpdir(), "terasuma-mcp-api-"));
-  const path = join(dir, CONFIG_FILE_NAME);
-  writeFileSync(path, `${JSON.stringify(initial, null, 2)}\n`, "utf8");
-
-  const settings: SettingsStore = createSettingsStore(path);
   const stub = createManagerStub();
-  const store = createStore(":memory:");
-  const { server } = startServer({
-    config: {
-      host: "127.0.0.1",
-      port: 0,
-      configDir: dir,
-      configPath: path,
-      dataDir: dir,
-      dbPath: ":memory:",
-      engine: "mock",
-      isDevelopment: false,
-    },
-    store,
-    engine: createMockEngine({ chunkSize: 10_000, delayMs: 0 }),
-    compaction: createCompactionStub(store),
-    settings,
-    mcp: stub.manager,
-    container: createContainerStub(),
-    handover: createHandover(),
-  });
 
-  const request = (requestPath: string, init?: RequestInit) =>
-    fetch(new URL(requestPath, server.url), init);
-
-  try {
-    return await run(
-      {
-        request,
-        async servers() {
-          const response = await request("/api/mcp/servers");
-          expect(response.status).toBe(200);
-          return (await response.json()) as McpServersView;
+  return withServer(
+    ({ request, file }) =>
+      run(
+        {
+          request,
+          async servers() {
+            const response = await request("/api/mcp/servers");
+            expect(response.status).toBe(200);
+            return (await response.json()) as McpServersView;
+          },
+          file,
         },
-        file: () => readSettingsFile(path),
-      },
-      stub,
-    );
-  } finally {
-    await server.stop(true);
-    rmSync(dir, { recursive: true, force: true });
-  }
+        stub,
+      ),
+    { settings: initial, mcp: stub.manager },
+  );
 }
 
 const LOCAL: McpServerSettings = {
@@ -190,23 +153,30 @@ describe("MCP サーバーの API", () => {
   });
 
   test("設定を変えると保存され、URL と id の食い違いは 400", async () => {
-    await withMcpServer({ mcpServers: { remote: { type: "http", url: "https://old.example.test/mcp" } } }, async (harness) => {
-      const patch = (id: string, body: unknown) =>
-        harness.request(`/api/mcp/servers/${id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
+    await withMcpServer(
+      { mcpServers: { remote: { type: "http", url: "https://old.example.test/mcp" } } },
+      async (harness) => {
+        const patch = (id: string, body: unknown) =>
+          harness.request(`/api/mcp/servers/${id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          });
+
+        const updated = await patch("remote", { id: "remote", type: "http", url: "https://new.example.test/mcp" });
+        expect(updated.status).toBe(200);
+        expect(harness.file().mcpServers).toEqual({
+          remote: { type: "http", url: "https://new.example.test/mcp" },
         });
 
-      const updated = await patch("remote", { id: "remote", type: "http", url: "https://new.example.test/mcp" });
-      expect(updated.status).toBe(200);
-      expect(harness.file().mcpServers).toEqual({
-        remote: { type: "http", url: "https://new.example.test/mcp" },
-      });
-
-      expect((await patch("remote", { id: "other", type: "http", url: "https://new.example.test/mcp" })).status).toBe(400);
-      expect((await patch("missing", { id: "missing", type: "http", url: "https://x.example.test/mcp" })).status).toBe(404);
-    });
+        expect((await patch("remote", { id: "other", type: "http", url: "https://new.example.test/mcp" })).status).toBe(
+          400,
+        );
+        expect(
+          (await patch("missing", { id: "missing", type: "http", url: "https://x.example.test/mcp" })).status,
+        ).toBe(404);
+      },
+    );
   });
 
   test("削除すると設定から消え、一覧が返る", async () => {
@@ -290,34 +260,40 @@ describe("MCP サーバーの API", () => {
   });
 
   test("認可は URL を返し、取り消しもできる", async () => {
-    await withMcpServer({ mcpServers: { remote: { type: "http", url: "https://mcp.example.test/mcp" } } }, async (harness, stub) => {
-      const started = await harness.request("/api/mcp/servers/remote/authorize", { method: "POST" });
-      expect(started.status).toBe(200);
-      expect(await started.json()).toEqual({ url: "https://auth.example.test/remote" });
-      expect(stub.calls.authorize).toEqual(["remote"]);
+    await withMcpServer(
+      { mcpServers: { remote: { type: "http", url: "https://mcp.example.test/mcp" } } },
+      async (harness, stub) => {
+        const started = await harness.request("/api/mcp/servers/remote/authorize", { method: "POST" });
+        expect(started.status).toBe(200);
+        expect(await started.json()).toEqual({ url: "https://auth.example.test/remote" });
+        expect(stub.calls.authorize).toEqual(["remote"]);
 
-      const cancelled = await harness.request("/api/mcp/servers/remote/authorize", { method: "DELETE" });
-      expect(cancelled.status).toBe(200);
-      expect(((await cancelled.json()) as McpServersView).servers.map((server) => server.id)).toEqual(["remote"]);
-      expect(stub.calls.cancelled).toEqual(["remote"]);
-    });
+        const cancelled = await harness.request("/api/mcp/servers/remote/authorize", { method: "DELETE" });
+        expect(cancelled.status).toBe(200);
+        expect(((await cancelled.json()) as McpServersView).servers.map((server) => server.id)).toEqual(["remote"]);
+        expect(stub.calls.cancelled).toEqual(["remote"]);
+      },
+    );
   });
 
   test("認可のコールバックは、成否をページで返す", async () => {
-    await withMcpServer({ mcpServers: { remote: { type: "http", url: "https://mcp.example.test/mcp" } } }, async (harness, stub) => {
-      const ok = await harness.request("/api/mcp/oauth/callback?code=abc&state=terasuma.remote.1");
-      expect(ok.status).toBe(200);
-      expect(ok.headers.get("Content-Type")).toContain("text/html");
-      expect(await ok.text()).toContain("認可が完了しました");
-      expect(stub.calls.completed).toEqual([{ code: "abc", iss: null, error: null }]);
+    await withMcpServer(
+      { mcpServers: { remote: { type: "http", url: "https://mcp.example.test/mcp" } } },
+      async (harness, stub) => {
+        const ok = await harness.request("/api/mcp/oauth/callback?code=abc&state=terasuma.remote.1");
+        expect(ok.status).toBe(200);
+        expect(ok.headers.get("Content-Type")).toContain("text/html");
+        expect(await ok.text()).toContain("認可が完了しました");
+        expect(stub.calls.completed).toEqual([{ code: "abc", iss: null, error: null }]);
 
-      stub.failCompletion("コードを交換できませんでした");
-      const failed = await harness.request("/api/mcp/oauth/callback?code=abc&state=terasuma.remote.1");
-      expect(failed.status).toBe(400);
-      expect(await failed.text()).toContain("コードを交換できませんでした");
+        stub.failCompletion("コードを交換できませんでした");
+        const failed = await harness.request("/api/mcp/oauth/callback?code=abc&state=terasuma.remote.1");
+        expect(failed.status).toBe(400);
+        expect(await failed.text()).toContain("コードを交換できませんでした");
 
-      const missingState = await harness.request("/api/mcp/oauth/callback?code=abc");
-      expect(missingState.status).toBe(400);
-    });
+        const missingState = await harness.request("/api/mcp/oauth/callback?code=abc");
+        expect(missingState.status).toBe(400);
+      },
+    );
   });
 });

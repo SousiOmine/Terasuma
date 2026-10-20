@@ -227,10 +227,7 @@ function webpSize(data: Uint8Array): ImageSize {
       // 署名（2F）のあとの 28 ビットに、幅-1 と高さ-1 が 14 ビットずつ入る。
       if (size < 5 || data[payload] !== 0x2f) break;
       const bits =
-        data[payload + 1]! |
-        (data[payload + 2]! << 8) |
-        (data[payload + 3]! << 16) |
-        (data[payload + 4]! << 24);
+        data[payload + 1]! | (data[payload + 2]! << 8) | (data[payload + 3]! << 16) | (data[payload + 4]! << 24);
       return positiveSize((bits & 0x3fff) + 1, ((bits >>> 14) & 0x3fff) + 1);
     }
 

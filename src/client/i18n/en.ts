@@ -88,7 +88,8 @@ export const en = {
   "settings.mcp.form.addTitle": "Add an MCP server",
   "settings.mcp.form.editTitle": "MCP server settings",
   "settings.mcp.form.name.label": "Name",
-  "settings.mcp.form.name.description": "The id used in the settings and in tool names (lowercase letters, digits, hyphens).",
+  "settings.mcp.form.name.description":
+    "The id used in the settings and in tool names (lowercase letters, digits, hyphens).",
   "settings.mcp.form.name.placeholder": "filesystem",
   "settings.mcp.form.type.label": "Type",
   "settings.mcp.form.type.stdio": "Local",

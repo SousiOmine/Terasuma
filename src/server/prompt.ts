@@ -184,10 +184,7 @@ export function buildModelInput(
   replyLanguage: ReplyLanguage,
   options: ModelInputOptions,
 ): ModelMessage[] {
-  return [
-    { role: "system", content: SYSTEM_PROMPT },
-    ...toModelMessages(context, images, replyLanguage, options),
-  ];
+  return [{ role: "system", content: SYSTEM_PROMPT }, ...toModelMessages(context, images, replyLanguage, options)];
 }
 
 /** 本文とツール呼び出しを、保存された順のまま並べる。 */

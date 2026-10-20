@@ -178,7 +178,10 @@ export function createModelLister(fetchImpl: FetchLike = fetch): ProviderModelLi
       );
     }
     if (outcome.ids.length === 0) {
-      throw new ProviderRequestError("provider_no_models", `${request.target?.url ?? ""} に使えるモデルがありませんでした`);
+      throw new ProviderRequestError(
+        "provider_no_models",
+        `${request.target?.url ?? ""} に使えるモデルがありませんでした`,
+      );
     }
     return outcome.ids;
   };
@@ -251,4 +254,3 @@ function readErrorMessage(body: unknown): string | null {
   const message = (body as { message?: unknown }).message;
   return typeof message === "string" ? message : null;
 }
-

@@ -23,10 +23,7 @@ export type CommandResult = {
  * 差し替えて確かめる。実行ファイルが見つからない場合も例外にせず、code -1 の
  * 結果として返す。signal が立つと、実行中のコマンドを打ち切る。
  */
-export type CommandRunner = (
-  cmd: readonly string[],
-  options: RunCommandOptions,
-) => Promise<CommandResult>;
+export type CommandRunner = (cmd: readonly string[], options: RunCommandOptions) => Promise<CommandResult>;
 
 export type RunCommandOptions = {
   timeoutMs: number;
@@ -51,10 +48,7 @@ export type RunCommandOptions = {
  */
 const OUTPUT_LIMIT = 20_000;
 
-export async function runCommand(
-  cmd: readonly string[],
-  options: RunCommandOptions,
-): Promise<CommandResult> {
+export async function runCommand(cmd: readonly string[], options: RunCommandOptions): Promise<CommandResult> {
   const timeout = AbortSignal.timeout(options.timeoutMs);
   const abort = options.signal === undefined ? timeout : AbortSignal.any([options.signal, timeout]);
 

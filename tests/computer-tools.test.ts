@@ -75,7 +75,15 @@ async function withTools<T>(behaviour: ToolBehaviour, run: (context: ToolContext
   const tools = createComputerTools({ container, images, handover: createHandover(), teraId: "t1" });
 
   try {
-    return await run({ tools, execCalls, execSignals, shellCalls, shellSignals, images, homeDir: join(dir, "container", "home") });
+    return await run({
+      tools,
+      execCalls,
+      execSignals,
+      shellCalls,
+      shellSignals,
+      images,
+      homeDir: join(dir, "container", "home"),
+    });
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -103,7 +111,10 @@ function toolsetFor(behaviour: ToolBehaviour) {
     command: stub.run,
   });
 
-  return { provider: createComputerToolset({ container, images: createImageStore(dir), handover: createHandover() }), dir };
+  return {
+    provider: createComputerToolset({ container, images: createImageStore(dir), handover: createHandover() }),
+    dir,
+  };
 }
 
 describe("computer ツールセット", () => {
@@ -132,9 +143,7 @@ describe("computer ツールセット", () => {
   test("コンテナが止まっているだけなら、ツールは渡す（理由を伝えられるように）", async () => {
     const { provider, dir } = toolsetFor({ running: false });
     try {
-      expect(
-        Object.keys(await provider.toolset({ teraId: "t1" })),
-      ).toContain("computer_screenshot");
+      expect(Object.keys(await provider.toolset({ teraId: "t1" }))).toContain("computer_screenshot");
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

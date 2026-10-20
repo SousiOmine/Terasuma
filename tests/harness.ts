@@ -1,0 +1,171 @@
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import { CONFIG_FILE_NAME, readSettingsFile, type AppConfig, type FileSettings } from "../src/config";
+import type { ContainerManager } from "../src/server/container";
+import { createMockEngine, type AgentEngine } from "../src/server/engine";
+import { createHandover, type Handover } from "../src/server/handover";
+import type { McpManager } from "../src/server/mcp";
+import type { Catalog } from "../src/server/models-dev";
+import type { ConnectionChecker, ProviderModelLister } from "../src/server/provider-models";
+import { startServer, type StartedServer } from "../src/server/server";
+import { createSettingsStore, type SettingsStore } from "../src/server/settings";
+import { createStore, type Store } from "../src/server/store";
+import { TEST_SETTINGS, createCompactionStub, createContainerStub, createMcpStub } from "./support";
+
+/**
+ * HTTP 越しに確かめるテストの土台。
+ *
+ * 「一時ディレクトリに本物の config.json を置き、ポートは OS に選ばせ、
+ * 差し替えたい依存だけを渡してサーバを起こし、終わったら必ず畳む」という形は
+ * どの API のテストでも同じになる。この形をここに 1 つだけ置く。
+ *
+ * 個々のテストファイルは、その API に固有の差し替え（カタログ、候補の一覧、
+ * コンテナの状態）だけを渡す。
+ */
+
+export type ServerHarnessOptions = {
+  /** 起動に使うポート。省くと OS に選ばせる。 */
+  port?: number;
+  /** 設定ファイルの初期内容。null を渡すとファイルを作らない。 */
+  settings?: FileSettings | null;
+  /** 設定ファイルの置き場。dir を基に決める（入れ子のディレクトリを作れるようにする）。 */
+  configPath?: (dir: string) => string;
+  /** 会話のストア。省くとメモリ上の本物を作る。 */
+  store?: Store;
+  /** モデル呼び出し。省くと待ち時間ゼロのモックを使う。 */
+  engine?: AgentEngine;
+  /** コンテナ。dir を受け取る関数を渡すと、その中に置き場を作れる。 */
+  container?: ContainerManager | ((dir: string) => ContainerManager);
+  /** MCP 接続。省くと「何も確かめていない」差し替えを使う。 */
+  mcp?: McpManager;
+  /** 引き受け。省くと本物を作る。 */
+  handover?: Handover;
+  /** models.dev のカタログ。省くとサーバが本物を作る（通信はしない）。 */
+  catalog?: Catalog;
+  /** プロバイダへの接続確認。 */
+  checkConnection?: ConnectionChecker;
+  /** 独自エンドポイントのモデル一覧。 */
+  listModels?: ProviderModelLister;
+};
+
+/** 1 つのサーバと、そのテストが触るものをまとめたもの。 */
+export type ServerHarness = {
+  server: StartedServer["server"];
+  /** 希望のポートが埋まっていて、別のポートで起動したかどうか。 */
+  portChanged: boolean;
+  url: string;
+  /** このテスト専用の一時ディレクトリ。 */
+  dir: string;
+  store: Store;
+  settings: SettingsStore;
+  settingsPath: string;
+  handover: Handover;
+  request(path: string, init?: RequestInit): Promise<Response>;
+  /** 設定ファイルのいまの中身（書き戻されたかを確かめる）。 */
+  file(): FileSettings;
+};
+
+/** 差し替えを渡してサーバを起こし、確かめ終わったら畳む。 */
+export async function withServer<T>(
+  run: (harness: ServerHarness) => Promise<T>,
+  options: ServerHarnessOptions = {},
+): Promise<T> {
+  const dir = mkdtempSync(join(tmpdir(), "terasuma-test-"));
+  const settingsPath = options.configPath?.(dir) ?? join(dir, CONFIG_FILE_NAME);
+
+  if (options.settings !== null) {
+    mkdirSync(dirname(settingsPath), { recursive: true });
+    writeFileSync(settingsPath, `${JSON.stringify(options.settings ?? TEST_SETTINGS, null, 2)}\n`, "utf8");
+  }
+
+  const settings = createSettingsStore(settingsPath);
+  const store = options.store ?? createStore(":memory:");
+  const compaction = createCompactionStub(store);
+  const handover = options.handover ?? createHandover();
+  const container =
+    typeof options.container === "function" ? options.container(dir) : (options.container ?? createContainerStub());
+
+  const config: AppConfig = {
+    host: "127.0.0.1",
+    port: options.port ?? 0,
+    configDir: dir,
+    configPath: settingsPath,
+    dataDir: dir,
+    dbPath: ":memory:",
+    engine: "mock",
+    isDevelopment: false,
+  };
+
+  // 起動そのものが失敗した場合も、作った置き場を残さない。
+  let started: StartedServer;
+  try {
+    started = startServer({
+      config,
+      store,
+      engine: options.engine ?? fastMock(),
+      compaction,
+      settings,
+      mcp: options.mcp ?? createMcpStub(),
+      container,
+      handover,
+      catalog: options.catalog,
+      checkConnection: options.checkConnection,
+      listModels: options.listModels,
+    });
+  } catch (error) {
+    compaction.close();
+    store.close();
+    rmSync(dir, { recursive: true, force: true });
+    throw error;
+  }
+
+  const harness: ServerHarness = {
+    server: started.server,
+    portChanged: started.portChanged,
+    url: started.server.url.toString(),
+    dir,
+    store,
+    settings,
+    settingsPath,
+    handover,
+    request: (path, init) => fetch(new URL(path, started.server.url), init),
+    file: () => readSettingsFile(settingsPath),
+  };
+
+  try {
+    return await run(harness);
+  } finally {
+    compaction.close();
+    await started.server.stop(true);
+    store.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+/** 待ち時間ゼロで一気に流すモック。全文を待ってから確かめるテストで使う。 */
+export function fastMock(): AgentEngine {
+  return createMockEngine({ chunkSize: 10_000, delayMs: 0 });
+}
+
+/** 待ち受けているポートを取り出す。取れなければテストの前提が崩れているので止める。 */
+export function portOf(server: { port?: number }): number {
+  if (server.port === undefined) throw new Error("サーバのポートが取れていない");
+  return server.port;
+}
+
+/** JSON を返す応答。fetch の差し替えで使う。 */
+export function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
+}
+
+/** 一時ディレクトリを作り、確かめ終わったら消す。 */
+export async function withTempDir<T>(prefix: string, run: (dir: string) => Promise<T>): Promise<T> {
+  const dir = mkdtempSync(join(tmpdir(), prefix));
+
+  try {
+    return await run(dir);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}

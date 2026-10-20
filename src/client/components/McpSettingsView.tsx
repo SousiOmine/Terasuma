@@ -204,9 +204,7 @@ function McpServerCard({
             {server.type === "stdio" ? [server.command, ...server.args].join(" ") : server.url}
           </p>
 
-          {detail !== null && (
-            <p class="mt-1 break-words text-xs text-red-600 dark:text-red-400">{detail}</p>
-          )}
+          {detail !== null && <p class="mt-1 break-words text-xs text-red-600 dark:text-red-400">{detail}</p>}
 
           {authorizing && authorizationUrl !== null && (
             <a

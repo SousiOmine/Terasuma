@@ -101,11 +101,7 @@ export type CatalogRoute = {
  * カタログのプロバイダを、呼び出しに必要な形へ解決する。
  * 依存に無いパッケージのものと、接続先が分からない OpenAI 互換は null（選ばせない）。
  */
-export function catalogRoute(input: {
-  id: string;
-  npm: string | null;
-  api: string | null;
-}): CatalogRoute | null {
+export function catalogRoute(input: { id: string; npm: string | null; api: string | null }): CatalogRoute | null {
   const kind = input.npm === null ? undefined : NPM_KINDS[input.npm];
   if (kind === undefined) return null;
 

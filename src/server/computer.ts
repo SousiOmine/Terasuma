@@ -113,7 +113,10 @@ export function createComputerTools(options: ComputerToolsOptions): ComputerTool
       ) => {
         const times = count ?? 1;
         await xdotool(["mousemove", String(x), String(y)], context.abortSignal);
-        await xdotool(["click", "--repeat", String(times), String(BUTTON_CODES[button ?? "left"])], context.abortSignal);
+        await xdotool(
+          ["click", "--repeat", String(times), String(BUTTON_CODES[button ?? "left"])],
+          context.abortSignal,
+        );
         return `clicked ${button ?? "left"} ${times} time(s) at ${x},${y}`;
       },
     }),
@@ -148,10 +151,9 @@ export function createComputerTools(options: ComputerToolsOptions): ComputerTool
     }),
 
     computer_type: tool({
-      description: [
-        "Type text with the keyboard into the focused window.",
-        "Click the target first to focus it.",
-      ].join(" "),
+      description: ["Type text with the keyboard into the focused window.", "Click the target first to focus it."].join(
+        " ",
+      ),
       inputSchema: z.object({
         text: z.string().describe("Text to type"),
       }),
@@ -163,7 +165,7 @@ export function createComputerTools(options: ComputerToolsOptions): ComputerTool
 
     computer_key: tool({
       description: [
-        "Press a key or a key combination, such as \"Return\", \"Escape\", \"ctrl+c\" or \"alt+Tab\".",
+        'Press a key or a key combination, such as "Return", "Escape", "ctrl+c" or "alt+Tab".',
         "The names are the ones xdotool accepts.",
       ].join(" "),
       inputSchema: z.object({
@@ -287,10 +289,7 @@ function formatWindows(result: ShellResult): string {
     .map((line) => {
       const [kind, id, name, geometry] = line.split("|");
       const position = /X=(-?\d+) Y=(-?\d+) WIDTH=(\d+) HEIGHT=(\d+)/.exec(geometry ?? "");
-      const bounds =
-        position === null
-          ? ""
-          : ` at ${position[1]},${position[2]} size ${position[3]}x${position[4]}`;
+      const bounds = position === null ? "" : ` at ${position[1]},${position[2]} size ${position[3]}x${position[4]}`;
       return `${kind === "active" ? "* " : "  "}${id ?? "?"} ${name ?? ""}${bounds}`;
     })
     .join("\n");

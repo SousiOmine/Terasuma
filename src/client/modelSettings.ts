@@ -55,7 +55,6 @@ export function providerName(provider: ProviderView): string {
   return catalogProviders.value?.find((entry) => entry.id === provider.id)?.name ?? provider.name;
 }
 
-
 /** 設定を読む。失敗は呼び出し側が画面に出す。 */
 export async function loadModelSettings(): Promise<void> {
   isLoadingSettings.value = true;

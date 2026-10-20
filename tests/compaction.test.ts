@@ -1,10 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import {
-  createCompaction,
-  estimateMessageTokens,
-  estimateTokens,
-  type Compaction,
-} from "../src/server/compaction";
+import { createCompaction, estimateMessageTokens, estimateTokens, type Compaction } from "../src/server/compaction";
 import type { CompleteInput } from "../src/server/engine";
 import { DEFAULT_TERA_ID, type Store } from "../src/server/store";
 import type { ChatMessage } from "../src/shared/types";
@@ -328,7 +323,9 @@ describe("要約の作り方", () => {
     });
     const last = seed(store, 1_000, 30);
 
-    const fake = createEngine((input) => (input.prompt.includes("<previous-summary>") ? "## Goal\n書き直した要約。" : ""));
+    const fake = createEngine((input) =>
+      input.prompt.includes("<previous-summary>") ? "## Goal\n書き直した要約。" : "",
+    );
     const compaction = compactionWith(store, fake.engine, { limit: 1_000_000, now: () => last });
 
     await compaction.update(DEFAULT_TERA_ID, { force: true });
@@ -397,7 +394,7 @@ describe("要約の作り方", () => {
 
     expect(prompt).toContain("[User]: ");
     expect(prompt).toContain("[Assistant]: 調べます。");
-    expect(prompt).toContain("[Assistant tool calls]: bash(command=\"uname -a\")");
+    expect(prompt).toContain('[Assistant tool calls]: bash(command="uname -a")');
     expect(prompt).toContain("[Tool result]: Linux terasuma");
     // 長い結果は切る。画像は中身を渡さず、大きさだけ残す。
     expect(prompt).toContain("more characters truncated");

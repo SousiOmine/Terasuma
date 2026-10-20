@@ -155,9 +155,7 @@ export function createStore(dbPath: string, options: CreateStoreOptions = {}): S
     );
   `);
 
-  const selectTera = db.query<TeraRow, [string]>(
-    "SELECT id, name, created_at, updated_at FROM teras WHERE id = ?",
-  );
+  const selectTera = db.query<TeraRow, [string]>("SELECT id, name, created_at, updated_at FROM teras WHERE id = ?");
   const selectTeras = db.query<TeraRow, []>(
     "SELECT id, name, created_at, updated_at FROM teras ORDER BY updated_at DESC, created_at DESC",
   );
@@ -166,9 +164,7 @@ export function createStore(dbPath: string, options: CreateStoreOptions = {}): S
      VALUES (?, ?, ?, ?)
      ON CONFLICT (id) DO NOTHING`,
   );
-  const touchTera = db.query<unknown, [number, string]>(
-    "UPDATE teras SET updated_at = ? WHERE id = ?",
-  );
+  const touchTera = db.query<unknown, [number, string]>("UPDATE teras SET updated_at = ? WHERE id = ?");
 
   const selectMessages = db.query<MessageRow, [string]>(
     `SELECT id, tera_id, seq, role, content, parts, created_at, input_tokens, output_tokens, cached_input_tokens

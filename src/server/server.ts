@@ -2,7 +2,7 @@ import type { Server } from "bun";
 import { join } from "node:path";
 import index from "../client/index.html";
 import type { AppConfig } from "../config";
-import { type ContainerManager } from "./container";
+import type { ContainerManager } from "./container";
 import type { AgentEngine } from "./engine";
 import type { Handover } from "./handover";
 import { describeError } from "../shared/errors";
@@ -10,7 +10,8 @@ import { jsonError } from "./errors";
 import type { McpManager } from "./mcp";
 import { OAUTH_CALLBACK_PATH } from "./mcp-oauth";
 import type { Compaction } from "./compaction";
-import { CATALOG_FILE_NAME, createCatalog, type Catalog } from "./models-dev";import {
+import { CATALOG_FILE_NAME, createCatalog, type Catalog } from "./models-dev";
+import {
   createConnectionChecker,
   createModelLister,
   type ConnectionChecker,
@@ -240,10 +241,7 @@ export function startServer(options: ServerOptions): StartedServer {
  * 希望のポートで listen する。埋まっていたら OS に空きポートを選ばせて listen し直す。
  * どのポートで起動できたかは戻り値で伝える（呼び出し側が開く URL を知らせられるように）。
  */
-function serveOnAvailablePort(
-  preferredPort: number,
-  serve: (port: number) => Server<ScreenSocketData>,
-): StartedServer {
+function serveOnAvailablePort(preferredPort: number, serve: (port: number) => Server<ScreenSocketData>): StartedServer {
   try {
     return { server: serve(preferredPort), portChanged: false };
   } catch (error) {

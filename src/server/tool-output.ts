@@ -80,8 +80,7 @@ export function toolResultOutput(options: {
   /** プロバイダがツールの結果に画像を置けるかどうか。 */
   includeImages: boolean;
 }): ToolResultOutput {
-  const text =
-    options.images.missing === 0 ? options.text : `${options.text}\n(Could not read the stored image.)`;
+  const text = options.images.missing === 0 ? options.text : `${options.text}\n(Could not read the stored image.)`;
 
   if (options.failed) return { type: "error-text", value: text };
   if (!options.includeImages || options.images.files.length === 0) return { type: "text", value: text };

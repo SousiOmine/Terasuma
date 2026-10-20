@@ -25,8 +25,7 @@ import { ErrorNotice } from "./ErrorNotice";
 import { ModelPickerDialog } from "./ModelPickerDialog";
 import { ProviderWizard, type WizardMode } from "./ProviderWizard";
 
-const CARD_ACTION_CLASS =
-  "rounded-lg px-2 py-1 text-xs transition hover:bg-neutral-100 dark:hover:bg-neutral-800";
+const CARD_ACTION_CLASS = "rounded-lg px-2 py-1 text-xs transition hover:bg-neutral-100 dark:hover:bg-neutral-800";
 
 /**
  * 設定の「モデル」。
@@ -129,24 +128,17 @@ export function ModelSettingsView() {
               {t("settings.model.default.description")}
             </p>
           </div>
-          <Button
-            disabled={settings === null || settings.providers.length === 0}
-            onClick={() => setPickerOpen(true)}
-          >
+          <Button disabled={settings === null || settings.providers.length === 0} onClick={() => setPickerOpen(true)}>
             {t("settings.model.default.change")}
           </Button>
         </div>
 
         <p class="mt-3 truncate text-sm">{settings?.model ?? t("settings.model.default.unset")}</p>
         {problem === "unset" && (
-          <p class="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
-            {t("settings.model.default.unsetHint")}
-          </p>
+          <p class="mt-1 text-xs text-neutral-500 dark:text-neutral-400">{t("settings.model.default.unsetHint")}</p>
         )}
         {problem === "provider-missing" && (
-          <p class="mt-1 text-xs text-amber-700 dark:text-amber-400">
-            {t("settings.model.default.missingProvider")}
-          </p>
+          <p class="mt-1 text-xs text-amber-700 dark:text-amber-400">{t("settings.model.default.missingProvider")}</p>
         )}
 
         {reasoning !== null && reasoning.values.length > 0 && (
@@ -194,9 +186,7 @@ export function ModelSettingsView() {
           {settings === null && loading ? (
             <p class="text-xs text-neutral-500 dark:text-neutral-400">{t("chat.loading")}</p>
           ) : settings === null || settings.providers.length === 0 ? (
-            <p class="text-xs text-neutral-500 dark:text-neutral-400">
-              {t("settings.model.providers.empty")}
-            </p>
+            <p class="text-xs text-neutral-500 dark:text-neutral-400">{t("settings.model.providers.empty")}</p>
           ) : (
             settings.providers.map((provider) => (
               <ProviderCard
@@ -219,9 +209,7 @@ export function ModelSettingsView() {
           title={t("settings.model.providers.deleteTitle")}
           subject={deleting.name}
           message={t(
-            holdsDefault
-              ? "settings.model.providers.deleteMessageDefault"
-              : "settings.model.providers.deleteMessage",
+            holdsDefault ? "settings.model.providers.deleteMessageDefault" : "settings.model.providers.deleteMessage",
           )}
           confirmLabel={t("settings.model.providers.delete")}
           cancelLabel={t("common.cancel")}

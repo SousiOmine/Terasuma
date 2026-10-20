@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import type { LanguageModel } from "ai";
-import { catalogRoute, createLanguageModel, providerSpecForId, toolResultTakesImages } from "../src/server/provider-registry";
+import {
+  catalogRoute,
+  createLanguageModel,
+  providerSpecForId,
+  toolResultTakesImages,
+} from "../src/server/provider-registry";
 
 /** 生成したモデルの、providerOptions のキーとモデル名を取り出す。 */
 function modelInfo(model: LanguageModel): { provider: string; modelId: string } {
@@ -40,7 +45,9 @@ describe("カタログのプロバイダの解決", () => {
   });
 
   test("接続先を持つ専用パッケージは、その URL を使う", () => {
-    expect(catalogRoute({ id: "minimax", npm: "@ai-sdk/anthropic", api: "https://api.minimax.io/anthropic/v1" })).toEqual({
+    expect(
+      catalogRoute({ id: "minimax", npm: "@ai-sdk/anthropic", api: "https://api.minimax.io/anthropic/v1" }),
+    ).toEqual({
       spec: { id: "minimax", kind: "anthropic", optionKey: "anthropic" },
       baseUrl: "https://api.minimax.io/anthropic/v1",
     });

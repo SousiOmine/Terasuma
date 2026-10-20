@@ -105,12 +105,7 @@ export function createCodingToolset({ container, root }: CodingToolsetOptions): 
       }),
       execute: async ({ path, content }: { path: string; content: string }, context: ToolContext) => {
         throwIfAborted(context.abortSignal);
-        const output = await writeTextFile(
-          container,
-          resolveToolPath(path, root),
-          content,
-          context.abortSignal,
-        );
+        const output = await writeTextFile(container, resolveToolPath(path, root), content, context.abortSignal);
         throwIfAborted(context.abortSignal);
         return output;
       },
@@ -126,7 +121,9 @@ export function createCodingToolset({ container, root }: CodingToolsetOptions): 
       ].join(" "),
       inputSchema: z.object({
         path: z.string().min(1).describe("Path to the file to edit (relative or absolute)"),
-        oldText: z.string().describe("Exact text for one targeted replacement. It must be unique in the original file."),
+        oldText: z
+          .string()
+          .describe("Exact text for one targeted replacement. It must be unique in the original file."),
         newText: z.string().describe("Replacement text for this targeted edit."),
       }),
       execute: async (
@@ -164,10 +161,7 @@ export function createCodingToolset({ container, root }: CodingToolsetOptions): 
           .optional()
           .describe(`Timeout in seconds (default: ${BASH_TIMEOUT_MS / 1000}, max: ${BASH_MAX_TIMEOUT_SECONDS})`),
       }),
-      execute: async (
-        { command, timeout }: { command: string; timeout?: number },
-        context: ToolContext,
-      ) => {
+      execute: async ({ command, timeout }: { command: string; timeout?: number }, context: ToolContext) => {
         throwIfAborted(context.abortSignal);
         const output = await runBash(container, command, timeout, context.abortSignal);
         throwIfAborted(context.abortSignal);
@@ -197,12 +191,7 @@ function throwIfAborted(signal: AbortSignal | undefined): void {
  * テキストを読む。行番号は 1 始まりで、末尾の改行は行として数えない。
  * 大きすぎるファイルは、続きの offset を添えて切る（切ったことを黙らない）。
  */
-function readTextFile(
-  path: string,
-  buffer: Uint8Array,
-  offset: number | undefined,
-  limit: number | undefined,
-): string {
+function readTextFile(path: string, buffer: Uint8Array, offset: number | undefined, limit: number | undefined): string {
   if (buffer.includes(0)) {
     throw new Error(`${path} is a binary file; this tool reads text files only`);
   }

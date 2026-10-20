@@ -6,7 +6,6 @@ import { toErrorState } from "./errors";
 import { locale, setLocale } from "./i18n";
 import { loadModelSettings } from "./modelSettings";
 
-
 /** 表示中の画面。設定は全画面で開く。 */
 export type View = "chat" | "settings";
 
@@ -30,9 +29,7 @@ export const errorCode = signal<api.ClientErrorCode | null>(null);
 export const errorDetail = signal<string | null>(null);
 
 /** 一覧をまだ読めていないときは null になる。 */
-export const activeTera = computed(
-  () => teras.value.find((tera) => tera.id === activeTeraId.value) ?? null,
-);
+export const activeTera = computed(() => teras.value.find((tera) => tera.id === activeTeraId.value) ?? null);
 
 /**
  * 右ペイン（コンテナの画面）を開いているかどうか。既定は閉じている。
@@ -62,9 +59,7 @@ export const handoverQuestion = signal<string | null>(null);
  * 引き受けの返事を届ける。送った文は、そのまま computer_ask_user の戻り値になる。
  * これが済むと、ターンの中でツールの結果が流れてくる（画面も見るだけに戻る）。
  */
-export async function answerHandover(
-  answer: { kind: "done" } | { kind: "text"; text: string },
-): Promise<void> {
+export async function answerHandover(answer: { kind: "done" } | { kind: "text"; text: string }): Promise<void> {
   const teraId = activeTeraId.value;
   if (teraId === null || !handoverActive.value) return;
 

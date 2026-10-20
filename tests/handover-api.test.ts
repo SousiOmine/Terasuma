@@ -1,51 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { createMockEngine } from "../src/server/engine";
-import { HANDOVER_DONE, createHandover, type Handover } from "../src/server/handover";
-import { startServer } from "../src/server/server";
-import { createStore } from "../src/server/store";
-import { TEST_SETTINGS, createContainerStub, createMcpStub, createCompactionStub, withTempSettings } from "./support";
-
-/** 引き受けの受け渡しを、HTTP 越しに確かめる。 */
-async function withHandoverServer<T>(
-  run: (harness: {
-    request: (path: string, init?: RequestInit) => Promise<Response>;
-    handover: Handover;
-  }) => Promise<T>,
-): Promise<T> {
-  const handover = createHandover();
-
-  return withTempSettings(TEST_SETTINGS, async (settings) => {
-    const store = createStore(":memory:");
-    const { server } = startServer({
-      config: {
-        host: "127.0.0.1",
-        port: 0,
-        configDir: ".",
-        configPath: "./config.json",
-        dataDir: ".",
-        dbPath: ":memory:",
-        engine: "mock",
-        isDevelopment: false,
-      },
-      store,
-      engine: createMockEngine({ chunkSize: 10_000, delayMs: 0 }),
-      compaction: createCompactionStub(store),
-      settings,
-      mcp: createMcpStub(),
-      container: createContainerStub(),
-      handover,
-    });
-
-    try {
-      return await run({
-        request: (path, init) => fetch(new URL(path, server.url), init),
-        handover,
-      });
-    } finally {
-      await server.stop(true);
-    }
-  });
-}
+import { HANDOVER_DONE } from "../src/server/handover";
+import { withServer } from "./harness";
 
 function handoverRequest(teraId: string, body: Record<string, unknown>): RequestInit {
   return {
@@ -57,17 +12,20 @@ function handoverRequest(teraId: string, body: Record<string, unknown>): Request
 
 describe("引き受けの API", () => {
   test("チャットの文が、待っているツールの戻り値になる", async () => {
-    await withHandoverServer(async ({ request, handover }) => {
+    await withServer(async ({ request, handover }) => {
       const waiting = handover.wait("t1", new AbortController().signal);
 
-      const response = await request("/api/computer/handover", handoverRequest("t1", { kind: "text", text: "認証できた" }));
+      const response = await request(
+        "/api/computer/handover",
+        handoverRequest("t1", { kind: "text", text: "認証できた" }),
+      );
       expect(response.status).toBe(204);
       expect(await waiting).toBe("認証できた");
     });
   });
 
   test("「操作を完了した」も同じ経路で返せる", async () => {
-    await withHandoverServer(async ({ request, handover }) => {
+    await withServer(async ({ request, handover }) => {
       const waiting = handover.wait("t1", new AbortController().signal);
 
       const response = await request("/api/computer/handover", handoverRequest("t1", { kind: "done" }));
@@ -77,7 +35,7 @@ describe("引き受けの API", () => {
   });
 
   test("待っていない Tera への返事は 409", async () => {
-    await withHandoverServer(async ({ request }) => {
+    await withServer(async ({ request }) => {
       const response = await request("/api/computer/handover", handoverRequest("t1", { kind: "done" }));
       expect(response.status).toBe(409);
       expect(((await response.json()) as { code: string }).code).toBe("handover_not_pending");
@@ -85,7 +43,7 @@ describe("引き受けの API", () => {
   });
 
   test("壊れた入力は 400 で弾く", async () => {
-    await withHandoverServer(async ({ request, handover }) => {
+    await withServer(async ({ request, handover }) => {
       // 待っている状態でも、空の文は通さない（ツールの戻り値が空になるため）。
       const waiting = handover.wait("t1", new AbortController().signal);
 

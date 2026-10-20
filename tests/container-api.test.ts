@@ -1,60 +1,25 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createContainerManager } from "../src/server/container";
-import { createMockEngine } from "../src/server/engine";
-import { startServer } from "../src/server/server";
-import { createStore } from "../src/server/store";
 import type { ContainerStatusView } from "../src/shared/types";
-import { createHandover } from "../src/server/handover";
-import { TEST_SETTINGS, createMcpStub, createCompactionStub, createPodmanStub, withTempSettings, type PodmanStubBehaviour } from "./support";
+import { type ServerHarness, withServer } from "./harness";
+import { createPodmanStub, type PodmanStubBehaviour } from "./support";
 
 /** コンテナの API を、podman を差し替えた状態で HTTP 越しに確かめる。 */
 async function withContainerServer<T>(
   behaviour: PodmanStubBehaviour,
-  run: (harness: { request: (path: string, init?: RequestInit) => Promise<Response> }) => Promise<T>,
+  run: (harness: Pick<ServerHarness, "request">) => Promise<T>,
 ): Promise<T> {
-  const dir = mkdtempSync(join(tmpdir(), "terasuma-container-api-"));
   const stub = createPodmanStub(behaviour);
-  const container = createContainerManager({
-    dataDir: dir,
-    containerDir: join(dir, "container-files"),
-    command: stub.run,
+
+  return withServer(({ request }) => run({ request }), {
+    container: (dir) =>
+      createContainerManager({
+        dataDir: dir,
+        containerDir: join(dir, "container-files"),
+        command: stub.run,
+      }),
   });
-
-  try {
-    return await withTempSettings(TEST_SETTINGS, async (settings) => {
-      const store = createStore(":memory:");
-      const { server } = startServer({
-        config: {
-          host: "127.0.0.1",
-          port: 0,
-          configDir: dir,
-          configPath: join(dir, "config.json"),
-          dataDir: dir,
-          dbPath: ":memory:",
-          engine: "mock",
-          isDevelopment: false,
-        },
-        store,
-        engine: createMockEngine({ chunkSize: 10_000, delayMs: 0 }),
-        compaction: createCompactionStub(store),
-        settings,
-        mcp: createMcpStub(),
-        container,
-        handover: createHandover(),
-      });
-
-      try {
-        return await run({ request: (path, init) => fetch(new URL(path, server.url), init) });
-      } finally {
-        await server.stop(true);
-      }
-    });
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
 }
 
 async function readStatus(response: Response): Promise<ContainerStatusView> {

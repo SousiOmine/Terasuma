@@ -11,14 +11,7 @@ import type { CatalogProviderView, ProviderCredentials, ProviderView } from "../
 import * as api from "../api";
 import { toErrorState, type ErrorState } from "../errors";
 import { t } from "../i18n";
-import {
-  addProvider,
-  catalogProviders,
-  loadCatalog,
-  modelSettings,
-  providers,
-  updateProvider,
-} from "../modelSettings";
+import { addProvider, catalogProviders, loadCatalog, modelSettings, providers, updateProvider } from "../modelSettings";
 import { Button } from "./Button";
 import { ErrorNotice } from "./ErrorNotice";
 import { Field } from "./Field";
@@ -34,9 +27,7 @@ export type ProviderWizardProps = {
 };
 
 /** 追加・変更の対象。カタログのプロバイダか、接続先を自分で決めるエンドポイントか。 */
-type Target =
-  | { kind: "catalog"; id: string; name: string }
-  | { kind: "endpoint"; preset: EndpointPreset; id: string };
+type Target = { kind: "catalog"; id: string; name: string } | { kind: "endpoint"; preset: EndpointPreset; id: string };
 
 const ADD_STEPS = [
   { key: "settings.wizard.step.choose" },
@@ -60,7 +51,7 @@ export function ProviderWizard({ mode, onClose }: ProviderWizardProps) {
 
   const [target, setTarget] = useState<Target | null>(() => (mode.kind === "edit" ? targetOf(mode.provider) : null));
   const [apiKey, setApiKey] = useState("");
-  const [baseUrl, setBaseUrl] = useState(() => (editing ? mode.provider.baseUrl ?? "" : ""));
+  const [baseUrl, setBaseUrl] = useState(() => (editing ? (mode.provider.baseUrl ?? "") : ""));
   const [label, setLabel] = useState(() => (editing && isEndpoint(mode.provider) ? mode.provider.name : ""));
   const [revealKey, setRevealKey] = useState(false);
   const [models, setModels] = useState<readonly string[] | null>(null);
@@ -260,9 +251,7 @@ export function ProviderWizard({ mode, onClose }: ProviderWizardProps) {
           </Field>
 
           {target.kind === "catalog" && (
-            <p class="pt-1 text-xs text-neutral-500 dark:text-neutral-400">
-              {t("settings.wizard.catalogHint")}
-            </p>
+            <p class="pt-1 text-xs text-neutral-500 dark:text-neutral-400">{t("settings.wizard.catalogHint")}</p>
           )}
 
           {error !== null && (
@@ -385,9 +374,7 @@ function ProviderChooser({
 
       <div class="max-h-80 overflow-y-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
         {list === null ? (
-          <p class="px-3 py-4 text-center text-xs text-neutral-500 dark:text-neutral-400">
-            {t("chat.loading")}
-          </p>
+          <p class="px-3 py-4 text-center text-xs text-neutral-500 dark:text-neutral-400">{t("chat.loading")}</p>
         ) : visible.length === 0 ? (
           <p class="px-3 py-4 text-center text-xs text-neutral-500 dark:text-neutral-400">
             {t("settings.wizard.noMatch")}
@@ -517,15 +504,7 @@ function StepIndicator({ current }: { current: "choose" | "connect" | "model" })
 }
 
 /** 表示の切り替えができる API キーの入力欄。 */
-function ApiKeyInput({
-  value,
-  reveal,
-  onInput,
-}: {
-  value: string;
-  reveal: boolean;
-  onInput: (value: string) => void;
-}) {
+function ApiKeyInput({ value, reveal, onInput }: { value: string; reveal: boolean; onInput: (value: string) => void }) {
   const common = {
     value,
     autocomplete: "off",

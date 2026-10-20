@@ -41,7 +41,8 @@ export function ModelPickerDialog({ onClose }: ModelPickerDialogProps) {
   };
 
   const load = async (providerId: string) => {
-    const request = (requestRef.current += 1);
+    const request = requestRef.current + 1;
+    requestRef.current = request;
     setLoading(true);
     setError(null);
     setModels(null);
@@ -122,11 +123,7 @@ export function ModelPickerDialog({ onClose }: ModelPickerDialogProps) {
           <ErrorNotice
             error={error}
             action={
-              <button
-                type="button"
-                onClick={() => void load(activeId)}
-                class="shrink-0 text-xs underline"
-              >
+              <button type="button" onClick={() => void load(activeId)} class="shrink-0 text-xs underline">
                 {t("settings.wizard.retry")}
               </button>
             }

@@ -173,7 +173,9 @@ describe("providers の検証", () => {
   test("独自エンドポイントは baseUrl と label を持てる", () => {
     withConfigFile(
       JSON.stringify({
-        providers: { "custom-1": { baseUrl: "https://gateway.example.test/v1/", label: "社内ゲートウェイ", apiKey: "x" } },
+        providers: {
+          "custom-1": { baseUrl: "https://gateway.example.test/v1/", label: "社内ゲートウェイ", apiKey: "x" },
+        },
       }),
       (env) => {
         const settings = toModelSettings(readSettingsFile(loadConfig(env).configPath));
@@ -268,8 +270,12 @@ describe("mcpServers の検証", () => {
   });
 
   test("type と食い違う項目は止める", () => {
-    expect(() => read({ local: { type: "stdio", command: "bunx", url: "http://127.0.0.1/mcp" } })).toThrow(/http のサーバー/);
-    expect(() => read({ remote: { type: "http", url: "http://127.0.0.1/mcp", command: "bunx" } })).toThrow(/stdio のサーバー/);
+    expect(() => read({ local: { type: "stdio", command: "bunx", url: "http://127.0.0.1/mcp" } })).toThrow(
+      /http のサーバー/,
+    );
+    expect(() => read({ remote: { type: "http", url: "http://127.0.0.1/mcp", command: "bunx" } })).toThrow(
+      /stdio のサーバー/,
+    );
     expect(() => read({ remote: { type: "sse", url: "http://127.0.0.1/mcp" } })).toThrow(/"stdio" か "http"/);
   });
 
@@ -332,7 +338,10 @@ describe("MCP サーバーの入力の検証", () => {
     expect(() => mcpServerSettingsFromForm({ ...base, type: "stdio" }, "mcpServers.x")).toThrow(/command/);
     expect(() => mcpServerSettingsFromForm({ ...base, type: "http" }, "mcpServers.x")).toThrow(/url/);
     expect(() =>
-      mcpServerSettingsFromForm({ ...base, type: "stdio", command: "bunx", url: "http://127.0.0.1/mcp" }, "mcpServers.x"),
+      mcpServerSettingsFromForm(
+        { ...base, type: "stdio", command: "bunx", url: "http://127.0.0.1/mcp" },
+        "mcpServers.x",
+      ),
     ).toThrow(/http のサーバー/);
     expect(() =>
       mcpServerSettingsFromForm({ ...base, type: "http", url: "http://127.0.0.1/mcp", args: ["-y"] }, "mcpServers.x"),
@@ -340,7 +349,8 @@ describe("MCP サーバーの入力の検証", () => {
   });
 });
 
-describe("writeSettingsFile", () => {  test("書いた内容をそのまま読み直せる", () => {
+describe("writeSettingsFile", () => {
+  test("書いた内容をそのまま読み直せる", () => {
     withConfigFile(null, (_env, dir) => {
       const path = join(dir, CONFIG_FILE_NAME);
       writeSettingsFile(path, { model: "openai/gpt-5.6-sol", port: 4567, engine: "mock" });

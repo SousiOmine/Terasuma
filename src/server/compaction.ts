@@ -125,10 +125,13 @@ export function createCompaction(options: CreateCompactionOptions): Compaction {
     const at = last.createdAt + IDLE_MS;
     timers.set(
       teraId,
-      setTimeout(() => {
-        timers.delete(teraId);
-        void update(teraId, { force: true });
-      }, Math.max(0, at - now())),
+      setTimeout(
+        () => {
+          timers.delete(teraId);
+          void update(teraId, { force: true });
+        },
+        Math.max(0, at - now()),
+      ),
     );
   }
 
@@ -245,10 +248,9 @@ export function createCompaction(options: CreateCompactionOptions): Compaction {
   }
 
   async function summarizePrefix(messages: readonly ChatMessage[], signal: AbortSignal): Promise<string> {
-    const prompt = [
-      `<conversation>\n${serializeConversation(messages)}\n</conversation>`,
-      TURN_PREFIX_PROMPT,
-    ].join("\n\n");
+    const prompt = [`<conversation>\n${serializeConversation(messages)}\n</conversation>`, TURN_PREFIX_PROMPT].join(
+      "\n\n",
+    );
     return summarize(prompt, PREFIX_MAX_TOKENS, signal);
   }
 

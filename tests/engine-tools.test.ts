@@ -314,7 +314,8 @@ describe("MCP のツール呼び出し（AI SDK 経由）", () => {
 
     try {
       const events = await run({ toolset: async () => ({}) }, settingsFor(portOf(fake.server)), {
-        toolset: async () => createComputerTools({ container, images: createImageStub(), handover: createHandover(), teraId: "t1" }),
+        toolset: async () =>
+          createComputerTools({ container, images: createImageStub(), handover: createHandover(), teraId: "t1" }),
       });
 
       // MCP と同じ名前空間（"<ツールセット名>_<ツール名>"）でモデルへ渡る。

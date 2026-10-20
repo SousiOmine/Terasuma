@@ -1,26 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import type { AppConfig } from "../src/config";
 import type { AgentEngine, EngineInput, EngineStream } from "../src/server/engine";
 import { createMockEngine } from "../src/server/engine";
-import { parseCatalog, type Catalog } from "../src/server/models-dev";
-import { createHandover } from "../src/server/handover";
-import { startServer } from "../src/server/server";
-import { createStore, DEFAULT_TERA_ID } from "../src/server/store";
+import type { Catalog } from "../src/server/models-dev";
+import { parseCatalog } from "../src/server/models-dev";
+import { DEFAULT_TERA_ID, createStore } from "../src/server/store";
 import type { Store } from "../src/server/store";
 import { decodeChatEvents } from "../src/shared/sse";
 import type { ApiErrorCode, ChatEvent, ChatMessage, Tera } from "../src/shared/types";
-import { TEST_SETTINGS, createCompactionStub, createContainerStub, createMcpStub, withTempSettings } from "./support";
-
-const config: AppConfig = {
-  host: "127.0.0.1",
-  port: 0, // 空きポートを OS に選ばせる
-  configDir: ".",
-  configPath: "./config.json",
-  dataDir: ".",
-  dbPath: ":memory:",
-  engine: "mock",
-  isDevelopment: false,
-};
+import { fastMock, withServer as withTestServer } from "./harness";
 
 /** テスト用のカタログ。TEST_SETTINGS の deepseek を解決できるようにする。 */
 function testCatalog(): Catalog {
@@ -40,9 +27,6 @@ function testCatalog(): Catalog {
 }
 
 /** モックの全文生成が目的なので、待ち時間ゼロで一気に流す。 */
-function fastMock() {
-  return createMockEngine({ chunkSize: 10_000, delayMs: 0 });
-}
 
 type Harness = {
   store: Store;
@@ -65,56 +49,39 @@ async function withServer<T>(
    */
   makeStore: () => Store = () => createStore(":memory:"),
 ): Promise<T> {
-  return withTempSettings(TEST_SETTINGS, async (settings) => {
-    const store = makeStore();
-    const compaction = createCompactionStub(store);
-    const { server } = startServer({
-      config,
-      store,
-      engine,
-      compaction,
-      settings,
-      mcp: createMcpStub(),
-      container: createContainerStub(),
-      handover: createHandover(),
-      catalog: testCatalog(),
-    });
-    const base = server.url;
+  const store = makeStore();
 
-    const request = (path: string, init?: RequestInit) => fetch(new URL(path, base), init);
+  return withTestServer(
+    async ({ request }) => {
+      const harness: Harness = {
+        store,
+        request,
+        async send(teraId, content) {
+          const response = await request(`/api/teras/${teraId}/messages`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ content, language: "ja" }),
+          });
+          expect(response.status, "送信が失敗した").toBe(200);
 
-    const harness: Harness = {
-      store,
-      request,
-      async send(teraId, content) {
-        const response = await request(`/api/teras/${teraId}/messages`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ content, language: "ja" }),
-        });
-        expect(response.status, "送信が失敗した").toBe(200);
+          const decoded = decodeChatEvents(await response.text());
+          expect(decoded.rest).toBe("");
+          return decoded.events;
+        },
+        async teras() {
+          const response = await request("/api/teras");
+          return ((await response.json()) as { teras: Tera[] }).teras;
+        },
+        async messages(teraId) {
+          const response = await request(`/api/teras/${teraId}/messages`);
+          return ((await response.json()) as { messages: ChatMessage[] }).messages;
+        },
+      };
 
-        const decoded = decodeChatEvents(await response.text());
-        expect(decoded.rest).toBe("");
-        return decoded.events;
-      },
-      async teras() {
-        const response = await request("/api/teras");
-        return ((await response.json()) as { teras: Tera[] }).teras;
-      },
-      async messages(teraId) {
-        const response = await request(`/api/teras/${teraId}/messages`);
-        return ((await response.json()) as { messages: ChatMessage[] }).messages;
-      },
-    };
-
-    try {
-      return await run(harness);
-    } finally {
-      await server.stop(true);
-      compaction.close();
-    }
-  });
+      return run(harness);
+    },
+    { engine, store, catalog: testCatalog() },
+  );
 }
 
 function joinedDeltas(events: ChatEvent[]): string {
@@ -252,9 +219,7 @@ describe("チャット API", () => {
       await harness.send("second", "2 体目の Tera へ");
 
       const userMessagesOf = async (teraId: string) =>
-        (await harness.messages(teraId))
-          .filter((message) => message.role === "user")
-          .map((message) => message.content);
+        (await harness.messages(teraId)).filter((message) => message.role === "user").map((message) => message.content);
 
       expect(await userMessagesOf(DEFAULT_TERA_ID)).toEqual(["既定の Tera へ"]);
       expect(await userMessagesOf("second")).toEqual(["2 体目の Tera へ"]);
@@ -282,7 +247,9 @@ describe("チャット API", () => {
       if (first === undefined || second === undefined) throw new Error("入力が記録されていない");
 
       expect(second.context.messages.slice(0, first.context.messages.length)).toEqual([...first.context.messages]);
-      expect(JSON.stringify(second.context.messages).startsWith(JSON.stringify(first.context.messages).slice(0, -1))).toBe(true);
+      expect(
+        JSON.stringify(second.context.messages).startsWith(JSON.stringify(first.context.messages).slice(0, -1)),
+      ).toBe(true);
     });
   });
 
