@@ -1,6 +1,6 @@
 import { Database } from "bun:sqlite";
-import { isMessagePart } from "../../shared/chat-event";
-import type { ChatMessage, MessagePart, MessageRole, Tera, TokenUsage } from "../../shared/types";
+import { isChatAttachment, isMessagePart } from "../../shared/chat-event";
+import type { ChatAttachment, ChatMessage, MessagePart, MessageRole, Tera, TokenUsage } from "../../shared/types";
 
 /**
  * 既定の Tera。起動時に 1 体だけ用意する。
@@ -13,7 +13,10 @@ export type AppendMessageInput = {
   id: string;
   teraId: string;
   role: MessageRole;
+  /** 画面に出す本文。 */
   content: string;
+  /** 画面に出す添付ファイル。無ければ null。 */
+  attachments?: ChatAttachment[] | null;
   /** ツール呼び出しを含むときだけ渡す。含まないメッセージは null。 */
   parts?: MessagePart[] | null;
   usage?: TokenUsage | null;
@@ -63,6 +66,7 @@ type MessageRow = {
   seq: number;
   role: string;
   content: string;
+  attachments: string | null;
   parts: string | null;
   created_at: number;
   input_tokens: number | null;
@@ -90,10 +94,22 @@ function toMessage(row: MessageRow): ChatMessage {
     seq: row.seq,
     role: row.role as MessageRole,
     content: row.content,
+    attachments: readAttachments(row),
     parts: readParts(row),
     createdAt: row.created_at,
     usage,
   };
+}
+
+/** 画面に出す添付ファイルを読み戻す。読めない値は黙って捨てず、そのまま失敗させる。 */
+function readAttachments(row: MessageRow): ChatAttachment[] | null {
+  if (row.attachments === null) return null;
+
+  const parsed: unknown = JSON.parse(row.attachments);
+  if (!Array.isArray(parsed) || !parsed.every(isChatAttachment)) {
+    throw new Error(`メッセージ ${row.id} の attachments は添付ファイルの配列ではありません`);
+  }
+  return parsed;
 }
 
 /** 保存されている部分を読み戻す。読めない値は黙って捨てず、そのまま失敗させる。 */
@@ -136,6 +152,7 @@ export function createStore(dbPath: string, options: CreateStoreOptions = {}): S
       seq                 INTEGER NOT NULL,
       role                TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
       content             TEXT NOT NULL,
+      attachments         TEXT,
       parts               TEXT,
       created_at          INTEGER NOT NULL,
       input_tokens        INTEGER,
@@ -168,20 +185,32 @@ export function createStore(dbPath: string, options: CreateStoreOptions = {}): S
   const touchTera = db.query<unknown, [number, string]>("UPDATE teras SET updated_at = ? WHERE id = ?");
 
   const selectMessages = db.query<MessageRow, [string]>(
-    `SELECT id, tera_id, seq, role, content, parts, created_at, input_tokens, output_tokens, cached_input_tokens
+    `SELECT id, tera_id, seq, role, content, attachments, parts, created_at, input_tokens, output_tokens, cached_input_tokens
      FROM messages WHERE tera_id = ? ORDER BY seq ASC`,
   );
   const selectMessagesSince = db.query<MessageRow, [string, number]>(
-    `SELECT id, tera_id, seq, role, content, parts, created_at, input_tokens, output_tokens, cached_input_tokens
+    `SELECT id, tera_id, seq, role, content, attachments, parts, created_at, input_tokens, output_tokens, cached_input_tokens
      FROM messages WHERE tera_id = ? AND seq > ? ORDER BY seq ASC`,
   );
   const insertMessage = db.query<
     { seq: number },
-    [string, string, string, string, string, string | null, number, number | null, number | null, number | null]
+    [
+      string,
+      string,
+      string,
+      string,
+      string,
+      string | null,
+      string | null,
+      number,
+      number | null,
+      number | null,
+      number | null,
+    ]
   >(
     `INSERT INTO messages
-       (id, tera_id, seq, role, content, parts, created_at, input_tokens, output_tokens, cached_input_tokens)
-     VALUES (?, ?, (SELECT COALESCE(MAX(seq), 0) + 1 FROM messages WHERE tera_id = ?), ?, ?, ?, ?, ?, ?, ?)
+       (id, tera_id, seq, role, content, attachments, parts, created_at, input_tokens, output_tokens, cached_input_tokens)
+     VALUES (?, ?, (SELECT COALESCE(MAX(seq), 0) + 1 FROM messages WHERE tera_id = ?), ?, ?, ?, ?, ?, ?, ?, ?)
      RETURNING seq`,
   );
 
@@ -201,6 +230,7 @@ export function createStore(dbPath: string, options: CreateStoreOptions = {}): S
   const append = db.transaction((input: AppendMessageInput): ChatMessage => {
     const at = now();
     const parts = input.parts ?? null;
+    const attachments = input.attachments ?? null;
 
     // 連番は INSERT の中で決める（読み出してから書くまでの往復を減らす）。
     const inserted = insertMessage.get(
@@ -209,6 +239,7 @@ export function createStore(dbPath: string, options: CreateStoreOptions = {}): S
       input.teraId,
       input.role,
       input.content,
+      attachments === null ? null : JSON.stringify(attachments),
       parts === null ? null : JSON.stringify(parts),
       at,
       input.usage?.inputTokens ?? null,
@@ -225,6 +256,7 @@ export function createStore(dbPath: string, options: CreateStoreOptions = {}): S
       seq,
       role: input.role,
       content: input.content,
+      attachments,
       parts,
       createdAt: at,
       usage: input.usage ?? null,
@@ -289,7 +321,7 @@ export function createStore(dbPath: string, options: CreateStoreOptions = {}): S
 }
 
 /** いまの保存の形の版。形を変えたら上げ、migrateSchema に移行を足す。 */
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 
 /**
  * 保存の形を、いまの版に合わせる。
@@ -297,10 +329,26 @@ const SCHEMA_VERSION = 1;
  */
 function migrateSchema(db: Database): void {
   const row = db.query<{ user_version: number }, []>("PRAGMA user_version").get();
-  if ((row?.user_version ?? 0) >= SCHEMA_VERSION) return;
+  const version = row?.user_version ?? 0;
+  if (version >= SCHEMA_VERSION) return;
 
   dropLegacyTables(db);
+  ensureMessageColumns(db);
   db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
+}
+
+/**
+ * メッセージの列を、いまの形に合わせる。
+ * attachments は v2 で増えた。既存のメッセージには添付の記録が無いので、null のままにする。
+ */
+function ensureMessageColumns(db: Database): void {
+  const columns = db.query<{ name: string }, []>("PRAGMA table_info(messages)").all();
+  if (columns.length === 0) return;
+
+  const names = new Set(columns.map((column) => column.name));
+  if (!names.has("attachments")) {
+    db.exec("ALTER TABLE messages ADD COLUMN attachments TEXT");
+  }
 }
 
 /**

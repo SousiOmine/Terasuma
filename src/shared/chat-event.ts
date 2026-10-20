@@ -1,5 +1,5 @@
 import { API_ERROR_CODES } from "./types";
-import type { ChatEvent, ChatMessage, ImageRef, MessagePart, TokenUsage } from "./types";
+import type { ChatAttachment, ChatEvent, ChatMessage, ImageRef, MessagePart, TokenUsage } from "./types";
 
 /**
  * 通信と保存データの形を、実行時に確かめる。
@@ -31,6 +31,11 @@ function isImageRef(value: unknown): value is ImageRef {
   return (
     isRecord(value) && isString(value.sha256) && isString(value.mime) && isNumber(value.width) && isNumber(value.height)
   );
+}
+
+/** 画面に出す添付ファイル 1 件。 */
+export function isChatAttachment(value: unknown): value is ChatAttachment {
+  return isRecord(value) && isString(value.name) && isNumber(value.size) && isString(value.path);
 }
 
 /** 保存・送信されるメッセージの部品 1 つ。 */
@@ -66,6 +71,7 @@ export function isChatMessage(value: unknown): value is ChatMessage {
     isNumber(value.seq) &&
     (value.role === "user" || value.role === "assistant") &&
     isString(value.content) &&
+    (value.attachments === null || (Array.isArray(value.attachments) && value.attachments.every(isChatAttachment))) &&
     (value.parts === null || (Array.isArray(value.parts) && value.parts.every(isMessagePart))) &&
     isNumber(value.createdAt) &&
     (value.usage === null || isUsage(value.usage))

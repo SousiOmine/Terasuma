@@ -14,6 +14,7 @@ import { toolResultTakesImages } from "../provider/kinds";
 import { reasoningProviderOptions } from "../provider/reasoning";
 import { type ResolvedModel, resolveModel } from "../provider/routing";
 import { imagesMessage, SYSTEM_PROMPT, toModelMessages, type PendingImages, type TeraContext } from "./prompt";
+import { userContentForModel } from "./model-content";
 import { readStoredImages, readToolOutput, toolResultOutput } from "./tool-output";
 import { describeError } from "../../shared/errors";
 import { splitToolName } from "../../shared/tools";
@@ -441,7 +442,10 @@ export function createMockEngine(options: { chunkSize?: number; delayMs?: number
 
       // 数値は文字数から作った当てずっぽう。実際のキャッシュの値ではない。
       const usage: TokenUsage = {
-        inputTokens: context.messages.reduce((total, message) => total + message.content.length, 0),
+        inputTokens: context.messages.reduce(
+          (total, message) => total + (message.role === "user" ? userContentForModel(message) : message.content).length,
+          0,
+        ),
         outputTokens: reply.length,
         cachedInputTokens: 0,
       };

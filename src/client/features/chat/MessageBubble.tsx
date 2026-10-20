@@ -1,21 +1,41 @@
-import type { MessageRole } from "../../../shared/types";
+import { formatBytes } from "../../../shared/attachments";
+import type { ChatAttachment, MessageRole } from "../../../shared/types";
 import { t } from "../../i18n";
 
 export type MessageBubbleProps = {
   /** 発言者。user か assistant。 */
   author: MessageRole;
-  /** 本文。ツールの呼び出しと結果は画面に出さないので、本文だけで足りる。 */
+  /** 画面に出す本文。 */
   content: string;
+  /** 画面に出す添付ファイル。 */
+  attachments?: readonly ChatAttachment[] | null;
   /** 生成中かどうか。true の間は、本文の下に小さく「作業中…」を出す。 */
   working?: boolean;
 };
 
-export function MessageBubble({ author, content, working = false }: MessageBubbleProps) {
+export function MessageBubble({ author, content, attachments = null, working = false }: MessageBubbleProps) {
   if (author === "user") {
+    const files = attachments ?? [];
+    // 本文も添付も無い発言は、空の枠を残さない。
+    if (content.length === 0 && files.length === 0) return null;
+
     return (
       <div class="flex justify-end">
-        <div class="max-w-[85%] rounded-2xl rounded-br-sm bg-neutral-900 px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap break-words text-white dark:bg-neutral-100 dark:text-neutral-900">
-          {content}
+        <div class="max-w-[85%] rounded-2xl rounded-br-sm bg-neutral-900 px-4 py-2.5 text-sm leading-relaxed text-white dark:bg-neutral-100 dark:text-neutral-900">
+          {content.length > 0 && <div class="whitespace-pre-wrap break-words">{content}</div>}
+          {files.length > 0 && (
+            <div class={`flex flex-wrap gap-1.5 ${content.length > 0 ? "mt-2" : ""}`}>
+              {files.map((file, index) => (
+                <span
+                  key={`${file.name}-${file.size}-${index}`}
+                  class="inline-flex max-w-full items-center gap-1.5 rounded-md bg-white/15 px-2 py-1 text-xs dark:bg-black/10"
+                >
+                  <span class="max-w-[220px] truncate">{file.name}</span>
+                  <span class="shrink-0 opacity-70">{formatBytes(file.size)}</span>
+                </span>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     );

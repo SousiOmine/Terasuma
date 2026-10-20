@@ -1,7 +1,10 @@
 import { describeError } from "../../shared/errors";
 import { isProviderId } from "../../shared/ids";
+import { isReplyLanguage, type ReplyLanguage } from "../../shared/language";
 import { isModelId, type ModelId } from "../../shared/model";
 import type { McpServerForm, ProviderCredentials } from "../../shared/types";
+import type { UploadFile } from "../computer/uploads";
+import { readUploadedFiles } from "../computer/uploads";
 import { mcpServerSettingsFromForm, parseProviderCredentials } from "../data/settings-form";
 import type { McpServerSettings, ProviderSettings } from "../data/settings-schema";
 import { ValidationError } from "../errors";
@@ -12,6 +15,45 @@ import { ValidationError } from "../errors";
  * 形が違えば ValidationError を投げる。応答への変換は http/respond.ts が行うので、
  * ここは「読めなかった理由」だけを返す。
  */
+
+/**
+ * チャットの送信本文。multipart/form-data で受ける。
+ * 本文と返事の言語は文字列、添付ファイルは "files" の部品として並ぶ。
+ */
+export type TurnForm = {
+  content: string;
+  language: ReplyLanguage;
+  files: readonly UploadFile[];
+};
+
+/**
+ * 送信の multipart を読み、検証した形にする。
+ * JSON は受け付けない（ファイルの有無で経路を分けると、片方だけ直し忘れるため）。
+ */
+export async function readTurnForm(req: { formData(): Promise<FormData> }): Promise<TurnForm> {
+  let form: FormData;
+  try {
+    form = await req.formData();
+  } catch (error) {
+    throw new ValidationError(`multipart/form-data として読めませんでした: ${describeError(error)}`);
+  }
+
+  const rawContent = form.get("content");
+  if (rawContent !== null && typeof rawContent !== "string") {
+    throw new ValidationError("content must be a string");
+  }
+
+  const language = form.get("language");
+  if (!isReplyLanguage(language)) {
+    throw new ValidationError('language must be "ja" or "en"');
+  }
+
+  return {
+    content: rawContent?.trim() ?? "",
+    language,
+    files: await readUploadedFiles(form),
+  };
+}
 
 /**
  * 画面から来た MCP サーバーの入力を、保存できる形にする。

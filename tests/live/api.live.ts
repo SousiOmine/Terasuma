@@ -122,11 +122,12 @@ test(
       // 1 件あたり 1,000 トークンほど（半角 4 文字で 1 トークン）の履歴を 60 件置く。
       // 画面から作ると 30 往復かかるので、履歴は直に置く（最後はアシスタントの発言にして、畳める形にする）。
       for (let index = 1; index <= 60; index += 1) {
+        const content = `記録 ${index}: ${"terasuma compaction check ".repeat(150)}`;
         harness.store.appendMessage({
           id: `seed-${index}`,
           teraId: DEFAULT_TERA_ID,
           role: index % 2 === 1 ? "user" : "assistant",
-          content: `記録 ${index}: ${"terasuma compaction check ".repeat(150)}`,
+          content,
         });
       }
 

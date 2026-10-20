@@ -58,6 +58,19 @@ export type ImageRef = {
   height: number;
 };
 
+/**
+ * 画面に出す添付ファイル。
+ * name と size は画面用。path はモデル向けの案内にだけ使い、画面は参照しない。
+ */
+export type ChatAttachment = {
+  /** 画面に出す名前。 */
+  name: string;
+  /** バイト数。 */
+  size: number;
+  /** コンテナの中の絶対パス。モデルへ渡す案内にだけ使う。 */
+  path: string;
+};
+
 export type ChatMessage = {
   id: string;
   /** このメッセージを持つ Tera。 */
@@ -65,8 +78,13 @@ export type ChatMessage = {
   /** Tera の中の連番。1 から始まり、履歴の並び順を確定させる。 */
   seq: number;
   role: MessageRole;
-  /** 本文（parts があるときは text 部分を連結したもの）。 */
+  /** 画面に出す本文。 */
   content: string;
+  /**
+   * 画面に出す添付ファイル。無ければ null。
+   * モデルへは、content とこの配列から案内を組み立てて渡す。
+   */
+  attachments: ChatAttachment[] | null;
   /**
    * ツール呼び出しを含むメッセージだけが持つ。含まないメッセージでは null。
    * 画面には出さず、モデルへ渡す履歴にだけ使う。

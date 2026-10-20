@@ -14,6 +14,14 @@ import { DEFAULT_TERA_ID } from "../src/server/data/store";
 import type { ModelSettingsView, ProviderCheckResult, ProviderView, ReasoningView } from "../src/shared/types";
 import { withServer } from "./harness";
 
+/** チャットの送信は multipart で受ける。 */
+function turnRequest(content: string, language = "ja"): RequestInit {
+  const form = new FormData();
+  form.append("content", content);
+  form.append("language", language);
+  return { method: "POST", body: form };
+}
+
 /** テストで使うカタログの中身。deepseek はカタログのプロバイダ、custom-1 は独自エンドポイント。 */
 const CATALOG_RAW = {
   deepseek: {
@@ -726,10 +734,7 @@ describe("思考強度", () => {
 describe("チャットとモデル設定の関係", () => {
   test("モデルが未設定なら、送信はターンを始めずに断る", async () => {
     await withModelServer({ providers: { deepseek: { apiKey: "sk-1" } } }, async (harness) => {
-      const response = await harness.request(
-        `/api/teras/${DEFAULT_TERA_ID}/messages`,
-        jsonRequest("POST", { content: "こんにちは", language: "ja" }),
-      );
+      const response = await harness.request(`/api/teras/${DEFAULT_TERA_ID}/messages`, turnRequest("こんにちは"));
 
       expect(response.status).toBe(400);
       const body = (await response.json()) as { code: string; detail: string };
@@ -750,10 +755,7 @@ describe("チャットとモデル設定の関係", () => {
     await withModelServer(
       { model: "deepseek/deepseek-flash", providers: { deepseek: { apiKey: "sk-1" } } },
       async (harness) => {
-        const response = await harness.request(
-          `/api/teras/${DEFAULT_TERA_ID}/messages`,
-          jsonRequest("POST", { content: "こんにちは", language: "ja" }),
-        );
+        const response = await harness.request(`/api/teras/${DEFAULT_TERA_ID}/messages`, turnRequest("こんにちは"));
 
         expect(response.status).toBe(200);
         expect(await response.text()).toContain("user-message");

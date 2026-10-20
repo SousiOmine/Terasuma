@@ -54,17 +54,25 @@ export async function listMessages(teraId: string): Promise<readonly ChatMessage
 
 /**
  * 1 ターン分のイベントを SSE として受け取る。
+ * 本文とファイルは multipart/form-data で送る。ファイルはサーバがコンテナへ置き、
+ * そのパスをユーザー発言の後ろに添えてモデルへ渡す。
  * 途中で AbortSignal が立った場合は、例外にせずそのまま終了する（利用者の「停止」操作）。
  */
 export async function* streamTurn(
   teraId: string,
   content: string,
   language: ReplyLanguage,
+  files: readonly File[],
   signal: AbortSignal,
 ): AsyncGenerator<ChatEvent> {
+  const form = new FormData();
+  form.append("content", content);
+  form.append("language", language);
+  for (const file of files) form.append("files", file, file.name);
+
   let response: Response;
   try {
-    response = await fetchOrThrow(messagesPath(teraId), jsonRequest("POST", { content, language }, signal));
+    response = await fetchOrThrow(messagesPath(teraId), { method: "POST", body: form, signal });
   } catch (error) {
     // 利用者の「停止」は失敗ではないので、そのまま終わる。
     if (signal.aborted) return;

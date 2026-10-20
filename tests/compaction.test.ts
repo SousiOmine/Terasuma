@@ -29,11 +29,12 @@ function body(tokens: number, label: string): string {
 function seed(store: Store, tokensEach: number, count: number): number {
   let at = 0;
   for (let index = 1; index <= count; index += 1) {
+    const content = body(tokensEach, `m${index}`);
     const message = store.appendMessage({
       id: `m${index}`,
       teraId: DEFAULT_TERA_ID,
       role: index % 2 === 1 ? "user" : "assistant",
-      content: body(tokensEach, `m${index}`),
+      content,
     });
     at = message.createdAt;
   }
@@ -44,11 +45,12 @@ function seed(store: Store, tokensEach: number, count: number): number {
 function seedMessages(store: Store, plan: readonly (readonly [role: "user" | "assistant", tokens: number])[]): number {
   let at = 0;
   for (const [index, [role, tokens]] of plan.entries()) {
+    const content = body(tokens, `p${index + 1}`);
     const message = store.appendMessage({
       id: `p${index + 1}`,
       teraId: DEFAULT_TERA_ID,
       role,
-      content: body(tokens, `p${index + 1}`),
+      content,
     });
     at = message.createdAt;
   }
@@ -384,7 +386,12 @@ describe("要約の作り方", () => {
         },
       ],
     });
-    store.appendMessage({ id: "u2", teraId: DEFAULT_TERA_ID, role: "user", content: body(15_000, "u2") });
+    store.appendMessage({
+      id: "u2",
+      teraId: DEFAULT_TERA_ID,
+      role: "user",
+      content: body(15_000, "u2"),
+    });
 
     const fake = createEngine(() => SUMMARY);
     // p1・p2 を畳む。直近（p3）は生のまま残る。
@@ -555,6 +562,7 @@ describe("トークンの目安", () => {
       seq: 1,
       role: "assistant",
       content: "abcd",
+      attachments: null,
       parts: [
         { type: "text", text: "abcd" }, // 1
         { type: "tool-call", id: "call-1", server: "local", tool: "echo", args: "abcd" }, // """abcd""" で 2

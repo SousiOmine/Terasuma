@@ -39,6 +39,11 @@ export const en = {
   "composer.placeholder": "Send a message",
   "composer.send": "Send",
   "composer.stop": "Stop",
+  "composer.attach": "Attach files",
+  "composer.attach.remove": "Remove {name}",
+  "composer.attach.tooMany": "You can attach up to {max} files.",
+  "composer.attach.tooLarge": "Each file must be {max} or smaller.",
+  "composer.attach.totalTooLarge": "The attachments must total {max} or less.",
 
   "settings.title": "Settings",
   "settings.back": "Back to chat",

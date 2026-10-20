@@ -38,6 +38,11 @@ export const ja: Record<MessageKey, string> = {
   "composer.placeholder": "メッセージを入力",
   "composer.send": "送信",
   "composer.stop": "停止",
+  "composer.attach": "ファイルを添付",
+  "composer.attach.remove": "{name} を外す",
+  "composer.attach.tooMany": "添付できるファイルは {max} 件までです。",
+  "composer.attach.tooLarge": "1 つのファイルは {max} 以下にしてください。",
+  "composer.attach.totalTooLarge": "合計サイズは {max} 以下にしてください。",
 
   "settings.title": "設定",
   "settings.back": "チャットに戻る",

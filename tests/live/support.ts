@@ -126,10 +126,13 @@ export async function withLiveServer(run: (harness: LiveHarness) => Promise<void
       store,
       compaction,
       async send(teraId, content, language = "ja") {
+        const form = new FormData();
+        form.append("content", content);
+        form.append("language", language);
+
         const response = await fetch(new URL(`/api/teras/${teraId}/messages`, base), {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ content, language }),
+          body: form,
         });
         expect(response.status, "送信が失敗した").toBe(200);
 

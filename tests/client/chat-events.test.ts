@@ -13,6 +13,7 @@ const message: ChatMessage = {
   seq: 1,
   role: "assistant",
   content: "こんにちは",
+  attachments: null,
   parts: null,
   createdAt: 1,
   usage: null,

@@ -3,6 +3,7 @@ import type { ReplyLanguage } from "../../shared/language";
 import type { ChatMessage, ImageRef, MessagePart } from "../../shared/types";
 import { toolNameFor } from "../../shared/tools";
 import type { ImageReader } from "../computer/images";
+import { userContentForModel } from "./model-content";
 import { readStoredImages, toolResultOutput, type StoredImages } from "./tool-output";
 
 /**
@@ -91,7 +92,7 @@ export function toModelMessages(
 
   for (const message of context.messages) {
     if (message.role === "user") {
-      messages.push({ role: "user", content: message.content });
+      messages.push({ role: "user", content: userContentForModel(message) });
       continue;
     }
 

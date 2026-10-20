@@ -32,7 +32,15 @@ export function ChatView() {
   // 確定した会話は、増えたときだけ組み立て直す。
   // 生成中の本文が伸びるたびに全メッセージの部品を作り直すと、長い会話ほど重くなる。
   const bubbles = useMemo(
-    () => items.map((message) => <MessageBubble key={message.id} author={message.role} content={message.content} />),
+    () =>
+      items.map((message) => (
+        <MessageBubble
+          key={message.id}
+          author={message.role}
+          content={message.content}
+          attachments={message.attachments}
+        />
+      )),
     [items],
   );
 

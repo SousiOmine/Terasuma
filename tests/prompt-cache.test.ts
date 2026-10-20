@@ -56,6 +56,25 @@ describe("プロンプトキャッシュ保護", () => {
     ]);
   });
 
+  test("添付ファイルの案内は、content と attachments から組み立てる", () => {
+    const store = makeStore();
+    store.appendMessage({
+      id: "m1",
+      teraId: DEFAULT_TERA_ID,
+      role: "user",
+      content: "見て",
+      attachments: [{ name: "notes.txt", size: 5, path: "/home/agent/uploads/x/01-notes.txt" }],
+    });
+
+    const input = buildInput(contextOf(store), createImageStub());
+    const user = input[1];
+    if (user?.role !== "user" || typeof user.content !== "string") throw new Error("ユーザー発言が無い");
+
+    expect(user.content.startsWith("見て\n\n[Attached files]\n")).toBe(true);
+    expect(user.content).toContain("notes.txt: /home/agent/uploads/x/01-notes.txt (5 B)");
+    expect(user.content).toContain("Open them with the read or bash tools.");
+  });
+
   test("同じ履歴からは常に同じ入力が組み立てられる", () => {
     const store = makeStore();
     store.appendMessage({ id: "m1", teraId: DEFAULT_TERA_ID, role: "user", content: "質問" });

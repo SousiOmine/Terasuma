@@ -1,13 +1,17 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentEngine, EngineInput, EngineStream } from "../src/server/agent/engine";
 import { createMockEngine } from "../src/server/agent/engine";
+import { userContentForModel } from "../src/server/agent/model-content";
+import type { ContainerManager } from "../src/server/computer/container";
 import type { Catalog } from "../src/server/provider/catalog";
 import { parseCatalog } from "../src/server/provider/catalog";
 import { DEFAULT_TERA_ID, createStore } from "../src/server/data/store";
 import type { Store } from "../src/server/data/store";
+import { MAX_ATTACHMENTS } from "../src/shared/attachments";
 import { decodeChatEvents } from "../src/shared/sse";
 import type { ApiErrorCode, ChatEvent, ChatMessage, Tera } from "../src/shared/types";
 import { fastMock, withServer as withTestServer } from "./harness";
+import { createContainerStub } from "./support";
 
 /** テスト用のカタログ。TEST_SETTINGS の deepseek を解決できるようにする。 */
 function testCatalog(): Catalog {
@@ -31,9 +35,47 @@ function testCatalog(): Catalog {
 type Harness = {
   store: Store;
   request(path: string, init?: RequestInit): Promise<Response>;
-  send(teraId: string, content: string): Promise<ChatEvent[]>;
+  send(teraId: string, content: string, files?: readonly File[]): Promise<ChatEvent[]>;
   teras(): Promise<Tera[]>;
   messages(teraId: string): Promise<ChatMessage[]>;
+};
+
+/** 送信の multipart を組み立てる。本文と言語、ファイルを 1 つの要求にまとめる。 */
+function messageRequest(
+  content: string,
+  options: { language?: string | null; files?: readonly File[]; signal?: AbortSignal } = {},
+): RequestInit {
+  const language = options.language === undefined ? "ja" : options.language;
+  const form = new FormData();
+  form.append("content", content);
+  if (language !== null) form.append("language", language);
+  for (const file of options.files ?? []) form.append("files", file, file.name);
+
+  return {
+    method: "POST",
+    body: form,
+    ...(options.signal === undefined ? {} : { signal: options.signal }),
+  };
+}
+
+/** 書き込まれたパスと中身を記録する、動いているコンテナの差し替え。 */
+function recordingContainer(): ContainerManager & { writes: { path: string; bytes: Uint8Array }[] } {
+  const writes: { path: string; bytes: Uint8Array }[] = [];
+
+  return {
+    ...createContainerStub({ vncPort: 45_678 }),
+    async writeFile(path, content) {
+      writes.push({ path, bytes: content });
+    },
+    writes,
+  };
+}
+
+type TestServerOptions = {
+  /** 読み出しで失敗するストアなどに差し替える。 */
+  makeStore?: () => Store;
+  /** ファイルの書き込みを確かめるときに差し替える。 */
+  container?: ContainerManager;
 };
 
 /**
@@ -43,25 +85,17 @@ type Harness = {
 async function withServer<T>(
   engine: AgentEngine,
   run: (harness: Harness) => Promise<T>,
-  /**
-   * ストアを差し替える（既定はメモリ上の本物）。
-   * 読み出しで失敗するストアを混ぜて、想定外の例外の返し方を確かめるために使う。
-   */
-  makeStore: () => Store = () => createStore(":memory:"),
+  options: TestServerOptions = {},
 ): Promise<T> {
-  const store = makeStore();
+  const store = options.makeStore?.() ?? createStore(":memory:");
 
   return withTestServer(
     async ({ request }) => {
       const harness: Harness = {
         store,
         request,
-        async send(teraId, content) {
-          const response = await request(`/api/teras/${teraId}/messages`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ content, language: "ja" }),
-          });
+        async send(teraId, content, files = []) {
+          const response = await request(`/api/teras/${teraId}/messages`, messageRequest(content, { files }));
           expect(response.status, "送信が失敗した").toBe(200);
 
           const decoded = decodeChatEvents(await response.text());
@@ -80,7 +114,12 @@ async function withServer<T>(
 
       return run(harness);
     },
-    { engine, store, catalog: testCatalog() },
+    {
+      engine,
+      store,
+      catalog: testCatalog(),
+      ...(options.container === undefined ? {} : { container: options.container }),
+    },
   );
 }
 
@@ -348,11 +387,122 @@ describe("チャット API", () => {
 
   test("空の本文は 400 invalid_request で弾く", async () => {
     await withServer(fastMock(), async (harness) => {
-      const response = await harness.request(`/api/teras/${DEFAULT_TERA_ID}/messages`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: "   ", language: "ja" }),
-      });
+      const response = await harness.request(`/api/teras/${DEFAULT_TERA_ID}/messages`, messageRequest("   "));
+
+      expect(response.status).toBe(400);
+      expect(((await response.json()) as { code: string }).code).toBe("invalid_request");
+    });
+  });
+
+  test("添付したファイルがコンテナに置かれ、UI とモデルで本文を分ける", async () => {
+    const container = recordingContainer();
+
+    await withServer(
+      fastMock(),
+      async (harness) => {
+        const file = new File([new TextEncoder().encode("hello attachment")], "notes.txt", {
+          type: "text/plain",
+        });
+
+        const events = await harness.send(DEFAULT_TERA_ID, "このファイルを見て", [file]);
+
+        expect(events[0]?.type).toBe("user-message");
+        if (events[0]?.type !== "user-message") throw new Error("最初のイベントが user-message ではない");
+
+        const message = events[0].message;
+        expect(message.content).toBe("このファイルを見て");
+        expect(message.content).not.toContain("[Attached files]");
+
+        const attachment = message.attachments?.[0];
+        if (attachment === undefined) throw new Error("添付ファイルが記録されていない");
+        expect(attachment.name).toBe("notes.txt");
+        expect(attachment.size).toBe(file.size);
+        expect(attachment.path).toMatch(/^\/home\/agent\/uploads\/.+\/01-notes\.txt$/);
+
+        const modelText = userContentForModel(message);
+        expect(modelText).toContain("[Attached files]");
+        expect(modelText).toContain("notes.txt");
+        expect(modelText).toContain(attachment.path);
+
+        const write = container.writes[0];
+        if (write === undefined) throw new Error("ファイルが書かれていない");
+        expect(write.path.startsWith("/home/agent/uploads/")).toBe(true);
+        expect(write.path.endsWith("/01-notes.txt")).toBe(true);
+        expect(new TextDecoder().decode(write.bytes)).toBe("hello attachment");
+
+        // 保存された発言にも同じ分離が残り、次のターンでもパスを参照できる。
+        const messages = await harness.messages(DEFAULT_TERA_ID);
+        expect(messages[0]).toEqual(message);
+      },
+      { container },
+    );
+  });
+
+  test("添付ファイルのパスは、モデルへ渡る文脈に入り、画面の本文には入らない", async () => {
+    const recording = createRecordingEngine(fastMock());
+    const container = recordingContainer();
+
+    await withServer(
+      recording,
+      async (harness) => {
+        const file = new File([new TextEncoder().encode("hello")], "context.txt");
+        await harness.send(DEFAULT_TERA_ID, "見て", [file]);
+
+        const input = recording.inputs[0];
+        if (input === undefined) throw new Error("入力が記録されていない");
+
+        const message = input.context.messages[0];
+        if (message === undefined) throw new Error("ユーザー発言が無い");
+        expect(message.content).toBe("見て");
+        expect(message.content).not.toContain("context.txt");
+
+        const attachment = message.attachments?.[0];
+        if (attachment === undefined) throw new Error("添付ファイルが記録されていない");
+        const modelText = userContentForModel(message);
+        expect(modelText).toContain("context.txt");
+        expect(modelText).toContain(attachment.path);
+      },
+      { container },
+    );
+  });
+
+  test("本文が空でもファイルだけを送れる", async () => {
+    const container = recordingContainer();
+
+    await withServer(
+      fastMock(),
+      async (harness) => {
+        const file = new File([new TextEncoder().encode("only")], "only.txt");
+        const events = await harness.send(DEFAULT_TERA_ID, "", [file]);
+
+        expect(events[0]?.type).toBe("user-message");
+        if (events[0]?.type !== "user-message") throw new Error("最初のイベントが user-message ではない");
+
+        const message = events[0].message;
+        expect(message.content).toBe("");
+
+        const attachment = message.attachments?.[0];
+        if (attachment === undefined) throw new Error("添付ファイルが記録されていない");
+        expect(attachment.name).toBe("only.txt");
+        expect(attachment.size).toBe(file.size);
+
+        const modelText = userContentForModel(message);
+        expect(modelText).toContain("[Attached files]");
+        expect(modelText).toContain("only.txt");
+        expect(modelText).toContain(attachment.path);
+        expect(events.at(-1)?.type).toBe("assistant-done");
+      },
+      { container },
+    );
+  });
+
+  test("添付できる数を超えた送信は 400 で弾く", async () => {
+    await withServer(fastMock(), async (harness) => {
+      const files = Array.from({ length: MAX_ATTACHMENTS + 1 }, (_, index) => new File(["x"], `${index}.txt`));
+      const response = await harness.request(
+        `/api/teras/${DEFAULT_TERA_ID}/messages`,
+        messageRequest("見て", { files }),
+      );
 
       expect(response.status).toBe(400);
       expect(((await response.json()) as { code: string }).code).toBe("invalid_request");
@@ -361,11 +511,10 @@ describe("チャット API", () => {
 
   test("返事の言語が無い送信は 400 invalid_request で弾く", async () => {
     await withServer(fastMock(), async (harness) => {
-      const response = await harness.request(`/api/teras/${DEFAULT_TERA_ID}/messages`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: "こんにちは" }),
-      });
+      const response = await harness.request(
+        `/api/teras/${DEFAULT_TERA_ID}/messages`,
+        messageRequest("こんにちは", { language: null }),
+      );
 
       expect(response.status).toBe(400);
       expect(((await response.json()) as { code: string }).code).toBe("invalid_request");
@@ -378,11 +527,7 @@ describe("チャット API", () => {
       expect(response.status).toBe(404);
       expect(((await response.json()) as { code: string }).code).toBe("tera_not_found");
 
-      const posted = await harness.request("/api/teras/missing/messages", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: "こんにちは", language: "ja" }),
-      });
+      const posted = await harness.request("/api/teras/missing/messages", messageRequest("こんにちは"));
       expect(posted.status).toBe(404);
       expect(((await posted.json()) as { code: string }).code).toBe("tera_not_found");
     });
@@ -392,11 +537,7 @@ describe("チャット API", () => {
     // ゆっくり流し、1 つ目が終わらないうちに 2 つ目を送れるようにする。
     await withServer(createMockEngine({ chunkSize: 1, delayMs: 5 }), async (harness) => {
       const send = (content: string) =>
-        harness.request(`/api/teras/${DEFAULT_TERA_ID}/messages`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ content, language: "ja" }),
-        });
+        harness.request(`/api/teras/${DEFAULT_TERA_ID}/messages`, messageRequest(content));
 
       const first = await send("1 つ目の質問");
       expect(first.status).toBe(200);
@@ -439,7 +580,7 @@ describe("チャット API", () => {
         expect(response.headers.get("content-type")).toContain("application/json");
         expect(await response.json()).toEqual({ code: "internal_error", detail: "一覧を読めませんでした" });
       },
-      () => broken,
+      { makeStore: () => broken },
     );
   });
 
@@ -499,12 +640,10 @@ describe("チャット API", () => {
     const slow = createMockEngine({ chunkSize: 2, delayMs: 10 });
     await withServer(slow, async (harness) => {
       const controller = new AbortController();
-      const response = await harness.request(`/api/teras/${DEFAULT_TERA_ID}/messages`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: "長めの応答をください", language: "ja" }),
-        signal: controller.signal,
-      });
+      const response = await harness.request(
+        `/api/teras/${DEFAULT_TERA_ID}/messages`,
+        messageRequest("長めの応答をください", { signal: controller.signal }),
+      );
 
       const reader = response.body?.getReader();
       if (reader === undefined) throw new Error("本文が無い");

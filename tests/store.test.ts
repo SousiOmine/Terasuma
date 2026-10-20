@@ -45,6 +45,28 @@ describe("store", () => {
     expect(store.getTera(DEFAULT_TERA_ID)?.updatedAt).toBeGreaterThan(before.createdAt);
   });
 
+  test("画面の本文と添付を保存する", () => {
+    const store = makeStore();
+    const attachment = {
+      name: "notes.txt",
+      size: 5,
+      path: "/home/agent/uploads/x/01-notes.txt",
+    };
+    const message = store.appendMessage({
+      id: "m1",
+      teraId: DEFAULT_TERA_ID,
+      role: "user",
+      content: "画面に出す本文",
+      attachments: [attachment],
+    });
+
+    expect(message.content).toBe("画面に出す本文");
+    expect(message.attachments).toEqual([attachment]);
+
+    const [saved] = store.listMessages(DEFAULT_TERA_ID);
+    expect(saved).toEqual(message);
+  });
+
   test("listMessages は seq 昇順で返す", () => {
     const store = makeStore();
     store.appendMessage({ id: "m1", teraId: DEFAULT_TERA_ID, role: "user", content: "1" });
@@ -148,6 +170,42 @@ describe("store", () => {
         expect(second.listMessages(DEFAULT_TERA_ID).map((message) => message.content)).toEqual(["残る本文"]);
       } finally {
         second.close();
+      }
+    } finally {
+      removeDatabase(path);
+    }
+  });
+
+  test("v1 の DB は、添付の列を足してそのまま読める", () => {
+    const path = join(tmpdir(), `terasuma-store-${crypto.randomUUID()}.db`);
+
+    try {
+      const legacy = new Database(path, { create: true });
+      legacy.exec(`
+        CREATE TABLE teras (
+          id TEXT PRIMARY KEY, name TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
+        );
+        CREATE TABLE messages (
+          id TEXT PRIMARY KEY, tera_id TEXT NOT NULL, seq INTEGER NOT NULL, role TEXT NOT NULL,
+          content TEXT NOT NULL, parts TEXT, created_at INTEGER NOT NULL,
+          input_tokens INTEGER, output_tokens INTEGER, cached_input_tokens INTEGER,
+          UNIQUE (tera_id, seq)
+        );
+        PRAGMA user_version = 1;
+      `);
+      legacy.run("INSERT INTO teras VALUES ('default', 'Tera', 1, 2)");
+      legacy.run(
+        "INSERT INTO messages (id, tera_id, seq, role, content, created_at) VALUES ('m1', 'default', 1, 'user', '古い本文', 3)",
+      );
+      legacy.close();
+
+      const store = createStore(path);
+      try {
+        const [message] = store.listMessages(DEFAULT_TERA_ID);
+        expect(message?.content).toBe("古い本文");
+        expect(message?.attachments).toBeNull();
+      } finally {
+        store.close();
       }
     } finally {
       removeDatabase(path);

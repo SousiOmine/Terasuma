@@ -3,6 +3,7 @@ import { join } from "node:path";
 import index from "../../client/index.html";
 import type { AppConfig } from "../../config";
 import type { ContainerManager } from "../computer/container";
+import { MAX_REQUEST_BODY_BYTES } from "../computer/uploads";
 import type { AgentEngine } from "../agent/engine";
 import type { Handover } from "../computer/handover";
 import { describeError } from "../../shared/errors";
@@ -97,6 +98,7 @@ export function startServer(options: ServerOptions): StartedServer {
     Bun.serve<ScreenSocketData>({
       hostname: config.host,
       port,
+      maxRequestBodySize: MAX_REQUEST_BODY_BYTES,
       development: config.isDevelopment,
       routes: {
         "/": index,

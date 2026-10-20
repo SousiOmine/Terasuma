@@ -23,6 +23,7 @@ export type ApiRequest<Params extends Record<string, string> = Record<string, ne
   params: Params;
   signal: AbortSignal;
   json(): Promise<unknown>;
+  formData(): Promise<FormData>;
 };
 
 /**

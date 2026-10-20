@@ -53,6 +53,7 @@ function history(): ChatMessage[] {
       seq: 1,
       role: "user",
       content: "こんにちは",
+      attachments: null,
       parts: null,
       createdAt: 0,
       usage: null,

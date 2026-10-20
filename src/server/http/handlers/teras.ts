@@ -1,8 +1,8 @@
-import { isReplyLanguage } from "../../../shared/language";
 import { resolveModel } from "../../provider/routing";
+import { saveUploads } from "../../computer/uploads";
 import { createTurns } from "../../agent/turns";
 import { ValidationError } from "../../errors";
-import { readJsonBody } from "../body";
+import { readTurnForm } from "../body";
 import { json, jsonError } from "../respond";
 import { createSseResponse } from "../sse";
 import { type ApiDeps, type ApiRequest, requireTera } from "./shared";
@@ -11,7 +11,7 @@ import { type ApiDeps, type ApiRequest, requireTera } from "./shared";
  * Tera（会話の持ち主）と、その 1 本の履歴。
  */
 export function terasHandlers(deps: ApiDeps) {
-  const { store, settings } = deps;
+  const { store, settings, container } = deps;
 
   // 同じ Tera でターンが重なると、履歴の並びと引き受けの待ちが壊れる。
   // 「実行中かどうか」はターンの側が持つ（HTTP 層へ Set を渡さない）。
@@ -33,22 +33,29 @@ export function terasHandlers(deps: ApiDeps) {
      * 会話は Tera ごとに 1 本なので、履歴はこの Tera に追記されていく。
      */
     async sendMessage(req: ApiRequest<{ id: string }>): Promise<Response> {
-      const body = await readJsonBody(req);
-      const raw = typeof body?.["content"] === "string" ? body["content"] : "";
-      const content = raw.trim();
-      if (content.length === 0) throw new ValidationError("content must be a non-empty string");
-
-      const language = body?.["language"];
-      if (!isReplyLanguage(language)) throw new ValidationError('language must be "ja" or "en"');
-
+      // 無い Tera へ大きなファイルを送られたとき、本文を読む前に断る。
       requireTera(store, req.params.id);
+
+      const form = await readTurnForm(req);
+      if (form.content.length === 0 && form.files.length === 0) {
+        throw new ValidationError("content or files must be provided");
+      }
 
       // モデルを呼べない状態なら、ターンを始めずに理由を返す。
       // 呼び出しの中で初めて失敗すると、画面には「モデルから応答を得られませんでした」としか出せない。
+      // ファイルを置く前に確かめて、無駄なファイルを残さない。
       const resolution = resolveModel(settings.read(), deps.catalog.snapshot());
       if (!resolution.ok) return jsonError(400, "model_not_configured", resolution.detail);
 
-      const events = turns.begin(req.params.id, { content, language, signal: req.signal });
+      const uploaded = await saveUploads(container, form.files, req.signal);
+      const attachments = uploaded.length === 0 ? null : uploaded;
+
+      const events = turns.begin(req.params.id, {
+        content: form.content,
+        attachments,
+        language: form.language,
+        signal: req.signal,
+      });
       if (events === null) {
         return jsonError(409, "turn_in_progress", "この Tera はほかで応答を生成しています");
       }

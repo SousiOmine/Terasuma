@@ -1,6 +1,6 @@
 import { readJsonBody } from "../body";
 import { jsonError, noContent } from "../respond";
-import { type ApiDeps, type ApiRequest } from "./shared";
+import type { ApiDeps, ApiRequest } from "./shared";
 
 /**
  * コンピュータの操作のうち、画面を渡している間の受け渡し。

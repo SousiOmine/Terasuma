@@ -1,6 +1,6 @@
 import type { ReplyLanguage } from "../../shared/language";
 import { describeError } from "../../shared/errors";
-import type { ChatEvent, ChatMessage, MessagePart, TokenUsage } from "../../shared/types";
+import type { ChatAttachment, ChatEvent, ChatMessage, MessagePart, TokenUsage } from "../../shared/types";
 import type { Compaction } from "./compaction";
 import type { AgentEngine } from "./engine";
 import type { Store } from "../data/store";
@@ -22,7 +22,10 @@ export type TurnDeps = {
 
 /** 1 ターンの入力。 */
 export type TurnInput = {
+  /** 画面に出す本文。 */
   content: string;
+  /** 画面に出す添付ファイル。無ければ null。 */
+  attachments: ChatAttachment[] | null;
   language: ReplyLanguage;
   signal: AbortSignal;
 };
@@ -57,11 +60,11 @@ export function createTurns(deps: TurnDeps): Turns {
 async function* runTurn(
   deps: TurnDeps,
   teraId: string,
-  { content, language, signal }: TurnInput,
+  { content, attachments, language, signal }: TurnInput,
   running: Set<string>,
 ): AsyncGenerator<ChatEvent> {
   try {
-    yield* turnEvents(deps, teraId, content, language, signal);
+    yield* turnEvents(deps, teraId, content, attachments, language, signal);
   } finally {
     running.delete(teraId);
 
@@ -78,6 +81,7 @@ async function* turnEvents(
   deps: TurnDeps,
   teraId: string,
   content: string,
+  attachments: ChatAttachment[] | null,
   language: ReplyLanguage,
   signal: AbortSignal,
 ): AsyncGenerator<ChatEvent> {
@@ -89,6 +93,7 @@ async function* turnEvents(
     teraId,
     role: "user",
     content,
+    attachments,
   });
   yield { type: "user-message", message: userMessage };
 
@@ -135,6 +140,7 @@ async function* turnEvents(
       teraId,
       role: "assistant",
       content: storedText(),
+      attachments: null,
       parts: storedParts(),
       usage,
     });

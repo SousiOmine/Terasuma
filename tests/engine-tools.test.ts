@@ -208,6 +208,7 @@ function history(): ChatMessage[] {
       seq: 1,
       role: "user",
       content: "調べて",
+      attachments: null,
       parts: null,
       createdAt: 0,
       usage: null,

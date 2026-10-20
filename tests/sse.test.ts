@@ -50,6 +50,7 @@ describe("SSE", () => {
         seq: 2,
         role: "assistant",
         content: "1行目\n2行目\n```ts\nconst a = 1;\n```",
+        attachments: null,
         parts: null,
         createdAt: 1,
         usage: { inputTokens: 1, outputTokens: 2, cachedInputTokens: 3 },

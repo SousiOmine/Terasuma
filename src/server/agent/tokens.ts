@@ -1,5 +1,6 @@
 import type { ChatMessage } from "../../shared/types";
 import type { CompactionState } from "../data/store";
+import { userContentForModel } from "./model-content";
 import { summaryText } from "./prompt";
 
 /**
@@ -23,7 +24,10 @@ export function estimateTokens(text: string): number {
 
 /** メッセージ 1 件のトークンの目安。parts があるときは部品ごとに数える（本文は parts の text の連結）。 */
 export function estimateMessageTokens(message: ChatMessage): number {
-  if (message.parts === null) return estimateTokens(message.content);
+  if (message.parts === null) {
+    const content = message.role === "user" ? userContentForModel(message) : message.content;
+    return estimateTokens(content);
+  }
 
   let total = 0;
   for (const part of message.parts) {

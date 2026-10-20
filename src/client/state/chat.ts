@@ -44,13 +44,14 @@ export async function openTera(id: string): Promise<void> {
   }
 }
 
-export async function sendMessage(rawContent: string): Promise<void> {
+export async function sendMessage(rawContent: string, files: readonly File[]): Promise<void> {
   const content = rawContent.trim();
-  if (content.length === 0) return;
+  if (content.length === 0 && files.length === 0) return;
 
   // 引き受けている間の入力は、新しい発言ではなくツールの戻り値になる。
   // 新しい発言として扱うと、ターンが 2 つ重なって会話の並びが崩れる。
   if (handoverActive.value) {
+    if (content.length === 0) return;
     await answerHandover({ kind: "text", text: content });
     return;
   }
@@ -72,7 +73,7 @@ export async function sendMessage(rawContent: string): Promise<void> {
   streamingText.value = "";
 
   try {
-    for await (const event of api.streamTurn(teraId, content, locale.value, abort.signal)) {
+    for await (const event of api.streamTurn(teraId, content, locale.value, files, abort.signal)) {
       applyEvent(event);
     }
   } catch (error) {

@@ -1,5 +1,6 @@
 import { toolNameFor } from "../../shared/tools";
 import type { ChatMessage, MessagePart } from "../../shared/types";
+import { userContentForModel } from "./model-content";
 
 /**
  * 圧縮（要約）に渡す文の組み立てと、要約の指示。
@@ -46,7 +47,7 @@ export function serializeConversation(messages: readonly ChatMessage[]): string 
 
   for (const message of messages) {
     if (message.role === "user") {
-      lines.push(`[User]: ${message.content}`);
+      lines.push(`[User]: ${userContentForModel(message)}`);
       continue;
     }
 
