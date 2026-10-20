@@ -6,8 +6,11 @@ import { McpServer, createMcpHandler } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import { CONFIG_FILE_NAME, type McpServerSettings, type McpServersSettings } from "../src/config";
 import { McpServerNotFound, createMcpManager, type McpManager } from "../src/server/mcp";
+import { createImageStore, type ImageStore } from "../src/server/images";
 import { createSettingsStore } from "../src/server/settings";
+import type { ImageRef } from "../src/shared/types";
 import { startFakeOAuthServer } from "./fixtures/oauth-server";
+import { testPng } from "./support";
 
 /** コールバックの URL。認可を使わないテストでは開かれない。 */
 const CALLBACK_URL = "http://127.0.0.1:9/api/mcp/oauth/callback";
@@ -26,6 +29,18 @@ function createTestServer(name: string): McpServer {
     "fail",
     { description: `${name} の fail`, inputSchema: { reason: z.string() } },
     ({ reason }) => ({ content: [{ type: "text", text: `失敗: ${reason}` }], isError: true }),
+  );
+
+  // 画像を返すツール。ツールの戻り値に画像を載せられることを確かめる。
+  server.registerTool(
+    "shot",
+    { description: `${name} の shot`, inputSchema: {} },
+    () => ({
+      content: [
+        { type: "text" as const, text: "撮りました" },
+        { type: "image" as const, data: Buffer.from(testPng(3, 2)).toString("base64"), mimeType: "image/png" },
+      ],
+    }),
   );
 
   return server;
@@ -51,20 +66,22 @@ function startHttpMcpServer() {
 /** 一時ディレクトリに本物の設定ファイルを作り、そこを指す manager を渡す。 */
 async function withManager(
   servers: McpServersSettings,
-  run: (manager: McpManager) => Promise<void>,
+  run: (manager: McpManager, images: ImageStore) => Promise<void>,
 ): Promise<void> {
   const dir = mkdtempSync(join(tmpdir(), "terasuma-mcp-"));
   const path = join(dir, CONFIG_FILE_NAME);
   writeFileSync(path, `${JSON.stringify({ mcpServers: servers }, null, 2)}\n`, "utf8");
 
+  const images = createImageStore(dir);
   const manager = createMcpManager({
     settings: createSettingsStore(path),
     dataDir: dir,
+    images,
     callbackUrl: () => new URL(CALLBACK_URL),
   });
 
   try {
-    await run(manager);
+    await run(manager, images);
   } finally {
     await manager.close();
     rmSync(dir, { recursive: true, force: true });
@@ -92,7 +109,7 @@ describe("MCP サーバーとの接続", () => {
       const status = await manager.check(id);
       expect(status.state).toBe("connected");
       expect(status.detail).toBeNull();
-      expect([...status.tools].sort()).toEqual(["echo", "fail"]);
+      expect([...status.tools].sort()).toEqual(["echo", "fail", "shot"]);
     });
   });
 
@@ -102,7 +119,7 @@ describe("MCP サーバーとの接続", () => {
       await withManager({ remote: { type: "http", url: http.url } }, async (manager) => {
         const status = await manager.check("remote");
         expect(status.state).toBe("connected");
-        expect([...status.tools].sort()).toEqual(["echo", "fail"]);
+        expect([...status.tools].sort()).toEqual(["echo", "fail", "shot"]);
       });
     } finally {
       await http.server.stop(true);
@@ -145,7 +162,7 @@ describe("MCP サーバーとの接続", () => {
 
         const status = await manager.check("remote");
         expect(status.state).toBe("connected");
-        expect([...status.tools].sort()).toEqual(["echo", "fail"]);
+        expect([...status.tools].sort()).toEqual(["echo", "fail", "shot"]);
       });
     } finally {
       await as.server.stop(true);
@@ -176,7 +193,7 @@ describe("MCP サーバーとの接続", () => {
     const { id, server } = stdioServer("local");
     await withManager({ [id]: server }, async (manager) => {
       const tools = await manager.toolset();
-      expect(Object.keys(tools).sort()).toEqual(["local_echo", "local_fail"]);
+      expect(Object.keys(tools).sort()).toEqual(["local_echo", "local_fail", "local_shot"]);
 
       // 実際に呼べることまで確かめる。
       // expect(...).resolves で待つと、MCP の応答を受け取る前に要求が時間切れになる
@@ -185,6 +202,30 @@ describe("MCP サーバーとの接続", () => {
       if (echo === undefined) throw new Error("echo が無い");
       const result = await echo.execute?.({ text: "こんにちは" }, {} as never);
       expect(result).toBeDefined();
+    });
+  });
+
+  test("ツールが返した画像は保存され、参照つきで返る", async () => {
+    const { id, server } = stdioServer("local");
+    await withManager({ [id]: server }, async (manager, images) => {
+      const tools = await manager.toolset();
+      const shot = tools["local_shot"];
+      if (shot?.execute === undefined) throw new Error("shot が無い");
+
+      const output = (await shot.execute({}, {} as never)) as { text: string; images?: ImageRef[] };
+      expect(output.text).toBe("撮りました");
+      expect(output.images).toHaveLength(1);
+
+      const image = output.images?.[0];
+      if (image === undefined) throw new Error("画像の参照が無い");
+
+      expect(image.mime).toBe("image/png");
+      expect(image.width).toBe(1);
+      expect(image.height).toBe(1);
+      // 保存した実体を参照から読み直せる（会話には base64 を残さない）。
+      expect(images.read(image)?.subarray(0, 8)).toEqual(
+        new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+      );
     });
   });
 
@@ -213,7 +254,7 @@ describe("MCP サーバーとの接続", () => {
       { [id]: server, broken: { type: "stdio", command: "/nonexistent/terasuma-mcp-server" } },
       async (manager) => {
         const tools = await manager.toolset();
-        expect(Object.keys(tools).sort()).toEqual(["local_echo", "local_fail"]);
+        expect(Object.keys(tools).sort()).toEqual(["local_echo", "local_fail", "local_shot"]);
       },
     );
   });
@@ -225,7 +266,7 @@ describe("保存する前の接続の確認", () => {
     await withManager({}, async (manager) => {
       const result = await manager.test(id, server);
       expect(result.state).toBe("connected");
-      expect([...result.tools].sort()).toEqual(["echo", "fail"]);
+      expect([...result.tools].sort()).toEqual(["echo", "fail", "shot"]);
       expect(result.authorizationUrl).toBeNull();
 
       // 確かめただけなので、接続の一覧はまだ何も知らない。
@@ -289,7 +330,7 @@ describe("保存する前の接続の確認", () => {
         // トークンが保存されたので、次は認可を求めずに繋がる。
         const result = await manager.test("remote", server);
         expect(result.state).toBe("connected");
-        expect([...result.tools].sort()).toEqual(["echo", "fail"]);
+        expect([...result.tools].sort()).toEqual(["echo", "fail", "shot"]);
       });
     } finally {
       await as.server.stop(true);

@@ -4,15 +4,21 @@ import type { AppConfig, ModelSettings } from "../config";
 import type { ReplyLanguage } from "../shared/language";
 import { modelProvider } from "../shared/model";
 import type { MessagePart, TokenUsage } from "../shared/types";
-import type { ImageRef } from "../shared/types";
 import type { CodingToolset } from "./coding";
 import type { ComputerToolset } from "./computer";
 import type { ImageStore } from "./images";
 import type { McpToolset } from "./mcp";
 import { catalogProvider, type CatalogSnapshot } from "./models-dev";
-import { SYSTEM_PROMPT, screenMessage, toModelMessages, type TeraContext } from "./prompt";
-import { catalogRoute, createLanguageModel, type ResolvedModel } from "./provider-registry";
+import {
+  imagesMessage,
+  SYSTEM_PROMPT,
+  toModelMessages,
+  type PendingImages,
+  type TeraContext,
+} from "./prompt";
+import { catalogRoute, createLanguageModel, toolResultTakesImages, type ResolvedModel } from "./provider-registry";
 import { reasoningProviderOptions } from "./reasoning";
+import { readStoredImages, readToolOutput, toolResultOutput } from "./tool-output";
 import { describeError } from "../shared/errors";
 
 /** モデルから流れてくる出来事。画面へ流す単位でもある。 */
@@ -62,11 +68,10 @@ export type ToolsetProvider = {
 };
 
 /**
- * コンテナのツールの供給元。ターンの対象の Tera と、
- * ツールが撮った画像を受け取る口を渡す。
+ * コンテナのツールの供給元。ターンの対象の Tera を渡す。
  */
 export type ComputerToolsetProvider = {
-  toolset(input: { teraId: string; onImage: (image: ImageRef) => void }): Promise<ComputerToolset>;
+  toolset(input: { teraId: string }): Promise<ComputerToolset>;
 };
 
 /**
@@ -237,23 +242,31 @@ export function createAiSdkEngine(options: AiSdkEngineOptions): AgentEngine {
     async stream({ context, signal, teraId, replyLanguage }) {
       const model = resolve();
 
+      // ツールの結果に画像を置けるかはプロバイダ次第。置けない場合は user メッセージで渡す。
+      const toolResultImages = toolResultTakesImages(model.provider.kind);
+
       // 畳んだ要約を先頭に、生の履歴をその後ろに置く。生の履歴には要約も並べ替えもしない
       // （プロンプトキャッシュが当たり続けるようにするため）。
-      const messages = toModelMessages(context, images, replyLanguage);
+      const messages = toModelMessages(context, images, replyLanguage, { toolResultImages });
 
       // 思考強度はプロバイダごとに渡し方が違うので、ここで組み立てて呼び出しごとに渡す。
       const providerOptions = reasoningProviderOptions(model.provider, model.reasoningEffort);
 
-      // このターンで撮った画像。次のステップの直前に user メッセージとして足す。
-      const capturedImages: ImageRef[] = [];
+      // 画像を結果に置けないプロバイダのために、このターンで届いた画像を集める。
+      // 次のステップの直前に user メッセージとして足す。
+      const pendingImages: PendingImages[] = [];
 
       // MCP とコンテナのツールは呼び出しごとに渡す
       // （設定画面でサーバーを足しても、コンテナを止めても作り直さずに済む）。
-      const [mcpTools, computerTools] = await Promise.all([
-        mcp.toolset(),
-        computer.toolset({ teraId, onImage: (image) => capturedImages.push(image) }),
-      ]);
-      const tools: ToolSet = { ...mcpTools, ...computerTools, ...coding };
+      const [mcpTools, computerTools] = await Promise.all([mcp.toolset(), computer.toolset({ teraId })]);
+      const tools = withToolModelOutput(
+        { ...mcpTools, ...computerTools, ...coding },
+        {
+          includeImages: toolResultImages,
+          images,
+          onImages: (entry) => pendingImages.push(entry),
+        },
+      );
 
       // 上限で止まったかどうかを、finish のときに知れるようにする。
       const withinLimit = stepCountIs(MAX_STEPS_PER_TURN);
@@ -271,16 +284,18 @@ export function createAiSdkEngine(options: AiSdkEngineOptions): AgentEngine {
           return stop;
         },
         ...(providerOptions === null ? {} : { providerOptions }),
-        // tool の本文に画像を置けるプロバイダが無い（OpenAI 互換は文字列へ潰す）。
-        // ステップの直前に user メッセージとして足し、どの呼び出しの画像かを本文で示す。
-        prepareStep: ({ messages: current }) => {
-          if (capturedImages.length === 0) return undefined;
+        // 画像を結果に置けないプロバイダでは、結果の直後に user メッセージとして足し、
+        // どの呼び出しの画像かを本文で示す（プロバイダの役割の並びも壊さない）。
+        ...(toolResultImages
+          ? {}
+          : {
+              prepareStep: ({ messages: current }) => {
+                if (pendingImages.length === 0) return undefined;
 
-          const added = capturedImages.splice(0).flatMap((image) => screenMessage(image, images));
-          if (added.length === 0) return undefined;
-
-          return { messages: [...current, ...added] };
-        },
+                const message = imagesMessage(pendingImages.splice(0), images);
+                return message === null ? undefined : { messages: [...current, message] };
+              },
+            }),
       });
 
       return toEngineStream(result.fullStream, () => reachedStepLimit);
@@ -396,7 +411,7 @@ function splitToolName(name: string): { server: string; tool: string } {
 
 /**
  * ツールの結果を、保存する形にする。
- * コンテナのツールは画像を返すことがあるので、その参照も一緒に持たせる。
+ * 画像を返すツールは、その参照も一緒に残す（実体は画像の置き場にある）。
  */
 function toolResultPart(
   id: string,
@@ -405,7 +420,10 @@ function toolResultPart(
   failed: boolean,
   value: unknown,
 ): Extract<MessagePart, { type: "tool-result" }> {
-  const image = readImageRef(value);
+  // 失敗した呼び出しは、例外の message を本文にする（JSON の包装を見せない）。
+  const output = failed
+    ? { text: toolErrorMessage(value) ?? readToolOutput(value).text, images: [] }
+    : readToolOutput(value);
 
   return {
     type: "tool-result",
@@ -413,31 +431,62 @@ function toolResultPart(
     server,
     tool,
     failed,
-    output: toolOutputText(value, failed),
-    ...(image === undefined ? {} : { image }),
+    output: output.text,
+    ...(output.images.length === 0 ? {} : { images: output.images }),
   };
 }
 
 /**
- * ツールの戻り値から画像の参照を取り出す。
- * コンテナのツールが返す形（{ text, image }）だけを扱い、それ以外は画像なしとして扱う。
+ * すべてのツールの結果を、モデルへ渡す形（本文 + 画像）に揃える。
+ *
+ * ツールの戻り値は文字列か { text, images } なので、そのまま渡すとオブジェクトが
+ * JSON としてモデルに見えてしまう。ここで本文だけに開き、画像を置けるプロバイダには
+ * content の file 部品として一緒に渡す。置けないプロバイダには本文だけを渡し、
+ * 画像は prepareStep が user メッセージとして足す。
  */
-function readImageRef(value: unknown): ImageRef | undefined {
-  if (typeof value !== "object" || value === null) return undefined;
+function withToolModelOutput(
+  tools: ToolSet,
+  options: {
+    includeImages: boolean;
+    images: ImageStore;
+    /** 画像を結果に置けないときに、結果の直後の user メッセージへ回すために集める。 */
+    onImages?: (entry: PendingImages) => void;
+  },
+): ToolSet {
+  // 同じ呼び出しで toModelOutput が複数回呼ばれても、画像を二重に集めない。
+  const collected = new Set<string>();
 
-  const image = (value as { image?: unknown }).image;
-  if (typeof image !== "object" || image === null) return undefined;
+  const wrapped: ToolSet = {};
 
-  const { sha256, mime, width, height } = image as Record<string, unknown>;
-  if (typeof sha256 !== "string" || typeof mime !== "string") return undefined;
-  if (typeof width !== "number" || typeof height !== "number") return undefined;
+  for (const [name, definition] of Object.entries(tools)) {
+    wrapped[name] = {
+      ...definition,
+      toModelOutput: ({ toolCallId, output }: { toolCallId: string; output: unknown }) => {
+        const { text, images } = readToolOutput(output);
 
-  return { sha256, mime, width, height };
+        // 画像を結果に置けないプロバイダでは、結果の直後の user メッセージとして渡す。
+        // toModelOutput はステップの応答を組み立てるとき（prepareStep より前）に呼ばれる。
+        if (!options.includeImages && images.length > 0 && !collected.has(toolCallId)) {
+          collected.add(toolCallId);
+          options.onImages?.({ label: `${name} call`, images });
+        }
+
+        return toolResultOutput({
+          text,
+          images: readStoredImages(images, options.images),
+          failed: false,
+          includeImages: options.includeImages,
+        });
+      },
+    };
+  }
+
+  return wrapped;
 }
 
 /**
  * 失敗した呼び出しの戻り値から、モデルへ見せるエラー本文を取り出す。
- * 取り出せない形（MCP の content など）は null を返し、通常の本文の組み立てに任せる。
+ * 取り出せない形は null を返し、通常の本文の組み立てに任せる。
  */
 function toolErrorMessage(value: unknown): string | null {
   if (value instanceof Error) return value.message;
@@ -445,46 +494,6 @@ function toolErrorMessage(value: unknown): string | null {
 
   const message = (value as { message?: unknown }).message;
   return typeof message === "string" ? message : null;
-}
-
-/** ツールの戻り値を、モデルと画面に見せる文字列にする。 */
-function toolOutputText(value: unknown, failed = false): string {
-  if (failed) {
-    const message = toolErrorMessage(value);
-    if (message !== null) return message;
-  }
-
-  // コンテナのツールは本文を text に入れて返す。
-  if (typeof value === "object" && value !== null) {
-    const text = (value as { text?: unknown }).text;
-    if (typeof text === "string") return text;
-  }
-
-  const text = mcpContentText(value);
-  if (text !== null) return text;
-
-  if (typeof value === "string") return value;
-  const json = JSON.stringify(value);
-  return json === undefined ? String(value) : json;
-}
-
-/**
- * MCP の結果（content ブロック）がそのまま入っている場合に、そのテキストをまとめる。
- * 構造化された値しか無い場合は null を返し、呼び出し側が JSON として見せる。
- */
-function mcpContentText(value: unknown): string | null {
-  if (typeof value !== "object" || value === null) return null;
-
-  const content = (value as { content?: unknown }).content;
-  if (!Array.isArray(content)) return null;
-
-  const texts: string[] = [];
-  for (const block of content) {
-    if (typeof block !== "object" || block === null) continue;
-    const entry = block as { type?: unknown; text?: unknown };
-    if (entry.type === "text" && typeof entry.text === "string") texts.push(entry.text);
-  }
-  return texts.length === 0 ? null : texts.join("\n");
 }
 
 function normalizeUsage(raw: LanguageModelUsage): TokenUsage | null {

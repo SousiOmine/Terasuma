@@ -40,8 +40,8 @@ export type MessagePart =
       failed: boolean;
       /** ツールが返した内容（モデルへ渡るのと同じ文字列）。 */
       output: string;
-      /** ツールが返した画像。画像を返さないツールでは無い。 */
-      image?: ImageRef;
+      /** ツールが返した画像（返した順）。画像を返さないツールでは無い。 */
+      images?: ImageRef[];
     };
 
 /**
@@ -52,7 +52,7 @@ export type MessagePart =
 export type ImageRef = {
   /** ファイル名になる。画像の中身の sha256。 */
   sha256: string;
-  /** image/png など。 */
+  /** image/png、image/jpeg、image/gif、image/webp のいずれか。 */
   mime: string;
   width: number;
   height: number;

@@ -192,7 +192,33 @@ export function createLanguageModel(model: ResolvedModel): LanguageModel {
         name: model.provider.optionKey,
         baseURL,
         apiKey,
+        // ツール結果の content を、テキストと画像の部品のまま送る。
+        // 既定では画像も JSON 文字列に潰され、モデルが中身を読めない。
+        supportsMultiPartToolContent: true,
       }).chatModel(modelName);
+  }
+}
+
+/**
+ * ツールの結果に画像を置けるかどうか。
+ *
+ * 各プロバイダの変換が content 出力の file 部品を画像として送れるかで決める。
+ * 送れないもの（画像を JSON 文字列に潰す、またはエラーにする）は false にし、
+ * 呼び出し側が結果の直後の user メッセージとして渡す。
+ * openai は Responses API なので、画像を input_image としてそのまま渡せる。
+ */
+export function toolResultTakesImages(kind: ProviderKind): boolean {
+  switch (kind) {
+    // content の file 部品を画像として送れないパッケージ。
+    case "groq":
+    case "mistral":
+    case "cerebras":
+    case "deepinfra":
+    case "togetherai":
+    case "perplexity":
+      return false;
+    default:
+      return true;
   }
 }
 

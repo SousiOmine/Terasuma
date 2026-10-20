@@ -3,7 +3,7 @@ import { mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createImageStore } from "../src/server/images";
-import { testPng } from "./support";
+import { testGif, testJpeg, testPng, testWebp } from "./support";
 
 function withStore<T>(run: (context: { store: ReturnType<typeof createImageStore>; dir: string }) => T): T {
   const dir = mkdtempSync(join(tmpdir(), "terasuma-images-"));
@@ -55,6 +55,35 @@ describe("画像の置き場", () => {
     });
   });
 
+  test("PNG 以外の画像も、大きさが分かり、種類に応じた拡張子で保存される", () => {
+    withStore(({ store, dir }) => {
+      const jpeg = store.save(testJpeg(640, 480), "image/jpeg");
+      const gif = store.save(testGif(32, 24), "image/gif");
+      const webp = store.save(testWebp(800, 600), "image/webp");
+
+      expect(jpeg).toMatchObject({ mime: "image/jpeg", width: 640, height: 480 });
+      expect(gif).toMatchObject({ mime: "image/gif", width: 32, height: 24 });
+      expect(webp).toMatchObject({ mime: "image/webp", width: 800, height: 600 });
+
+      expect(store.read(jpeg)).toEqual(testJpeg(640, 480));
+      expect(store.read(gif)).toEqual(testGif(32, 24));
+      expect(store.read(webp)).toEqual(testWebp(800, 600));
+
+      expect(readdirSync(join(dir, "images")).sort()).toEqual(
+        [`${jpeg.sha256}.jpg`, `${gif.sha256}.gif`, `${webp.sha256}.webp`].sort(),
+      );
+    });
+  });
+
+  test("image/jpg は image/jpeg として保存する", () => {
+    withStore(({ store }) => {
+      const ref = store.save(testJpeg(10, 20), "image/jpg");
+
+      expect(ref.mime).toBe("image/jpeg");
+      expect(store.read(ref)).toEqual(testJpeg(10, 20));
+    });
+  });
+
   test("無い画像は null を返す（例外にしない）", () => {
     withStore(({ store }) => {
       expect(store.read({ sha256: "0".repeat(64), mime: "image/png", width: 1, height: 1 })).toBeNull();
@@ -73,10 +102,13 @@ describe("画像の置き場", () => {
 
   test("扱えない種類と、壊れた中身は失敗させる", () => {
     withStore(({ store }) => {
-      expect(() => store.save(testPng(10, 10), "image/gif")).toThrow();
-      // PNG の署名が無い中身を、大きさが分からないまま保存しない。
+      expect(() => store.save(testPng(10, 10), "image/bmp")).toThrow();
+      // 署名が無い中身を、大きさが分からないまま保存しない。
       expect(() => store.save(new Uint8Array(24), "image/png")).toThrow();
       expect(() => store.save(new Uint8Array(4), "image/png")).toThrow();
+      expect(() => store.save(new Uint8Array(10), "image/gif")).toThrow();
+      expect(() => store.save(new Uint8Array(24), "image/jpeg")).toThrow();
+      expect(() => store.save(new Uint8Array(16), "image/webp")).toThrow();
     });
   });
 });

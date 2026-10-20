@@ -9,7 +9,7 @@ import {
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
 import { jsonSchema, tool, type JSONSchema7, type ToolSet } from "ai";
 import type { McpHttpServerSettings, McpServerSettings, McpServersSettings } from "../config";
-import type { McpAuthorizationView, McpServerStatusView, McpTestView } from "../shared/types";
+import type { ImageRef, McpAuthorizationView, McpServerStatusView, McpTestView } from "../shared/types";
 import {
   McpOAuthProvider,
   createFileOAuthStorage,
@@ -19,6 +19,8 @@ import {
   type OAuthStorage,
 } from "./mcp-oauth";
 import type { SettingsStore } from "./settings";
+import type { ImageStore } from "./images";
+import type { ImageToolOutput } from "./tool-output";
 import { describeError } from "../shared/errors";
 
 /** モデルへ渡すツール。キーは "<サーバー id>_<ツール名>"。 */
@@ -68,6 +70,8 @@ export type McpManagerOptions = {
   settings: SettingsStore;
   /** OAuth の保存先を置くディレクトリ。 */
   dataDir: string;
+  /** ツールが返した画像の置き場。会話には参照だけを残す。 */
+  images: ImageStore;
   /**
    * 認可コードを受け取る URL。待ち受けを始めるまで決まらないので、呼び出しのたびに読む。
    * まだ決まっていないときに認可を始めようとしたら失敗させる（登録先が食い違う URL で登録しないため）。
@@ -288,7 +292,7 @@ export function createMcpManager(options: McpManagerOptions): McpManager {
         tools: connection.tools.map((definition) => definition.name),
         detail: null,
       });
-      for (const [namespaced, definition] of toolEntries(serverId, connection)) {
+      for (const [namespaced, definition] of toolEntries(serverId, connection, options.images)) {
         nextTools[namespaced] = definition;
       }
     }
@@ -461,7 +465,11 @@ export function createMcpManager(options: McpManagerOptions): McpManager {
 }
 
 /** 1 つのサーバーのツールを、モデルへ渡す名前と定義の組にする。 */
-function toolEntries(serverId: string, connection: ServerConnection): [string, ToolSet[string]][] {
+function toolEntries(
+  serverId: string,
+  connection: ServerConnection,
+  images: ImageStore,
+): [string, ToolSet[string]][] {
   return connection.tools.map((definition) => [
     `${serverId}_${definition.name}`,
     tool({
@@ -473,10 +481,10 @@ function toolEntries(serverId: string, connection: ServerConnection): [string, T
           options.abortSignal === undefined ? {} : { signal: options.abortSignal },
         );
 
-        const text = callToolText(result);
+        const output = callToolOutput(result, images);
         // エラーは例外にして、モデルへ本文だけを渡す（JSON の包装を見せない）。
-        if (result.isError === true) throw new Error(text);
-        return text;
+        if (result.isError === true) throw new Error(output.text);
+        return output;
       },
     }),
   ]);
@@ -488,16 +496,42 @@ function asArguments(input: unknown): Record<string, unknown> {
   return input as Record<string, unknown>;
 }
 
-/** MCP の結果から、モデルと画面に見せる本文を取り出す。 */
-function callToolText(result: CallToolResult): string {
+/**
+ * MCP の結果から、モデルへ渡す本文と画像を取り出す。
+ * 画像は置き場に保存し、会話とモデルへは参照だけを渡す（base64 を載せない）。
+ */
+function callToolOutput(result: CallToolResult, images: ImageStore): ImageToolOutput {
   const texts: string[] = [];
-  for (const block of result.content) {
-    if (block.type === "text") texts.push(block.text);
-  }
-  if (texts.length > 0) return texts.join("\n");
+  const refs: ImageRef[] = [];
 
-  // テキスト以外（画像・資源）しか無い場合は、結果全体を JSON として見せる。
-  return JSON.stringify(result);
+  for (const block of result.content) {
+    if (block.type === "text") {
+      texts.push(block.text);
+      continue;
+    }
+    if (block.type !== "image") continue;
+
+    try {
+      refs.push(images.save(Buffer.from(block.data, "base64"), block.mimeType));
+    } catch (error) {
+      // 扱えない形式や壊れた中身でも、他の内容は読めるようにする。
+      texts.push(`(Could not store the image returned by the tool: ${describeError(error)})`);
+    }
+  }
+
+  if (texts.length > 0) {
+    return { text: texts.join("\n"), ...(refs.length === 0 ? {} : { images: refs }) };
+  }
+
+  if (refs.length > 0) {
+    return {
+      text: refs.length === 1 ? "(image returned by the tool)" : `(${refs.length} images returned by the tool)`,
+      images: refs,
+    };
+  }
+
+  // テキストも画像も無い（資源や音声だけ）場合は、結果全体を JSON として見せる。
+  return { text: JSON.stringify(result) };
 }
 
 /**

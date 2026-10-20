@@ -2,13 +2,12 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createImageStore } from "../src/server/images";
+import { createImageStore, type ImageReader } from "../src/server/images";
 import {
   summaryText,
   buildModelInput,
   replyLanguageInstruction,
   SYSTEM_PROMPT,
-  type ImageReader,
   type TeraContext,
 } from "../src/server/prompt";
 import { readContext } from "../src/server/compaction";
@@ -25,7 +24,7 @@ function contextOf(store: ReturnType<typeof makeStore>): TeraContext {
 
 /** このテストの会話は日本語なので、返事の言語は ja に固定する。 */
 function buildInput(context: TeraContext, images: ImageReader) {
-  return buildModelInput(context, images, "ja");
+  return buildModelInput(context, images, "ja", { toolResultImages: true });
 }
 
 /** 入力の末尾に必ず 1 件足される、返事の言語の指示。 */
@@ -203,8 +202,8 @@ describe("ツールを使ったターンの入力", () => {
 
 describe("返事の言語", () => {
   test("設定した言語の指示を、入力の末尾に 1 件だけ置く", () => {
-    const ja = buildModelInput({ summary: null, messages: [] }, createImageStub(), "ja");
-    const en = buildModelInput({ summary: null, messages: [] }, createImageStub(), "en");
+    const ja = buildModelInput({ summary: null, messages: [] }, createImageStub(), "ja", { toolResultImages: true });
+    const en = buildModelInput({ summary: null, messages: [] }, createImageStub(), "en", { toolResultImages: true });
 
     expect(ja.at(-1)).toEqual(LANGUAGE_MESSAGE);
     expect(en.at(-1)).toEqual({ role: "user", content: replyLanguageInstruction("en") });
@@ -215,7 +214,7 @@ describe("返事の言語", () => {
 
 describe("画像つきのツール結果", () => {
   /** 画面を撮ったことにして、画像つきの結果を 1 つ持つ履歴を作る。 */
-  function screenshotHistory(result: { image?: ImageRef }) {
+  function screenshotHistory(result: { images?: ImageRef[] }) {
     const store = makeStore();
     store.appendMessage({ id: "m1", teraId: DEFAULT_TERA_ID, role: "user", content: "画面を見て" });
     store.appendMessage({
@@ -233,24 +232,60 @@ describe("画像つきのツール結果", () => {
           tool: "screenshot",
           failed: false,
           output: "The screen is 1280x800 pixels.",
-          ...(result.image === undefined ? {} : { image: result.image }),
+          ...(result.images === undefined ? {} : { images: result.images }),
         },
       ],
     });
     return contextOf(store);
   }
 
-  test("結果は本文で渡し、画像は続く user メッセージで渡す", () => {
+  test("画像を置けるプロバイダには、ツール結果の content として渡す", () => {
     const dir = mkdtempSync(join(tmpdir(), "terasuma-prompt-"));
     const images = createImageStore(dir);
     const png = testPng(1280, 800);
 
     try {
       const ref = images.save(png, "image/png");
-      const input = buildInput(screenshotHistory({ image: ref }), images);
+      const input = buildModelInput(screenshotHistory({ images: [ref] }), images, "ja", {
+        toolResultImages: true,
+      });
 
-      // tool の本文に画像は置けない（OpenAI 互換のプロバイダが文字列へ潰すため）。
-      // 結果はテキストで渡し、画像はその直後の user メッセージで渡す。
+      expect(input[3]).toEqual({
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "call-1",
+            toolName: "computer_screenshot",
+            output: {
+              type: "content",
+              value: [
+                { type: "text", text: "The screen is 1280x800 pixels." },
+                { type: "file", mediaType: "image/png", data: { type: "data", data: png } },
+              ],
+            },
+          },
+        ],
+      });
+
+      // 画像は結果の中にあるので、user メッセージは足さない。
+      expect(input[4]).toEqual(LANGUAGE_MESSAGE);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("画像を置けないプロバイダには、結果の直後の user メッセージで渡す", () => {
+    const dir = mkdtempSync(join(tmpdir(), "terasuma-prompt-"));
+    const images = createImageStore(dir);
+    const png = testPng(1280, 800);
+
+    try {
+      const ref = images.save(png, "image/png");
+      const input = buildModelInput(screenshotHistory({ images: [ref] }), images, "ja", {
+        toolResultImages: false,
+      });
+
       expect(input[3]).toEqual({
         role: "tool",
         content: [
@@ -266,8 +301,36 @@ describe("画像つきのツール結果", () => {
       expect(input[4]).toEqual({
         role: "user",
         content: [
-          { type: "text", text: "(screen image from the computer_screenshot call)" },
-          { type: "image", image: png, mediaType: "image/png" },
+          { type: "text", text: "(image from the computer_screenshot call)" },
+          { type: "file", mediaType: "image/png", data: { type: "data", data: png } },
+        ],
+      });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("複数の画像は、1 つの user メッセージにまとめる", () => {
+    const dir = mkdtempSync(join(tmpdir(), "terasuma-prompt-"));
+    const images = createImageStore(dir);
+    const first = testPng(10, 20);
+    const second = testPng(30, 40);
+
+    try {
+      const refs = [images.save(first, "image/png"), images.save(second, "image/png")];
+      const input = buildModelInput(screenshotHistory({ images: refs }), images, "ja", {
+        toolResultImages: false,
+      });
+
+      expect(input[4]).toEqual({
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: "(image from the computer_screenshot call)\n(image from the computer_screenshot call)",
+          },
+          { type: "file", mediaType: "image/png", data: { type: "data", data: first } },
+          { type: "file", mediaType: "image/png", data: { type: "data", data: second } },
         ],
       });
     } finally {
@@ -284,8 +347,8 @@ describe("画像つきのツール結果", () => {
       const first = images.save(testPng(1280, 800), "image/png");
       const second = images.save(testPng(1280, 800), "image/png");
 
-      expect(buildInput(screenshotHistory({ image: second }), images)).toEqual(
-        buildInput(screenshotHistory({ image: first }), images),
+      expect(buildInput(screenshotHistory({ images: [second] }), images)).toEqual(
+        buildInput(screenshotHistory({ images: [first] }), images),
       );
     } finally {
       rmSync(dir, { recursive: true, force: true });
@@ -298,7 +361,7 @@ describe("画像つきのツール結果", () => {
     const missing: ImageRef = { sha256: "0".repeat(64), mime: "image/png", width: 1280, height: 800 };
 
     try {
-      const input = buildInput(screenshotHistory({ image: missing }), images);
+      const input = buildInput(screenshotHistory({ images: [missing] }), images);
       expect(input[3]).toEqual({
         role: "tool",
         content: [
@@ -313,6 +376,8 @@ describe("画像つきのツール結果", () => {
           },
         ],
       });
+      // 読めない画像のために user メッセージは足さない。
+      expect(input[4]).toEqual(LANGUAGE_MESSAGE);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

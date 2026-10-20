@@ -382,7 +382,7 @@ describe("要約の作り方", () => {
           tool: "bash",
           failed: false,
           output: "Linux terasuma 7.0.0\n".repeat(400),
-          image: { sha256: "0".repeat(64), mime: "image/png", width: 1280, height: 800 },
+          images: [{ sha256: "0".repeat(64), mime: "image/png", width: 1280, height: 800 }],
         },
       ],
     });
@@ -567,7 +567,7 @@ describe("トークンの目安", () => {
           tool: "echo",
           failed: false,
           output: "abcdefgh", // 2
-          image: { sha256: "0".repeat(64), mime: "image/png", width: 1280, height: 800 }, // 画像 1 枚分
+          images: [{ sha256: "0".repeat(64), mime: "image/png", width: 1280, height: 800 }], // 画像 1 枚分
         },
       ],
       createdAt: 0,

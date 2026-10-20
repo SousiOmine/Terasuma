@@ -78,7 +78,7 @@ test(
       expect(result.part.failed, `画面を撮れなかった: ${result.part.output}`).toBe(false);
 
       // 撮った画像は保存され、参照が残っている（履歴から読み直してモデルへ渡せる）。
-      const image = result.part.image;
+      const image = result.part.images?.[0];
       if (image === undefined) throw new Error(`撮った画像の参照が残っていない: ${result.part.output}`);
       console.log(`  画面: ${join(harness.dataDir, "images", `${image.sha256}.png`)}（${image.width}x${image.height}）`);
 
@@ -87,7 +87,7 @@ test(
         (part): part is Extract<MessagePart, { type: "tool-result" }> =>
           part.type === "tool-result" && part.id === shot.part.id,
       );
-      expect(saved?.image, "保存された履歴に画像の参照が無い").toBeDefined();
+      expect(saved?.images, "保存された履歴に画像の参照が無い").toBeDefined();
 
       // ここが本題。画像を渡せていなければ、モデルはこの数字を書けない。
       expect(done.content, "モデルが画面の文字を読めていない").toContain(MARKER_DIGITS);

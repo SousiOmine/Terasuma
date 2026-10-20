@@ -1,6 +1,8 @@
 import type { ModelMessage } from "ai";
 import type { ReplyLanguage } from "../shared/language";
 import type { ChatMessage, ImageRef, MessagePart } from "../shared/types";
+import type { ImageReader } from "./images";
+import { readStoredImages, toolResultOutput, type StoredImages } from "./tool-output";
 
 /**
  * モデルへ渡す system プロンプト。
@@ -56,12 +58,13 @@ type ToolContent = Extract<ModelMessage, { role: "tool" }>["content"];
 /** tool の結果 1 件分の output。 */
 type ToolResultOutput = Extract<ToolContent[number], { type: "tool-result" }>["output"];
 
-/**
- * 保存した画像を読み出す口。
- * 履歴を組み立てる側がファイルの場所を知らずに済むよう、ここだけを渡す。
- */
-export type ImageReader = {
-  read(ref: ImageRef): Uint8Array | null;
+/** 履歴を組み立てるときに、モデル（プロバイダ）の都合を伝える。 */
+export type ModelInputOptions = {
+  /**
+   * プロバイダがツールの結果に画像を置けるかどうか。
+   * 置けない場合は、結果の直後に user メッセージとして渡す。
+   */
+  toolResultImages: boolean;
 };
 
 /** ツール呼び出しの名前。接続側が付けた "<サーバー id>_<ツール名>" を組み立て直す。 */
@@ -81,6 +84,7 @@ export function toModelMessages(
   context: TeraContext,
   images: ImageReader,
   replyLanguage: ReplyLanguage,
+  options: ModelInputOptions,
 ): ModelMessage[] {
   const messages: ModelMessage[] = [];
 
@@ -103,13 +107,14 @@ export function toModelMessages(
 
     messages.push({ role: "assistant", content: toAssistantParts(parts, message.content) });
 
-    const results = toToolResults(parts, images);
+    // ツールの結果に画像を置けないプロバイダのために、結果の直後に続ける画像を集める。
+    // 置けるプロバイダでは、結果そのものに画像が入るので、ここには何も残らない。
+    const pending: PendingImages[] = [];
+    const results = toToolResults(parts, images, options.toolResultImages, pending);
     if (results.length > 0) messages.push({ role: "tool", content: results });
 
-    // 画像は tool の結果に混ぜられない。OpenAI 互換のプロバイダは tool の本文に画像を
-    // 置けず、渡しても文字列に潰される（実測）。結果の直後に user メッセージとして置き、
-    // どの呼び出しの画像なのかを本文で示す。
-    for (const image of toImageMessages(parts, images)) messages.push(image);
+    const imageMessage = pending.length === 0 ? null : imagesMessage(pending, images);
+    if (imageMessage !== null) messages.push(imageMessage);
   }
 
   // 返事の言語は、保存済みの履歴のあと（今回のユーザー発言の後ろ）に置く。
@@ -131,45 +136,38 @@ export function replyLanguageInstruction(language: ReplyLanguage): string {
   return REPLY_LANGUAGE_INSTRUCTIONS[language];
 }
 
-/** ツールが返した画像を、モデルへ渡す user メッセージにする。 */
-function toImageMessages(parts: readonly MessagePart[], images: ImageReader): ModelMessage[] {
-  return parts.flatMap((part) =>
-    part.type === "tool-result" && part.image !== undefined
-      ? screenMessage(part.image, images, `${toolNameFor(part.server, part.tool)} call`)
-      : [],
-  );
+/** 結果の直後に user メッセージとして渡す画像。どの呼び出しの画像かを本文で示す。 */
+export type PendingImages = {
+  /** ツール呼び出しの名前（"computer_screenshot call" など）。 */
+  label: string;
+  images: readonly ImageRef[];
+};
+
+/** 画像を渡すときの本文。どの呼び出しの画像なのかをモデルに示す。 */
+function imageText(label: string): string {
+  return `(image from the ${label})`;
 }
 
 /**
- * 画像を渡すときの本文。どの呼び出しの画像なのかをモデルに示す。
- * 組み立てる場所が 2 つあるので、文言はここに 1 つだけ置く。
+ * ツール結果に載せられない画像を、user メッセージ 1 件にまとめる。
+ * 読める画像が 1 枚も無ければ null（読めなかったことはツール結果の本文に残っている）。
  */
-export function screenImageText(label = "computer_screenshot call"): string {
-  return `(screen image from the ${label})`;
-}
+export function imagesMessage(entries: readonly PendingImages[], images: ImageReader): ModelMessage | null {
+  const texts: string[] = [];
+  const files: StoredImages["files"] = [];
 
-/**
- * 撮った画像を、モデルへ渡す user メッセージにする。
- * 画像は tool の本文に置けないので（OpenAI 互換のプロバイダは文字列へ潰す）、
- * 結果の直後に別のメッセージとして置く。
- */
-export function screenMessage(
-  image: ImageRef,
-  images: ImageReader,
-  label = "computer_screenshot call",
-): ModelMessage[] {
-  const data = images.read(image);
-  if (data === null) return [];
+  for (const entry of entries) {
+    const stored = readStoredImages(entry.images, images);
+    for (let index = 0; index < stored.files.length; index += 1) texts.push(imageText(entry.label));
+    files.push(...stored.files);
+  }
 
-  return [
-    {
-      role: "user",
-      content: [
-        { type: "text", text: screenImageText(label) },
-        { type: "image", image: data, mediaType: image.mime },
-      ],
-    },
-  ];
+  if (files.length === 0) return null;
+
+  return {
+    role: "user",
+    content: [{ type: "text", text: texts.join("\n") }, ...files],
+  };
 }
 
 /**
@@ -184,10 +182,11 @@ export function buildModelInput(
   context: TeraContext,
   images: ImageReader,
   replyLanguage: ReplyLanguage,
+  options: ModelInputOptions,
 ): ModelMessage[] {
   return [
     { role: "system", content: SYSTEM_PROMPT },
-    ...toModelMessages(context, images, replyLanguage),
+    ...toModelMessages(context, images, replyLanguage, options),
   ];
 }
 
@@ -211,7 +210,12 @@ function toAssistantParts(parts: readonly MessagePart[], content: string): Assis
 }
 
 /** ツール呼び出しに対する結果を、呼び出しの順に並べる。 */
-function toToolResults(parts: readonly MessagePart[], images: ImageReader): ToolContent {
+function toToolResults(
+  parts: readonly MessagePart[],
+  images: ImageReader,
+  toolResultImages: boolean,
+  pending: PendingImages[],
+): ToolContent {
   const results = new Map<string, Extract<MessagePart, { type: "tool-result" }>>();
   for (const part of parts) {
     if (part.type === "tool-result") results.set(part.id, part);
@@ -231,7 +235,13 @@ function toToolResults(parts: readonly MessagePart[], images: ImageReader): Tool
           ? // 「停止」で結果が残らなかった呼び出し。結果を欠いたまま渡すとプロバイダが
             // 呼び出しと結果の対応を取れずに失敗するので、中断した事実だけを伝える。
             { type: "error-text", value: "This tool call was interrupted before it returned a result." }
-          : toToolResultOutput(result, images),
+          : toToolResultOutput(
+              result,
+              images,
+              toolResultImages,
+              `${toolNameFor(part.server, part.tool)} call`,
+              pending,
+            ),
     });
   }
   return blocks;
@@ -239,21 +249,26 @@ function toToolResults(parts: readonly MessagePart[], images: ImageReader): Tool
 
 /**
  * ツールの結果を、モデルへ渡す形にする。
- * 画像はここには入れない（tool の本文に画像を置けるプロバイダが無いため、別の user メッセージで渡す）。
+ * 画像を置けるプロバイダでは結果そのものに含め、置けないプロバイダでは
+ * 結果の直後の user メッセージ（pending）に回す。
  */
 function toToolResultOutput(
   result: Extract<MessagePart, { type: "tool-result" }>,
   images: ImageReader,
+  toolResultImages: boolean,
+  label: string,
+  pending: PendingImages[],
 ): ToolResultOutput {
-  const asText = (value: string): ToolResultOutput => ({
-    type: result.failed ? "error-text" : "text",
-    value,
-  });
+  const stored = readStoredImages(result.images ?? [], images);
 
-  // 参照はあるのに実体が無い状態。黙って本文だけにすると、画像を見たつもりで話が進む。
-  if (result.image !== undefined && images.read(result.image) === null) {
-    return asText(`${result.output}\n(Could not read the stored image.)`);
+  if (!toolResultImages && !result.failed && stored.images.length > 0) {
+    pending.push({ label, images: stored.images });
   }
 
-  return asText(result.output);
+  return toolResultOutput({
+    text: result.output,
+    images: stored,
+    failed: result.failed,
+    includeImages: toolResultImages,
+  });
 }

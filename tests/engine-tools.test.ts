@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { tool } from "ai";
 import { z } from "zod";
 import type { ModelSettings } from "../src/config";
@@ -12,9 +15,11 @@ import {
   type SettingsReader,
   type ToolsetProvider,
 } from "../src/server/engine";
-import type { ChatMessage } from "../src/shared/types";
+import { createImageStore, type ImageStore } from "../src/server/images";
+import type { CatalogSnapshot } from "../src/server/models-dev";
+import type { ChatMessage, ImageRef } from "../src/shared/types";
 import { createHandover } from "../src/server/handover";
-import { createCodingStub, createComputerStub, createContainerStub, createImageStub } from "./support";
+import { createCodingStub, createComputerStub, createContainerStub, createImageStub, testPng } from "./support";
 
 /**
  * 1 回目の呼び出しではツールを呼び、2 回目では本文を返す偽のプロバイダ。
@@ -174,6 +179,19 @@ function createToolsetProvider(): ToolsetProvider & { executed: unknown[] } {
   return { executed, toolset: async () => ({ local_echo: echo }) };
 }
 
+/** 画像を 1 枚返すツールを 1 つ持つ供給元。 */
+function createImageToolsetProvider(ref: ImageRef): ToolsetProvider {
+  return {
+    toolset: async () => ({
+      local_shot: tool({
+        description: "テスト用の画像",
+        inputSchema: z.object({}),
+        execute: async () => ({ text: "撮りました", images: [ref] }),
+      }),
+    }),
+  };
+}
+
 function settingsFor(port: number): ModelSettings {
   return {
     model: "custom-1/test-model",
@@ -218,6 +236,8 @@ async function run(
   settings: ModelSettings,
   computer: ComputerToolsetProvider = createComputerStub(),
   coding: CodingToolset = createCodingStub(),
+  images: ImageStore = createImageStub(),
+  catalog: CatalogSnapshot | null = null,
 ): Promise<EngineEvent[]> {
   const reader: SettingsReader = { read: () => settings };
   const stream = await createAiSdkEngine({
@@ -225,8 +245,8 @@ async function run(
     mcp: provider,
     computer,
     coding,
-    images: createImageStub(),
-    catalog: { snapshot: () => null },
+    images,
+    catalog: { snapshot: () => catalog },
   }).stream({
     context: { summary: null, messages: history() },
     signal: new AbortController().signal,
@@ -389,6 +409,101 @@ describe("MCP のツール呼び出し（AI SDK 経由）", () => {
       expect(result.part.output).toBe("boom");
     } finally {
       await fake.server.stop(true);
+    }
+  });
+
+  test("ツールが返した画像は、ツールの結果としてモデルへ渡る", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "terasuma-engine-"));
+    const images = createImageStore(dir);
+    const png = testPng(4, 3);
+    const ref = images.save(png, "image/png");
+
+    const fake = startFakeProvider({ name: "local_shot", args: "{}" });
+
+    try {
+      const events = await run(
+        createImageToolsetProvider(ref),
+        settingsFor(portOf(fake.server)),
+        createComputerStub(),
+        createCodingStub(),
+        images,
+      );
+
+      const result = events.find((event) => event.type === "tool-result");
+      if (result?.type !== "tool-result") throw new Error("ツールの結果が返らなかった");
+      expect(result.part.output).toBe("撮りました");
+      expect(result.part.images).toEqual([ref]);
+
+      // 2 回目の呼び出しでは、ツールの結果そのものに画像が入っている。
+      const messages = (fake.bodies[1]?.["messages"] ?? []) as { role: string; content: unknown }[];
+      const toolMessage = messages.find((message) => message.role === "tool");
+      expect(toolMessage?.content).toEqual([
+        { type: "text", text: "撮りました" },
+        {
+          type: "image_url",
+          image_url: { url: `data:image/png;base64,${Buffer.from(png).toString("base64")}` },
+        },
+      ]);
+    } finally {
+      await fake.server.stop(true);
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("画像を結果に置けないプロバイダには、次のステップで user メッセージとして渡す", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "terasuma-engine-"));
+    const images = createImageStore(dir);
+    const png = testPng(4, 3);
+    const ref = images.save(png, "image/png");
+
+    const fake = startFakeProvider({ name: "local_shot", args: "{}" });
+    const catalog: CatalogSnapshot = {
+      fetchedAt: 0,
+      providers: [
+        {
+          id: "cerebras",
+          name: "Cerebras",
+          npm: "@ai-sdk/cerebras",
+          api: `http://127.0.0.1:${portOf(fake.server)}/v1`,
+        },
+      ],
+      models: new Map(),
+    };
+
+    try {
+      const events = await run(
+        createImageToolsetProvider(ref),
+        {
+          model: "cerebras/test-model",
+          providers: { cerebras: { apiKey: "test-key" } },
+          modelOptions: {},
+        },
+        createComputerStub(),
+        createCodingStub(),
+        images,
+        catalog,
+      );
+
+      const result = events.find((event) => event.type === "tool-result");
+      if (result?.type !== "tool-result") throw new Error("ツールの結果が返らなかった");
+      expect(result.part.images).toEqual([ref]);
+
+      // ツールの結果には画像を置かず、結果の直後の user メッセージで渡す。
+      const messages = (fake.bodies[1]?.["messages"] ?? []) as { role: string; content: unknown }[];
+      const toolMessage = messages.find((message) => message.role === "tool");
+      expect(toolMessage?.content).toBe("撮りました");
+
+      const imageMessage = messages.filter((message) => message.role === "user").at(-1);
+      expect(imageMessage?.content).toEqual([
+        { type: "text", text: "(image from the local_shot call)" },
+        {
+          type: "image_url",
+          image_url: { url: `data:image/png;base64,${Buffer.from(png).toString("base64")}` },
+        },
+      ]);
+    } finally {
+      await fake.server.stop(true);
+      rmSync(dir, { recursive: true, force: true });
     }
   });
 

@@ -123,7 +123,7 @@ describe("computer ツールセット", () => {
   test("podman が無い端末では、ツールを 1 つも渡さない", async () => {
     const { provider, dir } = toolsetFor({ podman: false });
     try {
-      expect(await provider.toolset({ teraId: "t1", onImage: () => undefined })).toEqual({});
+      expect(await provider.toolset({ teraId: "t1" })).toEqual({});
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -133,7 +133,7 @@ describe("computer ツールセット", () => {
     const { provider, dir } = toolsetFor({ running: false });
     try {
       expect(
-        Object.keys(await provider.toolset({ teraId: "t1", onImage: () => undefined })),
+        Object.keys(await provider.toolset({ teraId: "t1" })),
       ).toContain("computer_screenshot");
     } finally {
       rmSync(dir, { recursive: true, force: true });
@@ -144,28 +144,24 @@ describe("computer ツールセット", () => {
 describe("画面の撮影", () => {
   test("撮った画像を保存して、大きさを返す", async () => {
     await withTools({}, async ({ tools, images }) => {
-      const output = (await callTool(tools, "computer_screenshot", {})) as { text: string; image: ImageRef };
+      const output = (await callTool(tools, "computer_screenshot", {})) as { text: string; images: ImageRef[] };
 
       expect(output.text).toBe("The screen is 1280x800 pixels.");
-      expect(images.read(output.image)).toEqual(testPng(1280, 800));
+      expect(output.images).toHaveLength(1);
+      expect(images.read(output.images[0]!)).toEqual(testPng(1280, 800));
     });
   });
 
-  test("モデルへ渡すのは本文だけ（画像は組み立て側が別に渡す）", async () => {
+  test("画像の参照は、保存した実体を指す", async () => {
     await withTools({}, async ({ tools }) => {
-      const tool = tools["computer_screenshot"];
-      if (tool?.execute === undefined) throw new Error("computer_screenshot が無い");
+      const output = (await callTool(tools, "computer_screenshot", {})) as { text: string; images: ImageRef[] };
+      const image = output.images[0];
+      if (image === undefined) throw new Error("画像の参照が無い");
 
-      const output = await tool.execute({} as never, {} as never);
-      // tool の本文に画像を置けるプロバイダが無いので、ここでは参照を出さない。
-      expect(tool.toModelOutput?.({ toolCallId: "call-1", input: {}, output })).toEqual({
-        type: "text",
-        value: "The screen is 1280x800 pixels.",
-      });
-
-      // 保存した画像は、あとから組み立てる側（prompt.ts）が読める形で残っている。
-      const image = (output as { image: ImageRef }).image;
       expect(image.sha256).toMatch(/^[0-9a-f]{64}$/);
+      expect(image.mime).toBe("image/png");
+      expect(image.width).toBe(1280);
+      expect(image.height).toBe(800);
     });
   });
 });

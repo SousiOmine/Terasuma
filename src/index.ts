@@ -21,12 +21,17 @@ ensureDirectories(config);
 const store = createStore(config.dbPath);
 const settings = createSettingsStore(config.configPath);
 
+// ツールが返した画像は、データディレクトリにファイルとして置く（会話には参照だけが残る）。
+// MCP の接続もこの置き場へ画像を保存するので、接続より先に用意する。
+const images = createImageStore(config.dataDir);
+
 // 認可コードの受け取り先は、待ち受けているポートが決まってから決まる。
 // 実際に使うポートは startServer の戻り値で分かるので、そこまで null のままにする。
 let boundPort: number | null = null;
 const mcp = createMcpManager({
   settings,
   dataDir: config.dataDir,
+  images,
   callbackUrl: () =>
     boundPort === null ? null : new URL(`http://${config.host}:${boundPort}${OAUTH_CALLBACK_PATH}`),
 });
@@ -37,9 +42,6 @@ const container = createContainerManager({
   dataDir: config.dataDir,
   containerDir: join(import.meta.dir, "..", "container"),
 });
-
-// ツールが撮った画像は、データディレクトリにファイルとして置く（会話には参照だけが残る）。
-const images = createImageStore(config.dataDir);
 
 // エージェントがユーザーへ画面を渡すときの待ち（ログインや二段階認証）。
 const handover = createHandover();

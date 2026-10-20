@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { LanguageModel } from "ai";
-import { catalogRoute, createLanguageModel, providerSpecForId } from "../src/server/provider-registry";
+import { catalogRoute, createLanguageModel, providerSpecForId, toolResultTakesImages } from "../src/server/provider-registry";
 
 /** 生成したモデルの、providerOptions のキーとモデル名を取り出す。 */
 function modelInfo(model: LanguageModel): { provider: string; modelId: string } {
@@ -123,5 +123,25 @@ describe("モデルの組み立て", () => {
         reasoningEffort: null,
       }),
     ).toThrow(/接続先/);
+  });
+});
+
+describe("ツール結果の画像", () => {
+  test("ツールの結果に画像を置けるプロバイダを見分ける", () => {
+    // content の file 部品を、そのまま画像として送れるパッケージ。
+    expect(toolResultTakesImages("openai")).toBe(true);
+    expect(toolResultTakesImages("anthropic")).toBe(true);
+    expect(toolResultTakesImages("google")).toBe(true);
+    expect(toolResultTakesImages("xai")).toBe(true);
+    expect(toolResultTakesImages("openrouter")).toBe(true);
+    expect(toolResultTakesImages("openai-compatible")).toBe(true);
+
+    // 画像を JSON の文字列に潰すか、エラーにするパッケージ。
+    expect(toolResultTakesImages("groq")).toBe(false);
+    expect(toolResultTakesImages("mistral")).toBe(false);
+    expect(toolResultTakesImages("cerebras")).toBe(false);
+    expect(toolResultTakesImages("deepinfra")).toBe(false);
+    expect(toolResultTakesImages("togetherai")).toBe(false);
+    expect(toolResultTakesImages("perplexity")).toBe(false);
   });
 });

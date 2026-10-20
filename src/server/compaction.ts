@@ -450,8 +450,8 @@ function serializeConversation(messages: readonly ChatMessage[]): string {
       if (part.type !== "tool-result") continue;
 
       const label = part.failed ? "Tool result (failed)" : "Tool result";
-      const image = part.image === undefined ? "" : ` [image ${part.image.width}x${part.image.height}]`;
-      lines.push(`[${label}]: ${truncate(part.output)}${image}`);
+      const images = (part.images ?? []).map((image) => ` [image ${image.width}x${image.height}]`).join("");
+      lines.push(`[${label}]: ${truncate(part.output)}${images}`);
     }
   }
 
@@ -611,7 +611,7 @@ export function estimateMessageTokens(message: ChatMessage): number {
         total += estimateTokens(JSON.stringify(part.args) ?? "");
         break;
       case "tool-result":
-        total += estimateTokens(part.output) + (part.image === undefined ? 0 : IMAGE_TOKENS);
+        total += estimateTokens(part.output) + (part.images?.length ?? 0) * IMAGE_TOKENS;
         break;
     }
   }

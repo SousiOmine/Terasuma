@@ -250,6 +250,57 @@ export function testPng(width: number, height: number): Uint8Array {
   return bytes;
 }
 
+/**
+ * 幅と高さだけを持つ最小の JPEG（SOI + SOF0）。
+ * 大きさの読み取りは SOF の寸法しか見ないので、画像データは付けない。
+ */
+export function testJpeg(width: number, height: number): Uint8Array {
+  return new Uint8Array([
+    0xff, 0xd8, // SOI
+    0xff, 0xc0, 0x00, 0x11, // SOF0（長さ 17）
+    0x08, // 精度
+    (height >> 8) & 0xff, height & 0xff,
+    (width >> 8) & 0xff, width & 0xff,
+    0x03, // 成分数
+    0x01, 0x22, 0x00,
+    0x02, 0x11, 0x01,
+    0x03, 0x11, 0x01,
+  ]);
+}
+
+/** 幅と高さだけを持つ最小の GIF（GIF89a）。 */
+export function testGif(width: number, height: number): Uint8Array {
+  const bytes = new Uint8Array(10);
+  bytes.set(new TextEncoder().encode("GIF89a"), 0);
+  const view = new DataView(bytes.buffer);
+  view.setUint16(6, width, true);
+  view.setUint16(8, height, true);
+  return bytes;
+}
+
+/** WebP のヘッダー（RIFF + WEBP + VP8X チャンク）だけを持つ最小の WebP。 */
+export function testWebp(width: number, height: number): Uint8Array {
+  const payload = new Uint8Array(10);
+  const canvasWidth = width - 1;
+  const canvasHeight = height - 1;
+  payload[4] = canvasWidth & 0xff;
+  payload[5] = (canvasWidth >> 8) & 0xff;
+  payload[6] = (canvasWidth >> 16) & 0xff;
+  payload[7] = canvasHeight & 0xff;
+  payload[8] = (canvasHeight >> 8) & 0xff;
+  payload[9] = (canvasHeight >> 16) & 0xff;
+
+  const bytes = new Uint8Array(12 + 8 + payload.length);
+  bytes.set(new TextEncoder().encode("RIFF"), 0);
+  const view = new DataView(bytes.buffer);
+  view.setUint32(4, 4 + 8 + payload.length, true);
+  bytes.set(new TextEncoder().encode("WEBP"), 8);
+  bytes.set(new TextEncoder().encode("VP8X"), 12);
+  view.setUint32(16, payload.length, true);
+  bytes.set(payload, 20);
+  return bytes;
+}
+
 /** テストで使う設定。プロバイダ 1 件が設定済みで、既定のモデルも決まっている状態。 */
 export const TEST_SETTINGS: FileSettings = {
   model: "deepseek/deepseek-flash",

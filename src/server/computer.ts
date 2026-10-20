@@ -1,7 +1,6 @@
 import type { ToolSet } from "ai";
 import { tool } from "ai";
 import { z } from "zod";
-import type { ImageRef } from "../shared/types";
 import type { ContainerManager, ShellResult } from "./container";
 import type { ComputerToolsetProvider } from "./engine";
 import type { Handover } from "./handover";
@@ -49,7 +48,7 @@ export function createComputerToolset(options: ComputerToolsetOptions): Computer
     async toolset(input) {
       const status = await options.container.status();
       if (status.state === "podman_missing") return {};
-      return createComputerTools({ ...options, teraId: input.teraId, onImage: input.onImage });
+      return createComputerTools({ ...options, teraId: input.teraId });
     },
   };
 }
@@ -65,15 +64,10 @@ export type ComputerToolsetOptions = {
 export type ComputerToolsOptions = ComputerToolsetOptions & {
   /** ターンの対象の Tera。 */
   teraId: string;
-  /**
-   * 撮った画像を、このターンの次のステップでモデルへ渡すために知らせる。
-   * tool の本文に画像を置けるプロバイダが無いので、渡す口はここで作る。
-   */
-  onImage?: (image: ImageRef) => void;
 };
 
 export function createComputerTools(options: ComputerToolsOptions): ComputerToolset {
-  const { container, images, handover, teraId, onImage } = options;
+  const { container, images, handover, teraId } = options;
 
   /** xdotool を 1 回呼ぶ。失敗と打ち切りは例外にして、モデルが理由を読めるようにする。 */
   async function xdotool(args: readonly string[], signal?: AbortSignal): Promise<ShellResult> {
@@ -98,13 +92,8 @@ export function createComputerTools(options: ComputerToolsOptions): ComputerTool
       execute: async () => {
         const png = await container.screenshot();
         const image = images.save(png, "image/png");
-        onImage?.(image);
-        return { text: `The screen is ${image.width}x${image.height} pixels.`, image };
+        return { text: `The screen is ${image.width}x${image.height} pixels.`, images: [image] };
       },
-      // 画像はここには入れない。tool の本文に画像を置けるプロバイダが無いため、
-      // 保存した参照から組み立てる側（prompt.ts）が user メッセージとして渡す。
-      // モデルへ渡すのは本文だけにする。画像は保存した参照から prompt.ts が組み立てる。
-      toModelOutput: ({ output }: { output: ImageOutput }) => ({ type: "text", value: output.text }),
     }),
 
     computer_click: tool({
@@ -306,9 +295,6 @@ function formatWindows(result: ShellResult): string {
     })
     .join("\n");
 }
-
-/** 画像つきのツールの戻り値。 */
-type ImageOutput = { text: string; image: ImageRef };
 
 /**
  * 指定した時間だけ待つ。ターンが止まったら、待つのもやめる。

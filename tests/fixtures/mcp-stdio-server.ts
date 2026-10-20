@@ -21,5 +21,20 @@ serveStdio(() => {
     ({ reason }) => ({ content: [{ type: "text", text: `失敗: ${reason}` }], isError: true }),
   );
 
+  // 1x1 の PNG。ツールの戻り値で画像を返せることを確かめるために使う。
+  const PNG_1X1 =
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+
+  server.registerTool(
+    "shot",
+    { description: "画像を返す", inputSchema: {} },
+    () => ({
+      content: [
+        { type: "text" as const, text: "撮りました" },
+        { type: "image" as const, data: PNG_1X1, mimeType: "image/png" },
+      ],
+    }),
+  );
+
   return server;
 });
