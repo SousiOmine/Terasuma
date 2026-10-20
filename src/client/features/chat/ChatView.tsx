@@ -9,6 +9,7 @@ import { computerPaneOpen, toggleComputerPane } from "../../state/handover";
 import { openSettings } from "../../state/route";
 import { activeTera } from "../../state/session";
 import { Composer } from "./Composer";
+import { Banner } from "../../ui/Banner";
 import { ErrorNotice } from "../../ui/ErrorNotice";
 import { MessageBubble } from "./MessageBubble";
 
@@ -77,33 +78,15 @@ export function ChatView() {
       </header>
 
       {problem !== null && (
-        <div class="shrink-0 border-b border-amber-200 bg-amber-50 px-5 py-2 dark:border-amber-900/60 dark:bg-amber-950/40">
-          <div class="mx-auto flex w-full max-w-3xl items-center gap-3 text-sm text-amber-900 dark:text-amber-200">
-            <p class="min-w-0 flex-1">{t(problem === "unset" ? "chat.model.unset" : "chat.model.providerMissing")}</p>
-            <button
-              type="button"
-              onClick={() => openSettings("model")}
-              class="shrink-0 rounded-lg border border-amber-300 px-2.5 py-1 text-xs transition hover:bg-amber-100 dark:border-amber-800 dark:hover:bg-amber-900/40"
-            >
-              {t("chat.openSettings")}
-            </button>
-          </div>
-        </div>
+        <Banner tone="warning" action={{ label: t("chat.openSettings"), onClick: () => openSettings("model") }}>
+          {t(problem === "unset" ? "chat.model.unset" : "chat.model.providerMissing")}
+        </Banner>
       )}
 
       {containerMissing && (
-        <div class="shrink-0 border-b border-neutral-200 bg-neutral-100 px-5 py-2 dark:border-neutral-800 dark:bg-neutral-900">
-          <div class="mx-auto flex w-full max-w-3xl items-center gap-3 text-sm text-neutral-700 dark:text-neutral-300">
-            <p class="min-w-0 flex-1">{t("chat.container.unavailable")}</p>
-            <button
-              type="button"
-              onClick={() => openSettings("container")}
-              class="shrink-0 rounded-lg border border-neutral-300 px-2.5 py-1 text-xs transition hover:bg-neutral-200 dark:border-neutral-700 dark:hover:bg-neutral-800"
-            >
-              {t("chat.openSettings")}
-            </button>
-          </div>
-        </div>
+        <Banner tone="muted" action={{ label: t("chat.openSettings"), onClick: () => openSettings("container") }}>
+          {t("chat.container.unavailable")}
+        </Banner>
       )}
 
       <div ref={scrollRef} onScroll={handleScroll} class="min-h-0 flex-1 overflow-y-auto">

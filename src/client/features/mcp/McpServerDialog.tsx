@@ -1,23 +1,21 @@
-import { IconExternalLink } from "@tabler/icons-preact";
 import { useEffect, useRef, useState } from "preact/hooks";
-import { mcpServerIdProblem } from "../../../shared/ids";
 import type { McpServerForm, McpServerView, McpTestView } from "../../../shared/types";
-import * as api from "../../lib/api";
-import { toErrorState, type ErrorState } from "../../lib/errors";
+import { useInFlight } from "../../hooks/useInFlight";
 import { t } from "../../i18n";
+import * as api from "../../lib/api";
+import { type ErrorState, toErrorState } from "../../lib/errors";
 import { AUTHORIZATION_POLL_MS, AUTHORIZATION_TIMEOUT_MS, saveMcpServer } from "../../state/mcp";
 import { Button } from "../../ui/Button";
 import { ErrorNotice } from "../../ui/ErrorNotice";
 import { Field } from "../../ui/Field";
 import { Modal } from "../../ui/Modal";
+import { Segmented } from "../../ui/Segmented";
+import { INPUT_CLASS, TEXTAREA_CLASS } from "../../ui/styles";
+import { buildForm, envToText, type McpFormFields } from "./mcpForm";
+import { AuthorizationNotice, CheckedNotice } from "./McpNotices";
 
 /** 新しく追加するか、設定済みのものを変更するか。 */
 export type McpDialogMode = { kind: "add" } | { kind: "edit"; server: McpServerView };
-
-const INPUT_CLASS =
-  "w-full rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-sm outline-none focus:border-neutral-400 dark:border-neutral-700 dark:bg-neutral-900 dark:focus:border-neutral-600";
-
-const TEXTAREA_CLASS = `${INPUT_CLASS} font-mono text-xs leading-relaxed`;
 
 /** 接続を確かめられたときの入力と、そのときに見えたツール。 */
 type Checked = { signature: string; tools: readonly string[] };
@@ -56,14 +54,14 @@ export function McpServerDialog({
   const [authorizing, setAuthorizing] = useState<string | null>(null);
   const [error, setError] = useState<ErrorState | null>(null);
 
-  /** 送信中の要求。素早く二度押しされると busy が立つ前に 2 回目が走るので、押した瞬間に閉じる門をここに置く。 */
-  const inFlight = useRef(false);
+  /** 送信中の要求。素早く二度押しされると busy が立つ前に 2 回目が走るので、押した瞬間に閉じる門を置く。 */
+  const inFlight = useInFlight();
   /** 走っている確認の番号。入力が変わったときと閉じたときに進めて、その結果を捨てる。 */
   const run = useRef(0);
   /** 一度開いた認可画面。同じタブを開き直さないための控え。 */
   const opened = useRef<string | null>(null);
 
-  const inputs: FormFields = { id, type, command, args, env, url };
+  const inputs: McpFormFields = { id, type, command, args, env, url };
   /** 入力そのもの。確かめた結果が今の入力に対するものかを比べるのにも使う。 */
   const signature = JSON.stringify(inputs);
   const checkedNow = checked !== null && checked.signature === signature ? checked : null;
@@ -87,41 +85,45 @@ export function McpServerDialog({
 
   /** いまの入力で接続を確かめる。認可が要る場合は、終わるまで待つ。 */
   const check = () => {
-    if (inFlight.current || authorizing !== null) return;
+    if (inFlight.isRunning() || authorizing !== null) return;
 
-    const form = buildForm(inputs, takenIds, setError);
-    if (form === null) return;
+    const parsed = buildForm(inputs, takenIds);
+    if (parsed.kind === "error") {
+      setError({ code: "input", detail: t(parsed.message) });
+      return;
+    }
 
-    inFlight.current = true;
-    setBusy("checking");
-    setError(null);
-    setChecked(null);
-    const current = run.current + 1;
-    run.current = current;
-    void probe(form, signature, current).finally(() => {
-      inFlight.current = false;
+    inFlight.run(async () => {
+      setBusy("checking");
+      setError(null);
+      setChecked(null);
+      const current = run.current + 1;
+      run.current = current;
+      await probe(parsed.form, signature, current);
     });
   };
 
   const submit = () => {
-    if (inFlight.current) return;
+    if (inFlight.isRunning()) return;
 
-    const form = buildForm(inputs, takenIds, setError);
-    if (form === null) return;
+    const parsed = buildForm(inputs, takenIds);
+    if (parsed.kind === "error") {
+      setError({ code: "input", detail: t(parsed.message) });
+      return;
+    }
 
-    inFlight.current = true;
-    setBusy("saving");
-    setError(null);
+    inFlight.run(async () => {
+      setBusy("saving");
+      setError(null);
 
-    void saveMcpServer(form, editing ? "edit" : "add")
-      .then(() => onClose(form.id))
-      .catch((failure: unknown) => {
+      try {
+        await saveMcpServer(parsed.form, editing ? "edit" : "add");
+        onClose(parsed.form.id);
+      } catch (failure) {
         setError(toErrorState(failure));
         setBusy(null);
-      })
-      .finally(() => {
-        inFlight.current = false;
-      });
+      }
+    });
   };
 
   /** 1 回分の接続確認。 */
@@ -249,26 +251,14 @@ export function McpServerDialog({
         </Field>
 
         <Field label={t("settings.mcp.form.type.label")}>
-          <div class="flex gap-1 rounded-lg bg-neutral-200/60 p-0.5 dark:bg-neutral-800">
-            {(["stdio", "http"] as const).map((value) => {
-              const active = type === value;
-              return (
-                <button
-                  key={value}
-                  type="button"
-                  aria-pressed={active}
-                  onClick={() => change(setType, value)}
-                  class={`flex-1 rounded-md px-3 py-1 text-xs transition ${
-                    active
-                      ? "bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900"
-                      : "text-neutral-600 hover:bg-neutral-200 dark:text-neutral-300 dark:hover:bg-neutral-700"
-                  }`}
-                >
-                  {t(value === "stdio" ? "settings.mcp.form.type.stdio" : "settings.mcp.form.type.http")}
-                </button>
-              );
-            })}
-          </div>
+          <Segmented
+            options={[
+              { value: "stdio", label: t("settings.mcp.form.type.stdio") },
+              { value: "http", label: t("settings.mcp.form.type.http") },
+            ]}
+            value={type}
+            onChange={(value) => change(setType, value)}
+          />
         </Field>
 
         {type === "stdio" ? (
@@ -344,127 +334,9 @@ export function McpServerDialog({
   );
 }
 
-type FormFields = {
-  id: string;
-  type: "stdio" | "http";
-  command: string;
-  args: string;
-  env: string;
-  url: string;
-};
-
 /** 見出しの下に出す、いま設定されている接続先。 */
 function subtitleOf(server: McpServerView | null): string | undefined {
   if (server === null) return undefined;
   if (server.type === "stdio") return [server.command, ...server.args].join(" ");
   return server.url ?? undefined;
-}
-
-/** 接続を確かめられたことと、そのときに見えたツール。 */
-function CheckedNotice({ tools }: { tools: readonly string[] }) {
-  return (
-    <div class="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-200">
-      <p>{t("settings.mcp.form.connected")}</p>
-      {tools.length === 0 ? (
-        <p class="mt-0.5 opacity-80">{t("settings.mcp.noTools")}</p>
-      ) : (
-        <ul class="mt-1 flex flex-wrap gap-1">
-          {tools.map((tool) => (
-            <li key={tool} class="rounded bg-white/70 px-1.5 py-0.5 font-mono text-[11px] dark:bg-neutral-900/60">
-              {tool}
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
-
-/** 認可を待っている間の案内。ブラウザのタブを閉じてしまっても、ここから開き直せる。 */
-function AuthorizationNotice({ url }: { url: string }) {
-  return (
-    <div class="rounded-lg border border-sky-300 bg-sky-50 px-3 py-2 text-xs text-sky-900 dark:border-sky-900 dark:bg-sky-950/50 dark:text-sky-200">
-      <p>{t("settings.mcp.form.authorize")}</p>
-      <a href={url} target="_blank" rel="noreferrer noopener" class="mt-1 inline-flex items-center gap-1 underline">
-        <IconExternalLink size={12} stroke={1.6} class="shrink-0" />
-        {t("settings.mcp.openAuthorization")}
-      </a>
-    </div>
-  );
-}
-
-/** 入力を検証して送れる形にする。読めない場合は理由を出して null を返す。 */
-function buildForm(
-  fields: FormFields,
-  takenIds: readonly string[],
-  fail: (error: ErrorState) => void,
-): McpServerForm | null {
-  const id = fields.id.trim();
-  const idProblem = mcpServerIdProblem(id);
-  if (idProblem !== null) {
-    fail({
-      code: "input",
-      detail: t(idProblem === "reserved" ? "settings.mcp.form.reservedName" : "settings.mcp.form.invalidName"),
-    });
-    return null;
-  }
-
-  // 同じ id は設定でもツール名でも衝突する。サーバー側でも弾くが、繋ぎに行く前にここで止める。
-  if (takenIds.includes(id)) {
-    fail({ code: "input", detail: t("settings.mcp.form.nameTaken") });
-    return null;
-  }
-
-  if (fields.type === "stdio") {
-    const command = fields.command.trim();
-    if (command.length === 0) {
-      fail({ code: "input", detail: t("settings.mcp.form.needCommand") });
-      return null;
-    }
-
-    const env = parseEnv(fields.env);
-    if (env === null) {
-      fail({ code: "input", detail: t("settings.mcp.form.invalidEnv") });
-      return null;
-    }
-
-    return { id, type: "stdio", command, args: lines(fields.args), env, url: null };
-  }
-
-  const url = fields.url.trim();
-  if (url.length === 0) {
-    fail({ code: "input", detail: t("settings.mcp.form.needUrl") });
-    return null;
-  }
-
-  return { id, type: "http", command: null, args: null, env: null, url };
-}
-
-/** 1 行 1 項目の入力を、空行を除いた配列にする。 */
-function lines(value: string): string[] {
-  return value
-    .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0);
-}
-
-/** KEY=VALUE を 1 行ずつ読む。読めない行があれば null。 */
-function parseEnv(value: string): Record<string, string> | null {
-  const variables: Record<string, string> = {};
-
-  for (const line of lines(value)) {
-    const separator = line.indexOf("=");
-    if (separator <= 0) return null;
-
-    const name = line.slice(0, separator).trim();
-    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) return null;
-    variables[name] = line.slice(separator + 1).trim();
-  }
-  return variables;
-}
-
-function envToText(env: Record<string, string>): string {
-  return Object.entries(env)
-    .map(([name, value]) => `${name}=${value}`)
-    .join("\n");
 }

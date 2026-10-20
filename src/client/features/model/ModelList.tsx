@@ -1,6 +1,7 @@
-import { IconCheck, IconSearch } from "@tabler/icons-preact";
+import { IconCheck } from "@tabler/icons-preact";
 import { useState } from "preact/hooks";
 import { t } from "../../i18n";
+import { SearchInput } from "../../ui/SearchInput";
 
 export type ModelListProps = {
   models: readonly string[];
@@ -19,21 +20,7 @@ export function ModelList({ models, value, onChange, currentModel = null }: Mode
 
   return (
     <div>
-      <div class="relative">
-        <IconSearch
-          size={16}
-          stroke={1.6}
-          class="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-neutral-400"
-        />
-        <input
-          type="search"
-          value={query}
-          placeholder={t("settings.model.searchModel")}
-          aria-label={t("settings.model.searchModel")}
-          class="w-full rounded-lg border border-neutral-300 bg-white py-1.5 pl-8 pr-3 text-sm outline-none focus:border-neutral-400 dark:border-neutral-700 dark:bg-neutral-900 dark:focus:border-neutral-600"
-          onInput={(event) => setQuery(event.currentTarget.value)}
-        />
-      </div>
+      <SearchInput value={query} onInput={setQuery} placeholder={t("settings.model.searchModel")} />
 
       <div class="mt-2 max-h-64 overflow-y-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
         {visible.length === 0 ? (

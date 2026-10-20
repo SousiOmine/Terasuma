@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "preact/hooks";
+import { useInFlight } from "../../hooks/useInFlight";
 import { modelId, modelParts, modelProvider } from "../../../shared/model";
 import * as api from "../../lib/api";
 import { toErrorState, type ErrorState } from "../../lib/errors";
@@ -30,15 +31,7 @@ export function ModelPickerDialog({ onClose }: ModelPickerDialogProps) {
   const requestRef = useRef(0);
 
   /** 二度押しで同じ要求を 2 回送らないための門。 */
-  const inFlight = useRef(false);
-
-  const run = (action: () => Promise<void>) => {
-    if (inFlight.current) return;
-    inFlight.current = true;
-    void action().finally(() => {
-      inFlight.current = false;
-    });
-  };
+  const inFlight = useInFlight();
 
   const load = async (providerId: string) => {
     const request = requestRef.current + 1;
@@ -89,7 +82,7 @@ export function ModelPickerDialog({ onClose }: ModelPickerDialogProps) {
       footer={
         <>
           <Button onClick={onClose}>{t("common.cancel")}</Button>
-          <Button variant="primary" disabled={busy || model === null} onClick={() => run(save)}>
+          <Button variant="primary" disabled={busy || model === null} onClick={() => inFlight.run(save)}>
             {t(busy ? "settings.model.picker.saving" : "settings.model.picker.confirm")}
           </Button>
         </>
