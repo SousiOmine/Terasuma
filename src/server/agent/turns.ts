@@ -1,14 +1,15 @@
 import type { ReplyLanguage } from "../../shared/language";
-import { encodeChatEvent } from "../../shared/sse";
-import type { ChatEvent, ChatMessage, MessagePart, TokenUsage } from "../../shared/types";
 import { describeError } from "../../shared/errors";
-import type { AgentEngine } from "./engine";
+import type { ChatEvent, ChatMessage, MessagePart, TokenUsage } from "../../shared/types";
 import type { Compaction } from "./compaction";
+import type { AgentEngine } from "./engine";
 import type { Store } from "../data/store";
 
 /**
- * 1 ターン分の流れ。
+ * 1 ターン分の流れと、同じ Tera でターンが重ならないための門。
+ *
  * 保存 → モデル呼び出し → 保存、の順で進み、履歴は常に追記だけになる。
+ * 「実行中かどうか」はこのモジュールの中だけで持ち、HTTP 層へ Set を渡さない。
  */
 
 /** ターンを流すのに必要なもの。 */
@@ -19,16 +20,44 @@ export type TurnDeps = {
   compaction: Compaction;
 };
 
+/** 1 ターンの入力。 */
+export type TurnInput = {
+  content: string;
+  language: ReplyLanguage;
+  signal: AbortSignal;
+};
+
+export type Turns = {
+  /**
+   * ターンを始める。同じ Tera で実行中なら null（重ねて流さない）。
+   * 終わったら（止められた場合も）実行中の印は必ず外れる。
+   */
+  begin(teraId: string, input: TurnInput): AsyncIterable<ChatEvent> | null;
+};
+
+export function createTurns(deps: TurnDeps): Turns {
+  /** いま応答を生成している Tera。ターンは 1 つずつ進む。 */
+  const running = new Set<string>();
+
+  return {
+    begin(teraId, input) {
+      // 画面は 1 つのターンしか始めないが、別のタブから同じ Tera を開けるため、ここでも断る。
+      if (running.has(teraId)) return null;
+
+      running.add(teraId);
+      return runTurn(deps, teraId, input, running);
+    },
+  };
+}
+
 /**
  * 1 ターン分のイベント列。終わったら、実行中の印を必ず外す。
  * 「停止」やタブの切断でジェネレータが閉じられた場合も、finally は通る。
  */
-export async function* runTurn(
+async function* runTurn(
   deps: TurnDeps,
   teraId: string,
-  content: string,
-  language: ReplyLanguage,
-  signal: AbortSignal,
+  { content, language, signal }: TurnInput,
   running: Set<string>,
 ): AsyncGenerator<ChatEvent> {
   try {
@@ -157,16 +186,6 @@ async function* turnEvents(
 }
 
 /**
- * 待ちの接続に流す心拍の間隔。
- * Bun の待ち受けは、何も流さない接続を既定の 10 秒で切る（実測で 12 秒）。
- * ユーザーの操作を待つ間や、モデルが長く考えている間も切れないよう、これより短くする。
- */
-const HEARTBEAT_INTERVAL_MS = 5_000;
-
-/** 何も流れない間に流すコメント行（SSE の仕様上、読む側は無視する）。 */
-const HEARTBEAT_FRAME = ": heartbeat\n\n";
-
-/**
  * 1 ターンのステップの上限で打ち切られたときに、本文の末尾へ足す注記。
  * 黙って切れると、応答が途中で終わった理由が画面から分からない。
  * 設定した返事の言語に合わせる。
@@ -175,72 +194,4 @@ function stepLimitNote(language: ReplyLanguage): string {
   return language === "ja"
     ? "\n\n（1 回の応答で扱える操作の上限に達したため、ここで止まりました。続きは、もう一度送ってください）"
     : "\n\n(Stopped here because this turn reached the tool-call limit. Send another message to continue.)";
-}
-
-/**
- * クライアントが読むたびに、次のイベントを 1 つずつ返す。
- * pull ベースなので、相手が読まなくなれば cancel が呼ばれ、生成側も止まる。
- *
- * 次のイベントが来ないまま間隔が空いたら、コメント行を流して接続を保つ。
- * 止まった待ち（ユーザーの操作、長い思考）で切れないようにするため。
- * タイマーは待っている間だけ動かし、イベントが来たら必ず止める。
- */
-export function sseResponse(events: AsyncGenerator<ChatEvent>): Response {
-  const encoder = new TextEncoder();
-  let pending: Promise<IteratorResult<ChatEvent>> | null = null;
-  let heartbeat: ReturnType<typeof setTimeout> | null = null;
-
-  function stopHeartbeat(): void {
-    if (heartbeat === null) return;
-
-    clearTimeout(heartbeat);
-    heartbeat = null;
-  }
-
-  /** 心拍までの待ち。イベントが先に来ても、タイマーは stopHeartbeat が片付ける。 */
-  function nextHeartbeat(): Promise<{ kind: "heartbeat" }> {
-    return new Promise((resolve) => {
-      heartbeat = setTimeout(() => resolve({ kind: "heartbeat" }), HEARTBEAT_INTERVAL_MS);
-    });
-  }
-
-  const body = new ReadableStream<Uint8Array>({
-    async pull(controller) {
-      // 前回の pull で待ち続けている分があれば、それをそのまま使う。
-      pending ??= events.next();
-
-      const outcome = await Promise.race([
-        pending.then((result) => ({ kind: "event" as const, result })),
-        nextHeartbeat(),
-      ]);
-      stopHeartbeat();
-
-      // 相手が読むのをやめた直後は、流す先が無い。
-      if (controller.desiredSize === null) return;
-
-      if (outcome.kind === "heartbeat") {
-        controller.enqueue(encoder.encode(HEARTBEAT_FRAME));
-        return;
-      }
-
-      pending = null;
-      if (outcome.result.done === true) {
-        controller.close();
-        return;
-      }
-      controller.enqueue(encoder.encode(encodeChatEvent(outcome.result.value)));
-    },
-    async cancel() {
-      stopHeartbeat();
-      await events.return(undefined);
-    },
-  });
-
-  return new Response(body, {
-    headers: {
-      "Content-Type": "text/event-stream; charset=utf-8",
-      "Cache-Control": "no-cache, no-transform",
-      "X-Accel-Buffering": "no",
-    },
-  });
 }

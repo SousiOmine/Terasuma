@@ -1,11 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { LanguageModel } from "ai";
-import {
-  catalogRoute,
-  createLanguageModel,
-  providerSpecForId,
-  toolResultTakesImages,
-} from "../src/server/provider/registry";
+import { createLanguageModel } from "../src/server/provider/adapters";
+import { catalogRoute, providerSpecForId, toolResultTakesImages } from "../src/server/provider/kinds";
 
 /** 生成したモデルの、providerOptions のキーとモデル名を取り出す。 */
 function modelInfo(model: LanguageModel): { provider: string; modelId: string } {

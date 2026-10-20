@@ -1,121 +1,34 @@
-import { join } from "node:path";
+import { startApp } from "./app";
 import { ensureDirectories, loadConfig } from "./config";
-import { createCodingToolset } from "./server/agent/tools/coding";
-import { createCompaction } from "./server/agent/compaction";
-import { createComputerToolset } from "./server/agent/tools/computer";
-import { createContainerManager, WORKDIR_IN_CONTAINER } from "./server/computer/container";
-import { createEngine, resolveModel } from "./server/agent/engine";
+import { resolveModel } from "./server/provider/routing";
 import { describeError } from "./shared/errors";
-import { createHandover } from "./server/computer/handover";
-import { createImageStore } from "./server/computer/images";
-import { createMcpManager } from "./server/mcp/manager";
-import { OAUTH_CALLBACK_PATH } from "./server/mcp/oauth";
-import { CATALOG_FILE_NAME, createCatalog, modelContextTokens } from "./server/provider/catalog";
-import { startServer } from "./server/http/server";
-import { createSettingsStore } from "./server/data/settings";
-import { createStore } from "./server/data/store";
+
+/**
+ * 起動と停止。依存の組み立ては app.ts が持つ。
+ */
 
 const config = loadConfig();
 ensureDirectories(config);
-
-const store = createStore(config.dbPath);
-const settings = createSettingsStore(config.configPath);
-
-// ツールが返した画像は、データディレクトリにファイルとして置く（会話には参照だけが残る）。
-// MCP の接続もこの置き場へ画像を保存するので、接続より先に用意する。
-const images = createImageStore(config.dataDir);
-
-// 認可コードの受け取り先は、待ち受けているポートが決まってから決まる。
-// 実際に使うポートは startServer の戻り値で分かるので、そこまで null のままにする。
-let boundPort: number | null = null;
-const mcp = createMcpManager({
-  settings,
-  dataDir: config.dataDir,
-  images,
-  callbackUrl: () => (boundPort === null ? null : new URL(`http://${config.host}:${boundPort}${OAUTH_CALLBACK_PATH}`)),
-});
-
-// Containerfile と entry.sh は、リポジトリの container/ に置いてある。
-// src から実行しても dist から実行しても、1 つ上がリポジトリのルートになる。
-const container = createContainerManager({
-  dataDir: config.dataDir,
-  containerDir: join(import.meta.dir, "..", "container"),
-});
-
-// エージェントがユーザーへ画面を渡すときの待ち（ログインや二段階認証）。
-const handover = createHandover();
-
-const computer = createComputerToolset({ container, images, handover });
-
-// コンテナのファイルとシェルを扱うツール（read / write / edit / bash）。
-// いずれもコンピュータのコンテナの中だけで動き、ホストのファイルには触れない。
-const coding = createCodingToolset({ container, root: WORKDIR_IN_CONTAINER });
-
-// 畳むかどうかは、モデルの文脈長（カタログ）から決める。
-// 起動後にカタログを読んでおくので、設定画面を開かなくても文脈長が分かる。
-// エンジンも、プロバイダの呼び出し方を決めるのにカタログを使う。
-const catalog = createCatalog({ cachePath: join(config.dataDir, CATALOG_FILE_NAME) });
-
-const engine = createEngine({ config, settings, mcp, computer, coding, images, catalog });
-
-// 古いやり取りは、3 時間の放置か、文脈長に近づいたときに、背景で要約へ畳む。
-// 失敗は端末に出す（会話は生の履歴のまま続く）。
-const compaction = createCompaction({
-  store,
-  engine,
-  log: (message) => console.log(message),
-  contextLimit: () => modelContextTokens(catalog.snapshot(), settings.read().model),
-});
-
-const { server, portChanged } = startServer({
-  config,
-  store,
-  engine,
-  compaction,
-  catalog,
-  settings,
-  mcp,
-  container,
-  handover,
-});
-boundPort = server.port ?? null;
+const app = startApp(config);
 
 // モデルが未設定でも起動はする（画面から追加できる）。気づけるようにここで 1 行だけ出す。
-const model = settings.read().model;
+const model = app.settings.read().model;
 
 console.log(
   [
-    `Terasuma  http://${server.hostname}:${server.port}`,
-    `  engine : ${engine.name}`,
+    `Terasuma  http://${app.server.hostname}:${app.server.port}`,
+    `  engine : ${app.config.engine}`,
     `  model  : ${model ?? "(未設定)"}`,
     // 設定と違うポートで起動したことは黙らない。開く先が表示と食い違ってしまうため。
-    ...(portChanged ? [`  note   : ${config.port} は使用中だったので、空いているポートを使います`] : []),
-    `  config : ${config.configPath}`,
-    `  data   : ${config.dataDir}`,
+    ...(app.portChanged ? [`  note   : ${app.config.port} は使用中だったので、空いているポートを使います`] : []),
+    `  config : ${app.config.configPath}`,
+    `  data   : ${app.config.dataDir}`,
   ].join("\n"),
 );
 
-// 端末からの停止（Ctrl+C）や OS からの停止で、接続と DB を畳んでから終わる。
-// 畳まないと、MCP サーバーの接続と SQLite の WAL がそのまま残る。
-async function shutdown(signal: NodeJS.Signals): Promise<void> {
-  console.log(`\n  ${signal} を受けたので終わります`);
-
-  try {
-    await server.stop(true);
-    await mcp.close();
-    store.close();
-  } catch (error) {
-    console.log(`  終われませんでした: ${describeError(error)}`);
-  }
-  process.exit(0);
-}
-
-process.once("SIGINT", () => void shutdown("SIGINT"));
-process.once("SIGTERM", () => void shutdown("SIGTERM"));
-
 // 設定画面を開かなくてもモデルの文脈長が分かるよう、起動後にカタログを読んでおく。
 // 取れなくても起動は止めない（圧縮は既定の見積もりで動き、画面は必要になったときに取りに行く）。
-void catalog
+void app.catalog
   .load()
   .catch((error: unknown) => {
     console.log(`  catalog: 読めませんでした — ${describeError(error)}`);
@@ -123,17 +36,17 @@ void catalog
   .finally(() => {
     // カタログが読めたところで、既定のモデルを呼べるかを確かめる。
     // 起動直後はカタログがまだ無いので、ここで確かめる（誤った注記を出さないため）。
-    const resolution = resolveModel(settings.read(), catalog.snapshot());
+    const resolution = resolveModel(app.settings.read(), app.catalog.snapshot());
     if (!resolution.ok) console.log(`  note   : ${resolution.detail}`);
   });
 
 // 最後のやり取りから 3 時間以上たっている（か、文脈長に近づいている）Tera は、
 // ここで要約を作り始める。ターンは待たないので、話し始めても遅くならない。
-for (const tera of store.listTeras()) compaction.check(tera.id);
+for (const tera of app.store.listTeras()) app.compaction.check(tera.id);
 
 // ホストを再起動したあとも同じ画面に戻れるよう、起動時にコンテナも起こし直す。
 // 初回はイメージの build で数分かかるので、待たずに進め、結果だけを知らせる。
-void container
+void app.container
   .start()
   .then((status) => {
     const where = status.vncPort === null ? "" : ` (vnc 127.0.0.1:${status.vncPort})`;
@@ -142,3 +55,18 @@ void container
   .catch((error: unknown) => {
     console.log(`  container: 起動できませんでした — ${describeError(error)}`);
   });
+
+// 端末からの停止（Ctrl+C）や OS からの停止で、接続と DB を畳んでから終わる。
+async function shutdown(signal: NodeJS.Signals): Promise<void> {
+  console.log(`\n  ${signal} を受けたので終わります`);
+
+  try {
+    await app.shutdown();
+  } catch (error) {
+    console.log(`  終われませんでした: ${describeError(error)}`);
+  }
+  process.exit(0);
+}
+
+process.once("SIGINT", () => void shutdown("SIGINT"));
+process.once("SIGTERM", () => void shutdown("SIGTERM"));

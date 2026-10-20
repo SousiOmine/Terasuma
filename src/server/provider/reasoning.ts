@@ -1,15 +1,14 @@
 /**
  * 思考強度（reasoning effort）を、AI SDK の providerOptions に変換する。
  *
- * 渡し方はプロバイダのパッケージごとに違う。
- * - ほとんどのプロバイダ（OpenAI 互換を含む）は reasoningEffort を受ける。
- * - Anthropic は effort、Google は thinkingConfig.thinkingLevel を使う。
+ * 渡し方はプロバイダの種別ごとに違う。その事実は provider/kinds.ts の表が持ち、
+ * ここは「どの値を受け付け、どう組み立てるか」だけを持つ。
  *
  * 選択肢は「models.dev がそのモデルについて公開している値」と「AI SDK が受け付ける値」の交わりにする。
  * providerOptions のキーは ProviderSpec.optionKey（パッケージが読む名前）に合わせる。
  */
-import { effortValues, type CatalogModel } from "../provider/catalog";
-import type { ProviderKind, ProviderSpec } from "../provider/registry";
+import { effortValues, type CatalogModel } from "./catalog";
+import { PROVIDER_KINDS, type ProviderSpec, type ReasoningStyle } from "./kinds";
 
 /** providerOptions に入れられる値（AI SDK の型と同じ形）。 */
 export type ProviderOptionValue =
@@ -32,21 +31,30 @@ type Channel = {
 /** reasoningEffort を受けるプロバイダの値（AI SDK のスキーマにあるもの）。 */
 const REASONING_EFFORT_VALUES: readonly string[] = ["none", "minimal", "low", "medium", "high", "xhigh", "max"];
 
-/** reasoningEffort 以外の渡し方をするプロバイダ。 */
-const CHANNELS: Partial<Record<ProviderKind, Channel>> = {
-  anthropic: {
+/** 渡し方ごとの受け付ける値と組み立て方。 */
+const CHANNELS: Record<ReasoningStyle, Channel> = {
+  "reasoning-effort": {
+    values: REASONING_EFFORT_VALUES,
+    build: (effort, optionKey) => ({ [optionKey]: { reasoningEffort: effort } }),
+  },
+  "anthropic-effort": {
     values: ["low", "medium", "high", "xhigh", "max"],
     build: (effort, optionKey) => ({ [optionKey]: { effort } }),
   },
-  google: {
+  "google-thinking": {
     values: ["minimal", "low", "medium", "high"],
     build: (effort, optionKey) => ({ [optionKey]: { thinkingConfig: { thinkingLevel: effort } } }),
   },
 };
 
+/** プロバイダの種別から、思考強度の渡し方を引く。 */
+function channelOf(spec: ProviderSpec): Channel {
+  return CHANNELS[PROVIDER_KINDS[spec.kind].reasoning];
+}
+
 /** 画面に出す選択肢。渡せる値だけに絞る。 */
 export function selectableEfforts(spec: ProviderSpec, model: CatalogModel | null): readonly string[] {
-  const allowed = CHANNELS[spec.kind]?.values ?? REASONING_EFFORT_VALUES;
+  const allowed = channelOf(spec).values;
   return effortValues(model).filter((value) => allowed.includes(value));
 }
 
@@ -57,16 +65,9 @@ export function selectableEfforts(spec: ProviderSpec, model: CatalogModel | null
 export function reasoningProviderOptions(spec: ProviderSpec, effort: string | null): ProviderOptions | null {
   if (effort === null) return null;
 
-  const channel = CHANNELS[spec.kind];
-  if (channel !== undefined) {
-    if (!channel.values.includes(effort)) {
-      throw new Error(`思考強度 ${effort} はプロバイダ ${spec.id} に渡せません（設定で選び直してください）`);
-    }
-    return channel.build(effort, spec.optionKey);
-  }
-
-  if (!REASONING_EFFORT_VALUES.includes(effort)) {
+  const channel = channelOf(spec);
+  if (!channel.values.includes(effort)) {
     throw new Error(`思考強度 ${effort} はプロバイダ ${spec.id} に渡せません（設定で選び直してください）`);
   }
-  return { [spec.optionKey]: { reasoningEffort: effort } };
+  return channel.build(effort, spec.optionKey);
 }

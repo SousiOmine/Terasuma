@@ -54,8 +54,14 @@ export function createComputerToolset(options: ComputerToolsetOptions): Computer
 }
 
 /** ツールセットの供給元が受け取る材料。 */
+/**
+ * このツールセットが必要とするコンテナの能力。
+ * 起動やリセット（設定画面の操作）は要らないので、受け取る型を絞る。
+ */
+export type ComputerControl = Pick<ContainerManager, "status" | "exec" | "shell" | "screenshot">;
+
 export type ComputerToolsetOptions = {
-  container: ContainerManager;
+  container: ComputerControl;
   images: ImageStore;
   /** ユーザーへ画面を渡す待ち。 */
   handover: Handover;

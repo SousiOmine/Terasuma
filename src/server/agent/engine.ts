@@ -3,16 +3,17 @@ import type { LanguageModelUsage, TextStreamPart, ToolSet } from "ai";
 import type { AppConfig } from "../../config";
 import type { ModelSettings } from "../data/settings-schema";
 import type { ReplyLanguage } from "../../shared/language";
-import { modelProvider } from "../../shared/model";
 import type { MessagePart, TokenUsage } from "../../shared/types";
 import type { CodingToolset } from "./tools/coding";
 import type { ComputerToolset } from "./tools/computer";
 import type { ImageStore } from "../computer/images";
 import type { McpToolset } from "../mcp/manager";
-import { catalogProvider, type CatalogSnapshot } from "../provider/catalog";
+import type { CatalogSnapshot } from "../provider/catalog";
+import { createLanguageModel } from "../provider/adapters";
+import { toolResultTakesImages } from "../provider/kinds";
+import { reasoningProviderOptions } from "../provider/reasoning";
+import { type ResolvedModel, resolveModel } from "../provider/routing";
 import { imagesMessage, SYSTEM_PROMPT, toModelMessages, type PendingImages, type TeraContext } from "./prompt";
-import { catalogRoute, createLanguageModel, toolResultTakesImages, type ResolvedModel } from "../provider/registry";
-import { reasoningProviderOptions } from "./reasoning";
 import { readStoredImages, readToolOutput, toolResultOutput } from "./tool-output";
 import { describeError } from "../../shared/errors";
 import { splitToolName } from "../../shared/tools";
@@ -91,90 +92,6 @@ export type SettingsReader = {
 export type CatalogReader = {
   snapshot(): CatalogSnapshot | null;
 };
-
-/** 呼び出せるかどうかの判定。呼び出せないときは理由を添える。 */
-export type ModelResolution = { ok: true; model: ResolvedModel } | { ok: false; detail: string };
-
-/**
- * 既定のモデルとプロバイダの設定から、モデルの呼び出し方を決める。
- *
- * baseUrl を持つものは OpenAI 互換の独自エンドポイントとして、その URL を使う。
- * 持たないものは models.dev のカタログのプロバイダとして、npm（使うパッケージ）と
- * api（接続先）から呼び出し方を決める。
- * 思考強度はモデルごとの設定から取り出す。
- *
- * 設定が揃っていない状態は、モデルを呼ぶ前に理由付きで止める。
- * 既定値で埋め合わせると「設定したつもりで応答が来ない」状態になり、原因が分からなくなる。
- */
-export function resolveModel(settings: ModelSettings, snapshot: CatalogSnapshot | null): ModelResolution {
-  const model = settings.model;
-  if (model === null) {
-    return { ok: false, detail: "既定のモデルが設定されていません（画面の「設定 > モデル」から追加してください）" };
-  }
-
-  const providerId = modelProvider(model);
-  const provider = settings.providers[providerId];
-  if (provider === undefined) {
-    return {
-      ok: false,
-      detail: `既定のモデル ${model} のプロバイダ ${providerId} が設定されていません（画面の「設定 > モデル」から追加してください）`,
-    };
-  }
-
-  const reasoningEffort = settings.modelOptions[model]?.reasoningEffort ?? null;
-
-  // baseUrl があるものは OpenAI 互換の独自エンドポイント。
-  if (provider.baseUrl !== undefined) {
-    return {
-      ok: true,
-      model: {
-        id: model,
-        baseUrl: provider.baseUrl,
-        apiKey: provider.apiKey ?? null,
-        provider: { id: providerId, kind: "openai-compatible", optionKey: providerId },
-        reasoningEffort,
-      },
-    };
-  }
-
-  if (provider.apiKey === undefined) {
-    return { ok: false, detail: `プロバイダ ${providerId} の API キーが設定されていません` };
-  }
-
-  if (snapshot === null) {
-    return {
-      ok: false,
-      detail: "models.dev のカタログをまだ読めていません（少し待ってから、もう一度送ってください）",
-    };
-  }
-
-  const entry = catalogProvider(snapshot, providerId);
-  if (entry === null) {
-    return {
-      ok: false,
-      detail: `プロバイダ ${providerId} を models.dev のカタログに見つけられません（画面の「設定 > モデル」から選び直してください）`,
-    };
-  }
-
-  const route = catalogRoute(entry);
-  if (route === null) {
-    return {
-      ok: false,
-      detail: `プロバイダ ${providerId} をこのアプリから呼び出せません（対応していないか、接続先が分かりません。baseUrl を設定してください）`,
-    };
-  }
-
-  return {
-    ok: true,
-    model: {
-      id: model,
-      baseUrl: route.baseUrl,
-      apiKey: provider.apiKey,
-      provider: route.spec,
-      reasoningEffort,
-    },
-  };
-}
 
 export function createEngine(options: {
   config: AppConfig;

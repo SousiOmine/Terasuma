@@ -1,9 +1,10 @@
 import { isReplyLanguage } from "../../../shared/language";
-import { resolveModel } from "../../agent/engine";
-import { runTurn, sseResponse } from "../../agent/turn";
+import { resolveModel } from "../../provider/routing";
+import { createTurns } from "../../agent/turns";
 import { ValidationError } from "../../errors";
 import { readJsonBody } from "../body";
 import { json, jsonError } from "../respond";
+import { createSseResponse } from "../sse";
 import { type ApiDeps, type ApiRequest, requireTera } from "./shared";
 
 /**
@@ -12,12 +13,9 @@ import { type ApiDeps, type ApiRequest, requireTera } from "./shared";
 export function terasHandlers(deps: ApiDeps) {
   const { store, settings } = deps;
 
-  /**
-   * いま応答を生成している Tera。
-   * 同じ Tera でターンが重なると、履歴の並びと引き受けの待ちが壊れる。
-   * 画面は 1 つのターンしか始めないが、別のタブから同じ Tera を開けるため、ここでも断る。
-   */
-  const turnRunning = new Set<string>();
+  // 同じ Tera でターンが重なると、履歴の並びと引き受けの待ちが壊れる。
+  // 「実行中かどうか」はターンの側が持つ（HTTP 層へ Set を渡さない）。
+  const turns = createTurns(deps);
 
   return {
     /** 画面に並べる Tera の一覧。いまは既定の 1 体だけ。 */
@@ -50,12 +48,11 @@ export function terasHandlers(deps: ApiDeps) {
       const resolution = resolveModel(settings.read(), deps.catalog.snapshot());
       if (!resolution.ok) return jsonError(400, "model_not_configured", resolution.detail);
 
-      if (turnRunning.has(req.params.id)) {
+      const events = turns.begin(req.params.id, { content, language, signal: req.signal });
+      if (events === null) {
         return jsonError(409, "turn_in_progress", "この Tera はほかで応答を生成しています");
       }
-
-      turnRunning.add(req.params.id);
-      return sseResponse(runTurn(deps, req.params.id, content, language, req.signal, turnRunning));
+      return createSseResponse(events);
     },
   };
 }

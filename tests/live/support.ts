@@ -18,7 +18,8 @@ import {
   WORKDIR_IN_CONTAINER,
   type ContainerManager,
 } from "../../src/server/computer/container";
-import { createEngine, resolveModel } from "../../src/server/agent/engine";
+import { createEngine } from "../../src/server/agent/engine";
+import { resolveModel } from "../../src/server/provider/routing";
 import { createHandover } from "../../src/server/computer/handover";
 import { createImageStore } from "../../src/server/computer/images";
 import { createMcpManager } from "../../src/server/mcp/manager";
