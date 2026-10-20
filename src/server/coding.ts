@@ -1,29 +1,38 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { posix } from "node:path";
 import { createTool } from "@mastra/core/tools";
 import type { Tool } from "@mastra/core/tools";
 import { z } from "zod";
-import { runCommand, type CommandResult } from "./command";
+import type { ShellResult } from "./container";
 
 /**
- * エージェントが、Terasuma を動かしている端末そのもののファイルを読み書きし、
- * シェルを実行するためのツールセット（read / write / edit / bash）。
+ * エージェントが、Debian のデスクトップコンテナの中のファイルを読み書きし、
+ * その中でシェルを実行するためのツールセット（read / write / edit / bash）。
  *
- * pi-coding-agent の内蔵ツールを参考にしている。コンテナの computer_ ツールとは
- * 別の名前空間に置き、どちらがどちらのマシンを触るのかを名前で分けられるようにしてある。
+ * ファイルもコマンドも、すべて podman exec でコンピュータのコンテナの中に入って行う。
+ * Terasuma 本体が動いているホストや、アプリのコンテナのファイルには触れない。
+ * コンテナが動いていなければ、どのツールも理由付きで失敗する（ホストへは落ちない）。
  *
- * 相対パスは、Terasuma を起動したディレクトリを基準にする。絶対パスもそのまま使える。
- * 端末の外へ出ないための囲いは置いていない（bash からは結局どこへでも行けるため、
- * 囲いがあるように見せない）。動かすユーザーの権限で、そのユーザーが触れる場所を触る。
+ * 相対パスはコンテナの /home/agent を基準にし、~ も同じ場所に広げる。
  */
 
 /** モデルへ渡すツール。キーはツール名（"read" など）。 */
 export type CodingToolset = Record<string, Tool<any, any, any, any>>;
 
+/** ファイルとシェルを実行するコンテナ。テストではローカルの差し替えを渡す。 */
+export type CodingContainer = {
+  readFile(path: string, signal?: AbortSignal): Promise<Uint8Array>;
+  writeFile(path: string, content: Uint8Array, signal?: AbortSignal): Promise<void>;
+  shell(
+    script: string,
+    options: { timeoutMs: number; signal?: AbortSignal; maxOutputChars?: number },
+  ): Promise<ShellResult>;
+};
+
 export type CodingToolsetOptions = {
-  /** 相対パスの基準。Terasuma を起動したディレクトリを渡す。 */
-  cwd: string;
+  /** ファイルとシェルを実行するコンテナ。 */
+  container: CodingContainer;
+  /** 相対パスと ~ の基準（コンテナ内の絶対パス）。 */
+  root: string;
 };
 
 /** read が 1 回で返す行数の上限。 */
@@ -38,6 +47,8 @@ export const BASH_MAX_BYTES = 50 * 1024;
 export const BASH_TIMEOUT_MS = 120_000;
 /** bash に指定できる待ち時間の上限（秒）。 */
 const BASH_MAX_TIMEOUT_SECONDS = 600;
+/** bash の出力を、表示用に詰める前まで受け取る上限（文字数）。 */
+const BASH_RAW_OUTPUT_CHARS = 1_000_000;
 
 /** バイト数を、pi と同じ形（B / KB / MB）で表す。 */
 function formatSize(bytes: number): string {
@@ -48,15 +59,21 @@ function formatSize(bytes: number): string {
 
 const BOM = "\uFEFF";
 
+/** UTF-8 のデコード。BOM は残す（edit が BOM を見て、元のファイルに合わせて戻すため）。 */
+const UTF8 = new TextDecoder("utf-8", { ignoreBOM: true });
+
 /** ツールの実行に渡ってくる中断。ターンが止まったら、ファイル操作もコマンドも打ち切る。 */
 type ToolContext = { abortSignal?: AbortSignal };
 
-export function createCodingToolset({ cwd }: CodingToolsetOptions): CodingToolset {
+export function createCodingToolset({ container, root }: CodingToolsetOptions): CodingToolset {
+  const where = `Paths are relative to ${root} unless absolute.`;
+
   return {
     read: createTool({
       id: "read",
       description: [
-        "Read the contents of a text file on the machine where Terasuma runs.",
+        "Read the contents of a text file inside the Debian computer that you operate.",
+        where,
         `Output is truncated to ${READ_MAX_LINES} lines or ${formatSize(READ_MAX_BYTES)} (whichever is hit first).`,
         "Use offset/limit for large files. When you need the full file, continue with offset until complete.",
       ].join(" "),
@@ -70,16 +87,18 @@ export function createCodingToolset({ cwd }: CodingToolsetOptions): CodingToolse
         context: ToolContext,
       ) => {
         throwIfAborted(context.abortSignal);
-        const output = await readTextFile(resolveToolPath(path, cwd), offset, limit);
+        const target = resolveToolPath(path, root);
+        const buffer = await container.readFile(target, context.abortSignal);
         throwIfAborted(context.abortSignal);
-        return output;
+        return readTextFile(target, buffer, offset, limit);
       },
     }),
 
     write: createTool({
       id: "write",
       description: [
-        "Write content to a file on the machine where Terasuma runs.",
+        "Write content to a file inside the Debian computer that you operate.",
+        where,
         "Creates the file if it doesn't exist, overwrites if it does. Automatically creates parent directories.",
       ].join(" "),
       inputSchema: z.object({
@@ -88,7 +107,12 @@ export function createCodingToolset({ cwd }: CodingToolsetOptions): CodingToolse
       }),
       execute: async ({ path, content }: { path: string; content: string }, context: ToolContext) => {
         throwIfAborted(context.abortSignal);
-        const output = await writeTextFile(resolveToolPath(path, cwd), content, context.abortSignal);
+        const output = await writeTextFile(
+          container,
+          resolveToolPath(path, root),
+          content,
+          context.abortSignal,
+        );
         throwIfAborted(context.abortSignal);
         return output;
       },
@@ -97,7 +121,8 @@ export function createCodingToolset({ cwd }: CodingToolsetOptions): CodingToolse
     edit: createTool({
       id: "edit",
       description: [
-        "Edit a single file on the machine where Terasuma runs using exact text replacement.",
+        "Edit a single file inside the Debian computer that you operate using exact text replacement.",
+        where,
         "oldText must match a unique region of the original file.",
         "Include enough surrounding text to make it unique, but do not include large unchanged regions just to connect distant changes.",
         "Line endings and a BOM are preserved.",
@@ -113,7 +138,8 @@ export function createCodingToolset({ cwd }: CodingToolsetOptions): CodingToolse
       ) => {
         throwIfAborted(context.abortSignal);
         const output = await editTextFile(
-          resolveToolPath(path, cwd),
+          container,
+          resolveToolPath(path, root),
           oldText,
           newText,
           context.abortSignal,
@@ -126,8 +152,9 @@ export function createCodingToolset({ cwd }: CodingToolsetOptions): CodingToolse
     bash: createTool({
       id: "bash",
       description: [
-        "Execute a bash command on the machine where Terasuma runs, in the current working directory (the directory Terasuma was started in).",
-        "This is not the separate computer desktop that the computer_ tools operate.",
+        "Execute a bash command inside the Debian computer that you operate.",
+        `Commands run as bash -lc in ${root}, and sudo works without a password.`,
+        "This is the same machine that the computer_ tools control; it is not the machine Terasuma runs on.",
         "Returns stdout and stderr combined.",
         `Output is truncated to the last ${BASH_MAX_LINES} lines or ${formatSize(BASH_MAX_BYTES)} (whichever is hit first); the beginning is omitted.`,
         `Optionally provide a timeout in seconds (default: ${BASH_TIMEOUT_MS / 1000}, max: ${BASH_MAX_TIMEOUT_SECONDS}).`,
@@ -146,7 +173,7 @@ export function createCodingToolset({ cwd }: CodingToolsetOptions): CodingToolse
         context: ToolContext,
       ) => {
         throwIfAborted(context.abortSignal);
-        const output = await runBash(command, timeout, cwd, context.abortSignal);
+        const output = await runBash(container, command, timeout, context.abortSignal);
         throwIfAborted(context.abortSignal);
         return output;
       },
@@ -155,15 +182,15 @@ export function createCodingToolset({ cwd }: CodingToolsetOptions): CodingToolse
 }
 
 /**
- * 相対パスを、Terasuma を起動したディレクトリから解決する。
- * `~` と `~/...` だけはホームディレクトリに広げる（モデルがそう書くため）。
+ * 相対パスを、コンテナの基準ディレクトリから解決する。
+ * `~` と `~/...` だけは基準ディレクトリ（agent のホーム）に広げる。
  */
-export function resolveToolPath(input: string, cwd: string): string {
+export function resolveToolPath(input: string, root: string): string {
   const path = input.trim();
   if (path.length === 0) throw new Error("path must not be empty");
 
-  const expanded = path === "~" ? homedir() : path.startsWith("~/") ? join(homedir(), path.slice(2)) : path;
-  return resolve(cwd, expanded);
+  const expanded = path === "~" ? root : path.startsWith("~/") ? posix.join(root, path.slice(2)) : path;
+  return posix.resolve(root, expanded);
 }
 
 function throwIfAborted(signal: AbortSignal | undefined): void {
@@ -174,13 +201,17 @@ function throwIfAborted(signal: AbortSignal | undefined): void {
  * テキストを読む。行番号は 1 始まりで、末尾の改行は行として数えない。
  * 大きすぎるファイルは、続きの offset を添えて切る（切ったことを黙らない）。
  */
-async function readTextFile(path: string, offset: number | undefined, limit: number | undefined): Promise<string> {
-  const buffer = await readFile(path);
+function readTextFile(
+  path: string,
+  buffer: Uint8Array,
+  offset: number | undefined,
+  limit: number | undefined,
+): string {
   if (buffer.includes(0)) {
     throw new Error(`${path} is a binary file; this tool reads text files only`);
   }
 
-  const text = buffer.toString("utf-8");
+  const text = UTF8.decode(buffer);
   const lines = text.split("\n");
   const trailingNewline = text.endsWith("\n");
   if (trailingNewline) lines.pop();
@@ -237,13 +268,15 @@ async function readTextFile(path: string, offset: number | undefined, limit: num
 }
 
 /** ファイルを書く。親ディレクトリが無ければ作る（write は新しいファイル向け）。 */
-async function writeTextFile(path: string, content: string, signal: AbortSignal | undefined): Promise<string> {
+async function writeTextFile(
+  container: CodingContainer,
+  path: string,
+  content: string,
+  signal: AbortSignal | undefined,
+): Promise<string> {
   throwIfAborted(signal);
 
-  await mkdir(dirname(path), { recursive: true });
-  throwIfAborted(signal);
-
-  await writeFile(path, content, "utf-8");
+  await container.writeFile(path, Buffer.from(content, "utf-8"), signal);
   throwIfAborted(signal);
 
   return `Successfully wrote to ${path}`;
@@ -255,6 +288,7 @@ async function writeTextFile(path: string, content: string, signal: AbortSignal 
  * oldText が見つからない・一意でない場合は、直せることが分かる理由で止める。
  */
 async function editTextFile(
+  container: CodingContainer,
   path: string,
   oldText: string,
   newText: string,
@@ -262,7 +296,7 @@ async function editTextFile(
 ): Promise<string> {
   throwIfAborted(signal);
 
-  const raw = await readFile(path, "utf-8");
+  const raw = UTF8.decode(await container.readFile(path, signal));
   throwIfAborted(signal);
 
   const bom = raw.startsWith(BOM) ? BOM : "";
@@ -295,7 +329,7 @@ async function editTextFile(
     );
   }
 
-  await writeFile(path, bom + restoreLineEndings(next, ending), "utf-8");
+  await container.writeFile(path, Buffer.from(bom + restoreLineEndings(next, ending), "utf-8"), signal);
   throwIfAborted(signal);
 
   return `Successfully replaced 1 block(s) in ${path}.`;
@@ -318,25 +352,22 @@ function restoreLineEndings(text: string, ending: "\r\n" | "\n"): string {
   return ending === "\r\n" ? text.replace(/\n/g, "\r\n") : text;
 }
 
-/** bash を実行し、結果をモデルが読める形にする。 */
+/** コンテナの中で bash を実行し、結果をモデルが読める形にする。 */
 async function runBash(
+  container: CodingContainer,
   command: string,
   timeoutSeconds: number | undefined,
-  cwd: string,
   signal: AbortSignal | undefined,
 ): Promise<string> {
   const timeoutMs = (timeoutSeconds ?? BASH_TIMEOUT_MS / 1000) * 1000;
 
   // pi と同じく、標準出力と標準エラーは到着順のまま 1 本にまとめる。
-  // シェルの stderr を最初に stdout へ寄せ、runCommand からは 1 本の流れとして受け取る。
-  const result = await runCommand(["bash", "-lc", `exec 2>&1\n${command}`], {
+  // シェルの stderr を最初に stdout へ寄せ、コンテナからは 1 本の流れとして受け取る。
+  const result = await container.shell(`exec 2>&1\n${command}`, {
     timeoutMs,
-    cwd,
     signal,
-    // 表示用に切り詰めるのは 2,000 行 / 50 KB だが、その手前で末尾 1 MB まで受け取る。
-    // 出力が大きすぎるコマンドで、こちらのメモリを無制限に使わないための上限。
-    maxOutputChars: 1_000_000,
-    outputFrom: "tail",
+    // 表示用に詰めるのは 2,000 行 / 50 KB だが、その手前で末尾 1 MB まで受け取る。
+    maxOutputChars: BASH_RAW_OUTPUT_CHARS,
   });
 
   const output = formatBashOutput(result);
@@ -345,8 +376,8 @@ async function runBash(
   if (result.timedOut) {
     throw new Error(appendStatus(output, `Command timed out after ${timeoutMs / 1000} seconds`));
   }
-  if (result.code !== 0) {
-    throw new Error(appendStatus(output, `Command exited with code ${result.code}`));
+  if (result.exitCode !== 0) {
+    throw new Error(appendStatus(output, `Command exited with code ${result.exitCode}`));
   }
 
   return output;
@@ -356,7 +387,7 @@ async function runBash(
  * 標準出力と標準エラーを 1 つの本文にし、末尾 2,000 行 / 50 KB へ詰める。
  * 先頭を落としたときは、そのことを結果に残す（結果が途中であることをモデルが説明できるように）。
  */
-function formatBashOutput(result: CommandResult): string {
+function formatBashOutput(result: ShellResult): string {
   // stderr は exec 2>&1 で stdout に寄るが、シェル自体を起動できなかった場合は stderr に残る。
   const combined = result.stdout + result.stderr;
   const tail = truncateTail(combined, BASH_MAX_LINES, BASH_MAX_BYTES);

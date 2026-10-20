@@ -22,9 +22,9 @@ FROM docker.io/oven/bun:1.4.3-slim
 ENV NODE_ENV=production
 
 # podman は、ホストのソケットに繋いでコンピュータ用のコンテナを動かすために使う。
-# bash はエージェントの bash ツールが使う。
+# エージェントの bash ツールは、このイメージではなくコンピュータのコンテナの中で動く。
 RUN apt-get update \
- && apt-get install -y --no-install-recommends bash ca-certificates podman \
+ && apt-get install -y --no-install-recommends ca-certificates podman \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

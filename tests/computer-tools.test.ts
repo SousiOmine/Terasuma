@@ -3,8 +3,8 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ImageRef } from "../src/shared/types";
-import { createComputerToolset, createComputerTools, SHELL_TIMEOUT_MS } from "../src/server/computer";
-import { ContainerError, createContainerManager, type ContainerManager, type ShellResult } from "../src/server/container";
+import { createComputerToolset, createComputerTools } from "../src/server/computer";
+import { createContainerManager, type ContainerManager, type ShellResult } from "../src/server/container";
 import { createHandover } from "../src/server/handover";
 import { createImageStore, type ImageStore } from "../src/server/images";
 import { createPodmanStub, testPng, type PodmanStubBehaviour } from "./support";
@@ -115,7 +115,7 @@ describe("computer ツールセット", () => {
       // 画面を見てから操作するための一式が揃っていること。
       expect(names).toContain("computer_screenshot");
       expect(names).toContain("computer_click");
-      expect(names).toContain("computer_shell");
+      expect(names).toContain("computer_open");
     });
   });
 
@@ -267,57 +267,6 @@ describe("画面の操作", () => {
   });
 });
 
-describe("コンテナの中での実行", () => {
-  test("終了コードと標準出力・標準エラーを 1 つの結果にまとめる", async () => {
-    await withTools(
-      { shell: { exitCode: 1, stdout: "hello\n", stderr: "警告\n", truncated: false, timedOut: false } },
-      async ({ tools }) => {
-        expect(await callTool(tools, "computer_shell", { command: "echo hello" })).toBe(
-          "exit code: 1\n--- stdout ---\nhello\n--- stderr ---\n警告",
-        );
-      },
-    );
-  });
-
-  test("何も出力しないコマンドでも結果を返す", async () => {
-    await withTools({}, async ({ tools }) => {
-      expect(await callTool(tools, "computer_shell", { command: "true" })).toBe("exit code: 0");
-    });
-  });
-
-  test("切り詰めと打ち切りは、結果にその事実を残す", async () => {
-    await withTools(
-      { shell: { exitCode: -1, stdout: "長い出力", stderr: "", truncated: true, timedOut: true } },
-      async ({ tools }) => {
-        const output = (await callTool(tools, "computer_shell", { command: "yes" })) as string;
-        expect(output).toContain("cut off");
-        expect(output).toContain(`${SHELL_TIMEOUT_MS / 1000} seconds`);
-      },
-    );
-  });
-
-  test("コンテナが動いていなければ、実行せずに理由を投げる", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "terasuma-computer-"));
-    const stub = createPodmanStub({ running: false });
-    const container = createContainerManager({
-      dataDir: dir,
-      containerDir: join(dir, "container-files"),
-      command: stub.run,
-    });
-    const tools = createComputerTools({ container, images: createImageStore(dir), handover: createHandover(), teraId: "t1" });
-
-    try {
-      const failure = await callTool(tools, "computer_shell", { command: "uname -a" }).catch(
-        (error: unknown) => error,
-      );
-      expect(failure).toBeInstanceOf(ContainerError);
-      expect((failure as ContainerError).code).toBe("container_not_running");
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
-  });
-});
-
 describe("ターンの中断", () => {
   test("止まったターンでは、待つのをやめる", async () => {
     await withTools({}, async ({ tools }) => {
@@ -334,7 +283,7 @@ describe("ターンの中断", () => {
       const controller = new AbortController();
 
       await callTool(tools, "computer_click", { x: 10, y: 20 }, { abortSignal: controller.signal });
-      await callTool(tools, "computer_shell", { command: "uname -a" }, { abortSignal: controller.signal });
+      await callTool(tools, "computer_open", { command: "xterm" }, { abortSignal: controller.signal });
 
       expect(execSignals.at(-1)).toBe(controller.signal);
       expect(shellSignals.at(-1)).toBe(controller.signal);

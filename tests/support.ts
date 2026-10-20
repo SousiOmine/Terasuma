@@ -59,6 +59,12 @@ export function createContainerStub(options: { vncPort?: number } = {}): Contain
     exec: async () => {
       throw new ContainerError("container_not_running", "テスト用の差し替えでは実行できません");
     },
+    readFile: async () => {
+      throw new ContainerError("container_not_running", "テスト用の差し替えでは読めません");
+    },
+    writeFile: async () => {
+      throw new ContainerError("container_not_running", "テスト用の差し替えでは書けません");
+    },
     screenshot: async () => {
       throw new ContainerError("container_not_running", "テスト用の差し替えでは実行できません");
     },
@@ -127,9 +133,12 @@ export type PodmanStubBehaviour = {
 export function createPodmanStub(initial: PodmanStubBehaviour = {}): {
   run: CommandRunner;
   calls: string[][];
+  /** 各呼び出しに渡された標準入力。 */
+  inputs: (string | Uint8Array | undefined)[];
 } {
   const { podman = true, port = "127.0.0.1:45678" } = initial;
   const calls: string[][] = [];
+  const inputs: (string | Uint8Array | undefined)[] = [];
 
   const state = {
     image: initial.image ?? true,
@@ -145,8 +154,9 @@ export function createPodmanStub(initial: PodmanStubBehaviour = {}): {
     timedOut: false,
   });
 
-  const run: CommandRunner = async (cmd) => {
+  const run: CommandRunner = async (cmd, options) => {
     calls.push([...cmd]);
+    inputs.push(options.stdin);
     const [command, sub] = cmd;
     if (command !== "podman") return result(127, "", `unknown command: ${command}`);
 
@@ -205,7 +215,7 @@ export function createPodmanStub(initial: PodmanStubBehaviour = {}): {
     }
   };
 
-  return { run, calls };
+  return { run, calls, inputs };
 }
 
 /** 一時ディレクトリに本物の設定ファイルを作り、そこを指すストアを渡す。 */

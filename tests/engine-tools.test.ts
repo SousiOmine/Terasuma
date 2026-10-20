@@ -1,7 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import type { ModelSettings } from "../src/config";
@@ -291,9 +288,9 @@ describe("MCP のツール呼び出し（Mastra 経由）", () => {
     }
   });
 
-  test("コンテナのツールもモデルへ渡り、computer_shell が実行される", async () => {
-    const fake = startFakeProvider({ name: "computer_shell", args: '{"command":"uname -a"}' });
-    const { container, commands } = createShellContainer("Linux test 7.0.0\n");
+  test("コンテナのツールもモデルへ渡り、computer_open が実行される", async () => {
+    const fake = startFakeProvider({ name: "computer_open", args: '{"command":"xterm"}' });
+    const { container, commands } = createShellContainer("");
 
     try {
       const events = await run({ toolset: async () => ({}) }, settingsFor(portOf(fake.server)), {
@@ -301,13 +298,13 @@ describe("MCP のツール呼び出し（Mastra 経由）", () => {
       });
 
       // MCP と同じ名前空間（"<ツールセット名>_<ツール名>"）でモデルへ渡る。
-      expect(toolNames(fake.bodies[0])).toContain("computer_shell");
-      expect(commands).toEqual(["uname -a"]);
+      expect(toolNames(fake.bodies[0])).toContain("computer_open");
+      expect(commands).toEqual(["nohup 'xterm' >/dev/null 2>&1 &"]);
 
       expect(events).toEqual([
         {
           type: "tool-call",
-          part: { type: "tool-call", id: "call-1", server: "computer", tool: "shell", args: { command: "uname -a" } },
+          part: { type: "tool-call", id: "call-1", server: "computer", tool: "open", args: { command: "xterm" } },
         },
         {
           type: "tool-result",
@@ -315,54 +312,57 @@ describe("MCP のツール呼び出し（Mastra 経由）", () => {
             type: "tool-result",
             id: "call-1",
             server: "computer",
-            tool: "shell",
+            tool: "open",
             failed: false,
-            output: "exit code: 0\n--- stdout ---\nLinux test 7.0.0",
+            output: "started xterm",
           },
         },
         { type: "text-delta", delta: "呼び出しました" },
       ]);
 
-      // 2 回目の呼び出しには、シェルの結果が載っている。
-      expect(JSON.stringify(fake.bodies[1])).toContain("Linux test 7.0.0");
+      // 2 回目の呼び出しには、起動したアプリ名が載っている。
+      expect(JSON.stringify(fake.bodies[1])).toContain("started xterm");
     } finally {
       await fake.server.stop(true);
     }
   });
 
-  test("端末の read ツールもモデルへ渡り、ファイルを読める", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "terasuma-engine-coding-"));
-    const file = join(dir, "note.txt");
-    writeFileSync(file, "hello from the host\n", "utf8");
+  test("コンテナの read ツールもモデルへ渡り、ファイルを読める", async () => {
+    const container: ContainerManager = {
+      ...createContainerStub(),
+      readFile: async (path) => {
+        expect(path).toBe("/home/agent/note.txt");
+        return new TextEncoder().encode("hello from the container\n");
+      },
+    };
 
-    const fake = startFakeProvider({ name: "read", args: JSON.stringify({ path: file }) });
+    const fake = startFakeProvider({ name: "read", args: JSON.stringify({ path: "note.txt" }) });
 
     try {
       const events = await run(
         { toolset: async () => ({}) },
         settingsFor(portOf(fake.server)),
         createComputerStub(),
-        createCodingToolset({ cwd: dir }),
+        createCodingToolset({ container, root: "/home/agent" }),
       );
 
-      // 端末のツールは接頭辞を付けず、そのままの名前でモデルへ渡る。
+      // コンテナのツールは接頭辞を付けず、そのままの名前でモデルへ渡る。
       expect(toolNames(fake.bodies[0])).toContain("read");
 
       expect(events[0]).toEqual({
         type: "tool-call",
-        part: { type: "tool-call", id: "call-1", server: "", tool: "read", args: { path: file } },
+        part: { type: "tool-call", id: "call-1", server: "", tool: "read", args: { path: "note.txt" } },
       });
 
       const result = events[1];
       if (result?.type !== "tool-result") throw new Error("read の結果が返らなかった");
       expect(result.part.failed).toBe(false);
-      expect(result.part.output).toContain("hello from the host");
+      expect(result.part.output).toContain("hello from the container");
 
       // 2 回目の呼び出しには、読んだ内容が載っている。
-      expect(JSON.stringify(fake.bodies[1])).toContain("hello from the host");
+      expect(JSON.stringify(fake.bodies[1])).toContain("hello from the container");
     } finally {
       await fake.server.stop(true);
-      rmSync(dir, { recursive: true, force: true });
     }
   });
 

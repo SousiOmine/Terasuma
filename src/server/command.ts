@@ -25,8 +25,7 @@ export type CommandResult = {
  */
 export type CommandRunner = (
   cmd: readonly string[],
-  timeoutMs: number,
-  signal?: AbortSignal,
+  options: RunCommandOptions,
 ) => Promise<CommandResult>;
 
 export type RunCommandOptions = {
@@ -35,6 +34,8 @@ export type RunCommandOptions = {
   cwd?: string;
   /** ターンの停止などで打ち切るための signal。 */
   signal?: AbortSignal;
+  /** 標準入力へ流す内容。省くと標準入力を開かない。 */
+  stdin?: string | Uint8Array;
   /**
    * 残す出力の上限（文字数）。省くと 20,000 文字。
    * bash のように末尾を読みたい呼び出しは、大きめの値を渡してから自分で詰める。
@@ -60,12 +61,28 @@ export async function runCommand(
   try {
     const proc = Bun.spawn({
       cmd: [...cmd],
-      stdin: "ignore",
+      stdin: options.stdin === undefined ? "ignore" : "pipe",
       stdout: "pipe",
       stderr: "pipe",
       signal: abort,
       ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
     });
+
+    // 標準入力への書き込みは、出力の読み取りと同時に進める。
+    // 先に全部書いてから読むと、双方のパイプが詰まって止まる。
+    const writeInput = (async (): Promise<void> => {
+      if (options.stdin === undefined) return;
+
+      const stdin = proc.stdin;
+      if (stdin === undefined) throw new Error("standard input is not available");
+
+      try {
+        await stdin.write(options.stdin);
+        await stdin.end();
+      } catch {
+        // コマンドが入力を読む前に終わった場合。理由は終了コードと stderr に残る。
+      }
+    })();
 
     const limit = options.maxOutputChars ?? OUTPUT_LIMIT;
     const from = options.outputFrom ?? "head";
@@ -73,6 +90,7 @@ export async function runCommand(
       readLimited(proc.stdout, limit, from),
       readLimited(proc.stderr, limit, from),
     ]);
+    await writeInput;
     const code = await proc.exited;
 
     return {

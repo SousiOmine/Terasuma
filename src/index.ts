@@ -3,7 +3,7 @@ import { ensureDirectories, loadConfig } from "./config";
 import { createCodingToolset } from "./server/coding";
 import { createCompaction } from "./server/compaction";
 import { createComputerToolset } from "./server/computer";
-import { createContainerManager } from "./server/container";
+import { createContainerManager, WORKDIR_IN_CONTAINER } from "./server/container";
 import { createEngine, resolveModel } from "./server/engine";
 import { describeError } from "./shared/errors";
 import { createHandover } from "./server/handover";
@@ -46,16 +46,9 @@ const handover = createHandover();
 
 const computer = createComputerToolset({ container, images, handover });
 
-// 端末のファイルとシェルを扱うツール（read / write / edit / bash）。
-// 相対パスと bash の作業ディレクトリは、既定では Terasuma を起動したディレクトリになる。
-// コンテナでは、配信するファイルを cwd から解決する都合で cwd を dist に置くため、
-// エージェントの作業場所だけ TERASUMA_WORKSPACE で分ける。
-const configuredWorkspace = process.env.TERASUMA_WORKSPACE?.trim();
-if (configuredWorkspace === "") {
-  throw new Error("TERASUMA_WORKSPACE を空にはできません");
-}
-const workspace = configuredWorkspace ?? process.cwd();
-const coding = createCodingToolset({ cwd: workspace });
+// コンテナのファイルとシェルを扱うツール（read / write / edit / bash）。
+// いずれもコンピュータのコンテナの中だけで動き、ホストのファイルには触れない。
+const coding = createCodingToolset({ container, root: WORKDIR_IN_CONTAINER });
 
 const engine = createEngine({ config, settings, mcp, computer, coding, images });
 
@@ -94,7 +87,6 @@ console.log(
     `Terasuma  http://${server.hostname}:${server.port}`,
     `  engine : ${engine.name}`,
     `  model  : ${model ?? "(未設定)"}`,
-    `  workdir: ${workspace}`,
     // 設定と違うポートで起動したことは黙らない。開く先が表示と食い違ってしまうため。
     ...(portChanged ? [`  note   : ${config.port} は使用中だったので、空いているポートを使います`] : []),
     ...(resolution.ok ? [] : [`  note   : ${resolution.detail}`]),

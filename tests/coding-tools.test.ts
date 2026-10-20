@@ -1,28 +1,62 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { homedir, tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join, posix } from "node:path";
+import { runCommand } from "../src/server/command";
 import {
   BASH_TIMEOUT_MS,
   READ_MAX_BYTES,
   READ_MAX_LINES,
   createCodingToolset,
   resolveToolPath,
+  type CodingContainer,
   type CodingToolset,
 } from "../src/server/coding";
 
 /**
  * read / write / edit / bash を、モデルを介さずにそのまま呼ぶ。
  * ツールがモデルへ渡る形（Mastra 経由）は tests/engine-tools.test.ts で確かめる。
+ *
+ * コンテナは本物を使わず、一時ディレクトリをコンテナの /home/agent とみなす。
+ * コマンドも同じディレクトリで実行し、podman exec の往復だけを差し替える。
  */
 
 type ToolContext = { abortSignal?: AbortSignal };
+
+/** 一時ディレクトリをコンテナの中身として扱う差し替え。 */
+function localContainer(dir: string): CodingContainer {
+  return {
+    readFile: async (path) => new Uint8Array(readFileSync(path)),
+    writeFile: async (path, content) => {
+      mkdirSync(dirname(path), { recursive: true });
+      writeFileSync(path, content);
+    },
+    shell: async (script, options) => {
+      const result = await runCommand(["bash", "-lc", script], {
+        cwd: dir,
+        timeoutMs: options.timeoutMs,
+        signal: options.signal,
+        outputFrom: "tail",
+        ...(options.maxOutputChars === undefined ? {} : { maxOutputChars: options.maxOutputChars }),
+      });
+
+      return {
+        exitCode: result.code,
+        stdout: result.stdout,
+        stderr: result.stderr,
+        truncated: result.truncated,
+        timedOut: result.timedOut,
+      };
+    },
+  };
+}
 
 async function withTools<T>(run: (context: { tools: CodingToolset; dir: string }) => Promise<T>): Promise<T> {
   const dir = mkdtempSync(join(tmpdir(), "terasuma-coding-"));
 
   try {
-    return await run({ tools: createCodingToolset({ cwd: dir }), dir });
+    const tools = createCodingToolset({ container: localContainer(dir), root: dir });
+    return await run({ tools, dir });
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -297,22 +331,47 @@ describe("bash", () => {
   });
 });
 
+describe("ホストへは落ちない", () => {
+  test("コンテナの操作が失敗したら、その理由で止める", async () => {
+    const failure = new Error("The computer is not running (state: stopped)");
+    const container: CodingContainer = {
+      readFile: async () => {
+        throw failure;
+      },
+      writeFile: async () => {
+        throw failure;
+      },
+      shell: async () => {
+        throw failure;
+      },
+    };
+    const tools = createCodingToolset({ container, root: "/home/agent" });
+
+    await expect(callTool(tools, "read", { path: "/etc/hostname" })).rejects.toThrow("not running");
+    await expect(callTool(tools, "write", { path: "/home/agent/a.txt", content: "x" })).rejects.toThrow("not running");
+    await expect(
+      callTool(tools, "edit", { path: "/home/agent/a.txt", oldText: "x", newText: "y" }),
+    ).rejects.toThrow("not running");
+    await expect(callTool(tools, "bash", { command: "pwd" })).rejects.toThrow("not running");
+  });
+});
+
 describe("パスの解決", () => {
   test("相対パスは基準ディレクトリから解決する", () => {
-    expect(resolveToolPath("src/a.ts", "/work")).toBe(resolve("/work", "src/a.ts"));
+    expect(resolveToolPath("src/a.ts", "/home/agent")).toBe(posix.resolve("/home/agent", "src/a.ts"));
   });
 
   test("絶対パスはそのまま使う", () => {
-    expect(resolveToolPath("/tmp/a.ts", "/work")).toBe("/tmp/a.ts");
+    expect(resolveToolPath("/tmp/a.ts", "/home/agent")).toBe("/tmp/a.ts");
   });
 
-  test("~ はホームディレクトリに広げる", () => {
-    expect(resolveToolPath("~", "/work")).toBe(homedir());
-    expect(resolveToolPath("~/a.ts", "/work")).toBe(join(homedir(), "a.ts"));
+  test("~ はコンテナのホームに広げる", () => {
+    expect(resolveToolPath("~", "/home/agent")).toBe("/home/agent");
+    expect(resolveToolPath("~/a.ts", "/home/agent")).toBe("/home/agent/a.ts");
   });
 
   test("空のパスは失敗する", () => {
-    expect(() => resolveToolPath("  ", "/work")).toThrow("path must not be empty");
+    expect(() => resolveToolPath("  ", "/home/agent")).toThrow("path must not be empty");
   });
 });
 
@@ -320,7 +379,8 @@ describe("ツール名", () => {
   test("read / write / edit / bash をそのままの名前で渡す", () => {
     const dir = mkdtempSync(join(tmpdir(), "terasuma-coding-"));
     try {
-      expect(Object.keys(createCodingToolset({ cwd: dir })).sort()).toEqual(["bash", "edit", "read", "write"]);
+      const tools = createCodingToolset({ container: localContainer(dir), root: dir });
+      expect(Object.keys(tools).sort()).toEqual(["bash", "edit", "read", "write"]);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

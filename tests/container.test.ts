@@ -16,6 +16,7 @@ function withManager<T>(
   run: (context: {
     container: ReturnType<typeof createContainerManager>;
     calls: string[][];
+    inputs: (string | Uint8Array | undefined)[];
     dataDir: string;
     homeDir: string;
   }) => Promise<T>,
@@ -31,6 +32,7 @@ function withManager<T>(
   return run({
     container,
     calls: stub.calls,
+    inputs: stub.inputs,
     dataDir,
     homeDir: join(dataDir, "container", "home"),
   }).finally(() => rmSync(dataDir, { recursive: true, force: true }));
@@ -244,16 +246,17 @@ describe("コンテナの中での実行", () => {
     );
   });
 
-  test("実行中のコマンドには、渡された中断の signal がそのまま届く", async () => {    const dataDir = mkdtempSync(join(tmpdir(), "terasuma-container-"));
+  test("実行中のコマンドには、渡された中断の signal がそのまま届く", async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "terasuma-container-"));
     const stub = createPodmanStub({});
     const seen: (AbortSignal | undefined)[] = [];
     const container = createContainerManager({
       dataDir,
       containerDir: join(dataDir, "container-files"),
       // 状態の問い合わせは signal を取らない。実行だけが取る。
-      command: (cmd, timeoutMs, signal) => {
-        seen.push(signal);
-        return stub.run(cmd, timeoutMs);
+      command: (cmd, options) => {
+        seen.push(options.signal);
+        return stub.run(cmd, options);
       },
     });
 
@@ -267,5 +270,67 @@ describe("コンテナの中での実行", () => {
     } finally {
       rmSync(dataDir, { recursive: true, force: true });
     }
+  });
+
+  test("ファイルは base64 で受け取り、バイト列に戻す", async () => {
+    const bytes = new TextEncoder().encode("こんにちは\n");
+    await withManager(
+      { exec: { code: 0, stdout: Buffer.from(bytes).toString("base64"), stderr: "" } },
+      async ({ container, calls }) => {
+        expect(await container.readFile("/home/agent/note.txt")).toEqual(bytes);
+
+        expect(callsOf(calls, "exec")[0]).toEqual([
+          "podman",
+          "exec",
+          "--workdir",
+          "/home/agent",
+          "terasuma",
+          "base64",
+          "--wrap=0",
+          "--",
+          "/home/agent/note.txt",
+        ]);
+      },
+    );
+  });
+
+  test("上限を超えたファイルは、途中で切らずに失敗する", async () => {
+    await withManager(
+      { exec: { code: 0, stdout: "aGVsbG8=", stderr: "", truncated: true } },
+      async ({ container }) => {
+        await expect(container.readFile("/home/agent/huge.txt")).rejects.toThrow("larger than 16MB");
+      },
+    );
+  });
+
+  test("書き込みは親ディレクトリを作り、標準入力から書く", async () => {
+    const bytes = new TextEncoder().encode("こんにちは\n");
+    await withManager({}, async ({ container, calls, inputs }) => {
+      await container.writeFile("/home/agent/nested/note.txt", bytes);
+
+      expect(callsOf(calls, "exec")[0]).toEqual([
+        "podman",
+        "exec",
+        "--interactive",
+        "--workdir",
+        "/home/agent",
+        "terasuma",
+        "sh",
+        "-c",
+        'mkdir -p -- "$(dirname -- "$1")" && base64 --decode > "$1"',
+        "sh",
+        "/home/agent/nested/note.txt",
+      ]);
+      expect(inputs.at(-1)).toBe(Buffer.from(bytes).toString("base64"));
+    });
+  });
+
+  test("ファイルが読めなければ、コンテナの理由をそのまま投げる", async () => {
+    await withManager(
+      { exec: { code: 1, stdout: "", stderr: "base64: /home/agent/missing.txt: No such file or directory\n" } },
+      async ({ container }) => {
+        await expect(container.readFile("/home/agent/missing.txt")).rejects.toThrow("No such file or directory");
+      },
+    );
   });
 });

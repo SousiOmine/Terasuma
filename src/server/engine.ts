@@ -159,7 +159,7 @@ export function createEngine(options: {
   settings: SettingsReader;
   mcp: ToolsetProvider;
   computer: ComputerToolsetProvider;
-  /** 端末のファイルとシェルのツール。ターンごとに変わらないので、そのまま渡す。 */
+  /** コンテナのファイルとシェルのツール。ターンごとに変わらないので、そのまま渡す。 */
   coding: CodingToolset;
   /** 撮った画像の置き場。履歴から画像を読み直してモデルへ渡す。 */
   images: ImageStore;
@@ -189,7 +189,7 @@ export type MastraEngineOptions = {
   settings: SettingsReader;
   mcp: ToolsetProvider;
   computer: ComputerToolsetProvider;
-  /** 端末のファイルとシェルのツール。 */
+  /** コンテナのファイルとシェルのツール。 */
   coding: CodingToolset;
   images: ImageStore;
 };

@@ -9,8 +9,9 @@ import { runCommand, type CommandResult, type CommandRunner } from "./command";
  * podman で動かす Debian コンテナの面倒を見る。
  *
  * エージェントのプログラムはコンテナの中に置かず、Terasuma が `podman exec` で
- * コンテナの中のコマンドを呼ぶ。画面の撮影もクリックもキー入力もシェルも、
- * この 1 本の経路に揃える。
+ * コンテナの中のコマンドを呼ぶ。画面の撮影もクリックもキー入力も、ファイルの
+ * 読み書きもシェルも、この 1 本の経路に揃える。エージェントのツールはホストの
+ * ファイルシステムには触れない。
  *
  * 状態は podman への問い合わせだけで決める。Terasuma 側に台帳を持つと、
  * 手でコンテナを止めたときに食い違い、どちらが本当か分からなくなる。
@@ -46,6 +47,15 @@ const RUN_TIMEOUT_MS = 60_000;
 const REMOVE_TIMEOUT_MS = 60_000;
 /** 画面の撮影に許す時間。podman が返らないままターンが終わらなくなるのを防ぐ。 */
 const SCREENSHOT_TIMEOUT_MS = 15_000;
+/** ファイルの読み書きに許す時間。 */
+const FILE_TIMEOUT_MS = 60_000;
+/**
+ * 1 回の readFile で受け取るファイルの上限。
+ * これを超えるファイルは、bash ツールで head / sed / awk を使って部分を読む。
+ */
+const FILE_MAX_BYTES = 16 * 1024 * 1024;
+/** FILE_MAX_BYTES を base64 にしたときの文字数（末尾の改行の分も足す）。 */
+const FILE_MAX_BASE64_CHARS = Math.ceil(FILE_MAX_BYTES / 3) * 4 + 4;
 
 /**
  * 状態の問い合わせを使い回す時間。
@@ -84,12 +94,19 @@ export type ContainerManager = {
   /** コンテナを作り直す。wipeHome を選ぶと、マウントしたフォルダの中身も消す。 */
   reset(options: { wipeHome: boolean }): Promise<ContainerStatusView>;
   /** コンテナの中で bash -lc を実行する。動いていなければ ContainerError を投げる。 */
-  shell(script: string, options: { timeoutMs: number; signal?: AbortSignal }): Promise<ShellResult>;
+  shell(
+    script: string,
+    options: { timeoutMs: number; signal?: AbortSignal; maxOutputChars?: number },
+  ): Promise<ShellResult>;
   /**
-   * コンテナの中で 1 つのコマンドを実行する。
+   * コンテナの中の 1 つのコマンドを実行する。
    * シェルを介さないので、空白や記号を含む引数（打ち込む文字など）もそのまま渡せる。
    */
   exec(args: readonly string[], options: { timeoutMs: number; signal?: AbortSignal }): Promise<ShellResult>;
+  /** コンテナの中のファイルを読む。 */
+  readFile(path: string, signal?: AbortSignal): Promise<Uint8Array>;
+  /** コンテナの中のファイルを書く。親ディレクトリが無ければ作る。 */
+  writeFile(path: string, content: Uint8Array, signal?: AbortSignal): Promise<void>;
   /** いまの画面を PNG で撮る。 */
   screenshot(signal?: AbortSignal): Promise<Uint8Array>;
 };
@@ -104,8 +121,7 @@ export type ContainerManagerOptions = {
 };
 
 export function createContainerManager(options: ContainerManagerOptions): ContainerManager {
-  const run: CommandRunner =
-    options.command ?? ((cmd, timeoutMs, signal) => runCommand(cmd, { timeoutMs, signal }));
+  const run: CommandRunner = options.command ?? runCommand;
   const homeDir = join(options.dataDir, HOME_DIR_NAME);
   const containerfilePath = join(options.containerDir, "Containerfile");
 
@@ -117,7 +133,7 @@ export function createContainerManager(options: ContainerManagerOptions): Contai
   }
 
   async function podmanVersion(): Promise<string | null> {
-    const result = await run(["podman", "--version"], VERSION_TIMEOUT_MS);
+    const result = await run(["podman", "--version"], { timeoutMs: VERSION_TIMEOUT_MS });
     if (result.timedOut || result.code !== 0) return null;
 
     const version = result.stdout.trim();
@@ -125,19 +141,19 @@ export function createContainerManager(options: ContainerManagerOptions): Contai
   }
 
   async function imageExists(): Promise<boolean> {
-    const result = await run(["podman", "image", "exists", IMAGE_NAME], INSPECT_TIMEOUT_MS);
+    const result = await run(["podman", "image", "exists", IMAGE_NAME], { timeoutMs: INSPECT_TIMEOUT_MS });
     return result.code === 0;
   }
 
   async function containerExists(): Promise<boolean> {
-    const result = await run(["podman", "container", "exists", CONTAINER_NAME], INSPECT_TIMEOUT_MS);
+    const result = await run(["podman", "container", "exists", CONTAINER_NAME], { timeoutMs: INSPECT_TIMEOUT_MS });
     return result.code === 0;
   }
 
   async function containerStatus(): Promise<string | null> {
     const result = await run(
       ["podman", "inspect", "--format", "{{.State.Status}}", CONTAINER_NAME],
-      INSPECT_TIMEOUT_MS,
+      { timeoutMs: INSPECT_TIMEOUT_MS },
     );
     if (result.code !== 0) return null;
 
@@ -149,7 +165,7 @@ export function createContainerManager(options: ContainerManagerOptions): Contai
   async function publishedVncPort(): Promise<number | null> {
     const result = await run(
       ["podman", "port", CONTAINER_NAME, `${VNC_PORT_IN_CONTAINER}`],
-      INSPECT_TIMEOUT_MS,
+      { timeoutMs: INSPECT_TIMEOUT_MS },
     );
     if (result.code !== 0) return null;
 
@@ -164,7 +180,7 @@ export function createContainerManager(options: ContainerManagerOptions): Contai
   async function buildImage(): Promise<void> {
     const result = await run(
       ["podman", "build", "--tag", IMAGE_NAME, "--file", containerfilePath, options.containerDir],
-      BUILD_TIMEOUT_MS,
+      { timeoutMs: BUILD_TIMEOUT_MS },
     );
     if (result.code !== 0) throw fail("container_build_failed", result);
   }
@@ -192,19 +208,19 @@ export function createContainerManager(options: ContainerManagerOptions): Contai
         `${homeDir}:${WORKDIR_IN_CONTAINER}`,
         IMAGE_NAME,
       ],
-      RUN_TIMEOUT_MS,
+      { timeoutMs: RUN_TIMEOUT_MS },
     );
     if (result.code !== 0) throw fail("container_start_failed", result);
   }
 
   async function startContainer(): Promise<void> {
-    const result = await run(["podman", "start", CONTAINER_NAME], RUN_TIMEOUT_MS);
+    const result = await run(["podman", "start", CONTAINER_NAME], { timeoutMs: RUN_TIMEOUT_MS });
     if (result.code !== 0) throw fail("container_start_failed", result);
   }
 
   /** コンテナを消す。無い場合も同じ結果にしたいので、`rm --force` の失敗は見ない。 */
   async function removeContainer(): Promise<void> {
-    await run(["podman", "rm", "--force", CONTAINER_NAME], REMOVE_TIMEOUT_MS);
+    await run(["podman", "rm", "--force", CONTAINER_NAME], { timeoutMs: REMOVE_TIMEOUT_MS });
   }
 
   async function status(): Promise<ContainerStatusView> {
@@ -294,13 +310,18 @@ export function createContainerManager(options: ContainerManagerOptions): Contai
       return start();
     },
 
-    async shell(script, { timeoutMs, signal }) {
+    async shell(script, { timeoutMs, signal, maxOutputChars }) {
       await requireRunning();
 
       const result = await run(
         ["podman", "exec", "--workdir", WORKDIR_IN_CONTAINER, CONTAINER_NAME, "bash", "-lc", script],
-        timeoutMs,
-        signal,
+        {
+          timeoutMs,
+          signal,
+          // シェルの出力は末尾を読むことが多い。表示用に詰める前まで、末尾から受け取る。
+          outputFrom: "tail",
+          ...(maxOutputChars === undefined ? {} : { maxOutputChars }),
+        },
       );
 
       return toShellResult(result);
@@ -311,11 +332,62 @@ export function createContainerManager(options: ContainerManagerOptions): Contai
 
       const result = await run(
         ["podman", "exec", "--workdir", WORKDIR_IN_CONTAINER, CONTAINER_NAME, ...args],
-        timeoutMs,
-        signal,
+        { timeoutMs, signal },
       );
 
       return toShellResult(result);
+    },
+
+    async readFile(path, signal) {
+      await requireRunning();
+
+      // バイナリを文字列へ潰さないよう、base64 で受け取ってからバイト列に戻す。
+      const result = await run(
+        ["podman", "exec", "--workdir", WORKDIR_IN_CONTAINER, CONTAINER_NAME, "base64", "--wrap=0", "--", path],
+        { timeoutMs: FILE_TIMEOUT_MS, signal, maxOutputChars: FILE_MAX_BASE64_CHARS },
+      );
+
+      const failure = fileFailure("read", path, result);
+      if (failure !== null) throw failure;
+
+      // 上限を超えた出力を途中で切ると、base64 が欠けたまま復号されて中身が壊れる。
+      if (result.truncated) {
+        throw new Error(
+          `${path} is larger than ${FILE_MAX_BYTES / (1024 * 1024)}MB; use the bash tool to read it in parts`,
+        );
+      }
+
+      return Buffer.from(result.stdout, "base64");
+    },
+
+    async writeFile(path, content, signal) {
+      await requireRunning();
+
+      // 親ディレクトリを作ってから、標準入力から書き込む。
+      // パスはシェルの文字列へ埋めず、$1 として渡す。
+      const result = await run(
+        [
+          "podman",
+          "exec",
+          "--interactive",
+          "--workdir",
+          WORKDIR_IN_CONTAINER,
+          CONTAINER_NAME,
+          "sh",
+          "-c",
+          'mkdir -p -- "$(dirname -- "$1")" && base64 --decode > "$1"',
+          "sh",
+          path,
+        ],
+        {
+          timeoutMs: FILE_TIMEOUT_MS,
+          signal,
+          stdin: Buffer.from(content).toString("base64"),
+        },
+      );
+
+      const failure = fileFailure("write", path, result);
+      if (failure !== null) throw failure;
     },
 
     async screenshot(signal) {
@@ -334,6 +406,21 @@ function toShellResult(result: CommandResult): ShellResult {
     truncated: result.truncated,
     timedOut: result.timedOut,
   };
+}
+
+/** ファイル操作の失敗を、そのままモデルへ見せられる理由にする。成功なら null。 */
+function fileFailure(action: "read" | "write", path: string, result: CommandResult): Error | null {
+  if (result.timedOut) {
+    return new Error(
+      `Could not ${action} ${path}: the container did not respond within ${FILE_TIMEOUT_MS / 1000} seconds`,
+    );
+  }
+  if (result.code !== 0) {
+    return new Error(
+      result.stderr.trim() || `Could not ${action} ${path} (podman exec exit code ${result.code})`,
+    );
+  }
+  return null;
 }
 
 /**

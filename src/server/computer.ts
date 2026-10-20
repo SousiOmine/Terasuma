@@ -8,7 +8,8 @@ import type { Handover } from "./handover";
 import type { ImageStore } from "./images";
 
 /**
- * コンテナの画面とシェルをエージェントに渡すツールセット。
+ * コンテナの画面をエージェントに渡すツールセット。
+ * ファイルとシェルは coding.ts の read / write / edit / bash が受け持つ。
  *
  * Terasuma 自身の機能なので、MCP サーバーのようにユーザーが足したり消したりする対象ではない。
  * エンジンの中に内蔵のツールセットとして持つ。
@@ -24,14 +25,11 @@ import type { ImageStore } from "./images";
  * 撮った画像で読んだ座標をそのままクリックに渡せる。
  */
 
-/** モデルへ渡すツール。キーはツール名（"computer_shell" など）。 */
+/** モデルへ渡すツール。キーはツール名（"computer_screenshot" など）。 */
 export type ComputerToolset = Record<string, Tool<any, any, any, any>>;
 
 /** 操作 1 つの待ち時間。応答が返ってこない操作でターンが終わらなくなるのを防ぐ。 */
 const ACTION_TIMEOUT_MS = 15_000;
-
-/** computer_shell の待ち時間の上限。 */
-export const SHELL_TIMEOUT_MS = 120_000;
 
 /**
  * ツールの実行に渡ってくる中断。
@@ -264,23 +262,6 @@ export function createComputerTools(options: ComputerToolsOptions): ComputerTool
         return handover.wait(teraId, signal);
       },
     }),
-
-    computer_shell: createTool({
-      id: "computer_shell",
-      description: [
-        "Run a shell command on the Debian computer that you operate.",
-        "The command runs as bash -lc in /home/agent (the folder shared with the user's machine).",
-        "sudo works without a password.",
-        "Returns the exit code, standard output, and standard error.",
-      ].join(" "),
-      inputSchema: z.object({
-        command: z.string().describe('Shell command to run, for example "uname -a"'),
-      }),
-      execute: async ({ command }: { command: string }, context: ToolContext) => {
-        const result = await container.shell(command, { timeoutMs: SHELL_TIMEOUT_MS, signal: context.abortSignal });
-        return formatShellResult(result);
-      },
-    }),
   };
 }
 
@@ -335,20 +316,6 @@ function formatWindows(result: ShellResult): string {
     .join("\n");
 }
 
-/** シェルの結果を、モデルと画面に見せる 1 つの文字列にする。 */
-function formatShellResult(result: ShellResult): string {
-  const sections: string[] = [`exit code: ${result.exitCode}`];
-
-  if (result.stdout.length > 0) sections.push(`--- stdout ---\n${trimTrailingNewline(result.stdout)}`);
-  if (result.stderr.length > 0) sections.push(`--- stderr ---\n${trimTrailingNewline(result.stderr)}`);
-
-  // 切ったことと打ち切ったことは黙らない（結果が途中であることをモデルが説明できるように）。
-  if (result.truncated) sections.push("(output was too long and has been cut off)");
-  if (result.timedOut) sections.push(`(stopped after ${SHELL_TIMEOUT_MS / 1000} seconds)`);
-
-  return sections.join("\n");
-}
-
 /** 画像つきのツールの戻り値。 */
 type ImageOutput = { text: string; image: ImageRef };
 
@@ -375,8 +342,4 @@ function waitFor(ms: number, signal?: AbortSignal): Promise<void> {
     }
     signal?.addEventListener("abort", onAbort, { once: true });
   });
-}
-
-function trimTrailingNewline(text: string): string {
-  return text.endsWith("\n") ? text.slice(0, -1) : text;
 }

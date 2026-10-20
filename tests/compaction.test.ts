@@ -374,12 +374,12 @@ describe("要約の作り方", () => {
       content: "調べます。",
       parts: [
         { type: "text", text: "調べます。" },
-        { type: "tool-call", id: "call-1", server: "computer", tool: "shell", args: { command: "uname -a" } },
+        { type: "tool-call", id: "call-1", server: "", tool: "bash", args: { command: "uname -a" } },
         {
           type: "tool-result",
           id: "call-1",
-          server: "computer",
-          tool: "shell",
+          server: "",
+          tool: "bash",
           failed: false,
           output: "Linux terasuma 7.0.0\n".repeat(400),
           image: { sha256: "0".repeat(64), mime: "image/png", width: 1280, height: 800 },
@@ -397,7 +397,7 @@ describe("要約の作り方", () => {
 
     expect(prompt).toContain("[User]: ");
     expect(prompt).toContain("[Assistant]: 調べます。");
-    expect(prompt).toContain("[Assistant tool calls]: computer_shell(command=\"uname -a\")");
+    expect(prompt).toContain("[Assistant tool calls]: bash(command=\"uname -a\")");
     expect(prompt).toContain("[Tool result]: Linux terasuma");
     // 長い結果は切る。画像は中身を渡さず、大きさだけ残す。
     expect(prompt).toContain("more characters truncated");

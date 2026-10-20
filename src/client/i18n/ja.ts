@@ -41,7 +41,7 @@ export const ja: Record<MessageKey, string> = {
 
   "settings.container": "コンピュータ",
   "settings.container.description":
-    "エージェントが操作する仮想デスクトップ。アプリの実行も画面の操作も、この中だけで起きます。",
+    "エージェントが操作する仮想デスクトップ。アプリの実行も画面の操作もファイルの読み書きも、この中だけで起きます。",
   "settings.container.state.label": "状態",
   "settings.container.state.checking": "確認しています…",
   "settings.container.state.podman_missing": "podman が見つかりません",

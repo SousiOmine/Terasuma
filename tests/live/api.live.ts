@@ -63,12 +63,12 @@ test(
 
       const events = await harness.send(
         DEFAULT_TERA_ID,
-        "computer_shell ツールで `echo terasuma-live-ok` を実行し、その標準出力だけをそのまま返してください。",
+        "bash ツールで `echo terasuma-live-ok` を実行し、その標準出力だけをそのまま返してください。",
       );
       const done = expectTurnSucceeded(events);
       report("応答", done);
 
-      const call = toolCall(events, "computer", "shell");
+      const call = toolCall(events, "", "bash");
       const result = toolResultFor(events, call.part.id);
       console.log(`  呼び出し: ${preview(JSON.stringify(call.part.args), 120)}`);
       console.log(`  結果: ${preview(result.part.output, 120)}`);

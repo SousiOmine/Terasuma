@@ -13,7 +13,7 @@ import { join } from "node:path";
 import { loadConfig } from "../../src/config";
 import { createCodingToolset } from "../../src/server/coding";
 import { createComputerToolset } from "../../src/server/computer";
-import { createContainerManager, type ContainerManager } from "../../src/server/container";
+import { createContainerManager, WORKDIR_IN_CONTAINER, type ContainerManager } from "../../src/server/container";
 import { createEngine, resolveModel } from "../../src/server/engine";
 import { createHandover } from "../../src/server/handover";
 import { createImageStore } from "../../src/server/images";
@@ -48,8 +48,6 @@ export type LiveHarness = {
   store: Store;
   /** 過去の対話の圧縮。閾値をまたぐ確認で、更新を待つために使う。 */
   compaction: Compaction;
-  /** 端末のツール（read / write / edit / bash）の基準ディレクトリ。 */
-  workspace: string;
   send(teraId: string, content: string, language?: ReplyLanguage): Promise<ChatEvent[]>;
   /** その Tera の履歴（古い順）。 */
   messages(teraId: string): Promise<ChatMessage[]>;
@@ -62,14 +60,8 @@ export type LiveHarness = {
  * エンジンも MCP もコンテナも本物を使う。
  * 何かを差し替えると、確かめているのがアプリなのか差し替えなのか分からなくなる。
  */
-export type LiveServerOptions = {
-  /** 端末のツールの基準ディレクトリ。省くと、テストを動かしているディレクトリ。 */
-  cwd?: string;
-};
-
 export async function withLiveServer(
   run: (harness: LiveHarness) => Promise<void>,
-  options: LiveServerOptions = {},
 ): Promise<void> {
   const config = { ...loadConfig(), port: 0 };
 
@@ -92,9 +84,8 @@ export async function withLiveServer(
   const handover = createHandover();
   const computer = createComputerToolset({ container, images, handover });
 
-  // 相対パスと bash の作業ディレクトリ。アプリの起動時と同じく、起動したディレクトリを使う。
-  const workspace = options.cwd ?? process.cwd();
-  const coding = createCodingToolset({ cwd: workspace });
+  // read / write / edit / bash は、コンピュータのコンテナの中だけで動く（アプリの起動時と同じ）。
+  const coding = createCodingToolset({ container, root: WORKDIR_IN_CONTAINER });
 
   // OAuth の戻り先は、待ち受けているポートが決まってから決まる（index.ts と同じ）。
   let boundPort: number | null = null;
@@ -127,7 +118,6 @@ export async function withLiveServer(
       container,
       store,
       compaction,
-      workspace,
       async send(teraId, content, language = "ja") {
         const response = await fetch(new URL(`/api/teras/${teraId}/messages`, base), {
           method: "POST",

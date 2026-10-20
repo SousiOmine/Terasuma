@@ -31,11 +31,10 @@ GHCR のパッケージを private にした場合は、各マシンで `podman 
 `container/quadlet/terasuma.container` を user の Quadlet ディレクトリに置く。
 
 ```sh
-mkdir -p ~/.config/containers/systemd ~/.local/share/terasuma/workspace
+mkdir -p ~/.config/containers/systemd
 cp container/quadlet/terasuma.container ~/.config/containers/systemd/
 ```
 
-`~/.local/share/terasuma/workspace` は、エージェントのファイル操作と bash の基準になる場所。
 Quadlet の中の `%h` は、systemd がホームディレクトリに展開する。
 
 ログアウト後も動かすために linger を有効にする。
@@ -151,8 +150,7 @@ Quadlet は、ホストで直接動かすときと同じパスをコンテナに
 | `~/.local/share/terasuma/terasuma.db` | 会話の履歴 |
 | `~/.local/share/terasuma/images/` | ツールが撮った画像 |
 | `~/.local/share/terasuma/models-dev.json` | モデルカタログのキャッシュ |
-| `~/.local/share/terasuma/workspace/` | エージェントのファイル操作と bash の基準 |
-| `~/.local/share/terasuma/container/home/` | コンピュータのホーム |
+| `~/.local/share/terasuma/container/home/` | コンピュータのホーム（エージェントの read / write / edit / bash の場所） |
 
 バックアップを取るときは、`~/.config/terasuma` と `~/.local/share/terasuma` をまとめてコピーすればよい。
 
@@ -239,8 +237,13 @@ Terasuma にはアプリ側の認証がない。
 `127.0.0.1` に閉じておき、外から使うときは SSH トンネルか Tailscale Serve を使う。
 
 この構成では、アプリのコンテナにホストの Podman ソケットを渡している。
-コンテナの中のエージェントは `bash` と `read`、`write`、`edit` を使える。
-そのため、Terasuma にアクセスできる人は、ホストのコンテナとファイルを操作できるのと同じ権限を持つ。
+コンピュータの起動と操作にはこれが要る。
+エージェントの `read`、`write`、`edit`、`bash` は、そのソケットを持つアプリのコンテナではなく、
+コンピュータの Debian コンテナの中で動く。ホストのファイルは読めない。
+コンピュータとホストが共有するのは `~/.local/share/terasuma/container/home/` だけで、
+ここはホストのユーザーからも読める。
+
+Terasuma にアクセスできる人は、コンピュータの画面と、この共有フォルダの中身を操作できる。
 tailnet に共有端末や信頼できない端末が入っているなら、Tailscale の ACL で Serve のポートへのアクセスを絞る。
 
 モデルの API キーは `~/.config/terasuma/config.json` に保存される。

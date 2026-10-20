@@ -42,7 +42,7 @@ export const en = {
 
   "settings.container": "Computer",
   "settings.container.description":
-    "The virtual desktop the agent operates. Apps and screen interaction happen inside it.",
+    "The virtual desktop the agent operates. Apps, screen interaction, and file access all happen inside it.",
   "settings.container.state.label": "Status",
   "settings.container.state.checking": "Checking…",
   "settings.container.state.podman_missing": "podman is not installed",

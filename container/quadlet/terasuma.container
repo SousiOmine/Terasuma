@@ -1,7 +1,7 @@
 # Terasuma 本体の Quadlet。rootless（systemd の user ユニット）で動かす。
 #
 # 初回だけ、次の順で入れる:
-#   mkdir -p ~/.config/containers/systemd ~/.local/share/terasuma/workspace
+#   mkdir -p ~/.config/containers/systemd
 #   cp terasuma.container ~/.config/containers/systemd/
 #   sudo loginctl enable-linger "$USER"        # ログアウト後も動かす
 #   systemctl --user daemon-reload
@@ -16,8 +16,9 @@
 # 手で今すぐ更新するとき: podman auto-update
 # ログ: podman logs terasuma-app
 #
-# 注意: このユニットはホストの podman ソケットを渡す。中のエージェント（bash ツール）は
-# ホストのコンテナを自由に操作できる。信頼できるマシンだけで動かす。
+# 注意: このユニットはホストの podman ソケットを渡す（コンピュータの起動と操作に使う）。
+# エージェントの read / write / edit / bash はコンピュータのコンテナの中で動くので、
+# このソケットには触れない。信頼できるマシンだけで動かす。
 
 [Unit]
 Description=Terasuma
@@ -42,11 +43,6 @@ Volume=%h/.config/terasuma:%h/.config/terasuma:Z
 Volume=%h/.local/share/terasuma:%h/.local/share/terasuma:Z
 Environment=TERASUMA_CONFIG_DIR=%h/.config/terasuma
 Environment=TERASUMA_DATA_DIR=%h/.local/share/terasuma
-
-# エージェントの read / write / edit / bash の基準にする場所。
-# cwd は配信するファイルの解決に使うので /app/dist のままにし、作業場所だけ分ける。
-Volume=%h/.local/share/terasuma/workspace:/workspace:Z
-Environment=TERASUMA_WORKSPACE=/workspace
 
 # コンピュータ（VNC のデスクトップ）はホスト側の podman で動かす。
 # ソケットの親ディレクトリを渡し、中の podman に接続先を教える。
