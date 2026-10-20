@@ -2,6 +2,7 @@ import { signal } from "@preact/signals";
 import type { ChatEvent, ChatMessage } from "../../shared/types";
 import { locale } from "../i18n";
 import * as api from "../lib/api";
+import { ApiError } from "../lib/http";
 import { interpretEvent } from "./chat-events";
 import { clearChatError, showChatError } from "./failure";
 import { answerHandover, beginHandover, endHandover, handoverActive } from "./handover";
@@ -59,7 +60,7 @@ export async function sendMessage(rawContent: string): Promise<void> {
   // 送り先は起動時に読んだ一覧から決まる。読めていないときは送り先が無い。
   const teraId = activeTeraId.value;
   if (teraId === null) {
-    showChatError(new Error("tera_not_found"));
+    showChatError(new ApiError("tera_not_found"));
     return;
   }
 
@@ -111,7 +112,7 @@ function applyEvent(event: ChatEvent): void {
       endHandover();
       break;
     case "error":
-      showChatError(new Error(effect.detail ?? effect.code));
+      showChatError(new ApiError(effect.code, effect.detail));
       break;
   }
 }
