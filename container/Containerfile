@@ -1,4 +1,5 @@
-FROM debian:bookworm-slim
+# 短い名前は registries.conf の設定に左右されるので、Docker Hub を明示する。
+FROM docker.io/debian:bookworm-slim
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
       xvfb x11-utils x11vnc openbox xdotool scrot imagemagick \

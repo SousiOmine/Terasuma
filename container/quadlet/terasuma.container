@@ -1,0 +1,62 @@
+# Terasuma 本体の Quadlet。rootless（systemd の user ユニット）で動かす。
+#
+# 初回だけ、次の順で入れる:
+#   mkdir -p ~/.config/containers/systemd ~/.local/share/terasuma/workspace
+#   cp terasuma.container ~/.config/containers/systemd/
+#   sudo loginctl enable-linger "$USER"        # ログアウト後も動かす
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now podman.socket
+#   systemctl --user start terasuma
+#   systemctl --user enable --now podman-auto-update.timer   # 既定は毎日 0 時
+#
+# 画面は 127.0.0.1:3000。別のマシンから見るときは SSH トンネルを通す:
+#   ssh -L 3000:127.0.0.1:3000 <ホスト>
+#
+# GHCR のパッケージが private のままなら、先に podman login ghcr.io が要る。
+# 手で今すぐ更新するとき: podman auto-update
+# ログ: podman logs terasuma-app
+#
+# 注意: このユニットはホストの podman ソケットを渡す。中のエージェント（bash ツール）は
+# ホストのコンテナを自由に操作できる。信頼できるマシンだけで動かす。
+
+[Unit]
+Description=Terasuma
+Wants=network-online.target
+After=network-online.target podman.socket
+Requires=podman.socket
+
+[Container]
+Image=ghcr.io/sousiomine/terasuma:latest
+AutoUpdate=registry
+# コンピュータ用のコンテナが "terasuma" を使うので、こちらは別の名前にする。
+ContainerName=terasuma-app
+
+# アプリは 127.0.0.1 だけに待ち受ける。ホストの loopback に出すため host ネットワークを使う。
+Network=host
+# イメージの中の uid 1000 を、このユーザーに対応させる（マウントしたフォルダに書けるように）。
+UserNS=keep-id:uid=1000,gid=1000
+
+# 設定とデータは、ホストで直接動かすときと同じ絶対パスで見せる。
+# コンピュータ用コンテナのホームをホストの podman に -v で渡すため、パスを揃えておく。
+Volume=%h/.config/terasuma:%h/.config/terasuma:Z
+Volume=%h/.local/share/terasuma:%h/.local/share/terasuma:Z
+Environment=TERASUMA_CONFIG_DIR=%h/.config/terasuma
+Environment=TERASUMA_DATA_DIR=%h/.local/share/terasuma
+
+# エージェントの read / write / edit / bash の基準にする場所。
+# cwd は配信するファイルの解決に使うので /app/dist のままにし、作業場所だけ分ける。
+Volume=%h/.local/share/terasuma/workspace:/workspace:Z
+Environment=TERASUMA_WORKSPACE=/workspace
+
+# コンピュータ（VNC のデスクトップ）はホスト側の podman で動かす。
+# ソケットの親ディレクトリを渡し、中の podman に接続先を教える。
+Volume=%t/podman:/run/podman
+Environment=CONTAINER_HOST=unix:///run/podman/podman.sock
+
+[Service]
+Restart=on-failure
+# 初回はイメージの取得で 90 秒を超えることがある。
+TimeoutStartSec=900
+
+[Install]
+WantedBy=default.target

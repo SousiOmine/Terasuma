@@ -47,8 +47,14 @@ const handover = createHandover();
 const computer = createComputerToolset({ container, images, handover });
 
 // 端末のファイルとシェルを扱うツール（read / write / edit / bash）。
-// 相対パスと bash の作業ディレクトリは、Terasuma を起動したディレクトリになる。
-const workspace = process.cwd();
+// 相対パスと bash の作業ディレクトリは、既定では Terasuma を起動したディレクトリになる。
+// コンテナでは、配信するファイルを cwd から解決する都合で cwd を dist に置くため、
+// エージェントの作業場所だけ TERASUMA_WORKSPACE で分ける。
+const configuredWorkspace = process.env.TERASUMA_WORKSPACE?.trim();
+if (configuredWorkspace === "") {
+  throw new Error("TERASUMA_WORKSPACE を空にはできません");
+}
+const workspace = configuredWorkspace ?? process.cwd();
 const coding = createCodingToolset({ cwd: workspace });
 
 const engine = createEngine({ config, settings, mcp, computer, coding, images });
