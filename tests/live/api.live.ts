@@ -5,7 +5,7 @@
  * ネットワークと API キーが要り、通信費もわずかにかかるため、既定のテストからは外している。
  */
 import { expect, test } from "bun:test";
-import { DEFAULT_TERA_ID } from "../../src/server/store";
+import { DEFAULT_TERA_ID } from "../../src/server/data/store";
 import {
   CONTAINER_TIMEOUT_MS,
   TURN_TIMEOUT_MS,

@@ -4,10 +4,10 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ImageRef } from "../src/shared/types";
-import { createComputerToolset, createComputerTools } from "../src/server/computer";
-import { createContainerManager, type ContainerManager, type ShellResult } from "../src/server/container";
-import { createHandover } from "../src/server/handover";
-import { createImageStore, type ImageStore } from "../src/server/images";
+import { createComputerToolset, createComputerTools } from "../src/server/agent/tools/computer";
+import { createContainerManager, type ContainerManager, type ShellResult } from "../src/server/computer/container";
+import { createHandover } from "../src/server/computer/handover";
+import { createImageStore, type ImageStore } from "../src/server/computer/images";
 import { createPodmanStub, testPng, type PodmanStubBehaviour } from "./support";
 
 /**

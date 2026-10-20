@@ -8,8 +8,8 @@
  * 選択肢は「models.dev がそのモデルについて公開している値」と「AI SDK が受け付ける値」の交わりにする。
  * providerOptions のキーは ProviderSpec.optionKey（パッケージが読む名前）に合わせる。
  */
-import { effortValues, type CatalogModel } from "./models-dev";
-import type { ProviderKind, ProviderSpec } from "./provider-registry";
+import { effortValues, type CatalogModel } from "../provider/catalog";
+import type { ProviderKind, ProviderSpec } from "../provider/registry";
 
 /** providerOptions に入れられる値（AI SDK の型と同じ形）。 */
 export type ProviderOptionValue =

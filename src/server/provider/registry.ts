@@ -21,7 +21,7 @@ import { createTogetherAI } from "@ai-sdk/togetherai";
 import { createXai } from "@ai-sdk/xai";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import type { LanguageModel } from "ai";
-import { modelParts, type ModelId } from "../shared/model";
+import { modelParts, type ModelId } from "../../shared/model";
 
 /** 呼び出しに使う AI SDK のパッケージ。 */
 export type ProviderKind =

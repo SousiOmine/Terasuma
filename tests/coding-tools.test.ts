@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, posix } from "node:path";
-import { runCommand } from "../src/server/command";
+import { runCommand } from "../src/server/computer/command";
 import {
   BASH_TIMEOUT_MS,
   READ_MAX_BYTES,
@@ -11,7 +11,7 @@ import {
   resolveToolPath,
   type CodingContainer,
   type CodingToolset,
-} from "../src/server/coding";
+} from "../src/server/agent/tools/coding";
 
 /**
  * read / write / edit / bash を、モデルを介さずにそのまま呼ぶ。

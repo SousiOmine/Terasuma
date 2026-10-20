@@ -3,7 +3,7 @@ import { Database } from "bun:sqlite";
 import { rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createStore, DEFAULT_TERA_ID } from "../src/server/store";
+import { createStore, DEFAULT_TERA_ID } from "../src/server/data/store";
 import { makeStore } from "./support";
 
 /** 一時ファイルの DB を片付ける。WAL と共有メモリのファイルも残さない。 */

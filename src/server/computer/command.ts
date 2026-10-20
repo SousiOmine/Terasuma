@@ -1,4 +1,4 @@
-import { describeError } from "../shared/errors";
+import { describeError } from "../../shared/errors";
 
 /**
  * この端末でコマンドを 1 つ実行する。

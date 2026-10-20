@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { HANDOVER_DONE, createHandover } from "../src/server/handover";
+import { HANDOVER_DONE, createHandover } from "../src/server/computer/handover";
 
 /** ユーザーへ画面を渡す待ちの確認。エージェントのツールと HTTP の両方から触られる。 */
 describe("引き受けの待ち", () => {

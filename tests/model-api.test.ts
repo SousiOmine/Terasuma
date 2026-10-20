@@ -1,15 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { CONFIG_FILE_NAME, type FileSettings } from "../src/config";
-import { parseCatalog, type Catalog, type CatalogSnapshot } from "../src/server/models-dev";
+import { parseCatalog, type Catalog, type CatalogSnapshot } from "../src/server/provider/catalog";
 import {
   ProviderRequestError,
   type ConnectionChecker,
   type ProviderModelLister,
   type ProviderRequest,
-} from "../src/server/provider-models";
-import type { SettingsStore } from "../src/server/settings";
-import { DEFAULT_TERA_ID } from "../src/server/store";
+} from "../src/server/provider/connection";
+import type { SettingsStore } from "../src/server/data/settings";
+import { DEFAULT_TERA_ID } from "../src/server/data/store";
 import type { ModelSettingsView, ProviderCheckResult, ProviderView, ReasoningView } from "../src/shared/types";
 import { withServer } from "./harness";
 

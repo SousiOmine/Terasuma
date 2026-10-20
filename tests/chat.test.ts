@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import type { AgentEngine, EngineInput, EngineStream } from "../src/server/engine";
-import { createMockEngine } from "../src/server/engine";
-import type { Catalog } from "../src/server/models-dev";
-import { parseCatalog } from "../src/server/models-dev";
-import { DEFAULT_TERA_ID, createStore } from "../src/server/store";
-import type { Store } from "../src/server/store";
+import type { AgentEngine, EngineInput, EngineStream } from "../src/server/agent/engine";
+import { createMockEngine } from "../src/server/agent/engine";
+import type { Catalog } from "../src/server/provider/catalog";
+import { parseCatalog } from "../src/server/provider/catalog";
+import { DEFAULT_TERA_ID, createStore } from "../src/server/data/store";
+import type { Store } from "../src/server/data/store";
 import { decodeChatEvents } from "../src/shared/sse";
 import type { ApiErrorCode, ChatEvent, ChatMessage, Tera } from "../src/shared/types";
 import { fastMock, withServer as withTestServer } from "./harness";

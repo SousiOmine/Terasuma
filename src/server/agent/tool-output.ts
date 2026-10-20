@@ -1,6 +1,6 @@
 import type { ToolResultPart } from "ai";
-import type { ImageRef } from "../shared/types";
-import type { ImageReader } from "./images";
+import type { ImageRef } from "../../shared/types";
+import type { ImageReader } from "../computer/images";
 
 /**
  * ツールの戻り値から、モデルへ渡す本文と画像を取り出す。

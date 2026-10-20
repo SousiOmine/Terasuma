@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ContainerError, createContainerManager } from "../src/server/container";
+import { ContainerError, createContainerManager } from "../src/server/computer/container";
 import { createPodmanStub, type PodmanStubBehaviour } from "./support";
 
 /**

@@ -8,7 +8,7 @@
  */
 import { expect, test } from "bun:test";
 import { join } from "node:path";
-import { DEFAULT_TERA_ID } from "../../src/server/store";
+import { DEFAULT_TERA_ID } from "../../src/server/data/store";
 import type { MessagePart } from "../../src/shared/types";
 import {
   CONTAINER_TIMEOUT_MS,

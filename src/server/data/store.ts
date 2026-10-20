@@ -1,5 +1,5 @@
 import { Database } from "bun:sqlite";
-import type { ChatMessage, MessagePart, MessageRole, Tera, TokenUsage } from "../shared/types";
+import type { ChatMessage, MessagePart, MessageRole, Tera, TokenUsage } from "../../shared/types";
 
 /**
  * 既定の Tera。起動時に 1 体だけ用意する。

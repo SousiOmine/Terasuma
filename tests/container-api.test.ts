@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
-import { createContainerManager } from "../src/server/container";
+import { createContainerManager } from "../src/server/computer/container";
 import type { ContainerStatusView } from "../src/shared/types";
 import { type ServerHarness, withServer } from "./harness";
 import { createPodmanStub, type PodmanStubBehaviour } from "./support";

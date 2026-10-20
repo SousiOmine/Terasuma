@@ -7,10 +7,10 @@
  */
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import { modelParts, type ModelId } from "../shared/model";
-import type { FetchLike } from "./provider-models";
-import { catalogRoute } from "./provider-registry";
-import { describeError } from "../shared/errors";
+import { modelParts, type ModelId } from "../../shared/model";
+import type { FetchLike } from "./connection";
+import { catalogRoute } from "./registry";
+import { describeError } from "../../shared/errors";
 
 const MODELS_DEV_URL = "https://models.dev/api.json";
 export const CATALOG_FILE_NAME = "models-dev.json";

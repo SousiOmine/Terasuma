@@ -2,8 +2,14 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { CATALOG_FILE_NAME, CATALOG_TTL_MS, createCatalog, effortValues, parseCatalog } from "../src/server/models-dev";
-import type { FetchLike } from "../src/server/provider-models";
+import {
+  CATALOG_FILE_NAME,
+  CATALOG_TTL_MS,
+  createCatalog,
+  effortValues,
+  parseCatalog,
+} from "../src/server/provider/catalog";
+import type { FetchLike } from "../src/server/provider/connection";
 
 /** models.dev の応答の形（この実装が読む部分だけ）。 */
 function fixture() {

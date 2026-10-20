@@ -8,7 +8,7 @@ import {
   serverIdFromState,
   startMcpAuthorization,
   type OAuthStorage,
-} from "../src/server/mcp-oauth";
+} from "../src/server/mcp/oauth";
 import { FAKE_REDIRECT_URL, startFakeOAuthServer } from "./fixtures/oauth-server";
 
 /** テストで使うサーバー id と URL。実際には接続しない。 */

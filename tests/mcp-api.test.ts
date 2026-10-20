@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { FileSettings, McpServerSettings } from "../src/config";
-import type { AuthorizationCallback, McpManager } from "../src/server/mcp";
+import type { AuthorizationCallback, McpManager } from "../src/server/mcp/manager";
 import type { McpServerStatusView, McpServersView, McpTestView } from "../src/shared/types";
 import { withServer } from "./harness";
 

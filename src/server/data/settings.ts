@@ -8,8 +8,8 @@ import {
   type McpSettings,
   type ModelSettings,
   type ProviderSettings,
-} from "../config";
-import type { ModelId } from "../shared/model";
+} from "../../config";
+import type { ModelId } from "../../shared/model";
 
 /**
  * モデルとプロバイダ、MCP サーバーの設定。

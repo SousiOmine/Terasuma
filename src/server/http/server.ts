@@ -1,25 +1,25 @@
 import type { Server } from "bun";
 import { join } from "node:path";
-import index from "../client/index.html";
-import type { AppConfig } from "../config";
-import type { ContainerManager } from "./container";
-import type { AgentEngine } from "./engine";
-import type { Handover } from "./handover";
-import { describeError } from "../shared/errors";
-import { jsonError } from "./errors";
-import type { McpManager } from "./mcp";
-import { OAUTH_CALLBACK_PATH } from "./mcp-oauth";
-import type { Compaction } from "./compaction";
-import { CATALOG_FILE_NAME, createCatalog, type Catalog } from "./models-dev";
+import index from "../../client/index.html";
+import type { AppConfig } from "../../config";
+import type { ContainerManager } from "../computer/container";
+import type { AgentEngine } from "../agent/engine";
+import type { Handover } from "../computer/handover";
+import { describeError } from "../../shared/errors";
+import { jsonError } from "../errors";
+import type { McpManager } from "../mcp/manager";
+import { OAUTH_CALLBACK_PATH } from "../mcp/oauth";
+import type { Compaction } from "../agent/compaction";
+import { CATALOG_FILE_NAME, createCatalog, type Catalog } from "../provider/catalog";
 import {
   createConnectionChecker,
   createModelLister,
   type ConnectionChecker,
   type ProviderModelLister,
-} from "./provider-models";
+} from "../provider/connection";
 import { createApiHandlers } from "./routes";
-import type { SettingsStore } from "./settings";
-import type { Store } from "./store";
+import type { SettingsStore } from "../data/settings";
+import type { Store } from "../data/store";
 
 export type ServerOptions = {
   config: AppConfig;

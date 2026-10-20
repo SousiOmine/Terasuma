@@ -2,15 +2,15 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CONFIG_FILE_NAME, type FileSettings } from "../src/config";
-import type { CommandResult, CommandRunner } from "../src/server/command";
-import type { CodingToolset } from "../src/server/coding";
-import { ContainerError, type ContainerManager } from "../src/server/container";
-import type { ComputerToolsetProvider } from "../src/server/engine";
-import type { ImageStore } from "../src/server/images";
-import type { McpManager } from "../src/server/mcp";
-import { createSettingsStore, type SettingsStore } from "../src/server/settings";
-import { createStore, type Store } from "../src/server/store";
-import { createCompaction, type Compaction } from "../src/server/compaction";
+import type { CommandResult, CommandRunner } from "../src/server/computer/command";
+import type { CodingToolset } from "../src/server/agent/tools/coding";
+import { ContainerError, type ContainerManager } from "../src/server/computer/container";
+import type { ComputerToolsetProvider } from "../src/server/agent/engine";
+import type { ImageStore } from "../src/server/computer/images";
+import type { McpManager } from "../src/server/mcp/manager";
+import { createSettingsStore, type SettingsStore } from "../src/server/data/settings";
+import { createStore, type Store } from "../src/server/data/store";
+import { createCompaction, type Compaction } from "../src/server/agent/compaction";
 import type { ContainerStatusView } from "../src/shared/types";
 
 /** 時刻を固定したストア。updated_at の比較を決定的にするため。 */

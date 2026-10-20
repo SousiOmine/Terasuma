@@ -5,7 +5,7 @@ import {
   createLanguageModel,
   providerSpecForId,
   toolResultTakesImages,
-} from "../src/server/provider-registry";
+} from "../src/server/provider/registry";
 
 /** 生成したモデルの、providerOptions のキーとモデル名を取り出す。 */
 function modelInfo(model: LanguageModel): { provider: string; modelId: string } {

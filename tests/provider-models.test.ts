@@ -6,7 +6,7 @@ import {
   ProviderRequestError,
   type FetchLike,
   type ProviderRequest,
-} from "../src/server/provider-models";
+} from "../src/server/provider/connection";
 
 /** 呼ばれた URL とヘッダを記録する、差し替え可能な fetch。 */
 function stubFetch(handler: (url: string) => Response) {

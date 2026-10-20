@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { HANDOVER_DONE } from "../src/server/handover";
+import { HANDOVER_DONE } from "../src/server/computer/handover";
 import { withServer } from "./harness";
 
 function handoverRequest(teraId: string, body: Record<string, unknown>): RequestInit {

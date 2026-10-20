@@ -2,15 +2,15 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { CONFIG_FILE_NAME, readSettingsFile, type AppConfig, type FileSettings } from "../src/config";
-import type { ContainerManager } from "../src/server/container";
-import { createMockEngine, type AgentEngine } from "../src/server/engine";
-import { createHandover, type Handover } from "../src/server/handover";
-import type { McpManager } from "../src/server/mcp";
-import type { Catalog } from "../src/server/models-dev";
-import type { ConnectionChecker, ProviderModelLister } from "../src/server/provider-models";
-import { startServer, type StartedServer } from "../src/server/server";
-import { createSettingsStore, type SettingsStore } from "../src/server/settings";
-import { createStore, type Store } from "../src/server/store";
+import type { ContainerManager } from "../src/server/computer/container";
+import { createMockEngine, type AgentEngine } from "../src/server/agent/engine";
+import { createHandover, type Handover } from "../src/server/computer/handover";
+import type { McpManager } from "../src/server/mcp/manager";
+import type { Catalog } from "../src/server/provider/catalog";
+import type { ConnectionChecker, ProviderModelLister } from "../src/server/provider/connection";
+import { startServer, type StartedServer } from "../src/server/http/server";
+import { createSettingsStore, type SettingsStore } from "../src/server/data/settings";
+import { createStore, type Store } from "../src/server/data/store";
 import { TEST_SETTINGS, createCompactionStub, createContainerStub, createMcpStub } from "./support";
 
 /**

@@ -1,7 +1,7 @@
-import type { ProviderSettings } from "../config";
-import { isReplyLanguage } from "../shared/language";
-import { isModelId, modelParts, modelProvider } from "../shared/model";
-import { findEndpointPreset } from "../shared/providers";
+import type { ProviderSettings } from "../../config";
+import { isReplyLanguage } from "../../shared/language";
+import { isModelId, modelParts, modelProvider } from "../../shared/model";
+import { findEndpointPreset } from "../../shared/providers";
 import type {
   CatalogProviderView,
   ContainerStatusView,
@@ -9,13 +9,13 @@ import type {
   ProviderCheckResult,
   ProviderCredentials,
   ReasoningView,
-} from "../shared/types";
-import { resolveModel, type AgentEngine } from "./engine";
-import type { Compaction } from "./compaction";
-import { ContainerError, type ContainerErrorCode, type ContainerManager } from "./container";
-import type { Handover } from "./handover";
-import { describeError } from "../shared/errors";
-import { jsonError } from "./errors";
+} from "../../shared/types";
+import { resolveModel, type AgentEngine } from "../agent/engine";
+import type { Compaction } from "../agent/compaction";
+import { ContainerError, type ContainerErrorCode, type ContainerManager } from "../computer/container";
+import type { Handover } from "../computer/handover";
+import { describeError } from "../../shared/errors";
+import { jsonError } from "../errors";
 import {
   parseProviderSettings,
   readCredentials,
@@ -25,20 +25,20 @@ import {
   readProviderId,
 } from "./body";
 import { authorizationPage, toMcpView, toSettingsView } from "./views";
-import { runTurn, sseResponse } from "./turn";
-import { McpServerNotFound, type McpManager } from "./mcp";
-import { catalogProvider, type Catalog, type CatalogSnapshot } from "./models-dev";
+import { runTurn, sseResponse } from "../agent/turn";
+import { McpServerNotFound, type McpManager } from "../mcp/manager";
+import { catalogProvider, type Catalog, type CatalogSnapshot } from "../provider/catalog";
 import {
   ProviderRequestError,
   connectionTarget,
   type ConnectionChecker,
   type ConnectionTarget,
   type ProviderModelLister,
-} from "./provider-models";
-import { providerSpecForId } from "./provider-registry";
-import { selectableEfforts } from "./reasoning";
-import type { SettingsStore } from "./settings";
-import type { Store } from "./store";
+} from "../provider/connection";
+import { providerSpecForId } from "../provider/registry";
+import { selectableEfforts } from "../agent/reasoning";
+import type { SettingsStore } from "../data/settings";
+import type { Store } from "../data/store";
 
 /**
  * ハンドラが必要とする最小限のリクエスト形状。

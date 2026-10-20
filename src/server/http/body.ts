@@ -5,11 +5,11 @@ import {
   providerSettingsFromForm,
   type McpServerSettings,
   type ProviderSettings,
-} from "../config";
-import { describeError } from "../shared/errors";
-import { isModelId, type ModelId } from "../shared/model";
-import type { McpServerForm, ProviderCredentials } from "../shared/types";
-import { jsonError } from "./errors";
+} from "../../config";
+import { describeError } from "../../shared/errors";
+import { isModelId, type ModelId } from "../../shared/model";
+import type { McpServerForm, ProviderCredentials } from "../../shared/types";
+import { jsonError } from "../errors";
 
 /**
  * リクエストの本文から値を読み、検証して、保存できる形に整える。

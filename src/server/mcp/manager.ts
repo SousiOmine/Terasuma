@@ -8,8 +8,8 @@ import {
 } from "@modelcontextprotocol/client";
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
 import { jsonSchema, tool, type JSONSchema7, type ToolSet } from "ai";
-import type { McpHttpServerSettings, McpServerSettings, McpServersSettings } from "../config";
-import type { ImageRef, McpAuthorizationView, McpServerStatusView, McpTestView } from "../shared/types";
+import type { McpHttpServerSettings, McpServerSettings, McpServersSettings } from "../../config";
+import type { ImageRef, McpAuthorizationView, McpServerStatusView, McpTestView } from "../../shared/types";
 import {
   McpOAuthProvider,
   createFileOAuthStorage,
@@ -17,11 +17,11 @@ import {
   serverIdFromState,
   startMcpAuthorization,
   type OAuthStorage,
-} from "./mcp-oauth";
-import type { SettingsStore } from "./settings";
-import type { ImageStore } from "./images";
-import type { ImageToolOutput } from "./tool-output";
-import { describeError } from "../shared/errors";
+} from "./oauth";
+import type { SettingsStore } from "../data/settings";
+import type { ImageStore } from "../computer/images";
+import type { ImageToolOutput } from "../agent/tool-output";
+import { describeError } from "../../shared/errors";
 
 /** モデルへ渡すツール。キーは "<サーバー id>_<ツール名>"。 */
 export type McpToolset = ToolSet;

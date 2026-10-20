@@ -1,7 +1,7 @@
 import type { ModelMessage } from "ai";
-import type { ReplyLanguage } from "../shared/language";
-import type { ChatMessage, ImageRef, MessagePart } from "../shared/types";
-import type { ImageReader } from "./images";
+import type { ReplyLanguage } from "../../shared/language";
+import type { ChatMessage, ImageRef, MessagePart } from "../../shared/types";
+import type { ImageReader } from "../computer/images";
 import { readStoredImages, toolResultOutput, type StoredImages } from "./tool-output";
 
 /**

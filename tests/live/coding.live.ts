@@ -7,8 +7,8 @@
  * モデルの応答だけを信じない（「書きました」と言って書いていない場合を見逃さない）。
  */
 import { expect, test } from "bun:test";
-import { WORKDIR_IN_CONTAINER, type ContainerManager } from "../../src/server/container";
-import { DEFAULT_TERA_ID } from "../../src/server/store";
+import { WORKDIR_IN_CONTAINER, type ContainerManager } from "../../src/server/computer/container";
+import { DEFAULT_TERA_ID } from "../../src/server/data/store";
 import {
   CONTAINER_TIMEOUT_MS,
   TURN_TIMEOUT_MS,

@@ -1,6 +1,6 @@
-import type { McpServersSettings, ModelSettings } from "../config";
-import type { McpServersView, ModelSettingsView } from "../shared/types";
-import type { McpManager } from "./mcp";
+import type { McpServersSettings, ModelSettings } from "../../config";
+import type { McpServersView, ModelSettingsView } from "../../shared/types";
+import type { McpManager } from "../mcp/manager";
 
 /**
  * 保存されている設定を、画面へ返す形に整える。

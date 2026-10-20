@@ -1,10 +1,10 @@
-import type { ReplyLanguage } from "../shared/language";
-import { encodeChatEvent } from "../shared/sse";
-import type { ChatEvent, ChatMessage, MessagePart, TokenUsage } from "../shared/types";
-import { describeError } from "../shared/errors";
+import type { ReplyLanguage } from "../../shared/language";
+import { encodeChatEvent } from "../../shared/sse";
+import type { ChatEvent, ChatMessage, MessagePart, TokenUsage } from "../../shared/types";
+import { describeError } from "../../shared/errors";
 import type { AgentEngine } from "./engine";
 import type { Compaction } from "./compaction";
-import type { Store } from "./store";
+import type { Store } from "../data/store";
 
 /**
  * 1 ターン分の流れ。

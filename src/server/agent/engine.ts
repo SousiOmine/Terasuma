@@ -1,19 +1,19 @@
 import { generateText, stepCountIs, streamText } from "ai";
 import type { LanguageModelUsage, TextStreamPart, ToolSet } from "ai";
-import type { AppConfig, ModelSettings } from "../config";
-import type { ReplyLanguage } from "../shared/language";
-import { modelProvider } from "../shared/model";
-import type { MessagePart, TokenUsage } from "../shared/types";
-import type { CodingToolset } from "./coding";
-import type { ComputerToolset } from "./computer";
-import type { ImageStore } from "./images";
-import type { McpToolset } from "./mcp";
-import { catalogProvider, type CatalogSnapshot } from "./models-dev";
+import type { AppConfig, ModelSettings } from "../../config";
+import type { ReplyLanguage } from "../../shared/language";
+import { modelProvider } from "../../shared/model";
+import type { MessagePart, TokenUsage } from "../../shared/types";
+import type { CodingToolset } from "./tools/coding";
+import type { ComputerToolset } from "./tools/computer";
+import type { ImageStore } from "../computer/images";
+import type { McpToolset } from "../mcp/manager";
+import { catalogProvider, type CatalogSnapshot } from "../provider/catalog";
 import { imagesMessage, SYSTEM_PROMPT, toModelMessages, type PendingImages, type TeraContext } from "./prompt";
-import { catalogRoute, createLanguageModel, toolResultTakesImages, type ResolvedModel } from "./provider-registry";
+import { catalogRoute, createLanguageModel, toolResultTakesImages, type ResolvedModel } from "../provider/registry";
 import { reasoningProviderOptions } from "./reasoning";
 import { readStoredImages, readToolOutput, toolResultOutput } from "./tool-output";
-import { describeError } from "../shared/errors";
+import { describeError } from "../../shared/errors";
 
 /** モデルから流れてくる出来事。画面へ流す単位でもある。 */
 export type EngineEvent =

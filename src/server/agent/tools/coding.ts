@@ -2,7 +2,7 @@ import { posix } from "node:path";
 import type { ToolSet } from "ai";
 import { tool } from "ai";
 import { z } from "zod";
-import type { ShellResult } from "./container";
+import type { ShellResult } from "../../computer/container";
 
 /**
  * エージェントが、Debian のデスクトップコンテナの中のファイルを読み書きし、

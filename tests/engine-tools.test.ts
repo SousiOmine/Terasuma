@@ -5,20 +5,20 @@ import { join } from "node:path";
 import { tool } from "ai";
 import { z } from "zod";
 import type { ModelSettings } from "../src/config";
-import { createCodingToolset, type CodingToolset } from "../src/server/coding";
-import { createComputerTools } from "../src/server/computer";
-import type { ContainerManager } from "../src/server/container";
+import { createCodingToolset, type CodingToolset } from "../src/server/agent/tools/coding";
+import { createComputerTools } from "../src/server/agent/tools/computer";
+import type { ContainerManager } from "../src/server/computer/container";
 import {
   createAiSdkEngine,
   type ComputerToolsetProvider,
   type EngineEvent,
   type SettingsReader,
   type ToolsetProvider,
-} from "../src/server/engine";
-import { createImageStore, type ImageStore } from "../src/server/images";
-import type { CatalogSnapshot } from "../src/server/models-dev";
+} from "../src/server/agent/engine";
+import { createImageStore, type ImageStore } from "../src/server/computer/images";
+import type { CatalogSnapshot } from "../src/server/provider/catalog";
 import type { ChatMessage, ImageRef } from "../src/shared/types";
-import { createHandover } from "../src/server/handover";
+import { createHandover } from "../src/server/computer/handover";
 import { createCodingStub, createComputerStub, createContainerStub, createImageStub, testPng } from "./support";
 
 /**

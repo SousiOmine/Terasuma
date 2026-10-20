@@ -11,19 +11,23 @@
 import { expect } from "bun:test";
 import { join } from "node:path";
 import { loadConfig } from "../../src/config";
-import { createCodingToolset } from "../../src/server/coding";
-import { createComputerToolset } from "../../src/server/computer";
-import { createContainerManager, WORKDIR_IN_CONTAINER, type ContainerManager } from "../../src/server/container";
-import { createEngine, resolveModel } from "../../src/server/engine";
-import { createHandover } from "../../src/server/handover";
-import { createImageStore } from "../../src/server/images";
-import { createMcpManager } from "../../src/server/mcp";
-import { OAUTH_CALLBACK_PATH } from "../../src/server/mcp-oauth";
-import { createCompaction, type Compaction } from "../../src/server/compaction";
-import { CATALOG_FILE_NAME, createCatalog, modelContextTokens } from "../../src/server/models-dev";
-import { startServer } from "../../src/server/server";
-import { createSettingsStore } from "../../src/server/settings";
-import { createStore, type Store } from "../../src/server/store";
+import { createCodingToolset } from "../../src/server/agent/tools/coding";
+import { createComputerToolset } from "../../src/server/agent/tools/computer";
+import {
+  createContainerManager,
+  WORKDIR_IN_CONTAINER,
+  type ContainerManager,
+} from "../../src/server/computer/container";
+import { createEngine, resolveModel } from "../../src/server/agent/engine";
+import { createHandover } from "../../src/server/computer/handover";
+import { createImageStore } from "../../src/server/computer/images";
+import { createMcpManager } from "../../src/server/mcp/manager";
+import { OAUTH_CALLBACK_PATH } from "../../src/server/mcp/oauth";
+import { createCompaction, type Compaction } from "../../src/server/agent/compaction";
+import { CATALOG_FILE_NAME, createCatalog, modelContextTokens } from "../../src/server/provider/catalog";
+import { startServer } from "../../src/server/http/server";
+import { createSettingsStore } from "../../src/server/data/settings";
+import { createStore, type Store } from "../../src/server/data/store";
 import type { ReplyLanguage } from "../../src/shared/language";
 import { decodeChatEvents } from "../../src/shared/sse";
 import type { ChatEvent, ChatMessage, TokenUsage } from "../../src/shared/types";

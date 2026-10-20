@@ -1,10 +1,10 @@
 import type { ToolSet } from "ai";
 import { tool } from "ai";
 import { z } from "zod";
-import type { ContainerManager, ShellResult } from "./container";
-import type { ComputerToolsetProvider } from "./engine";
-import type { Handover } from "./handover";
-import type { ImageStore } from "./images";
+import type { ContainerManager, ShellResult } from "../../computer/container";
+import type { ComputerToolsetProvider } from "../engine";
+import type { Handover } from "../../computer/handover";
+import type { ImageStore } from "../../computer/images";
 
 /**
  * コンテナの画面をエージェントに渡すツールセット。

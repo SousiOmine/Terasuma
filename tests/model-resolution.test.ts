@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { ModelSettings } from "../src/config";
-import { resolveModel, type ModelResolution } from "../src/server/engine";
-import { parseCatalog, type CatalogSnapshot } from "../src/server/models-dev";
+import { resolveModel, type ModelResolution } from "../src/server/agent/engine";
+import { parseCatalog, type CatalogSnapshot } from "../src/server/provider/catalog";
 
 /**
  * テストで使うカタログ。npm（使うパッケージ）と api（接続先）が、

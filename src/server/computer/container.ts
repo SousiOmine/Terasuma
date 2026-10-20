@@ -1,8 +1,8 @@
 import { mkdirSync, rmSync } from "node:fs";
 import { createServer } from "node:net";
 import { join } from "node:path";
-import type { ContainerStatusView } from "../shared/types";
-import { describeError } from "../shared/errors";
+import type { ContainerStatusView } from "../../shared/types";
+import { describeError } from "../../shared/errors";
 import { runCommand, type CommandResult, type CommandRunner } from "./command";
 
 /**

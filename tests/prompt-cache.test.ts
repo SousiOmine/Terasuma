@@ -2,16 +2,16 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createImageStore, type ImageReader } from "../src/server/images";
+import { createImageStore, type ImageReader } from "../src/server/computer/images";
 import {
   summaryText,
   buildModelInput,
   replyLanguageInstruction,
   SYSTEM_PROMPT,
   type TeraContext,
-} from "../src/server/prompt";
-import { readContext } from "../src/server/compaction";
-import { DEFAULT_TERA_ID } from "../src/server/store";
+} from "../src/server/agent/prompt";
+import { readContext } from "../src/server/agent/compaction";
+import { DEFAULT_TERA_ID } from "../src/server/data/store";
 import type { ImageRef } from "../src/shared/types";
 import { createImageStub, makeStore, testPng } from "./support";
 

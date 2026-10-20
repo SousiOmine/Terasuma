@@ -8,8 +8,8 @@
  *
  * 独自エンドポイント（OpenAI 互換）はカタログに無いので、モデルの一覧もここから取る。
  */
-import type { ApiErrorCode, ProviderCheckResult } from "../shared/types";
-import { describeError } from "../shared/errors";
+import type { ApiErrorCode, ProviderCheckResult } from "../../shared/types";
+import { describeError } from "../../shared/errors";
 
 /** 接続確認で返す失敗の種類。ルート側でそのまま API のコードになる。 */
 export type ProviderErrorCode = Extract<

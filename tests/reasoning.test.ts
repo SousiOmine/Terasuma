@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import type { CatalogModel } from "../src/server/models-dev";
-import { catalogRoute, providerSpecForId, type ProviderSpec } from "../src/server/provider-registry";
-import { reasoningProviderOptions, selectableEfforts } from "../src/server/reasoning";
+import type { CatalogModel } from "../src/server/provider/catalog";
+import { catalogRoute, providerSpecForId, type ProviderSpec } from "../src/server/provider/registry";
+import { reasoningProviderOptions, selectableEfforts } from "../src/server/agent/reasoning";
 
 /** 思考強度として effort の値を持つモデル。 */
 function modelWithEffort(values: string[]): CatalogModel {

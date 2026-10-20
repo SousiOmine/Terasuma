@@ -6,7 +6,7 @@
  * 「ユーザーが書いた言語」ではなく「設定した言語」で返すことを見る。
  */
 import { expect, test } from "bun:test";
-import { DEFAULT_TERA_ID } from "../../src/server/store";
+import { DEFAULT_TERA_ID } from "../../src/server/data/store";
 import { TURN_TIMEOUT_MS, expectTurnSucceeded, joinedDeltas, report, withLiveServer } from "./support";
 
 /** ひらがな・カタカナ・漢字が 1 文字でも含まれているか。 */

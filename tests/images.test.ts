@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createImageStore } from "../src/server/images";
+import { createImageStore } from "../src/server/computer/images";
 import { testGif, testJpeg, testPng, testWebp } from "./support";
 
 function withStore<T>(run: (context: { store: ReturnType<typeof createImageStore>; dir: string }) => T): T {
