@@ -4,20 +4,22 @@ import { isModelId, type ModelId } from "../../shared/model";
 import type { McpServerForm, ProviderCredentials } from "../../shared/types";
 import { mcpServerSettingsFromForm, parseProviderCredentials } from "../data/settings-form";
 import type { McpServerSettings, ProviderSettings } from "../data/settings-schema";
-import { jsonError } from "../errors";
+import { ValidationError } from "../errors";
 
 /**
  * リクエストの本文から値を読み、検証して、保存できる形に整える。
- * 形が違えば、そのまま返せる 400 のレスポンスを返す。
+ *
+ * 形が違えば ValidationError を投げる。応答への変換は http/respond.ts が行うので、
+ * ここは「読めなかった理由」だけを返す。
  */
 
 /**
  * 画面から来た MCP サーバーの入力を、保存できる形にする。
- * id と種類ごとの規則の検証は、設定ファイルを読むときと同じ 1 箇所（config.ts）に任せる。
+ * id と種類ごとの規則の検証は、設定ファイルを読むときと同じ 1 箇所（settings-form.ts）に任せる。
  */
 export async function readMcpForm(req: {
   json(): Promise<unknown>;
-}): Promise<{ id: string; server: McpServerSettings } | Response> {
+}): Promise<{ id: string; server: McpServerSettings }> {
   const body = await readJsonBody(req);
 
   const rawId = body?.["id"];
@@ -25,7 +27,7 @@ export async function readMcpForm(req: {
 
   const type = body?.["type"];
   if (type !== "stdio" && type !== "http") {
-    return jsonError(400, "invalid_request", 'type は "stdio" か "http" にしてください');
+    throw new ValidationError('type は "stdio" か "http" にしてください');
   }
 
   const command = readOptionalString(body, "command");
@@ -33,11 +35,7 @@ export async function readMcpForm(req: {
   const args = readOptionalStringList(body, "args");
   const env = readOptionalStringMap(body, "env");
   if (command === undefined || url === undefined || args === undefined || env === undefined) {
-    return jsonError(
-      400,
-      "invalid_request",
-      "command, url, args, env は文字列・文字列の配列・文字列の対応表で指定してください",
-    );
+    throw new ValidationError("command, url, args, env は文字列・文字列の配列・文字列の対応表で指定してください");
   }
 
   const form: McpServerForm = { id, type, command, args, env, url };
@@ -45,35 +43,36 @@ export async function readMcpForm(req: {
   try {
     return { id, server: mcpServerSettingsFromForm(form, `mcpServers.${id}`) };
   } catch (error) {
-    return jsonError(400, "invalid_request", describeError(error));
+    throw new ValidationError(describeError(error));
   }
 }
 
 /** リクエストからプロバイダ id を読む。 */
-export function readProviderId(body: Record<string, unknown> | null): string | null {
+export function readProviderId(body: Record<string, unknown> | null): string {
   const id = body?.["id"];
-  if (typeof id !== "string") return null;
-
-  const trimmed = id.trim();
-  return isProviderId(trimmed) ? trimmed : null;
+  const trimmed = typeof id === "string" ? id.trim() : "";
+  if (!isProviderId(trimmed)) throw new ValidationError("id must be a provider id");
+  return trimmed;
 }
 
 /** リクエストから接続情報（apiKey / baseUrl / label）を読む。 */
-export function readCredentials(body: Record<string, unknown> | null): ProviderCredentials | null {
+export function readCredentials(body: Record<string, unknown> | null): ProviderCredentials {
   const apiKey = readOptionalString(body, "apiKey");
   const baseUrl = readOptionalString(body, "baseUrl");
   const label = readOptionalString(body, "label");
-  if (apiKey === undefined || baseUrl === undefined || label === undefined) return null;
+  if (apiKey === undefined || baseUrl === undefined || label === undefined) {
+    throw new ValidationError("apiKey, baseUrl, label must be strings or null");
+  }
 
   return { apiKey, baseUrl, label };
 }
 
 /** 追加と同時に決める既定のモデル。文字列でない値は弾く。 */
-export function readDefaultModel(body: Record<string, unknown> | null): ModelId | null | Response {
+export function readDefaultModel(body: Record<string, unknown> | null): ModelId | null {
   const value = body?.["defaultModel"];
   if (value === undefined || value === null) return null;
   if (typeof value !== "string" || !isModelId(value)) {
-    return jsonError(400, "invalid_request", 'defaultModel must be a "provider/model" string or null');
+    throw new ValidationError('defaultModel must be a "provider/model" string or null');
   }
   return value;
 }
@@ -112,18 +111,15 @@ export function readOptionalStringMap(
 
 /**
  * リクエストの本文から接続情報を読み、検証して保存できる形にする。
- * 弾いた場合はそのまま返せる 400 のレスポンスを返す。
+ * 弾いた場合は ValidationError を投げる。
  */
-export function parseProviderSettings(id: string, body: Record<string, unknown> | null): ProviderSettings | Response {
+export function parseProviderSettings(id: string, body: Record<string, unknown> | null): ProviderSettings {
   const credentials = readCredentials(body);
-  if (credentials === null) {
-    return jsonError(400, "invalid_request", "apiKey, baseUrl, label must be strings or null");
-  }
 
   try {
     return parseProviderCredentials(credentials, `providers.${id}`);
   } catch (error) {
-    return jsonError(400, "invalid_request", describeError(error));
+    throw new ValidationError(describeError(error));
   }
 }
 

@@ -10,6 +10,7 @@
  */
 import type { ApiErrorCode, ProviderCheckResult } from "../../shared/types";
 import { describeError } from "../../shared/errors";
+import { AppError } from "../errors";
 
 /** 接続確認で返す失敗の種類。ルート側でそのまま API のコードになる。 */
 export type ProviderErrorCode = Extract<
@@ -17,13 +18,10 @@ export type ProviderErrorCode = Extract<
   "provider_auth_failed" | "provider_unreachable" | "provider_no_models"
 >;
 
-export class ProviderRequestError extends Error {
-  readonly code: ProviderErrorCode;
-
+export class ProviderRequestError extends AppError {
   constructor(code: ProviderErrorCode, message: string) {
-    super(message);
-    this.name = "ProviderRequestError";
-    this.code = code;
+    // 認証の失敗は入力の問題なので 400、それ以外は接続先の問題として 502 にする。
+    super(code, code === "provider_auth_failed" ? 400 : 502, message);
   }
 }
 

@@ -3,6 +3,7 @@ import { createServer } from "node:net";
 import { join } from "node:path";
 import type { ContainerStatusView } from "../../shared/types";
 import { describeError } from "../../shared/errors";
+import { AppError } from "../errors";
 import { runCommand, type CommandResult, type CommandRunner } from "./command";
 
 /**
@@ -67,13 +68,14 @@ const STATUS_CACHE_MS = 1_000;
 /** コンテナを操作できなかった理由。画面の文言はクライアント側の i18n が決める。 */
 export type ContainerErrorCode = "container_build_failed" | "container_start_failed" | "container_not_running";
 
-export class ContainerError extends Error {
+export class ContainerError extends AppError {
   constructor(
-    readonly code: ContainerErrorCode,
+    override readonly code: ContainerErrorCode,
     message: string,
   ) {
-    super(message);
-    this.name = "ContainerError";
+    // 操作の前提（動いていること）が満たされていない場合だけ 409。
+    // イメージの作成や起動の失敗は、接続先（podman）側の問題として 502 にする。
+    super(code, code === "container_not_running" ? 409 : 502, message);
   }
 }
 

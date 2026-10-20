@@ -6,7 +6,7 @@ import type { ContainerManager } from "../computer/container";
 import type { AgentEngine } from "../agent/engine";
 import type { Handover } from "../computer/handover";
 import { describeError } from "../../shared/errors";
-import { jsonError } from "../errors";
+import { jsonError, withErrorHandling } from "./respond";
 import type { McpManager } from "../mcp/manager";
 import { OAUTH_CALLBACK_PATH } from "../mcp/oauth";
 import type { Compaction } from "../agent/compaction";
@@ -17,7 +17,7 @@ import {
   type ConnectionChecker,
   type ProviderModelLister,
 } from "../provider/connection";
-import { createApiHandlers } from "./routes";
+import { createApiHandlers } from "./handlers";
 import type { SettingsStore } from "../data/settings";
 import type { Store } from "../data/store";
 
@@ -77,18 +77,21 @@ const ANY_FREE_PORT = 0;
  */
 export function startServer(options: ServerOptions): StartedServer {
   const { config, store, engine, compaction, settings, mcp, container, handover } = options;
-  const api = createApiHandlers({
-    store,
-    engine,
-    settings,
-    mcp,
-    container,
-    handover,
-    compaction,
-    catalog: options.catalog ?? createCatalog({ cachePath: join(config.dataDir, CATALOG_FILE_NAME) }),
-    checkConnection: options.checkConnection ?? createConnectionChecker(),
-    listModels: options.listModels ?? createModelLister(),
-  });
+  // 各ハンドラの例外は、ここで 1 度だけ応答に変える（ハンドラ側に try/catch を書かない）。
+  const api = withErrorHandling(
+    createApiHandlers({
+      store,
+      engine,
+      settings,
+      mcp,
+      container,
+      handover,
+      compaction,
+      catalog: options.catalog ?? createCatalog({ cachePath: join(config.dataDir, CATALOG_FILE_NAME) }),
+      checkConnection: options.checkConnection ?? createConnectionChecker(),
+      listModels: options.listModels ?? createModelLister(),
+    }),
+  );
 
   const serve = (port: number) =>
     Bun.serve<ScreenSocketData>({

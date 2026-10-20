@@ -55,6 +55,23 @@ export function catalogProvider(snapshot: CatalogSnapshot | null, id: string): C
   return snapshot.providers.find((provider) => provider.id === id) ?? null;
 }
 
+/** カタログのモデル一覧。カタログに無いプロバイダは undefined。 */
+export function catalogModels(
+  snapshot: CatalogSnapshot | null,
+  providerId: string,
+): readonly CatalogModel[] | undefined {
+  if (snapshot === null) return undefined;
+  return snapshot.models.get(providerId);
+}
+
+/** モデル ID（"provider/model"）から、カタログのモデル 1 件を引く。 */
+export function catalogModel(snapshot: CatalogSnapshot | null, model: ModelId): CatalogModel | null {
+  if (snapshot === null) return null;
+
+  const { provider, model: name } = modelParts(model);
+  return catalogModels(snapshot, provider)?.find((candidate) => candidate.id === name) ?? null;
+}
+
 export type Catalog = {
   /** 取得済みのカタログ。まだ読めていなければ null。 */
   snapshot(): CatalogSnapshot | null;
@@ -288,11 +305,8 @@ export function effortValues(model: CatalogModel | null): readonly string[] {
  * 分からないモデル（接続先を自分で決めたものなど）の扱いは、呼ぶ側が決める。
  */
 export function modelContextTokens(snapshot: CatalogSnapshot | null, model: ModelId | null): number | null {
-  if (snapshot === null || model === null) return null;
-
-  const { provider, model: name } = modelParts(model);
-  const entry = snapshot.models.get(provider)?.find((candidate) => candidate.id === name);
-  return entry?.contextTokens ?? null;
+  if (model === null) return null;
+  return catalogModel(snapshot, model)?.contextTokens ?? null;
 }
 
 /** models.dev の limit.context。正の数でなければ「分からない」として null にする。 */

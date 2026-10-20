@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { ContainerManager } from "../src/server/computer/container";
-import { SCREEN_RELAY_PREFIX } from "../src/server/http/routes";
+import { SCREEN_RELAY_PREFIX } from "../src/server/http/handlers";
 import { portOf, withServer } from "./harness";
 import { createContainerStub } from "./support";
 

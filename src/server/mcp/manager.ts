@@ -10,6 +10,7 @@ import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
 import { jsonSchema, tool, type JSONSchema7, type ToolSet } from "ai";
 import type { McpHttpServerSettings, McpServerSettings, McpServersSettings } from "../data/settings-schema";
 import { toolNameFor } from "../../shared/tools";
+import { AppError } from "../errors";
 import type { ImageRef, McpAuthorizationView, McpServerStatusView, McpTestView } from "../../shared/types";
 import {
   McpOAuthProvider,
@@ -28,10 +29,9 @@ import { describeError } from "../../shared/errors";
 export type McpToolset = ToolSet;
 
 /** 設定に無い MCP サーバーを触ろうとしたときの失敗。 */
-export class McpServerNotFound extends Error {
+export class McpServerNotFound extends AppError {
   constructor(readonly serverId: string) {
-    super(`MCP サーバー ${serverId} は設定されていません`);
-    this.name = "McpServerNotFound";
+    super("mcp_server_not_found", 404, `MCP サーバー ${serverId} は設定されていません`);
   }
 }
 
