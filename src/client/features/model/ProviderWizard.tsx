@@ -314,16 +314,16 @@ function footerOf(options: FooterOptions) {
   if (editing) {
     return (
       <>
-        <Button onClick={options.onClose}>{t("settings.wizard.cancel")}</Button>
+        <Button onClick={options.onClose}>{t("common.cancel")}</Button>
         <Button variant="primary" disabled={busy !== null || incomplete} onClick={options.onSubmit}>
-          {t(busy === null ? "settings.wizard.save" : "settings.wizard.saving")}
+          {t(busy === null ? "settings.wizard.save" : "common.saving")}
         </Button>
       </>
     );
   }
 
   if (step === "choose") {
-    return <Button onClick={options.onClose}>{t("settings.wizard.cancel")}</Button>;
+    return <Button onClick={options.onClose}>{t("common.cancel")}</Button>;
   }
 
   if (step === "connect") {
@@ -331,7 +331,7 @@ function footerOf(options: FooterOptions) {
       <>
         <Button onClick={options.onBack}>{t("settings.wizard.back")}</Button>
         <Button variant="primary" disabled={busy !== null || incomplete} onClick={options.onConnect}>
-          {t(busy === null ? "settings.wizard.connect" : "settings.wizard.connecting")}
+          {t(busy === null ? "common.check" : "common.checking")}
         </Button>
       </>
     );
@@ -341,7 +341,7 @@ function footerOf(options: FooterOptions) {
     <>
       <Button onClick={options.onBackToConnect}>{t("settings.wizard.back")}</Button>
       <Button variant="primary" disabled={busy !== null || !canAdd} onClick={options.onSubmit}>
-        {t(busy === null ? "settings.wizard.add" : "settings.wizard.adding")}
+        {t(busy === null ? "common.add" : "common.adding")}
       </Button>
     </>
   );

@@ -11,7 +11,7 @@ export function EditAction({ onClick }: { onClick: () => void }) {
   return (
     <button type="button" onClick={onClick} class={`${CARD_ACTION_CLASS} flex items-center gap-1`}>
       <IconPencil size={14} stroke={1.6} class="shrink-0" />
-      {t("settings.model.providers.edit")}
+      {t("common.edit")}
     </button>
   );
 }
@@ -24,7 +24,7 @@ export function DeleteAction({ onClick }: { onClick: () => void }) {
       class={`${CARD_ACTION_CLASS} flex items-center gap-1 text-red-600 dark:text-red-400`}
     >
       <IconTrash size={14} stroke={1.6} class="shrink-0" />
-      {t("settings.model.providers.delete")}
+      {t("common.delete")}
     </button>
   );
 }

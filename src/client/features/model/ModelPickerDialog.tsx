@@ -83,7 +83,7 @@ export function ModelPickerDialog({ onClose }: ModelPickerDialogProps) {
         <>
           <Button onClick={onClose}>{t("common.cancel")}</Button>
           <Button variant="primary" disabled={busy || model === null} onClick={() => inFlight.run(save)}>
-            {t(busy ? "settings.model.picker.saving" : "settings.model.picker.confirm")}
+            {t(busy ? "common.saving" : "settings.model.picker.confirm")}
           </Button>
         </>
       }

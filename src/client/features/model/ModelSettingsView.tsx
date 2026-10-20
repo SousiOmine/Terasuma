@@ -1,7 +1,8 @@
-import { IconPencil, IconPlus, IconTrash } from "@tabler/icons-preact";
+import { IconPlus } from "@tabler/icons-preact";
 import { useEffect, useState } from "preact/hooks";
 import { modelProvider } from "../../../shared/model";
 import type { ProviderView } from "../../../shared/types";
+import { useDeleteTarget } from "../../hooks/useDeleteTarget";
 import { t } from "../../i18n";
 import {
   catalogProviders,
@@ -20,12 +21,11 @@ import {
   showSettingsError,
 } from "../../state/model";
 import { Button } from "../../ui/Button";
+import { DeleteAction, EditAction } from "../../ui/CardActions";
 import { ConfirmDialog } from "../../ui/ConfirmDialog";
-import { ErrorNotice } from "../../ui/ErrorNotice";
 import { ModelPickerDialog } from "./ModelPickerDialog";
 import { ProviderWizard, type WizardMode } from "./ProviderWizard";
-
-const CARD_ACTION_CLASS = "rounded-lg px-2 py-1 text-xs transition hover:bg-neutral-100 dark:hover:bg-neutral-800";
+import { SettingsSection } from "../../ui/SettingsSection";
 
 /**
  * 設定の「モデル」。
@@ -43,7 +43,7 @@ export function ModelSettingsView() {
 
   const [wizard, setWizard] = useState<WizardMode | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [deleting, setDeleting] = useState<ProviderView | null>(null);
+  const deleting = useDeleteTarget<ProviderView>();
 
   useEffect(() => {
     // 設定画面を直接開いた場合に備えて、まだ読めていなければここで読む。
@@ -76,50 +76,17 @@ export function ModelSettingsView() {
     }
   };
 
-  const confirmDelete = async () => {
-    const target = deleting;
-    setDeleting(null);
-    if (target === null) return;
-
-    try {
-      await removeProvider(target.id);
-    } catch (failure) {
-      showSettingsError(failure);
-    }
-  };
-
   const defaultProviderId =
     settings?.model === null || settings?.model === undefined ? null : modelProvider(settings.model);
-  const holdsDefault = deleting !== null && deleting.id === defaultProviderId;
+  const holdsDefault = deleting.target !== null && deleting.target.id === defaultProviderId;
 
   return (
-    <div class="mx-auto w-full max-w-2xl">
-      <h2 class="text-base font-semibold">{t("settings.model")}</h2>
-
-      {error !== null && (
-        <div class="mt-4">
-          <ErrorNotice
-            error={error}
-            action={
-              <div class="flex shrink-0 flex-col items-end gap-1">
-                {settings === null && (
-                  <button type="button" onClick={reload} class="text-xs underline">
-                    {t("settings.model.retry")}
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={clearSettingsError}
-                  class="text-xs opacity-70 transition hover:opacity-100"
-                >
-                  {t("error.dismiss")}
-                </button>
-              </div>
-            }
-          />
-        </div>
-      )}
-
+    <SettingsSection
+      title={t("settings.model")}
+      error={error}
+      onDismiss={clearSettingsError}
+      onRetry={settings === null ? reload : undefined}
+    >
       <section class="mt-6 border-b border-neutral-200 pb-5 dark:border-neutral-800">
         <div class="flex items-start justify-between gap-6">
           <div class="min-w-0">
@@ -157,7 +124,7 @@ export function ModelSettingsView() {
                 void changeReasoning(event.currentTarget.value === "" ? null : event.currentTarget.value)
               }
             >
-              <option value="">{t("settings.model.reasoning.default")}</option>
+              <option value="">{t("common.default")}</option>
               {reasoning.values.map((value) => (
                 <option key={value} value={value}>
                   {value}
@@ -184,7 +151,7 @@ export function ModelSettingsView() {
 
         <div class="mt-3 space-y-2">
           {settings === null && loading ? (
-            <p class="text-xs text-neutral-500 dark:text-neutral-400">{t("chat.loading")}</p>
+            <p class="text-xs text-neutral-500 dark:text-neutral-400">{t("common.loading")}</p>
           ) : settings === null || settings.providers.length === 0 ? (
             <p class="text-xs text-neutral-500 dark:text-neutral-400">{t("settings.model.providers.empty")}</p>
           ) : (
@@ -194,7 +161,7 @@ export function ModelSettingsView() {
                 provider={provider}
                 isDefault={settings.model !== null && modelProvider(settings.model) === provider.id}
                 onEdit={() => setWizard({ kind: "edit", provider })}
-                onDelete={() => setDeleting(provider)}
+                onDelete={() => deleting.open(provider)}
               />
             ))
           )}
@@ -204,21 +171,21 @@ export function ModelSettingsView() {
       {wizard !== null && <ProviderWizard mode={wizard} onClose={() => setWizard(null)} />}
       {pickerOpen && <ModelPickerDialog onClose={() => setPickerOpen(false)} />}
 
-      {deleting !== null && (
+      {deleting.target !== null && (
         <ConfirmDialog
           title={t("settings.model.providers.deleteTitle")}
-          subject={deleting.name}
+          subject={deleting.target.name}
           message={t(
             holdsDefault ? "settings.model.providers.deleteMessageDefault" : "settings.model.providers.deleteMessage",
           )}
-          confirmLabel={t("settings.model.providers.delete")}
+          confirmLabel={t("common.delete")}
           cancelLabel={t("common.cancel")}
           danger
-          onConfirm={() => void confirmDelete()}
-          onCancel={() => setDeleting(null)}
+          onConfirm={() => deleting.confirm(removeProvider, showSettingsError)}
+          onCancel={deleting.close}
         />
       )}
-    </div>
+    </SettingsSection>
   );
 }
 
@@ -241,7 +208,7 @@ function ProviderCard({ provider, isDefault, onEdit, onDelete }: ProviderCardPro
           <p class="truncate text-sm font-medium">{providerName(provider)}</p>
           {isDefault && (
             <span class="shrink-0 rounded-full bg-neutral-200 px-2 py-0.5 text-[11px] dark:bg-neutral-800">
-              {t("settings.model.providers.defaultBadge")}
+              {t("common.default")}
             </span>
           )}
         </div>
@@ -251,18 +218,8 @@ function ProviderCard({ provider, isDefault, onEdit, onDelete }: ProviderCardPro
       </div>
 
       <div class="flex shrink-0 items-center gap-1">
-        <button type="button" onClick={onEdit} class={`${CARD_ACTION_CLASS} flex items-center gap-1`}>
-          <IconPencil size={14} stroke={1.6} class="shrink-0" />
-          {t("settings.model.providers.edit")}
-        </button>
-        <button
-          type="button"
-          onClick={onDelete}
-          class={`${CARD_ACTION_CLASS} flex items-center gap-1 text-red-600 dark:text-red-400`}
-        >
-          <IconTrash size={14} stroke={1.6} class="shrink-0" />
-          {t("settings.model.providers.delete")}
-        </button>
+        <EditAction onClick={onEdit} />
+        <DeleteAction onClick={onDelete} />
       </div>
     </div>
   );

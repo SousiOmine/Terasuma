@@ -51,7 +51,7 @@ export function ProviderChooser({
 
       <div class="max-h-80 overflow-y-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
         {list === null ? (
-          <p class="px-3 py-4 text-center text-xs text-neutral-500 dark:text-neutral-400">{t("chat.loading")}</p>
+          <p class="px-3 py-4 text-center text-xs text-neutral-500 dark:text-neutral-400">{t("common.loading")}</p>
         ) : visible.length === 0 ? (
           <p class="px-3 py-4 text-center text-xs text-neutral-500 dark:text-neutral-400">
             {t("settings.wizard.noMatch")}

@@ -57,7 +57,19 @@ export function setLocale(next: Locale): void {
   }
 }
 
-/** 現在のロケールで文言を引く。ロケール signal を読むので、切り替えると再描画される。 */
-export function t(key: MessageKey): string {
-  return dictionaries[locale.value][key];
+/** 文言に埋め込む値（件数など）。 */
+export type MessageParams = Record<string, string | number>;
+
+/**
+ * 現在のロケールで文言を引く。ロケール signal を読むので、切り替えると再描画される。
+ * "{count}" のような差し込みは params で置き換える。語順は辞書側で決められる。
+ */
+export function t(key: MessageKey, params?: MessageParams): string {
+  const template = dictionaries[locale.value][key];
+  if (params === undefined) return template;
+
+  return template.replace(/\{(\w+)\}/g, (match, name: string) => {
+    const value = params[name];
+    return value === undefined ? match : String(value);
+  });
 }

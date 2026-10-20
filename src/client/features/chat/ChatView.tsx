@@ -96,7 +96,7 @@ export function ChatView() {
           <div class="mx-auto flex w-full max-w-3xl flex-col gap-6 px-5 py-8">
             {bubbles}
             {streaming && <MessageBubble author="assistant" content={pending} working />}
-            {loading && <p class="text-sm text-neutral-500 dark:text-neutral-400">{t("chat.loading")}</p>}
+            {loading && <p class="text-sm text-neutral-500 dark:text-neutral-400">{t("common.loading")}</p>}
           </div>
         )}
       </div>

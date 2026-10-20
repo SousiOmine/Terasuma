@@ -212,19 +212,19 @@ export function McpServerDialog({
       onClose={() => onClose()}
       footer={
         <>
-          <Button onClick={() => onClose()}>{t("settings.mcp.form.cancel")}</Button>
+          <Button onClick={() => onClose()}>{t("common.cancel")}</Button>
 
           {editing ? (
             <Button variant="primary" disabled={busy !== null} onClick={submit}>
-              {t(busy === "saving" ? "settings.mcp.form.saving" : "settings.mcp.form.save")}
+              {t(busy === "saving" ? "common.saving" : "settings.mcp.form.save")}
             </Button>
           ) : (
             <>
               <Button disabled={busy !== null || authorizing !== null} onClick={check}>
-                {t(busy === "checking" ? "settings.mcp.checking" : "settings.mcp.check")}
+                {t(busy === "checking" ? "common.checking" : "common.check")}
               </Button>
               <Button variant="primary" disabled={checkedNow === null || busy !== null} onClick={submit}>
-                {t(busy === "saving" ? "settings.mcp.form.adding" : "settings.mcp.form.add")}
+                {t(busy === "saving" ? "common.adding" : "common.add")}
               </Button>
             </>
           )}

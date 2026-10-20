@@ -14,7 +14,7 @@ import {
 } from "../../state/container";
 import { Button } from "../../ui/Button";
 import { ConfirmDialog } from "../../ui/ConfirmDialog";
-import { ErrorNotice } from "../../ui/ErrorNotice";
+import { SettingsSection } from "../../ui/SettingsSection";
 
 /** 状態の表示。文言は i18n にまとめる（状態に色は付けない）。 */
 const STATE_LABELS: Record<ContainerState, MessageKey> = {
@@ -59,17 +59,14 @@ export function ContainerSettingsView() {
   };
 
   return (
-    <div class="mx-auto w-full max-w-2xl">
-      <h2 class="text-base font-semibold">{t("settings.container")}</h2>
+    <SettingsSection title={t("settings.container")} error={error} onDismiss={clearContainerError}>
       <p class="mt-1 text-xs text-neutral-500 dark:text-neutral-400">{t("settings.container.description")}</p>
 
       <div class="mt-6 rounded-xl border border-neutral-200 p-4 dark:border-neutral-800">
         <div class="flex items-center justify-between gap-4">
           <div class="min-w-0">
             <p class="text-xs text-neutral-500 dark:text-neutral-400">{t("settings.container.state.label")}</p>
-            <p class="mt-1 text-sm">
-              {status === null ? t("settings.container.state.checking") : t(STATE_LABELS[status.state])}
-            </p>
+            <p class="mt-1 text-sm">{status === null ? t("common.checking") : t(STATE_LABELS[status.state])}</p>
           </div>
 
           {status !== null && status.state !== "podman_missing" && (
@@ -105,29 +102,12 @@ export function ContainerSettingsView() {
         )}
       </div>
 
-      {error !== null && (
-        <div class="mt-4">
-          <ErrorNotice
-            error={error}
-            action={
-              <button
-                type="button"
-                onClick={clearContainerError}
-                class="text-xs opacity-70 transition hover:opacity-100"
-              >
-                {t("error.dismiss")}
-              </button>
-            }
-          />
-        </div>
-      )}
-
       {resetting && (
         <ConfirmDialog
           title={t("settings.container.resetTitle")}
           message={t("settings.container.resetMessage")}
           confirmLabel={t("settings.container.confirmReset")}
-          cancelLabel={t("settings.container.cancel")}
+          cancelLabel={t("common.cancel")}
           danger
           onConfirm={confirmReset}
           onCancel={() => {
@@ -146,6 +126,6 @@ export function ContainerSettingsView() {
           </label>
         </ConfirmDialog>
       )}
-    </div>
+    </SettingsSection>
   );
 }

@@ -1,6 +1,7 @@
-import { IconExternalLink, IconPencil, IconPlus, IconRefresh, IconTrash } from "@tabler/icons-preact";
+import { IconExternalLink, IconPlus, IconRefresh } from "@tabler/icons-preact";
 import { useEffect, useState } from "preact/hooks";
 import type { McpServerState, McpServerView } from "../../../shared/types";
+import { useDeleteTarget } from "../../hooks/useDeleteTarget";
 import type { MessageKey } from "../../i18n";
 import { t } from "../../i18n";
 import {
@@ -19,13 +20,14 @@ import {
   startAuthorization,
 } from "../../state/mcp";
 import { Button } from "../../ui/Button";
+import { DeleteAction, EditAction } from "../../ui/CardActions";
 import { ConfirmDialog } from "../../ui/ConfirmDialog";
-import { ErrorNotice } from "../../ui/ErrorNotice";
+import { SettingsSection } from "../../ui/SettingsSection";
+import { type BadgeTone, StatusBadge } from "../../ui/StatusBadge";
+import { CARD_ACTION_CLASS } from "../../ui/styles";
 import { McpServerDialog, type McpDialogMode } from "./McpServerDialog";
 
-const CARD_ACTION_CLASS = "rounded-lg px-2 py-1 text-xs transition hover:bg-neutral-100 dark:hover:bg-neutral-800";
-
-/** 接続状態の表示。色と文言をここにまとめる。 */
+/** 接続状態の文言。 */
 const STATE_LABELS: Record<McpServerState, MessageKey> = {
   unknown: "settings.mcp.state.unknown",
   connected: "settings.mcp.state.connected",
@@ -34,12 +36,13 @@ const STATE_LABELS: Record<McpServerState, MessageKey> = {
   failed: "settings.mcp.state.failed",
 };
 
-const STATE_CLASSES: Record<McpServerState, string> = {
-  unknown: "bg-neutral-200 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300",
-  connected: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300",
-  authorizing: "bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300",
-  authorization_required: "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-300",
-  failed: "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300",
+/** 接続状態の色。 */
+const STATE_TONES: Record<McpServerState, BadgeTone> = {
+  unknown: "neutral",
+  connected: "success",
+  authorizing: "info",
+  authorization_required: "warning",
+  failed: "danger",
 };
 
 /**
@@ -56,7 +59,7 @@ export function McpSettingsView() {
   const authorizing = authorizingServer.value;
 
   const [dialog, setDialog] = useState<McpDialogMode | null>(null);
-  const [deleting, setDeleting] = useState<McpServerView | null>(null);
+  const deleting = useDeleteTarget<McpServerView>();
 
   useEffect(() => {
     // 設定画面を直接開いた場合に備えて、まだ読めていなければここで読む。
@@ -66,35 +69,8 @@ export function McpSettingsView() {
 
   const runCheck = (serverId: string) => void checkServer(serverId).catch(showMcpError);
 
-  const confirmDelete = async () => {
-    const target = deleting;
-    setDeleting(null);
-    if (target === null) return;
-
-    try {
-      await removeMcpServer(target.id);
-    } catch (failure) {
-      showMcpError(failure);
-    }
-  };
-
   return (
-    <div class="mx-auto w-full max-w-2xl">
-      <h2 class="text-base font-semibold">{t("settings.mcp.title")}</h2>
-
-      {error !== null && (
-        <div class="mt-4">
-          <ErrorNotice
-            error={error}
-            action={
-              <button type="button" onClick={clearMcpError} class="text-xs opacity-70 transition hover:opacity-100">
-                {t("error.dismiss")}
-              </button>
-            }
-          />
-        </div>
-      )}
-
+    <SettingsSection title={t("settings.mcp.title")} error={error} onDismiss={clearMcpError}>
       <div class="mt-6 flex items-start justify-between gap-6">
         <p class="min-w-0 text-xs text-neutral-500 dark:text-neutral-400">{t("settings.mcp.description")}</p>
         <Button variant="primary" onClick={() => setDialog({ kind: "add" })}>
@@ -105,7 +81,7 @@ export function McpSettingsView() {
 
       <div class="mt-3 space-y-2">
         {view === null ? (
-          <p class="text-xs text-neutral-500 dark:text-neutral-400">{t("chat.loading")}</p>
+          <p class="text-xs text-neutral-500 dark:text-neutral-400">{t("common.loading")}</p>
         ) : view.servers.length === 0 ? (
           <p class="text-xs text-neutral-500 dark:text-neutral-400">{t("settings.mcp.empty")}</p>
         ) : (
@@ -120,7 +96,7 @@ export function McpSettingsView() {
               onAuthorize={(url) => void authorize(server.id, url).catch(showMcpError)}
               onCancel={() => void cancelAuthorization(server.id).catch(showMcpError)}
               onEdit={() => setDialog({ kind: "edit", server })}
-              onDelete={() => setDeleting(server)}
+              onDelete={() => deleting.open(server)}
             />
           ))
         )}
@@ -138,19 +114,19 @@ export function McpSettingsView() {
         />
       )}
 
-      {deleting !== null && (
+      {deleting.target !== null && (
         <ConfirmDialog
           title={t("settings.mcp.deleteTitle")}
-          subject={deleting.id}
+          subject={deleting.target.id}
           message={t("settings.mcp.deleteMessage")}
-          confirmLabel={t("settings.mcp.delete")}
+          confirmLabel={t("common.delete")}
           cancelLabel={t("common.cancel")}
           danger
-          onConfirm={() => void confirmDelete()}
-          onCancel={() => setDeleting(null)}
+          onConfirm={() => deleting.confirm(removeMcpServer, showMcpError)}
+          onCancel={deleting.close}
         />
       )}
-    </div>
+    </SettingsSection>
   );
 }
 
@@ -195,9 +171,9 @@ function McpServerCard({
         <div class="min-w-0 flex-1">
           <div class="flex flex-wrap items-center gap-2">
             <p class="truncate text-sm font-medium">{server.id}</p>
-            <span class={`shrink-0 rounded-full px-2 py-0.5 text-[11px] ${STATE_CLASSES[state]}`}>
+            <StatusBadge tone={STATE_TONES[state]}>
               {authorizing ? t("settings.mcp.authorizing") : t(STATE_LABELS[state])}
-            </span>
+            </StatusBadge>
           </div>
 
           <p class="mt-0.5 truncate text-xs text-neutral-500 dark:text-neutral-400">
@@ -221,7 +197,7 @@ function McpServerCard({
           {state === "connected" && (
             <details class="mt-2">
               <summary class="cursor-pointer text-xs text-neutral-500 dark:text-neutral-400">
-                {t("settings.mcp.tools")} ({tools.length})
+                {t("settings.mcp.tools", { count: tools.length })}
               </summary>
               {tools.length === 0 ? (
                 <p class="mt-1 text-xs text-neutral-500 dark:text-neutral-400">{t("settings.mcp.noTools")}</p>
@@ -243,18 +219,8 @@ function McpServerCard({
 
         <div class="flex shrink-0 flex-col items-end gap-1">
           <div class="flex items-center gap-1">
-            <button type="button" onClick={onEdit} class={`${CARD_ACTION_CLASS} flex items-center gap-1`}>
-              <IconPencil size={14} stroke={1.6} class="shrink-0" />
-              {t("settings.mcp.edit")}
-            </button>
-            <button
-              type="button"
-              onClick={onDelete}
-              class={`${CARD_ACTION_CLASS} flex items-center gap-1 text-red-600 dark:text-red-400`}
-            >
-              <IconTrash size={14} stroke={1.6} class="shrink-0" />
-              {t("settings.mcp.delete")}
-            </button>
+            <EditAction onClick={onEdit} />
+            <DeleteAction onClick={onDelete} />
           </div>
 
           {authorizing ? (
@@ -279,7 +245,7 @@ function McpServerCard({
                 class={`${CARD_ACTION_CLASS} flex items-center gap-1 disabled:opacity-50`}
               >
                 <IconRefresh size={14} stroke={1.6} class="shrink-0" />
-                {checking ? t("settings.mcp.checking") : t("settings.mcp.check")}
+                {checking ? t("common.checking") : t("common.check")}
               </button>
             </div>
           )}
