@@ -43,8 +43,20 @@ describe("サーバの起動ポート", () => {
           const response = await fetch(new URL("/api/teras", server.url));
           expect(response.status).toBe(200);
         },
-        { port },
+        // 空きポートへ逃げるのは開発時だけ。
+        { port, isDevelopment: true },
       );
+    } finally {
+      await blocker.stop(true);
+    }
+  });
+
+  test("本番は、設定したポートが埋まっていたら起動しない", async () => {
+    const blocker = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response("") });
+    const port = portOf(blocker);
+
+    try {
+      await expect(withServer(async () => undefined, { port })).rejects.toThrow(/使用中/);
     } finally {
       await blocker.stop(true);
     }

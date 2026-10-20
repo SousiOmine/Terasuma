@@ -120,7 +120,7 @@ export function createStore(dbPath: string, options: CreateStoreOptions = {}): S
   // ON DELETE CASCADE が働くよう、接続ごとに有効にする必要がある。
   db.exec("PRAGMA foreign_keys = ON");
 
-  dropLegacyTables(db);
+  migrateSchema(db);
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS teras (
@@ -286,6 +286,21 @@ export function createStore(dbPath: string, options: CreateStoreOptions = {}): S
   // 会話の持ち主が無いと何も始まらないので、起動時に 1 体だけ用意する。
   store.ensureTera(DEFAULT_TERA_ID, DEFAULT_TERA_NAME);
   return store;
+}
+
+/** いまの保存の形の版。形を変えたら上げ、migrateSchema に移行を足す。 */
+const SCHEMA_VERSION = 1;
+
+/**
+ * 保存の形を、いまの版に合わせる。
+ * user_version を使い、移行は 1 回だけ走らせる（起動のたびに古いテーブルを調べ直さない）。
+ */
+function migrateSchema(db: Database): void {
+  const row = db.query<{ user_version: number }, []>("PRAGMA user_version").get();
+  if ((row?.user_version ?? 0) >= SCHEMA_VERSION) return;
+
+  dropLegacyTables(db);
+  db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
 }
 
 /**

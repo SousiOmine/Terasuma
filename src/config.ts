@@ -21,6 +21,10 @@ export type AppConfig = {
   /** SQLite の DB ファイル。 */
   dbPath: string;
   engine: EngineKind;
+  /**
+   * 開発モードかどうか。port 衝突時に空きポートへ逃げる・クライアントを HMR で配る、
+   * といった開発時だけの振る舞いを切り替える。既定は本番（開発は TERASUMA_DEV=1）。
+   */
   isDevelopment: boolean;
 };
 
@@ -55,8 +59,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     configPath,
     dataDir,
     dbPath: join(dataDir, "terasuma.db"),
-    engine: readEnvEngine(env) ?? file.engine ?? "ai-sdk",
-    isDevelopment: env.NODE_ENV !== "production",
+    engine: readEnvEngine(env) ?? "ai-sdk",
+    isDevelopment: env.TERASUMA_DEV === "1",
   };
 }
 

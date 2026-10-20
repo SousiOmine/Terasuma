@@ -28,6 +28,8 @@ import { TEST_SETTINGS, createCompactionStub, createContainerStub, createMcpStub
 export type ServerHarnessOptions = {
   /** 起動に使うポート。省くと OS に選ばせる。 */
   port?: number;
+  /** 開発モードとして起動するか。ポートが埋まっていたときの振る舞いが変わる。 */
+  isDevelopment?: boolean;
   /** 設定ファイルの初期内容。null を渡すとファイルを作らない。 */
   settings?: FileSettings | null;
   /** 設定ファイルの置き場。dir を基に決める（入れ子のディレクトリを作れるようにする）。 */
@@ -95,7 +97,7 @@ export async function withServer<T>(
     dataDir: dir,
     dbPath: ":memory:",
     engine: "mock",
-    isDevelopment: false,
+    isDevelopment: options.isDevelopment ?? false,
   };
 
   // 起動そのものが失敗した場合も、作った置き場を残さない。

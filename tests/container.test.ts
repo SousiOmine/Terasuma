@@ -117,7 +117,7 @@ describe("コンテナの起動", () => {
         "--tag",
         "terasuma-container",
         "--file",
-        join(dataDir, "container-files", "Containerfile"),
+        join(dataDir, "container-files", "desktop.Containerfile"),
         join(dataDir, "container-files"),
       ]);
 

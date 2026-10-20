@@ -47,13 +47,13 @@ describe("loadConfig", () => {
         providers: { deepseek: { apiKey: "secret" } },
         modelOptions: { "deepseek/deepseek-v4-pro": { reasoningEffort: "high" } },
         port: 4567,
-        engine: "mock",
       }),
       (env) => {
         const config = loadConfig(env);
 
         expect(config.port).toBe(4567);
-        expect(config.engine).toBe("mock");
+        // engine は開発用の切り替えなので、設定ファイルではなく環境変数だけで決める。
+        expect(config.engine).toBe("ai-sdk");
         expect(toModelSettings(readSettingsFile(config.configPath))).toEqual({
           model: "deepseek/deepseek-v4-pro",
           providers: { deepseek: { apiKey: "secret" } },
@@ -347,13 +347,12 @@ describe("writeSettingsFile", () => {
   test("書いた内容をそのまま読み直せる", () => {
     withConfigFile(null, (_env, dir) => {
       const path = join(dir, CONFIG_FILE_NAME);
-      writeSettingsFile(path, { model: "openai/gpt-5.6-sol", port: 4567, engine: "mock" });
+      writeSettingsFile(path, { model: "openai/gpt-5.6-sol", port: 4567 });
 
-      expect(readSettingsFile(path)).toEqual({ model: "openai/gpt-5.6-sol", port: 4567, engine: "mock" });
+      expect(readSettingsFile(path)).toEqual({ model: "openai/gpt-5.6-sol", port: 4567 });
       expect(JSON.parse(readFileSync(path, "utf8"))).toEqual({
         model: "openai/gpt-5.6-sol",
         port: 4567,
-        engine: "mock",
       });
     });
   });

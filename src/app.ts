@@ -54,7 +54,7 @@ export function startApp(config: AppConfig): App {
       boundPort === null ? null : new URL(`http://${config.host}:${boundPort}${OAUTH_CALLBACK_PATH}`),
   });
 
-  // Containerfile と entry.sh は、リポジトリの container/ に置いてある。
+  // デスクトップ用の Containerfile と entry.sh は、リポジトリの container/ に置いてある。
   // src から実行しても dist から実行しても、1 つ上がリポジトリのルートになる。
   const container = createContainerManager({
     dataDir: config.dataDir,

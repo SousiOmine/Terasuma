@@ -22,6 +22,9 @@ const result = await Bun.build({
   outdir,
   target: "bun",
   minify: true,
+  // 本番の判定は起動時の環境変数ではなく、ビルドに埋め込む。
+  // こうすると起動側で NODE_ENV=... を前置する必要がない（Windows でも同じ手順になる）。
+  define: { "process.env.NODE_ENV": '"production"' },
   plugins: [tailwind],
 });
 

@@ -88,6 +88,10 @@ podman auto-update --dry-run
 同じマシンなら `http://127.0.0.1:3000/` を開く。
 Terasuma は `127.0.0.1` にだけ待ち受ける。
 
+3000 番がほかのプログラムに使われていると、Terasuma は起動に失敗する（黙って別のポートへ移らない。
+Tailscale Serve や SSH トンネルは 3000 番を前提にしているため）。開発モード（`TERASUMA_DEV=1`）のときだけ、
+空いているポートで起動する。
+
 別のマシンから SSH で見るなら、手元でトンネルを張る。
 
 ```sh
@@ -137,7 +141,7 @@ API キーで繋ぐ MCP サーバーはこの制限を受けない。
 設定は `~/.config/terasuma/config.json` に保存される。
 
 エージェントにデスクトップを操作させるときは、`設定 > コンピュータ` で起動する。
-初回は `container/Containerfile` からコンピュータ用イメージを build するため、数分かかる。
+初回は `container/desktop.Containerfile` からコンピュータ用イメージを build するため、数分かかる。
 以降は build 済みのイメージを使い回す。
 イメージには、エージェントがそのまま使える `git`、`tmux`、`pi`（pi-coding-agent）が入っている。
 

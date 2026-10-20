@@ -1,5 +1,5 @@
 # Terasuma 本体のイメージ。
-# エージェントが操作するデスクトップ（Xvfb + Chromium）は container/Containerfile で別に作る。
+# エージェントが操作するデスクトップ（Xvfb + Chromium）は container/desktop.Containerfile で別に作る。
 # 配布と自動更新の設定（Quadlet）は container/quadlet/terasuma.container に置いてある。
 
 # 短い名前は registries.conf の設定に左右されるので、Docker Hub を明示する。
@@ -31,7 +31,7 @@ WORKDIR /app
 
 COPY --from=build /app/dist ./dist
 # ホストの podman でコンピュータ用イメージを build するときの材料。
-COPY container/Containerfile container/entry.sh ./container/
+COPY container/desktop.Containerfile container/entry.sh ./container/
 
 # Bun は HTML のアセットを cwd から解決するので、dist を cwd にして起動する
 # （package.json の start:dist と同じ）。

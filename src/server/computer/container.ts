@@ -125,7 +125,7 @@ export type ContainerManagerOptions = {
 export function createContainerManager(options: ContainerManagerOptions): ContainerManager {
   const run: CommandRunner = options.command ?? runCommand;
   const homeDir = join(options.dataDir, HOME_DIR_NAME);
-  const containerfilePath = join(options.containerDir, "Containerfile");
+  const containerfilePath = join(options.containerDir, "desktop.Containerfile");
 
   /** 直近に読んだ状態と、その時刻。画面の中継のように短い間に何度も聞かれるため。 */
   let cachedStatus: { at: number; view: ContainerStatusView } | null = null;

@@ -237,19 +237,33 @@ export function startServer(options: ServerOptions): StartedServer {
       },
     });
 
-  return serveOnAvailablePort(config.port, serve);
+  return serveOnAvailablePort(config.port, serve, config.isDevelopment);
 }
 
 /**
- * 希望のポートで listen する。埋まっていたら OS に空きポートを選ばせて listen し直す。
+ * 希望のポートで listen する。
+ *
+ * 開発時だけ、埋まっていたら OS に空きポートを選ばせて listen し直す（手元で 2 つ目を動かせる）。
+ * 本番は設定したポートで待つ。Tailscale Serve や SSH トンネルは既定のポートを前提にしているので、
+ * 黙って別のポートへ移ると、画面が開かない理由が分からなくなる。
  * どのポートで起動できたかは戻り値で伝える（呼び出し側が開く URL を知らせられるように）。
  */
-function serveOnAvailablePort(preferredPort: number, serve: (port: number) => Server<ScreenSocketData>): StartedServer {
+function serveOnAvailablePort(
+  preferredPort: number,
+  serve: (port: number) => Server<ScreenSocketData>,
+  allowPortFallback: boolean,
+): StartedServer {
   try {
     return { server: serve(preferredPort), portChanged: false };
   } catch (error) {
     // ポートが埋まっている以外の失敗は、握り潰さずに起動を止める。
     if (!isAddressInUse(error)) throw error;
+    if (!allowPortFallback) {
+      throw new Error(
+        `${preferredPort} は使用中です。設定したポートで起動できませんでした（開発時は空いているポートで起動します）`,
+        { cause: error },
+      );
+    }
   }
 
   try {
