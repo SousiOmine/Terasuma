@@ -35,7 +35,7 @@ export const ja: Record<MessageKey, string> = {
   "settings.back": "チャットに戻る",
   "settings.general": "一般",
   "settings.language.label": "言語",
-  "settings.language.description": "画面の表示に使う言語",
+  "settings.language.description": "画面の表示と、エージェントの返事に使う言語",
 
   "settings.advanced": "詳細設定",
 

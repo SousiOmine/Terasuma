@@ -3,6 +3,7 @@ import { createServer } from "node:net";
 import { join } from "node:path";
 import type { ContainerStatusView } from "../shared/types";
 import { describeError } from "../shared/errors";
+import { runCommand, type CommandResult, type CommandRunner } from "./command";
 
 /**
  * podman で動かす Debian コンテナの面倒を見る。
@@ -38,9 +39,6 @@ const MANAGED_LABEL = "terasuma.managed=1";
 const CONTAINER_UID = 1000;
 const CONTAINER_GID = 1000;
 
-/** 1 回の呼び出しで受け取る出力の上限（文字数）。超えた分は捨てて、切ったことを結果に書く。 */
-const OUTPUT_LIMIT = 20_000;
-
 const VERSION_TIMEOUT_MS = 10_000;
 const INSPECT_TIMEOUT_MS = 30_000;
 const BUILD_TIMEOUT_MS = 15 * 60_000;
@@ -68,28 +66,6 @@ export class ContainerError extends Error {
     this.name = "ContainerError";
   }
 }
-
-/** コマンド 1 回分の結果。 */
-export type CommandResult = {
-  code: number;
-  stdout: string;
-  stderr: string;
-  /** 出力の上限を超えて切られたかどうか。 */
-  truncated: boolean;
-  /** 待ち時間の上限で打ち切ったかどうか。 */
-  timedOut: boolean;
-};
-
-/**
- * コマンドの実行。テストでは podman の代わりにこれを差し替える。
- * 実行ファイルが見つからない場合も例外にせず、code -1 の結果として返す。
- * signal が立つと、実行中のコマンドを打ち切る。
- */
-export type CommandRunner = (
-  cmd: readonly string[],
-  timeoutMs: number,
-  signal?: AbortSignal,
-) => Promise<CommandResult>;
 
 /** コンテナの中でコマンドを実行した結果。 */
 export type ShellResult = {
@@ -128,7 +104,8 @@ export type ContainerManagerOptions = {
 };
 
 export function createContainerManager(options: ContainerManagerOptions): ContainerManager {
-  const run = options.command ?? runCommand;
+  const run: CommandRunner =
+    options.command ?? ((cmd, timeoutMs, signal) => runCommand(cmd, { timeoutMs, signal }));
   const homeDir = join(options.dataDir, HOME_DIR_NAME);
   const containerfilePath = join(options.containerDir, "Containerfile");
 
@@ -253,7 +230,7 @@ export function createContainerManager(options: ContainerManagerOptions): Contai
 
     const state = await containerStatus();
     if (state !== "running") {
-      return { state: "stopped", vncPort: null, detail: state === null ? "コンピュータの状態を読めませんでした" : null };
+      return { state: "stopped", vncPort: null, detail: state === null ? "Could not read the computer status" : null };
     }
 
     const vncPort = await publishedVncPort();
@@ -261,7 +238,7 @@ export function createContainerManager(options: ContainerManagerOptions): Contai
       state: "running",
       vncPort,
       // 動いているのに中継先が読めないのは、この機能が使えない状態。黙って空の画面を出さない。
-      detail: vncPort === null ? "画面の中継に使うポートを podman から読めませんでした" : null,
+      detail: vncPort === null ? "Could not read the screen relay port from podman" : null,
     };
   }
 
@@ -271,7 +248,7 @@ export function createContainerManager(options: ContainerManagerOptions): Contai
     if (current.state !== "running") {
       throw new ContainerError(
         "container_not_running",
-        `コンピュータが動いていません（いまの状態: ${current.state}）。設定の「コンピュータ」から起動してください`,
+        `The computer is not running (state: ${current.state}). Start it from Settings > Computer.`,
       );
     }
   }
@@ -385,11 +362,11 @@ async function captureScreen(signal?: AbortSignal): Promise<Uint8Array> {
     if (code !== 0) {
       throw new ContainerError(
         "container_not_running",
-        stderr.trim() || `画面を撮れませんでした（podman exec の終了コード ${code}）`,
+        stderr.trim() || `Could not take a screenshot (podman exec exit code ${code})`,
       );
     }
     if (data.byteLength === 0) {
-      throw new ContainerError("container_not_running", "画面の画像が空でした");
+      throw new ContainerError("container_not_running", "The screenshot was empty");
     }
 
     return new Uint8Array(data);
@@ -400,76 +377,10 @@ async function captureScreen(signal?: AbortSignal): Promise<Uint8Array> {
     throw new ContainerError(
       "container_not_running",
       timeout.aborted
-        ? `画面を撮るのに ${SCREENSHOT_TIMEOUT_MS / 1000} 秒以上かかりました`
-        : `画面を撮れませんでした: ${describeError(error)}`,
+        ? `Taking a screenshot took more than ${SCREENSHOT_TIMEOUT_MS / 1000} seconds`
+        : `Could not take a screenshot: ${describeError(error)}`,
     );
   }
-}
-
-/** podman のコマンドを実行し、出力と終了コードを返す。 */
-async function runCommand(
-  cmd: readonly string[],
-  timeoutMs: number,
-  signal?: AbortSignal,
-): Promise<CommandResult> {
-  const timeout = AbortSignal.timeout(timeoutMs);
-  const abort = signal === undefined ? timeout : AbortSignal.any([signal, timeout]);
-
-  try {
-    const proc = Bun.spawn({
-      cmd: [...cmd],
-      stdin: "ignore",
-      stdout: "pipe",
-      stderr: "pipe",
-      signal: abort,
-    });
-
-    const [stdout, stderr] = await Promise.all([readLimited(proc.stdout), readLimited(proc.stderr)]);
-    const code = await proc.exited;
-
-    return {
-      code,
-      stdout: stdout.text,
-      stderr: stderr.text,
-      truncated: stdout.truncated || stderr.truncated,
-      timedOut: timeout.aborted,
-    };
-  } catch (error) {
-    // podman が入っていない場合、実行ファイルが見つからずここへ来る。
-    // signal で打ち切られた場合もここへ来る（code -1 で、理由は stderr に入る）。
-    return { code: -1, stdout: "", stderr: describeError(error), truncated: false, timedOut: timeout.aborted };
-  }
-}
-
-/**
- * ストリームを上限まで読み、超えた分は捨てる。
- * 上限を決めずに読むと、暴走したコマンドの出力でこちらのメモリが埋まる。
- */
-async function readLimited(stream: ReadableStream<Uint8Array>): Promise<{ text: string; truncated: boolean }> {
-  const reader = stream.getReader();
-  const decoder = new TextDecoder();
-
-  let text = "";
-  let truncated = false;
-
-  for (;;) {
-    const chunk = await reader.read();
-    if (chunk.done) break;
-    if (truncated) continue;
-
-    const piece = decoder.decode(chunk.value, { stream: true });
-    const room = OUTPUT_LIMIT - text.length;
-    if (piece.length <= room) {
-      text += piece;
-      continue;
-    }
-
-    text += piece.slice(0, room);
-    truncated = true;
-  }
-
-  text += decoder.decode();
-  return { text, truncated };
 }
 
 /** publish に使う空きポートを 1 つ選ぶ。実際に使われた値は podman から読み直す。 */
@@ -484,7 +395,7 @@ async function findFreePort(): Promise<number> {
 
     const address = server.address();
     const port = typeof address === "object" && address !== null ? address.port : null;
-    if (port === null) throw new Error("空いているポートを選べませんでした");
+    if (port === null) throw new Error("Could not find a free port");
     return port;
   } finally {
     await new Promise<void>((resolve) => server.close(() => resolve()));
@@ -493,7 +404,7 @@ async function findFreePort(): Promise<number> {
 
 /** 失敗した理由を、そのまま画面とモデルに見せられる文字列にする。 */
 function describeFailure(result: CommandResult): string {
-  const detail = result.stderr.trim() || result.stdout.trim() || `podman が終了コード ${result.code} で失敗しました`;
-  return result.timedOut ? `${detail}（時間内に終わりませんでした）` : detail;
+  const detail = result.stderr.trim() || result.stdout.trim() || `podman failed with exit code ${result.code}`;
+  return result.timedOut ? `${detail} (did not finish in time)` : detail;
 }
 

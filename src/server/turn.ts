@@ -1,3 +1,4 @@
+import type { ReplyLanguage } from "../shared/language";
 import { encodeChatEvent } from "../shared/sse";
 import type { ChatEvent, ChatMessage, MessagePart, TokenUsage } from "../shared/types";
 import { describeError } from "../shared/errors";
@@ -26,11 +27,12 @@ export async function* runTurn(
   deps: TurnDeps,
   teraId: string,
   content: string,
+  language: ReplyLanguage,
   signal: AbortSignal,
   running: Set<string>,
 ): AsyncGenerator<ChatEvent> {
   try {
-    yield* turnEvents(deps, teraId, content, signal);
+    yield* turnEvents(deps, teraId, content, language, signal);
   } finally {
     running.delete(teraId);
 
@@ -47,6 +49,7 @@ async function* turnEvents(
   deps: TurnDeps,
   teraId: string,
   content: string,
+  language: ReplyLanguage,
   signal: AbortSignal,
 ): AsyncGenerator<ChatEvent> {
   const { store, engine, compaction } = deps;
@@ -109,7 +112,7 @@ async function* turnEvents(
   };
 
   try {
-    const stream = await engine.stream({ context, signal, teraId });
+    const stream = await engine.stream({ context, signal, teraId, replyLanguage: language });
 
     for await (const event of stream.events) {
       switch (event.type) {
@@ -125,11 +128,13 @@ async function* turnEvents(
           parts.push(event.part);
           yield { type: "tool-result", id: assistantId, part: event.part };
           break;
-        case "step-limit":
+        case "step-limit": {
           // 上限で打ち切られたことを本文の末尾に残す。画面でも次のターンのモデルでも分かるように。
-          appendText(STEP_LIMIT_NOTE);
-          yield { type: "text-delta", id: assistantId, delta: STEP_LIMIT_NOTE };
+          const note = stepLimitNote(language);
+          appendText(note);
+          yield { type: "text-delta", id: assistantId, delta: note };
           break;
+        }
       }
     }
 
@@ -164,9 +169,13 @@ const HEARTBEAT_FRAME = ": heartbeat\n\n";
 /**
  * 1 ターンのステップの上限で打ち切られたときに、本文の末尾へ足す注記。
  * 黙って切れると、応答が途中で終わった理由が画面から分からない。
+ * 設定した返事の言語に合わせる。
  */
-const STEP_LIMIT_NOTE =
-  "\n\n（1 回の応答で扱える操作の上限に達したため、ここで止まりました。続きは、もう一度送ってください）";
+function stepLimitNote(language: ReplyLanguage): string {
+  return language === "ja"
+    ? "\n\n（1 回の応答で扱える操作の上限に達したため、ここで止まりました。続きは、もう一度送ってください）"
+    : "\n\n(Stopped here because this turn reached the tool-call limit. Send another message to continue.)";
+}
 
 /**
  * クライアントが読むたびに、次のイベントを 1 つずつ返す。

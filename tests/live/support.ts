@@ -11,6 +11,7 @@
 import { expect } from "bun:test";
 import { join } from "node:path";
 import { loadConfig } from "../../src/config";
+import { createCodingToolset } from "../../src/server/coding";
 import { createComputerToolset } from "../../src/server/computer";
 import { createContainerManager, type ContainerManager } from "../../src/server/container";
 import { createEngine, resolveModel } from "../../src/server/engine";
@@ -23,6 +24,7 @@ import { CATALOG_FILE_NAME, createCatalog, modelContextTokens } from "../../src/
 import { startServer } from "../../src/server/server";
 import { createSettingsStore } from "../../src/server/settings";
 import { createStore, type Store } from "../../src/server/store";
+import type { ReplyLanguage } from "../../src/shared/language";
 import { decodeChatEvents } from "../../src/shared/sse";
 import type { ChatEvent, ChatMessage, TokenUsage } from "../../src/shared/types";
 
@@ -46,7 +48,9 @@ export type LiveHarness = {
   store: Store;
   /** 過去の対話の圧縮。閾値をまたぐ確認で、更新を待つために使う。 */
   compaction: Compaction;
-  send(teraId: string, content: string): Promise<ChatEvent[]>;
+  /** 端末のツール（read / write / edit / bash）の基準ディレクトリ。 */
+  workspace: string;
+  send(teraId: string, content: string, language?: ReplyLanguage): Promise<ChatEvent[]>;
   /** その Tera の履歴（古い順）。 */
   messages(teraId: string): Promise<ChatMessage[]>;
 };
@@ -54,10 +58,19 @@ export type LiveHarness = {
 /**
  * 本番と同じ組み立てでサーバを起こし、確認が終わったら畳む。
  *
- * 差し替えるのはポートだけ（OS に選ばせる）で、エンジンも MCP もコンテナも本物を使う。
+ * 差し替えるのは待ち受けポート（OS に選ばせる）と、端末のツールの基準ディレクトリだけ。
+ * エンジンも MCP もコンテナも本物を使う。
  * 何かを差し替えると、確かめているのがアプリなのか差し替えなのか分からなくなる。
  */
-export async function withLiveServer(run: (harness: LiveHarness) => Promise<void>): Promise<void> {
+export type LiveServerOptions = {
+  /** 端末のツールの基準ディレクトリ。省くと、テストを動かしているディレクトリ。 */
+  cwd?: string;
+};
+
+export async function withLiveServer(
+  run: (harness: LiveHarness) => Promise<void>,
+  options: LiveServerOptions = {},
+): Promise<void> {
   const config = { ...loadConfig(), port: 0 };
 
   // mock は API を呼ばないので、動かしても「繋がった」ことにはならない。黙って通さない。
@@ -79,6 +92,10 @@ export async function withLiveServer(run: (harness: LiveHarness) => Promise<void
   const handover = createHandover();
   const computer = createComputerToolset({ container, images, handover });
 
+  // 相対パスと bash の作業ディレクトリ。アプリの起動時と同じく、起動したディレクトリを使う。
+  const workspace = options.cwd ?? process.cwd();
+  const coding = createCodingToolset({ cwd: workspace });
+
   // OAuth の戻り先は、待ち受けているポートが決まってから決まる（index.ts と同じ）。
   let boundPort: number | null = null;
   const mcp = createMcpManager({
@@ -88,7 +105,7 @@ export async function withLiveServer(run: (harness: LiveHarness) => Promise<void
       boundPort === null ? null : new URL(`http://${config.host}:${boundPort}${OAUTH_CALLBACK_PATH}`),
   });
 
-  const engine = createEngine({ config, settings, mcp, computer, images });
+  const engine = createEngine({ config, settings, mcp, computer, coding, images });
 
   // 畳むかどうかはモデルの文脈長から決める（index.ts と同じ組み立て）。
   const catalog = createCatalog({ cachePath: join(config.dataDir, CATALOG_FILE_NAME) });
@@ -110,11 +127,12 @@ export async function withLiveServer(run: (harness: LiveHarness) => Promise<void
       container,
       store,
       compaction,
-      async send(teraId, content) {
+      workspace,
+      async send(teraId, content, language = "ja") {
         const response = await fetch(new URL(`/api/teras/${teraId}/messages`, base), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ content }),
+          body: JSON.stringify({ content, language }),
         });
         expect(response.status, "送信が失敗した").toBe(200);
 
@@ -184,7 +202,9 @@ export function report(label: string, message: ChatMessage): void {
 export function toolSequence(events: ChatEvent[]): string {
   const names = events
     .filter((event): event is Extract<ChatEvent, { type: "tool-call" }> => event.type === "tool-call")
-    .map((event) => `${event.part.server}_${event.part.tool}`);
+    .map((event) =>
+      event.part.server.length === 0 ? event.part.tool : `${event.part.server}_${event.part.tool}`,
+    );
   return names.length === 0 ? "(ツールは呼ばれていない)" : names.join(" → ");
 }
 

@@ -4,9 +4,11 @@ import { getProviderConfig } from "@mastra/core/llm";
 import type { OpenAICompatibleConfig } from "@mastra/core/llm";
 import type { ChunkType } from "@mastra/core/stream";
 import type { AppConfig, ModelSettings } from "../config";
+import type { ReplyLanguage } from "../shared/language";
 import { modelProvider, type ModelId } from "../shared/model";
 import type { MessagePart, TokenUsage } from "../shared/types";
 import type { ImageRef } from "../shared/types";
+import type { CodingToolset } from "./coding";
 import type { ComputerToolset } from "./computer";
 import type { ImageStore } from "./images";
 import type { McpToolset } from "./mcp";
@@ -37,6 +39,8 @@ export type EngineInput = {
   signal: AbortSignal;
   /** このターンの Tera。コンテナの引き受け（computer_ask_user）をこの単位で待つ。 */
   teraId: string;
+  /** 返事を書く言語。設定画面の言語を使い、ユーザープロンプトの末尾で指示する。 */
+  replyLanguage: ReplyLanguage;
 };
 
 /**
@@ -155,26 +159,43 @@ export function createEngine(options: {
   settings: SettingsReader;
   mcp: ToolsetProvider;
   computer: ComputerToolsetProvider;
+  /** 端末のファイルとシェルのツール。ターンごとに変わらないので、そのまま渡す。 */
+  coding: CodingToolset;
   /** 撮った画像の置き場。履歴から画像を読み直してモデルへ渡す。 */
   images: ImageStore;
 }): AgentEngine {
   if (options.config.engine === "mock") return createMockEngine();
-  return createMastraEngine(options.settings, options.mcp, options.computer, options.images);
+  return createMastraEngine({
+    settings: options.settings,
+    mcp: options.mcp,
+    computer: options.computer,
+    coding: options.coding,
+    images: options.images,
+  });
 }
 
 /**
  * 1 ターンでモデルを呼ぶ回数の上限。
- * 画面を見て押して、また見て確かめるような操作は何ステップにもなる。
- * 依存側の既定値に任せると、上げ下げのつもりがなくても変わってしまうので、ここで決める。
+ *
+ * ファイルを読み、直し、実行して確かめるようなコーディングの作業は何十ステップにもなる。
+ * 5 では 1 回の依頼で終わらないので、実質的に止まらない高さにしてある。
+ * それでも 0 にはしない。ツールの呼び出しが噛み合わずに繰り返されたとき、
+ * 際限なくモデルを呼び続けて課金が止まらなくなるのを防ぐため、最後の歯止めは残す。
+ * 依存側の既定値に任せると、こちらの意図と関係なく変わってしまうので、ここで決める。
  */
-const MAX_STEPS_PER_TURN = 5;
+const MAX_STEPS_PER_TURN = 500;
 
-export function createMastraEngine(
-  settings: SettingsReader,
-  mcp: ToolsetProvider,
-  computer: ComputerToolsetProvider,
-  images: ImageStore,
-): AgentEngine {
+export type MastraEngineOptions = {
+  settings: SettingsReader;
+  mcp: ToolsetProvider;
+  computer: ComputerToolsetProvider;
+  /** 端末のファイルとシェルのツール。 */
+  coding: CodingToolset;
+  images: ImageStore;
+};
+
+export function createMastraEngine(options: MastraEngineOptions): AgentEngine {
+  const { settings, mcp, computer, coding, images } = options;
   // モデル一覧の定期再取得は常駐アプリには不要（既定で 1 時間ごとに通信する）。
   // Mastra が初期化時に読むため、Agent を作る前に必ず設定する。
   process.env.MASTRA_AUTO_REFRESH_PROVIDERS ??= "false";
@@ -200,14 +221,14 @@ export function createMastraEngine(
 
   return {
     name: "mastra",
-    async stream({ context, signal, teraId }) {
+    async stream({ context, signal, teraId, replyLanguage }) {
       // 設定は設定画面から変わるので、ターンのたびに読み直す。
       const resolution = resolveModel(settings.read());
       if (!resolution.ok) throw new Error(resolution.detail);
 
       // 畳んだ要約を先頭に、生の履歴をその後ろに置く。生の履歴には要約も並べ替えもしない
       // （プロンプトキャッシュが当たり続けるようにするため）。
-      const messages = toModelMessages(context, images);
+      const messages = toModelMessages(context, images, replyLanguage);
 
       // 思考強度はプロバイダごとに渡し方が違うので、ここで組み立てて呼び出しごとに渡す。
       const providerOptions = reasoningProviderOptions(
@@ -224,7 +245,7 @@ export function createMastraEngine(
         mcp.toolset(),
         computer.toolset({ teraId, onImage: (image) => capturedImages.push(image) }),
       ]);
-      const tools = { ...mcpTools, ...computerTools };
+      const tools = { ...mcpTools, ...computerTools, ...coding };
 
       const result = await agentFor(resolution.model).stream(messages, {
         abortSignal: signal,
@@ -383,7 +404,7 @@ function toolResultPart(
     server,
     tool,
     failed,
-    output: toolOutputText(value),
+    output: toolOutputText(value, failed),
     ...(image === undefined ? {} : { image }),
   };
 }
@@ -405,8 +426,42 @@ function readImageRef(value: unknown): ImageRef | undefined {
   return { sha256, mime, width, height };
 }
 
+/**
+ * 失敗した呼び出しの戻り値から、モデルへ見せるエラー本文を取り出す。
+ *
+ * Mastra は、ツールが投げたエラーを { cause: { message } } で包んで渡すことがある。
+ * それを JSON のまま見せると、モデルが読むのはエラー本文ではなく包装になる。
+ * 取り出せない形（MCP の content など）は null を返し、通常の本文の組み立てに任せる。
+ */
+function toolErrorMessage(value: unknown): string | null {
+  if (value instanceof Error) return value.message;
+  if (typeof value !== "object" || value === null) return null;
+
+  const cause = (value as { cause?: unknown }).cause;
+  if (typeof cause === "object" && cause !== null) {
+    const message = (cause as { message?: unknown }).message;
+    if (typeof message === "string") return message;
+  }
+
+  const message = (value as { message?: unknown }).message;
+  if (typeof message === "string") return message;
+
+  const details = (value as { details?: unknown }).details;
+  if (typeof details === "object" && details !== null) {
+    const errorMessage = (details as { errorMessage?: unknown }).errorMessage;
+    if (typeof errorMessage === "string") return errorMessage.replace(/^Error: /, "");
+  }
+
+  return null;
+}
+
 /** ツールの戻り値を、モデルと画面に見せる文字列にする。 */
-function toolOutputText(value: unknown): string {
+function toolOutputText(value: unknown, failed = false): string {
+  if (failed) {
+    const message = toolErrorMessage(value);
+    if (message !== null) return message;
+  }
+
   // コンテナのツールは本文を text に入れて返す。
   if (typeof value === "object" && value !== null) {
     const text = (value as { text?: unknown }).text;
@@ -479,16 +534,24 @@ export function createMockEngine(options: { chunkSize?: number; delayMs?: number
 
   return {
     name: "mock",
-    stream({ context, signal }) {
+    stream({ context, signal, replyLanguage }) {
       const lastUser = [...context.messages].reverse().find((message) => message.role === "user");
       const userTurns = context.messages.filter((message) => message.role === "user").length;
 
-      const reply = [
-        "[mock engine]",
-        `これは偽の応答です。受け取った会話は ${context.messages.length} 件（うちユーザー発言 ${userTurns} 件）。`,
-        `畳んだ要約: ${context.summary === null ? "まだありません" : `${context.summary.length} 文字`}`,
-        `直前の発言: ${lastUser?.content ?? "(なし)"}`,
-      ].join("\n");
+      const reply =
+        replyLanguage === "ja"
+          ? [
+              "[mock engine]",
+              `これは偽の応答です。受け取った会話は ${context.messages.length} 件（うちユーザー発言 ${userTurns} 件）。`,
+              `畳んだ要約: ${context.summary === null ? "まだありません" : `${context.summary.length} 文字`}`,
+              `直前の発言: ${lastUser?.content ?? "(なし)"}`,
+            ].join("\n")
+          : [
+              "[mock engine]",
+              `This is a fake reply. Received ${context.messages.length} message(s) (${userTurns} from the user).`,
+              `Compacted summary: ${context.summary === null ? "none yet" : `${context.summary.length} characters`}`,
+              `Last message: ${lastUser?.content ?? "(none)"}`,
+            ].join("\n");
 
       // 数値は文字数から作った当てずっぽう。実際のキャッシュの値ではない。
       const usage: TokenUsage = {

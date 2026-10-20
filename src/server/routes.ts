@@ -1,4 +1,5 @@
 import type { ProviderSettings } from "../config";
+import { isReplyLanguage } from "../shared/language";
 import { isModelId, modelParts, modelProvider } from "../shared/model";
 import { findEndpointPreset } from "../shared/providers";
 import type {
@@ -175,6 +176,11 @@ export function createApiHandlers(deps: ApiDeps) {
         return jsonError(400, "invalid_request", "content must be a non-empty string");
       }
 
+      const language = body?.["language"];
+      if (!isReplyLanguage(language)) {
+        return jsonError(400, "invalid_request", 'language must be "ja" or "en"');
+      }
+
       if (store.getTera(req.params.id) === null) {
         return jsonError(404, "tera_not_found");
       }
@@ -191,7 +197,7 @@ export function createApiHandlers(deps: ApiDeps) {
       }
 
       turnRunning.add(req.params.id);
-      return sseResponse(runTurn(deps, req.params.id, content, req.signal, turnRunning));
+      return sseResponse(runTurn(deps, req.params.id, content, language, req.signal, turnRunning));
     },
 
     /** 設定画面を開いたときに読む、モデル設定の全体。 */

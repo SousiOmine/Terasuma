@@ -81,10 +81,10 @@ export function createComputerTools(options: ComputerToolsOptions): ComputerTool
   async function xdotool(args: readonly string[], signal?: AbortSignal): Promise<ShellResult> {
     const result = await container.exec(["xdotool", ...args], { timeoutMs: ACTION_TIMEOUT_MS, signal });
     if (result.timedOut) {
-      throw new Error(`xdotool ${args[0] ?? ""} が ${ACTION_TIMEOUT_MS / 1000} 秒で終わりませんでした`);
+      throw new Error(`xdotool ${args[0] ?? ""} did not finish within ${ACTION_TIMEOUT_MS / 1000} seconds`);
     }
     if (result.exitCode !== 0) {
-      throw new Error(result.stderr.trim() || `xdotool が終了コード ${result.exitCode} で失敗しました`);
+      throw new Error(result.stderr.trim() || `xdotool failed with exit code ${result.exitCode}`);
     }
     return result;
   }
@@ -236,7 +236,7 @@ export function createComputerTools(options: ComputerToolsOptions): ComputerTool
         const line = `nohup ${[command, ...(args ?? [])].map(quote).join(" ")} >/dev/null 2>&1 &`;
         const result = await container.shell(line, { timeoutMs: ACTION_TIMEOUT_MS, signal: context.abortSignal });
         if (result.exitCode !== 0) {
-          throw new Error(result.stderr.trim() || `起動できませんでした（終了コード ${result.exitCode}）`);
+          throw new Error(result.stderr.trim() || `Could not start the application (exit code ${result.exitCode})`);
         }
         return `started ${command}`;
       },
@@ -256,7 +256,9 @@ export function createComputerTools(options: ComputerToolsOptions): ComputerTool
       execute: async (_input: { question: string }, context: ToolContext) => {
         const signal = context.abortSignal;
         // 中断を受け取れないと、ユーザーを待ったままターンを片付けられなくなる。
-        if (signal === undefined) throw new Error("ターンの中断を受け取れないため、ユーザーを待てません");
+        if (signal === undefined) {
+          throw new Error("Cannot wait for the user because the turn's abort signal is not available");
+        }
 
         // 何を頼むかは、呼び出しの引数としてそのまま画面へ流れる。
         return handover.wait(teraId, signal);
@@ -310,7 +312,7 @@ function quote(value: string): string {
 /** ウィンドウ一覧の生の出力を、モデルが読みやすい形にする。 */
 function formatWindows(result: ShellResult): string {
   if (result.exitCode !== 0) {
-    throw new Error(result.stderr.trim() || `ウィンドウ一覧を取れませんでした（終了コード ${result.exitCode}）`);
+    throw new Error(result.stderr.trim() || `Could not list windows (exit code ${result.exitCode})`);
   }
 
   const lines = result.stdout
@@ -358,7 +360,7 @@ function waitFor(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
     const onAbort = (): void => {
       clearTimeout(timer);
-      reject(new Error("ターンが終了したため、待つのをやめました"));
+      reject(new Error("Stopped waiting because the turn ended"));
     };
 
     const timer = setTimeout(() => {
@@ -368,7 +370,7 @@ function waitFor(ms: number, signal?: AbortSignal): Promise<void> {
 
     if (signal?.aborted === true) {
       clearTimeout(timer);
-      reject(new Error("ターンはすでに終了しています"));
+      reject(new Error("The turn has already ended"));
       return;
     }
     signal?.addEventListener("abort", onAbort, { once: true });

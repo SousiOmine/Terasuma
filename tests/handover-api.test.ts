@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createMockEngine } from "../src/server/engine";
-import { createHandover, type Handover } from "../src/server/handover";
+import { HANDOVER_DONE, createHandover, type Handover } from "../src/server/handover";
 import { startServer } from "../src/server/server";
 import { createStore } from "../src/server/store";
 import { TEST_SETTINGS, createContainerStub, createMcpStub, createCompactionStub, withTempSettings } from "./support";
@@ -72,7 +72,7 @@ describe("引き受けの API", () => {
 
       const response = await request("/api/computer/handover", handoverRequest("t1", { kind: "done" }));
       expect(response.status).toBe(204);
-      expect(await waiting).toContain("操作を完了しました");
+      expect(await waiting).toBe(HANDOVER_DONE);
     });
   });
 
@@ -104,7 +104,7 @@ describe("引き受けの API", () => {
 
       // どれも受け付けていないので、待ちは残ったまま。
       expect(handover.answer("t1", { kind: "done" })).toBe(true);
-      expect(await waiting).toBe("ユーザーは操作を完了しました");
+      expect(await waiting).toBe(HANDOVER_DONE);
     });
   });
 });

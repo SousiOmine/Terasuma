@@ -51,7 +51,7 @@ describe("引き受けの待ち", () => {
     const waiting = handover.wait("t1", controller.signal);
     controller.abort();
 
-    expect(await waiting.catch((error: unknown) => (error as Error).message)).toContain("ターンが終わりました");
+    expect(await waiting.catch((error: unknown) => (error as Error).message)).toContain("The turn ended");
     // 止まったあとの返事は受け取らない。
     expect(handover.answer("t1", { kind: "done" })).toBe(false);
   });
@@ -63,7 +63,7 @@ describe("引き受けの待ち", () => {
 
     const waiting = handover.wait("t1", controller.signal);
 
-    expect(await waiting.catch((error: unknown) => (error as Error).message)).toContain("ターンが終わりました");
+    expect(await waiting.catch((error: unknown) => (error as Error).message)).toContain("The turn ended");
     expect(handover.answer("t1", { kind: "done" })).toBe(false);
   });
 });

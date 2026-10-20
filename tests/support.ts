@@ -2,7 +2,9 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CONFIG_FILE_NAME, type FileSettings } from "../src/config";
-import { ContainerError, type CommandResult, type CommandRunner, type ContainerManager } from "../src/server/container";
+import type { CommandResult, CommandRunner } from "../src/server/command";
+import type { CodingToolset } from "../src/server/coding";
+import { ContainerError, type ContainerManager } from "../src/server/container";
 import type { ComputerToolsetProvider } from "../src/server/engine";
 import type { ImageStore } from "../src/server/images";
 import type { McpManager } from "../src/server/mcp";
@@ -76,6 +78,11 @@ export function createImageStub(): ImageStore {
 /** コンテナのツールを渡さないテストのための差し替え。 */
 export function createComputerStub(): ComputerToolsetProvider {
   return { toolset: async () => ({}) };
+}
+
+/** 端末のツールを渡さないテストのための差し替え。 */
+export function createCodingStub(): CodingToolset {
+  return {};
 }
 
 /**

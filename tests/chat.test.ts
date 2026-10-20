@@ -71,7 +71,7 @@ async function withServer<T>(
         const response = await request(`/api/teras/${teraId}/messages`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ content }),
+          body: JSON.stringify({ content, language: "ja" }),
         });
         expect(response.status, "送信が失敗した").toBe(200);
 
@@ -365,7 +365,20 @@ describe("チャット API", () => {
       const response = await harness.request(`/api/teras/${DEFAULT_TERA_ID}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: "   " }),
+        body: JSON.stringify({ content: "   ", language: "ja" }),
+      });
+
+      expect(response.status).toBe(400);
+      expect(((await response.json()) as { code: string }).code).toBe("invalid_request");
+    });
+  });
+
+  test("返事の言語が無い送信は 400 invalid_request で弾く", async () => {
+    await withServer(fastMock(), async (harness) => {
+      const response = await harness.request(`/api/teras/${DEFAULT_TERA_ID}/messages`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: "こんにちは" }),
       });
 
       expect(response.status).toBe(400);
@@ -382,7 +395,7 @@ describe("チャット API", () => {
       const posted = await harness.request("/api/teras/missing/messages", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: "こんにちは" }),
+        body: JSON.stringify({ content: "こんにちは", language: "ja" }),
       });
       expect(posted.status).toBe(404);
       expect(((await posted.json()) as { code: string }).code).toBe("tera_not_found");
@@ -396,7 +409,7 @@ describe("チャット API", () => {
         harness.request(`/api/teras/${DEFAULT_TERA_ID}/messages`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ content }),
+          body: JSON.stringify({ content, language: "ja" }),
         });
 
       const first = await send("1 つ目の質問");
@@ -503,7 +516,7 @@ describe("チャット API", () => {
       const response = await harness.request(`/api/teras/${DEFAULT_TERA_ID}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: "長めの応答をください" }),
+        body: JSON.stringify({ content: "長めの応答をください", language: "ja" }),
         signal: controller.signal,
       });
 
@@ -529,6 +542,7 @@ describe("チャット API", () => {
         context: { summary: null, messages: [user] },
         signal: new AbortController().signal,
         teraId: DEFAULT_TERA_ID,
+        replyLanguage: "ja",
       });
       let fullText = "";
       for await (const event of full.events) {

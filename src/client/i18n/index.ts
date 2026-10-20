@@ -1,11 +1,12 @@
 import { signal } from "@preact/signals";
+import { REPLY_LANGUAGES, type ReplyLanguage } from "../../shared/language";
 import { en, type MessageKey } from "./en";
 import { ja } from "./ja";
 
 export type { MessageKey };
-export type Locale = "ja" | "en";
+export type Locale = ReplyLanguage;
 
-export const LOCALES: readonly Locale[] = ["ja", "en"];
+export const LOCALES: readonly Locale[] = REPLY_LANGUAGES;
 
 const dictionaries: Record<Locale, Record<MessageKey, string>> = { ja, en };
 const STORAGE_KEY = "terasuma.locale";

@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { ensureDirectories, loadConfig } from "./config";
+import { createCodingToolset } from "./server/coding";
 import { createCompaction } from "./server/compaction";
 import { createComputerToolset } from "./server/computer";
 import { createContainerManager } from "./server/container";
@@ -45,7 +46,12 @@ const handover = createHandover();
 
 const computer = createComputerToolset({ container, images, handover });
 
-const engine = createEngine({ config, settings, mcp, computer, images });
+// 端末のファイルとシェルを扱うツール（read / write / edit / bash）。
+// 相対パスと bash の作業ディレクトリは、Terasuma を起動したディレクトリになる。
+const workspace = process.cwd();
+const coding = createCodingToolset({ cwd: workspace });
+
+const engine = createEngine({ config, settings, mcp, computer, coding, images });
 
 // 畳むかどうかは、モデルの文脈長（カタログ）から決める。
 // 起動後にカタログを読んでおくので、設定画面を開かなくても文脈長が分かる。
@@ -82,6 +88,7 @@ console.log(
     `Terasuma  http://${server.hostname}:${server.port}`,
     `  engine : ${engine.name}`,
     `  model  : ${model ?? "(未設定)"}`,
+    `  workdir: ${workspace}`,
     // 設定と違うポートで起動したことは黙らない。開く先が表示と食い違ってしまうため。
     ...(portChanged ? [`  note   : ${config.port} は使用中だったので、空いているポートを使います`] : []),
     ...(resolution.ok ? [] : [`  note   : ${resolution.detail}`]),

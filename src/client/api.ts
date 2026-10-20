@@ -1,5 +1,6 @@
 import { decodeChatEvents } from "../shared/sse";
 import { describeError } from "../shared/errors";
+import type { ReplyLanguage } from "../shared/language";
 import type { ModelId } from "../shared/model";
 import { API_ERROR_CODES } from "../shared/types";
 import type {
@@ -71,6 +72,7 @@ export async function listMessages(teraId: string): Promise<readonly ChatMessage
 export async function* streamTurn(
   teraId: string,
   content: string,
+  language: ReplyLanguage,
   signal: AbortSignal,
 ): AsyncGenerator<ChatEvent> {
   let response: Response;
@@ -78,7 +80,7 @@ export async function* streamTurn(
     response = await fetch(messagesPath(teraId), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ content }),
+      body: JSON.stringify({ content, language }),
       signal,
     });
   } catch (error) {

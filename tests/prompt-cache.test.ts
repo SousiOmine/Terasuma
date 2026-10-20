@@ -3,7 +3,14 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createImageStore } from "../src/server/images";
-import { summaryText, buildModelInput, SYSTEM_PROMPT, type TeraContext } from "../src/server/prompt";
+import {
+  summaryText,
+  buildModelInput,
+  replyLanguageInstruction,
+  SYSTEM_PROMPT,
+  type ImageReader,
+  type TeraContext,
+} from "../src/server/prompt";
 import { readContext } from "../src/server/compaction";
 import { DEFAULT_TERA_ID } from "../src/server/store";
 import type { ImageRef } from "../src/shared/types";
@@ -16,6 +23,14 @@ function contextOf(store: ReturnType<typeof makeStore>): TeraContext {
   return readContext(store, DEFAULT_TERA_ID);
 }
 
+/** このテストの会話は日本語なので、返事の言語は ja に固定する。 */
+function buildInput(context: TeraContext, images: ImageReader) {
+  return buildModelInput(context, images, "ja");
+}
+
+/** 入力の末尾に必ず 1 件足される、返事の言語の指示。 */
+const LANGUAGE_MESSAGE = { role: "user", content: replyLanguageInstruction("ja") } as const;
+
 /**
  * プロンプトキャッシュは、リクエストの先頭が前回と一致するほど当たる。
  * ここが変わると気づかないうちにコストが増えるだけで分かりにくいため、テストで常に確認する。
@@ -23,8 +38,9 @@ function contextOf(store: ReturnType<typeof makeStore>): TeraContext {
  */
 describe("プロンプトキャッシュ保護", () => {
   test("入力の先頭は常に system プロンプト 1 件", () => {
-    expect(buildModelInput({ summary: null, messages: [] }, createImageStub())).toEqual([
+    expect(buildInput({ summary: null, messages: [] }, createImageStub())).toEqual([
       { role: "system", content: SYSTEM_PROMPT },
+      LANGUAGE_MESSAGE,
     ]);
   });
 
@@ -33,10 +49,11 @@ describe("プロンプトキャッシュ保護", () => {
     store.appendMessage({ id: "m1", teraId: DEFAULT_TERA_ID, role: "user", content: "質問" });
     store.appendMessage({ id: "m2", teraId: DEFAULT_TERA_ID, role: "assistant", content: "回答" });
 
-    expect(buildModelInput(contextOf(store), createImageStub())).toEqual([
+    expect(buildInput(contextOf(store), createImageStub())).toEqual([
       { role: "system", content: SYSTEM_PROMPT },
       { role: "user", content: "質問" },
       { role: "assistant", content: "回答" },
+      LANGUAGE_MESSAGE,
     ]);
   });
 
@@ -45,22 +62,26 @@ describe("プロンプトキャッシュ保護", () => {
     store.appendMessage({ id: "m1", teraId: DEFAULT_TERA_ID, role: "user", content: "質問" });
 
     // 日時や件数などを混ぜると、ここで差分が出てテストが失敗する。
-    expect(buildModelInput(contextOf(store), createImageStub())).toEqual(buildModelInput(contextOf(store), createImageStub()));
+    expect(buildInput(contextOf(store), createImageStub())).toEqual(buildInput(contextOf(store), createImageStub()));
   });
 
   test("次のターンの入力は、前のターンの入力で始まる", () => {
     const store = makeStore();
 
     store.appendMessage({ id: "m1", teraId: DEFAULT_TERA_ID, role: "user", content: "最初の質問" });
-    const turn1 = buildModelInput(contextOf(store), createImageStub());
+    const turn1 = buildInput(contextOf(store), createImageStub());
 
     store.appendMessage({ id: "m2", teraId: DEFAULT_TERA_ID, role: "assistant", content: "最初の回答" });
     store.appendMessage({ id: "m3", teraId: DEFAULT_TERA_ID, role: "user", content: "次の質問" });
-    const turn2 = buildModelInput(contextOf(store), createImageStub());
+    const turn2 = buildInput(contextOf(store), createImageStub());
 
-    expect(turn2.slice(0, turn1.length)).toEqual(turn1);
-    // シリアライズしたバイト列としても接頭辞になっていること（実際のキャッシュ条件）。
-    expect(JSON.stringify(turn2).startsWith(JSON.stringify(turn1).slice(0, -1))).toBe(true);
+    // 末尾の言語の指示はターンごとに位置が変わる。その手前（保存済みの履歴）が
+    // 前のターンと一致していることが、キャッシュの当たる条件になる。
+    const stable1 = turn1.slice(0, -1);
+    const stable2 = turn2.slice(0, -1);
+    expect(stable2.slice(0, stable1.length)).toEqual(stable1);
+    // シリアライズしたバイト列としても接頭辞になっていること。
+    expect(JSON.stringify(stable2).startsWith(JSON.stringify(stable1).slice(0, -1))).toBe(true);
   });
 });
 
@@ -85,7 +106,7 @@ describe("ツールを使ったターンの入力", () => {
     const store = makeStore();
     toolHistory(store);
 
-    expect(buildModelInput(contextOf(store), createImageStub())).toEqual([
+    expect(buildInput(contextOf(store), createImageStub())).toEqual([
       { role: "system", content: SYSTEM_PROMPT },
       { role: "user", content: "調べて" },
       {
@@ -106,6 +127,7 @@ describe("ツールを使ったターンの入力", () => {
           },
         ],
       },
+      LANGUAGE_MESSAGE,
     ]);
   });
 
@@ -120,7 +142,7 @@ describe("ツールを使ったターンの入力", () => {
       parts: [{ type: "tool-call", id: "call-1", server: "local", tool: "echo", args: { text: "hi" } }],
     });
 
-    const input = buildModelInput(contextOf(store), createImageStub());
+    const input = buildInput(contextOf(store), createImageStub());
     expect(input[3]).toEqual({
       role: "tool",
       content: [
@@ -128,7 +150,7 @@ describe("ツールを使ったターンの入力", () => {
           type: "tool-result",
           toolCallId: "call-1",
           toolName: "local_echo",
-          output: { type: "error-text", value: "この呼び出しは中断されたため、結果がありません" },
+          output: { type: "error-text", value: "This tool call was interrupted before it returned a result." },
         },
       ],
     });
@@ -149,8 +171,9 @@ describe("ツールを使ったターンの入力", () => {
       ],
     });
 
-    const input = buildModelInput(contextOf(store), createImageStub());
-    expect(input.at(-1)).toEqual({
+    const input = buildInput(contextOf(store), createImageStub());
+    // 末尾は言語の指示なので、その 1 つ前が最後のツールの結果になる。
+    expect(input.at(-2)).toEqual({
       role: "tool",
       content: [
         {
@@ -166,13 +189,27 @@ describe("ツールを使ったターンの入力", () => {
   test("ツールを使った後も、次の入力は前の入力で始まる", () => {
     const store = makeStore();
     toolHistory(store);
-    const turn1 = buildModelInput(contextOf(store), createImageStub());
+    const turn1 = buildInput(contextOf(store), createImageStub());
 
     store.appendMessage({ id: "m3", teraId: DEFAULT_TERA_ID, role: "user", content: "次の質問" });
-    const turn2 = buildModelInput(contextOf(store), createImageStub());
+    const turn2 = buildInput(contextOf(store), createImageStub());
 
-    expect(turn2.slice(0, turn1.length)).toEqual(turn1);
-    expect(JSON.stringify(turn2).startsWith(JSON.stringify(turn1).slice(0, -1))).toBe(true);
+    const stable1 = turn1.slice(0, -1);
+    const stable2 = turn2.slice(0, -1);
+    expect(stable2.slice(0, stable1.length)).toEqual(stable1);
+    expect(JSON.stringify(stable2).startsWith(JSON.stringify(stable1).slice(0, -1))).toBe(true);
+  });
+});
+
+describe("返事の言語", () => {
+  test("設定した言語の指示を、入力の末尾に 1 件だけ置く", () => {
+    const ja = buildModelInput({ summary: null, messages: [] }, createImageStub(), "ja");
+    const en = buildModelInput({ summary: null, messages: [] }, createImageStub(), "en");
+
+    expect(ja.at(-1)).toEqual(LANGUAGE_MESSAGE);
+    expect(en.at(-1)).toEqual({ role: "user", content: replyLanguageInstruction("en") });
+    expect(replyLanguageInstruction("ja")).toContain("Japanese");
+    expect(replyLanguageInstruction("en")).toContain("English");
   });
 });
 
@@ -210,7 +247,7 @@ describe("画像つきのツール結果", () => {
 
     try {
       const ref = images.save(png, "image/png");
-      const input = buildModelInput(screenshotHistory({ image: ref }), images);
+      const input = buildInput(screenshotHistory({ image: ref }), images);
 
       // tool の本文に画像は置けない（OpenAI 互換のプロバイダが文字列へ潰すため）。
       // 結果はテキストで渡し、画像はその直後の user メッセージで渡す。
@@ -247,8 +284,8 @@ describe("画像つきのツール結果", () => {
       const first = images.save(testPng(1280, 800), "image/png");
       const second = images.save(testPng(1280, 800), "image/png");
 
-      expect(buildModelInput(screenshotHistory({ image: second }), images)).toEqual(
-        buildModelInput(screenshotHistory({ image: first }), images),
+      expect(buildInput(screenshotHistory({ image: second }), images)).toEqual(
+        buildInput(screenshotHistory({ image: first }), images),
       );
     } finally {
       rmSync(dir, { recursive: true, force: true });
@@ -261,7 +298,7 @@ describe("画像つきのツール結果", () => {
     const missing: ImageRef = { sha256: "0".repeat(64), mime: "image/png", width: 1280, height: 800 };
 
     try {
-      const input = buildModelInput(screenshotHistory({ image: missing }), images);
+      const input = buildInput(screenshotHistory({ image: missing }), images);
       expect(input[3]).toEqual({
         role: "tool",
         content: [
@@ -271,7 +308,7 @@ describe("画像つきのツール結果", () => {
             toolName: "computer_screenshot",
             output: {
               type: "text",
-              value: "The screen is 1280x800 pixels.\n(保存した画像を読み出せませんでした)",
+              value: "The screen is 1280x800 pixels.\n(Could not read the stored image.)",
             },
           },
         ],
@@ -300,32 +337,35 @@ describe("畳んだ要約を渡すとき", () => {
   const SUMMARY = "## Goal\n京都に住んでいる。";
 
   test("要約は、system プロンプトの直後に user メッセージ 1 件として置く", () => {
-    expect(buildModelInput(contextOf(storeWithSummary(SUMMARY, 2)), createImageStub())).toEqual([
+    expect(buildInput(contextOf(storeWithSummary(SUMMARY, 2)), createImageStub())).toEqual([
       { role: "system", content: SYSTEM_PROMPT },
       { role: "user", content: summaryText(SUMMARY) },
       { role: "user", content: "次の質問" },
+      LANGUAGE_MESSAGE,
     ]);
   });
 
   test("畳んだメッセージは、生の履歴には残らない", () => {
-    const input = buildModelInput(contextOf(storeWithSummary(SUMMARY, 2)), createImageStub());
+    const input = buildInput(contextOf(storeWithSummary(SUMMARY, 2)), createImageStub());
     expect(input.some((message) => JSON.stringify(message).includes("京都に住んでいます"))).toBe(false);
 
     // まだ畳んでいない分は生のまま残る。
-    const pending = buildModelInput(contextOf(storeWithSummary(SUMMARY, 0)), createImageStub());
+    const pending = buildInput(contextOf(storeWithSummary(SUMMARY, 0)), createImageStub());
     expect(pending.some((message) => JSON.stringify(message).includes("京都に住んでいます"))).toBe(true);
   });
 
   test("要約が変わらなければ、次のターンの入力は前のターンで始まる", () => {
     const store = storeWithSummary(SUMMARY, 2);
-    const turn1 = buildModelInput(contextOf(store), createImageStub());
+    const turn1 = buildInput(contextOf(store), createImageStub());
 
     store.appendMessage({ id: "m4", teraId: DEFAULT_TERA_ID, role: "assistant", content: "回答" });
     store.appendMessage({ id: "m5", teraId: DEFAULT_TERA_ID, role: "user", content: "さらに質問" });
-    const turn2 = buildModelInput(contextOf(store), createImageStub());
+    const turn2 = buildInput(contextOf(store), createImageStub());
 
-    expect(turn2.slice(0, turn1.length)).toEqual(turn1);
-    expect(JSON.stringify(turn2).startsWith(JSON.stringify(turn1).slice(0, -1))).toBe(true);
+    const stable1 = turn1.slice(0, -1);
+    const stable2 = turn2.slice(0, -1);
+    expect(stable2.slice(0, stable1.length)).toEqual(stable1);
+    expect(JSON.stringify(stable2).startsWith(JSON.stringify(stable1).slice(0, -1))).toBe(true);
   });
 
   test("要約の前置きは定数で、日時や件数を混ぜない", () => {

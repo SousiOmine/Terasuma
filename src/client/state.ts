@@ -164,7 +164,7 @@ export async function sendMessage(rawContent: string): Promise<void> {
   streamingText.value = "";
 
   try {
-    for await (const event of api.streamTurn(teraId, content, abort.signal)) {
+    for await (const event of api.streamTurn(teraId, content, locale.value, abort.signal)) {
       applyEvent(event);
     }
   } catch (error) {

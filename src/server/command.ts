@@ -1,0 +1,136 @@
+import { describeError } from "../shared/errors";
+
+/**
+ * この端末でコマンドを 1 つ実行する。
+ *
+ * コンテナ（podman）と、エージェントの bash ツールが同じ処理を使う。
+ * 出力の上限・待ち時間の上限・中断の扱いを 2 か所に分けないため、ここに 1 つだけ置く。
+ */
+
+/** コマンド 1 回分の結果。 */
+export type CommandResult = {
+  code: number;
+  stdout: string;
+  stderr: string;
+  /** 出力の上限を超えて切られたかどうか。 */
+  truncated: boolean;
+  /** 待ち時間の上限で打ち切ったかどうか。 */
+  timedOut: boolean;
+};
+
+/**
+ * コマンドの実行。テストでは podman などの呼び出しを、この型を満たす別の関数に
+ * 差し替えて確かめる。実行ファイルが見つからない場合も例外にせず、code -1 の
+ * 結果として返す。signal が立つと、実行中のコマンドを打ち切る。
+ */
+export type CommandRunner = (
+  cmd: readonly string[],
+  timeoutMs: number,
+  signal?: AbortSignal,
+) => Promise<CommandResult>;
+
+export type RunCommandOptions = {
+  timeoutMs: number;
+  /** 実行するディレクトリ。省くとこのプロセスの作業ディレクトリ。 */
+  cwd?: string;
+  /** ターンの停止などで打ち切るための signal。 */
+  signal?: AbortSignal;
+  /**
+   * 残す出力の上限（文字数）。省くと 20,000 文字。
+   * bash のように末尾を読みたい呼び出しは、大きめの値を渡してから自分で詰める。
+   */
+  maxOutputChars?: number;
+  /** 上限を超えたときに、先頭を残すか末尾を残すか。省くと先頭。 */
+  outputFrom?: "head" | "tail";
+};
+
+/**
+ * 1 回の呼び出しで受け取る出力の上限（文字数）。超えた分は捨てて、切ったことを結果に書く。
+ * 上限を決めずに読むと、暴走したコマンドの出力でこちらのメモリが埋まる。
+ */
+const OUTPUT_LIMIT = 20_000;
+
+export async function runCommand(
+  cmd: readonly string[],
+  options: RunCommandOptions,
+): Promise<CommandResult> {
+  const timeout = AbortSignal.timeout(options.timeoutMs);
+  const abort = options.signal === undefined ? timeout : AbortSignal.any([options.signal, timeout]);
+
+  try {
+    const proc = Bun.spawn({
+      cmd: [...cmd],
+      stdin: "ignore",
+      stdout: "pipe",
+      stderr: "pipe",
+      signal: abort,
+      ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
+    });
+
+    const limit = options.maxOutputChars ?? OUTPUT_LIMIT;
+    const from = options.outputFrom ?? "head";
+    const [stdout, stderr] = await Promise.all([
+      readLimited(proc.stdout, limit, from),
+      readLimited(proc.stderr, limit, from),
+    ]);
+    const code = await proc.exited;
+
+    return {
+      code,
+      stdout: stdout.text,
+      stderr: stderr.text,
+      truncated: stdout.truncated || stderr.truncated,
+      timedOut: timeout.aborted,
+    };
+  } catch (error) {
+    // 実行ファイルが無い場合と、signal で打ち切られた場合にここへ来る。
+    // どちらも結果として返し、呼び出し側が理由をモデルへ見せられるようにする。
+    return { code: -1, stdout: "", stderr: describeError(error), truncated: false, timedOut: timeout.aborted };
+  }
+}
+
+/**
+ * ストリームを上限まで読み、超えた分は捨てる。
+ * 先頭を残す場合は、上限に達したあともストリームを読み切る（子プロセスが詰まらないように）。
+ * 末尾を残す場合は、常に最後の limit 文字だけを抱える。
+ */
+async function readLimited(
+  stream: ReadableStream<Uint8Array>,
+  limit: number,
+  from: "head" | "tail",
+): Promise<{ text: string; truncated: boolean }> {
+  const reader = stream.getReader();
+  const decoder = new TextDecoder();
+
+  let text = "";
+  let truncated = false;
+
+  for (;;) {
+    const chunk = await reader.read();
+    if (chunk.done) break;
+    if (from === "head" && truncated) continue;
+
+    const piece = decoder.decode(chunk.value, { stream: true });
+    text += piece;
+
+    if (text.length > limit) {
+      truncated = true;
+      text = from === "head" ? text.slice(0, limit) : tailOf(text, limit);
+    }
+  }
+
+  text += decoder.decode();
+  if (text.length > limit) {
+    truncated = true;
+    text = from === "head" ? text.slice(0, limit) : tailOf(text, limit);
+  }
+
+  return { text, truncated };
+}
+
+/** 末尾 limit 文字を取る。先頭がサロゲートペアの後半なら、そこは落とす。 */
+function tailOf(text: string, limit: number): string {
+  const tail = text.slice(text.length - limit);
+  const first = tail.charCodeAt(0);
+  return first >= 0xdc00 && first <= 0xdfff ? tail.slice(1) : tail;
+}

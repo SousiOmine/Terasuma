@@ -16,7 +16,7 @@ export type HandoverAnswer =
   | { kind: "text"; text: string };
 
 /** 「操作を完了した」ときの戻り値。 */
-export const HANDOVER_DONE = "ユーザーは操作を完了しました";
+export const HANDOVER_DONE = "The user finished working on the computer.";
 
 export type Handover = {
   /**
@@ -38,7 +38,7 @@ export function createHandover(): Handover {
         // すでに止まったターンから呼ばれることがある（停止と ask_user が競合した場合）。
         // ここで断らないと、誰も返事をしない待ちが残り、ターンが片付かない。
         if (signal.aborted) {
-          reject(new Error("画面を渡す前にターンが終わりました"));
+          reject(new Error("The turn ended before the screen was handed over"));
           return;
         }
 
@@ -50,7 +50,7 @@ export function createHandover(): Handover {
 
         const onAbort = (): void => {
           waiting.delete(teraId);
-          reject(new Error("画面を渡す前にターンが終わりました"));
+          reject(new Error("The turn ended before the screen was handed over"));
         };
 
         // 同じ Tera で二重に待つことはない（ターンは 1 つずつ進む）。

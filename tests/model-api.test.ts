@@ -777,7 +777,7 @@ describe("チャットとモデル設定の関係", () => {
     await withModelServer({ providers: { deepseek: { apiKey: "sk-1" } } }, async (harness) => {
       const response = await harness.request(
         `/api/teras/${DEFAULT_TERA_ID}/messages`,
-        jsonRequest("POST", { content: "こんにちは" }),
+        jsonRequest("POST", { content: "こんにちは", language: "ja" }),
       );
 
       expect(response.status).toBe(400);
@@ -801,7 +801,7 @@ describe("チャットとモデル設定の関係", () => {
       async (harness) => {
         const response = await harness.request(
           `/api/teras/${DEFAULT_TERA_ID}/messages`,
-          jsonRequest("POST", { content: "こんにちは" }),
+          jsonRequest("POST", { content: "こんにちは", language: "ja" }),
         );
 
         expect(response.status).toBe(200);

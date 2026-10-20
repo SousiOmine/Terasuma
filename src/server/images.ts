@@ -42,7 +42,7 @@ export function createImageStore(dataDir: string): ImageStore {
   return {
     save(data, mime) {
       if (mime !== IMAGE_MIME) {
-        throw new Error(`扱えない画像の種類です: ${mime}（いまは ${IMAGE_MIME} だけを扱えます）`);
+        throw new Error(`Unsupported image type: ${mime} (only ${IMAGE_MIME} is supported)`);
       }
 
       const size = pngSize(data);
@@ -75,22 +75,22 @@ export function createImageStore(dataDir: string): ImageStore {
  * （大きさが分からないまま参照を保存すると、あとから座標の対応が取れなくなる）。
  */
 function pngSize(data: Uint8Array): { width: number; height: number } {
-  if (data.length < 24) throw new Error("PNG として短すぎます");
+  if (data.length < 24) throw new Error("PNG data is too short");
 
   const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
 
   // 署名と、先頭のチャンクが IHDR であることを確かめてから大きさを読む。
   if (view.getUint32(0) !== 0x89504e47 || view.getUint32(4) !== 0x0d0a1a0a) {
-    throw new Error("PNG の署名がありません");
+    throw new Error("PNG signature is missing");
   }
   if (view.getUint32(12) !== 0x49484452) {
-    throw new Error("PNG の先頭に IHDR がありません");
+    throw new Error("PNG does not start with an IHDR chunk");
   }
 
   const width = view.getUint32(16);
   const height = view.getUint32(20);
   if (width === 0 || height === 0) {
-    throw new Error(`画像の大きさを読めませんでした（${width}x${height}）`);
+    throw new Error(`Could not read the image size (${width}x${height})`);
   }
   return { width, height };
 }

@@ -1,7 +1,11 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import type { ModelSettings } from "../src/config";
+import { createCodingToolset, type CodingToolset } from "../src/server/coding";
 import { createComputerTools } from "../src/server/computer";
 import type { ContainerManager } from "../src/server/container";
 import {
@@ -13,7 +17,7 @@ import {
 } from "../src/server/engine";
 import type { ChatMessage } from "../src/shared/types";
 import { createHandover } from "../src/server/handover";
-import { createComputerStub, createContainerStub, createImageStub } from "./support";
+import { createCodingStub, createComputerStub, createContainerStub, createImageStub } from "./support";
 
 /**
  * 1 回目の呼び出しではツールを呼び、2 回目では本文を返す偽のプロバイダ。
@@ -67,6 +71,70 @@ function startFakeProvider(call: { name: string; args: string } = { name: "local
         new ReadableStream<Uint8Array>({
           start(controller) {
             for (const frame of frames) controller.enqueue(frame);
+            controller.close();
+          },
+        }),
+        { headers: { "Content-Type": "text/event-stream" } },
+      );
+    },
+  });
+
+  return { server, bodies };
+}
+
+/**
+ * 1 ターンの中で、指定した回数だけツールを呼ばせる偽のプロバイダ。
+ * 最後の 1 回は本文を返す。1 ターンの上限が小さいままだと途中で打ち切られ、
+ * 呼ばれた回数が減るので、上限の回帰をここで見る。
+ */
+function startToolLoopProvider(toolCalls: number) {
+  const bodies: Record<string, unknown>[] = [];
+  const encoder = new TextEncoder();
+  const frame = (delta: Record<string, unknown>, finish: string | null) =>
+    encoder.encode(
+      `data: ${JSON.stringify({
+        id: "chatcmpl-1",
+        object: "chat.completion.chunk",
+        created: 0,
+        model: "test-model",
+        choices: [{ index: 0, delta, finish_reason: finish }],
+      })}\n\n`,
+    );
+
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    async fetch(request) {
+      bodies.push((await request.json()) as Record<string, unknown>);
+      const callNumber = bodies.length;
+
+      const frames: Uint8Array[] =
+        callNumber <= toolCalls
+          ? [
+              frame(
+                {
+                  role: "assistant",
+                  tool_calls: [
+                    {
+                      index: 0,
+                      id: `call-${callNumber}`,
+                      type: "function",
+                      function: { name: "local_echo", arguments: '{"text":"hi"}' },
+                    },
+                  ],
+                },
+                null,
+              ),
+              frame({}, "tool_calls"),
+            ]
+          : [frame({ role: "assistant", content: "終わりました" }, null), frame({}, "stop")];
+
+      frames.push(encoder.encode("data: [DONE]\n\n"));
+
+      return new Response(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            for (const part of frames) controller.enqueue(part);
             controller.close();
           },
         }),
@@ -153,12 +221,20 @@ async function run(
   provider: ToolsetProvider,
   settings: ModelSettings,
   computer: ComputerToolsetProvider = createComputerStub(),
+  coding: CodingToolset = createCodingStub(),
 ): Promise<EngineEvent[]> {
   const reader: SettingsReader = { read: () => settings };
-  const stream = await createMastraEngine(reader, provider, computer, createImageStub()).stream({
+  const stream = await createMastraEngine({
+    settings: reader,
+    mcp: provider,
+    computer,
+    coding,
+    images: createImageStub(),
+  }).stream({
     context: { summary: null, messages: history() },
     signal: new AbortController().signal,
     teraId: "t1",
+    replyLanguage: "ja",
   });
 
   const events: EngineEvent[] = [];
@@ -249,6 +325,92 @@ describe("MCP のツール呼び出し（Mastra 経由）", () => {
 
       // 2 回目の呼び出しには、シェルの結果が載っている。
       expect(JSON.stringify(fake.bodies[1])).toContain("Linux test 7.0.0");
+    } finally {
+      await fake.server.stop(true);
+    }
+  });
+
+  test("端末の read ツールもモデルへ渡り、ファイルを読める", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "terasuma-engine-coding-"));
+    const file = join(dir, "note.txt");
+    writeFileSync(file, "hello from the host\n", "utf8");
+
+    const fake = startFakeProvider({ name: "read", args: JSON.stringify({ path: file }) });
+
+    try {
+      const events = await run(
+        { toolset: async () => ({}) },
+        settingsFor(portOf(fake.server)),
+        createComputerStub(),
+        createCodingToolset({ cwd: dir }),
+      );
+
+      // 端末のツールは接頭辞を付けず、そのままの名前でモデルへ渡る。
+      expect(toolNames(fake.bodies[0])).toContain("read");
+
+      expect(events[0]).toEqual({
+        type: "tool-call",
+        part: { type: "tool-call", id: "call-1", server: "", tool: "read", args: { path: file } },
+      });
+
+      const result = events[1];
+      if (result?.type !== "tool-result") throw new Error("read の結果が返らなかった");
+      expect(result.part.failed).toBe(false);
+      expect(result.part.output).toContain("hello from the host");
+
+      // 2 回目の呼び出しには、読んだ内容が載っている。
+      expect(JSON.stringify(fake.bodies[1])).toContain("hello from the host");
+    } finally {
+      await fake.server.stop(true);
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("失敗したツールの結果は、JSON の包装ではなくエラー本文で渡る", async () => {
+    const fake = startFakeProvider({ name: "local_fail", args: "{}" });
+    const provider: ToolsetProvider = {
+      toolset: async () => ({
+        local_fail: createTool({
+          id: "local_fail",
+          description: "テスト用の失敗",
+          inputSchema: z.object({}),
+          execute: async () => {
+            throw new Error("boom");
+          },
+        }),
+      }),
+    };
+
+    try {
+      const events = await run(provider, settingsFor(portOf(fake.server)));
+      const result = events[1];
+      if (result?.type !== "tool-result") throw new Error("ツールの結果が返らなかった");
+
+      expect(result.part.failed).toBe(true);
+      expect(result.part.output).toBe("boom");
+    } finally {
+      await fake.server.stop(true);
+    }
+  });
+
+  test("1 ターンで 5 回を超えてツールを呼べる", async () => {
+    const toolCalls = 6;
+    const fake = startToolLoopProvider(toolCalls);
+    const provider = createToolsetProvider();
+
+    try {
+      const events = await run(provider, settingsFor(portOf(fake.server)));
+      const reportedCalls = events.filter((event) => event.type === "tool-call").length;
+      const text = events
+        .filter((event): event is Extract<EngineEvent, { type: "text-delta" }> => event.type === "text-delta")
+        .map((event) => event.delta)
+        .join("");
+
+      expect(provider.executed).toHaveLength(toolCalls);
+      expect(reportedCalls).toBe(toolCalls);
+      expect(fake.bodies).toHaveLength(toolCalls + 1);
+      expect(text).toContain("終わりました");
+      expect(text).not.toContain("上限");
     } finally {
       await fake.server.stop(true);
     }

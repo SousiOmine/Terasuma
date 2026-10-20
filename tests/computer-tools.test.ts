@@ -325,7 +325,7 @@ describe("ターンの中断", () => {
       const waiting = callTool(tools, "computer_wait", { seconds: 30 }, { abortSignal: controller.signal });
       controller.abort();
 
-      await expect(waiting).rejects.toThrow("ターンが終了した");
+      await expect(waiting).rejects.toThrow("Stopped waiting");
     });
   });
 

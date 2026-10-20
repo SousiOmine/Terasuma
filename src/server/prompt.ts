@@ -1,3 +1,4 @@
+import type { ReplyLanguage } from "../shared/language";
 import type { ChatMessage, ImageRef, MessagePart } from "../shared/types";
 
 /**
@@ -12,8 +13,10 @@ import type { ChatMessage, ImageRef, MessagePart } from "../shared/types";
 export const SYSTEM_PROMPT = [
   "You are Terasuma, a general-purpose assistant running on the user's own machine.",
   "Answer directly and concisely.",
-  "Always reply in the language the user writes in.",
-  "You can operate the computer (a separate Debian desktop) through the computer_ tools: its screen, keyboard, mouse, and shell.",
+  "Always follow the reply-language instruction at the end of the conversation.",
+  "You can read, write, and edit files, and run bash commands, on the machine where Terasuma runs through the read, write, edit, and bash tools. Relative paths and bash commands use the directory Terasuma was started in.",
+  "The computer_ tools operate a separate Debian desktop, not the machine Terasuma runs on.",
+  "Use read to examine a file before changing it. Use edit for targeted changes; use write only for new files or complete rewrites.",
 ].join("\n");
 
 /**
@@ -94,7 +97,11 @@ export function toolNameFor(server: string, tool: string): string {
  * 要約を system ではなく user にするのは、ターンの途中で切ったときに履歴が assistant から
  * 始まっても、直前が user の発言になり、プロバイダ側の役割の並びが壊れないため。
  */
-export function toModelMessages(context: TeraContext, images: ImageReader): ModelInputMessage[] {
+export function toModelMessages(
+  context: TeraContext,
+  images: ImageReader,
+  replyLanguage: ReplyLanguage,
+): ModelInputMessage[] {
   const messages: ModelInputMessage[] = [];
 
   // 要約は先頭に 1 件だけ置く。要約が変わらない限り、この前置きは前のターンと一致する。
@@ -125,7 +132,23 @@ export function toModelMessages(context: TeraContext, images: ImageReader): Mode
     for (const image of toImageMessages(parts, images)) messages.push(image);
   }
 
+  // 返事の言語は、保存済みの履歴のあと（今回のユーザー発言の後ろ）に置く。
+  // 先頭を変えないので、言語が同じ間はプロンプトキャッシュの先頭が当たり続ける。
+  messages.push({ role: "user", content: replyLanguageInstruction(replyLanguage) });
   return messages;
+}
+
+/**
+ * 返事を書く言語の指示。ツールやプロンプトは英語で揃え、言語名だけを切り替える。
+ * ユーザーの発言が別の言語でも、設定した言語で書かせる。
+ */
+const REPLY_LANGUAGE_INSTRUCTIONS: Record<ReplyLanguage, string> = {
+  ja: "Reply in Japanese. Write every part of your reply in Japanese, even if the user's message is in another language.",
+  en: "Reply in English. Write every part of your reply in English, even if the user's message is in another language.",
+};
+
+export function replyLanguageInstruction(language: ReplyLanguage): string {
+  return REPLY_LANGUAGE_INSTRUCTIONS[language];
 }
 
 /** ツールが返した画像を、モデルへ渡す user メッセージにする。 */
@@ -176,8 +199,15 @@ export function screenMessage(
  * メッセージ列は「system 1 件 + toModelMessages() の結果」になる。ここはそのあるべき形を
  * 1 箇所で表現したもので、キャッシュ保護の回帰テスト（tests/prompt-cache.test.ts）が参照する。
  */
-export function buildModelInput(context: TeraContext, images: ImageReader): ModelInputMessage[] {
-  return [{ role: "system", content: SYSTEM_PROMPT }, ...toModelMessages(context, images)];
+export function buildModelInput(
+  context: TeraContext,
+  images: ImageReader,
+  replyLanguage: ReplyLanguage,
+): ModelInputMessage[] {
+  return [
+    { role: "system", content: SYSTEM_PROMPT },
+    ...toModelMessages(context, images, replyLanguage),
+  ];
 }
 
 /** 本文とツール呼び出しを、保存された順のまま並べる。 */
@@ -219,7 +249,7 @@ function toToolResults(parts: readonly MessagePart[], images: ImageReader): Tool
         result === undefined
           ? // 「停止」で結果が残らなかった呼び出し。結果を欠いたまま渡すとプロバイダが
             // 呼び出しと結果の対応を取れずに失敗するので、中断した事実だけを伝える。
-            { type: "error-text", value: "この呼び出しは中断されたため、結果がありません" }
+            { type: "error-text", value: "This tool call was interrupted before it returned a result." }
           : toToolResultOutput(result, images),
     });
   }
@@ -241,7 +271,7 @@ function toToolResultOutput(
 
   // 参照はあるのに実体が無い状態。黙って本文だけにすると、画像を見たつもりで話が進む。
   if (result.image !== undefined && images.read(result.image) === null) {
-    return asText(`${result.output}\n(保存した画像を読み出せませんでした)`);
+    return asText(`${result.output}\n(Could not read the stored image.)`);
   }
 
   return asText(result.output);

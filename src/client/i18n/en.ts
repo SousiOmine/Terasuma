@@ -36,7 +36,7 @@ export const en = {
   "settings.back": "Back to chat",
   "settings.general": "General",
   "settings.language.label": "Language",
-  "settings.language.description": "Language used in the interface.",
+  "settings.language.description": "Language used in the interface and in the agent's replies.",
 
   "settings.advanced": "Advanced",
 
