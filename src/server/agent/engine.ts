@@ -14,6 +14,7 @@ import { catalogRoute, createLanguageModel, toolResultTakesImages, type Resolved
 import { reasoningProviderOptions } from "./reasoning";
 import { readStoredImages, readToolOutput, toolResultOutput } from "./tool-output";
 import { describeError } from "../../shared/errors";
+import { splitToolName } from "../../shared/tools";
 
 /** モデルから流れてくる出来事。画面へ流す単位でもある。 */
 export type EngineEvent =
@@ -389,16 +390,6 @@ function toEngineEvent<TOOLS extends ToolSet>(
     default:
       return null;
   }
-}
-
-/**
- * "<サーバー id>_<ツール名>" を分ける。
- * サーバー id に "_" は使えないので、最初の区切りで必ず確定する。
- */
-function splitToolName(name: string): { server: string; tool: string } {
-  const boundary = name.indexOf("_");
-  if (boundary === -1) return { server: "", tool: name };
-  return { server: name.slice(0, boundary), tool: name.slice(boundary + 1) };
 }
 
 /**

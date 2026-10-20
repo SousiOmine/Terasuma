@@ -9,6 +9,7 @@ import {
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
 import { jsonSchema, tool, type JSONSchema7, type ToolSet } from "ai";
 import type { McpHttpServerSettings, McpServerSettings, McpServersSettings } from "../../config";
+import { toolNameFor } from "../../shared/tools";
 import type { ImageRef, McpAuthorizationView, McpServerStatusView, McpTestView } from "../../shared/types";
 import {
   McpOAuthProvider,
@@ -255,7 +256,7 @@ export function createMcpManager(options: McpManagerOptions): McpManager {
     const conflicted = new Map<string, string>();
     for (const [serverId, connection] of connections) {
       for (const definition of connection.tools) {
-        const namespaced = `${serverId}_${definition.name}`;
+        const namespaced = toolNameFor(serverId, definition.name);
         const owner = claimed.get(namespaced);
         if (owner === undefined) {
           claimed.set(namespaced, serverId);
@@ -467,7 +468,7 @@ export function createMcpManager(options: McpManagerOptions): McpManager {
 /** 1 つのサーバーのツールを、モデルへ渡す名前と定義の組にする。 */
 function toolEntries(serverId: string, connection: ServerConnection, images: ImageStore): [string, ToolSet[string]][] {
   return connection.tools.map((definition) => [
-    `${serverId}_${definition.name}`,
+    toolNameFor(serverId, definition.name),
     tool({
       description: definition.description ?? "",
       inputSchema: jsonSchema(definition.inputSchema as unknown as JSONSchema7),

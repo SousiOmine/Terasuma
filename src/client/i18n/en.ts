@@ -113,6 +113,8 @@ export const en = {
   "settings.mcp.form.cancel": "Cancel",
   "settings.mcp.form.idFixed": "The name cannot be changed.",
   "settings.mcp.form.invalidName": "Use lowercase letters, digits and hyphens for the name (for example filesystem).",
+  "settings.mcp.form.reservedName":
+    "That name collides with Terasuma's built-in tools (computer_...). Choose another name.",
   "settings.mcp.form.nameTaken": "That name is already in use.",
   "settings.mcp.form.needCommand": "Enter a command.",
   "settings.mcp.form.needUrl": "Enter a URL.",

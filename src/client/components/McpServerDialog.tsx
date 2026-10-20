@@ -1,5 +1,6 @@
 import { IconExternalLink } from "@tabler/icons-preact";
 import { useEffect, useRef, useState } from "preact/hooks";
+import { mcpServerIdProblem } from "../../shared/ids";
 import type { McpServerForm, McpServerView, McpTestView } from "../../shared/types";
 import * as api from "../api";
 import { toErrorState, type ErrorState } from "../errors";
@@ -17,9 +18,6 @@ const INPUT_CLASS =
   "w-full rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-sm outline-none focus:border-neutral-400 dark:border-neutral-700 dark:bg-neutral-900 dark:focus:border-neutral-600";
 
 const TEXTAREA_CLASS = `${INPUT_CLASS} font-mono text-xs leading-relaxed`;
-
-/** 名前（id）に使える文字。ツール名の先頭に付くため、サーバー側と同じ規則にする。 */
-const ID_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
 
 /** 接続を確かめられたときの入力と、そのときに見えたツール。 */
 type Checked = { signature: string; tools: readonly string[] };
@@ -402,8 +400,12 @@ function buildForm(
   fail: (error: ErrorState) => void,
 ): McpServerForm | null {
   const id = fields.id.trim();
-  if (!ID_PATTERN.test(id)) {
-    fail({ code: "input", detail: t("settings.mcp.form.invalidName") });
+  const idProblem = mcpServerIdProblem(id);
+  if (idProblem !== null) {
+    fail({
+      code: "input",
+      detail: t(idProblem === "reserved" ? "settings.mcp.form.reservedName" : "settings.mcp.form.invalidName"),
+    });
     return null;
   }
 

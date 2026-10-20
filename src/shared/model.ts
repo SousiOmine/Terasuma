@@ -33,3 +33,11 @@ export function modelParts(model: ModelId): { provider: string; model: string } 
   const boundary = model.indexOf("/");
   return { provider: model.slice(0, boundary), model: model.slice(boundary + 1) };
 }
+
+/**
+ * プロバイダ名とモデル名から、モデル ID を組み立てる。
+ * 組み立てを各所に書くと、区切りや検証の有無が場所ごとにずれる。
+ */
+export function modelId(provider: string, model: string): ModelId {
+  return `${provider}/${model}`;
+}

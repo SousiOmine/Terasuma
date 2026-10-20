@@ -15,7 +15,7 @@ import type { ImageStore } from "../../computer/images";
  *
  * ツール名は "<ツールセット名>_<ツール名>" の規則に乗せて、"computer_" で始める。
  * MCP のツール（"<サーバー id>_<ツール名>"）と同じ名前空間に並ぶので、
- * 衝突する名前が無いかを config.ts の mcpServerIdProblem で弾いている。
+ * 衝突する名前が無いかを shared/ids.ts の mcpServerIdProblem で弾いている。
  *
  * 説明文には可変の情報を入れない。説明文はリクエストの前置きに入るので、
  * 変えるとプロンプトキャッシュが当たらなくなる。

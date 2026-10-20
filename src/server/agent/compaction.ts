@@ -1,7 +1,8 @@
 import { describeError } from "../../shared/errors";
 import type { ChatMessage, MessagePart } from "../../shared/types";
 import type { AgentEngine } from "./engine";
-import { summaryText, toolNameFor, type TeraContext } from "./prompt";
+import { toolNameFor } from "../../shared/tools";
+import { summaryText, type TeraContext } from "./prompt";
 import type { CompactionState, Store } from "../data/store";
 
 /**

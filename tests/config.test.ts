@@ -5,7 +5,6 @@ import { join } from "node:path";
 import {
   CONFIG_FILE_NAME,
   DEFAULT_PORT,
-  isProviderId,
   loadConfig,
   mcpServerSettingsFromForm,
   normalizeProvider,
@@ -15,6 +14,7 @@ import {
   toModelSettings,
   writeSettingsFile,
 } from "../src/config";
+import { isProviderId } from "../src/shared/ids";
 
 /** 一時ディレクトリを設定ディレクトリとデータディレクトリの両方に見立てて loadConfig を呼ぶ。 */
 function withConfigFile<T>(content: string | null, run: (env: NodeJS.ProcessEnv, dir: string) => T): T {

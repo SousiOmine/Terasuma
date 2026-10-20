@@ -1,4 +1,5 @@
 import { computed, signal } from "@preact/signals";
+import { ASK_USER_TOOL, COMPUTER_SERVER_ID } from "../shared/tools";
 import type { ChatEvent, ChatMessage, Tera } from "../shared/types";
 import * as api from "./api";
 import { loadContainer, showContainerError } from "./containerSettings";
@@ -223,7 +224,7 @@ function applyEvent(event: ChatEvent): void {
 
 /** 画面を渡す呼び出しかどうか。 */
 function isAskUser(part: { server: string; tool: string }): boolean {
-  return part.server === "computer" && part.tool === "ask_user";
+  return part.server === COMPUTER_SERVER_ID && part.tool === ASK_USER_TOOL;
 }
 
 /** 呼び出しの引数から、ユーザーへ見せる頼みを取り出す。 */

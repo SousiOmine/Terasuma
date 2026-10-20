@@ -1,6 +1,7 @@
 import type { ModelMessage } from "ai";
 import type { ReplyLanguage } from "../../shared/language";
 import type { ChatMessage, ImageRef, MessagePart } from "../../shared/types";
+import { toolNameFor } from "../../shared/tools";
 import type { ImageReader } from "../computer/images";
 import { readStoredImages, toolResultOutput, type StoredImages } from "./tool-output";
 
@@ -66,11 +67,6 @@ export type ModelInputOptions = {
    */
   toolResultImages: boolean;
 };
-
-/** ツール呼び出しの名前。接続側が付けた "<サーバー id>_<ツール名>" を組み立て直す。 */
-export function toolNameFor(server: string, tool: string): string {
-  return server.length === 0 ? tool : `${server}_${tool}`;
-}
 
 /**
  * 保存済み履歴を、モデルへ渡す形に開く。

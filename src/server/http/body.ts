@@ -1,5 +1,4 @@
 import {
-  isProviderId,
   mcpServerSettingsFromForm,
   normalizeProvider,
   providerSettingsFromForm,
@@ -7,6 +6,7 @@ import {
   type ProviderSettings,
 } from "../../config";
 import { describeError } from "../../shared/errors";
+import { isProviderId } from "../../shared/ids";
 import { isModelId, type ModelId } from "../../shared/model";
 import type { McpServerForm, ProviderCredentials } from "../../shared/types";
 import { jsonError } from "../errors";

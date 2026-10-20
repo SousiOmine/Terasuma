@@ -1,6 +1,7 @@
 import { IconChevronRight, IconSearch } from "@tabler/icons-preact";
 import { useEffect, useRef, useState } from "preact/hooks";
-import type { ModelId } from "../../shared/model";
+import { modelId } from "../../shared/model";
+import { trimOrNull } from "../../shared/strings";
 import {
   ENDPOINT_PRESETS,
   OPENAI_COMPATIBLE_TEMPLATE,
@@ -85,9 +86,9 @@ export function ProviderWizard({ mode, onClose }: ProviderWizardProps) {
 
   /** 入力中の値。空欄は「未入力」として null で送る。 */
   const credentials = (): ProviderCredentials => ({
-    apiKey: trimmedOrNull(apiKey),
-    baseUrl: trimmedOrNull(baseUrl),
-    label: trimmedOrNull(label),
+    apiKey: trimOrNull(apiKey),
+    baseUrl: trimOrNull(baseUrl),
+    label: trimOrNull(label),
   });
 
   const selectCatalogProvider = (id: string, name: string) => {
@@ -164,7 +165,7 @@ export function ProviderWizard({ mode, onClose }: ProviderWizardProps) {
         await addProvider({
           id: target.id,
           ...credentials(),
-          defaultModel: makeDefault && model !== null ? fullModelId(target.id, model) : null,
+          defaultModel: makeDefault && model !== null ? modelId(target.id, model) : null,
         });
       }
     } catch (failure) {
@@ -531,13 +532,4 @@ function nextCustomEndpointId(used: readonly ProviderView[]): string {
 /** 一覧の中から最初に選ぶモデル。 */
 function pickModel(models: readonly string[]): string | null {
   return models[0] ?? null;
-}
-
-function fullModelId(providerId: string, model: string): ModelId {
-  return `${providerId}/${model}`;
-}
-
-function trimmedOrNull(value: string): string | null {
-  const trimmed = value.trim();
-  return trimmed.length === 0 ? null : trimmed;
 }

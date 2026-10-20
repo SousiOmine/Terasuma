@@ -111,6 +111,8 @@ export const ja: Record<MessageKey, string> = {
   "settings.mcp.form.cancel": "やめる",
   "settings.mcp.form.idFixed": "名前は変更できません。",
   "settings.mcp.form.invalidName": "名前は英小文字・数字・ハイフンで指定してください（例: filesystem）。",
+  "settings.mcp.form.reservedName":
+    "この名前は Terasuma の内蔵ツール（computer_...）と同じになるため使えません。別の名前にしてください。",
   "settings.mcp.form.nameTaken": "この名前はすでに使われています。",
   "settings.mcp.form.needCommand": "コマンドを入力してください。",
   "settings.mcp.form.needUrl": "URL を入力してください。",

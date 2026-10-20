@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "preact/hooks";
-import { modelProvider, type ModelId } from "../../shared/model";
+import { modelId, modelParts, modelProvider } from "../../shared/model";
 import * as api from "../api";
 import { toErrorState, type ErrorState } from "../errors";
 import { t } from "../i18n";
@@ -72,7 +72,7 @@ export function ModelPickerDialog({ onClose }: ModelPickerDialogProps) {
     setBusy(true);
     setError(null);
     try {
-      await saveDefaultModel(`${activeId}/${model}` as ModelId);
+      await saveDefaultModel(modelId(activeId, model));
     } catch (failure) {
       setError(toErrorState(failure));
       setBusy(false);
@@ -155,6 +155,7 @@ function currentModelOf(providerId: string, models: readonly string[]): string |
   if (current === undefined || current === null) return null;
   if (modelProvider(current) !== providerId) return null;
 
-  const id = current.slice(providerId.length + 1);
-  return models.includes(id) ? id : null;
+  const { provider, model } = modelParts(current);
+  if (provider !== providerId) return null;
+  return models.includes(model) ? model : null;
 }

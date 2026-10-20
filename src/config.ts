@@ -1,9 +1,10 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { resolveAppPaths } from "./paths";
+import { describeError } from "./shared/errors";
+import { isProviderId, mcpServerIdProblem, type McpServerIdProblem } from "./shared/ids";
 import { isModelId, type ModelId } from "./shared/model";
 import type { McpServerForm, ProviderCredentials } from "./shared/types";
-import { describeError } from "./shared/errors";
 
 /** 使う LLM 実装。mock は開発・テスト専用で、既定には決してならない。 */
 type EngineKind = "ai-sdk" | "mock";
@@ -120,31 +121,12 @@ export const CONFIG_FILE_NAME = "config.json";
  */
 export const LOOPBACK_HOST = "127.0.0.1";
 
-/** id に使える文字。AI へ渡す名前の先頭部分になるため、記号と空白は許さない。 */
-const ID_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
-
-/**
- * MCP サーバーの id に使えない名前。
- * ツール名は "<サーバー id>_<ツール名>" になるので、コンテナの内蔵ツール
- * （"computer_..."）と同じ名前が作れてしまう。同じ名前になると、どちらのツールか
- * モデルにも画面にも区別が付かないので、ここで止める。
- */
-const RESERVED_MCP_SERVER_IDS: readonly string[] = ["computer"];
-
-/** プロバイダ id に使える文字。モデル ID の先頭部分になるため、スラッシュと空白は許さない。 */
-export function isProviderId(value: string): boolean {
-  return ID_PATTERN.test(value);
-}
-
-/** MCP サーバー id を受け付けられない理由。使える場合は null。 */
-export function mcpServerIdProblem(value: string): string | null {
-  if (RESERVED_MCP_SERVER_IDS.includes(value)) {
-    return `${JSON.stringify(value)} は Terasuma の内蔵ツール（${RESERVED_MCP_SERVER_IDS.map((id) => `${id}_...`).join(", ")}）と同じ名前になるため使えません`;
+/** MCP サーバー id を受け付けられない理由を、設定ファイルの文言にする。 */
+function describeMcpServerId(value: string, problem: McpServerIdProblem): string {
+  if (problem === "reserved") {
+    return `${JSON.stringify(value)} は Terasuma の内蔵ツール（computer_...）と同じ名前になるため使えません`;
   }
-  if (!ID_PATTERN.test(value)) {
-    return `${JSON.stringify(value)} は英小文字・数字・ハイフンで指定してください`;
-  }
-  return null;
+  return `${JSON.stringify(value)} は英小文字・数字・ハイフンで指定してください`;
 }
 
 /**
@@ -326,7 +308,7 @@ export function mcpServerSettingsFromForm(form: McpServerForm, source: string): 
   // id の検証は、設定ファイルを読むときと同じ 1 つの規則に任せる。
   const idProblem = mcpServerIdProblem(form.id);
   if (idProblem !== null) {
-    throw new Error(`${source} の id に使えない値です: ${idProblem}`);
+    throw new Error(`${source} の id に使えない値です: ${describeMcpServerId(form.id, idProblem)}`);
   }
 
   if (form.type === "stdio") {
@@ -460,7 +442,7 @@ function readMcpServers(source: Record<string, unknown>, path: string): McpServe
   for (const [id, entry] of Object.entries(value)) {
     const problem = mcpServerIdProblem(id);
     if (problem !== null) {
-      throw new Error(`${path} の mcpServers に使えない id があります: ${problem}`);
+      throw new Error(`${path} の mcpServers に使えない id があります: ${describeMcpServerId(id, problem)}`);
     }
     servers[id] = readMcpServerEntry(id, entry, path);
   }
