@@ -2,18 +2,14 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { CONFIG_FILE_NAME, DEFAULT_PORT, loadConfig } from "../src/config";
+import { mcpServerSettingsFromForm, providerSettingsFromForm } from "../src/server/data/settings-form";
 import {
-  CONFIG_FILE_NAME,
-  DEFAULT_PORT,
-  loadConfig,
-  mcpServerSettingsFromForm,
   normalizeProvider,
-  providerSettingsFromForm,
   readSettingsFile,
-  toMcpSettings,
   toModelSettings,
   writeSettingsFile,
-} from "../src/config";
+} from "../src/server/data/settings-schema";
 import { isProviderId } from "../src/shared/ids";
 
 /** 一時ディレクトリを設定ディレクトリとデータディレクトリの両方に見立てて loadConfig を呼ぶ。 */
@@ -243,14 +239,12 @@ describe("mcpServers の検証", () => {
         },
       }),
       (env) => {
-        expect(toMcpSettings(readSettingsFile(loadConfig(env).configPath))).toEqual({
-          servers: {
-            local: {
-              type: "stdio",
-              command: "bunx",
-              args: ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"],
-              env: { HOME_DIR: "/tmp" },
-            },
+        expect(readSettingsFile(loadConfig(env).configPath).mcpServers).toEqual({
+          local: {
+            type: "stdio",
+            command: "bunx",
+            args: ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"],
+            env: { HOME_DIR: "/tmp" },
           },
         });
       },
@@ -262,7 +256,7 @@ describe("mcpServers の検証", () => {
       JSON.stringify({ mcpServers: { remote: { type: "http", url: "https://mcp.example.test/mcp/" } } }),
       (env) => {
         // 末尾のスラッシュは落として保存する（接続先そのものを指すため）。
-        expect(toMcpSettings(readSettingsFile(loadConfig(env).configPath)).servers).toEqual({
+        expect(readSettingsFile(loadConfig(env).configPath).mcpServers).toEqual({
           remote: { type: "http", url: "https://mcp.example.test/mcp" },
         });
       },

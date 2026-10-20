@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { tool } from "ai";
 import { z } from "zod";
-import type { ModelSettings } from "../src/config";
+import type { ModelSettings } from "../src/server/data/settings-schema";
 import { createCodingToolset, type CodingToolset } from "../src/server/agent/tools/coding";
 import { createComputerTools } from "../src/server/agent/tools/computer";
 import type { ContainerManager } from "../src/server/computer/container";

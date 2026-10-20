@@ -1,14 +1,9 @@
-import {
-  mcpServerSettingsFromForm,
-  normalizeProvider,
-  providerSettingsFromForm,
-  type McpServerSettings,
-  type ProviderSettings,
-} from "../../config";
 import { describeError } from "../../shared/errors";
 import { isProviderId } from "../../shared/ids";
 import { isModelId, type ModelId } from "../../shared/model";
 import type { McpServerForm, ProviderCredentials } from "../../shared/types";
+import { mcpServerSettingsFromForm, parseProviderCredentials } from "../data/settings-form";
+import type { McpServerSettings, ProviderSettings } from "../data/settings-schema";
 import { jsonError } from "../errors";
 
 /**
@@ -126,7 +121,7 @@ export function parseProviderSettings(id: string, body: Record<string, unknown> 
   }
 
   try {
-    return normalizeProvider(providerSettingsFromForm(credentials), `providers.${id}`);
+    return parseProviderCredentials(credentials, `providers.${id}`);
   } catch (error) {
     return jsonError(400, "invalid_request", describeError(error));
   }

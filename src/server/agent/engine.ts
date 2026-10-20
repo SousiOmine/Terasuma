@@ -1,6 +1,7 @@
 import { generateText, stepCountIs, streamText } from "ai";
 import type { LanguageModelUsage, TextStreamPart, ToolSet } from "ai";
-import type { AppConfig, ModelSettings } from "../../config";
+import type { AppConfig } from "../../config";
+import type { ModelSettings } from "../data/settings-schema";
 import type { ReplyLanguage } from "../../shared/language";
 import { modelProvider } from "../../shared/model";
 import type { MessagePart, TokenUsage } from "../../shared/types";

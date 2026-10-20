@@ -1,4 +1,4 @@
-import type { McpServersSettings, ModelSettings } from "../../config";
+import type { McpServersSettings, ModelSettings } from "../data/settings-schema";
 import type { McpServersView, ModelSettingsView } from "../../shared/types";
 import type { McpManager } from "../mcp/manager";
 

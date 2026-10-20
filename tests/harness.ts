@@ -1,7 +1,8 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { CONFIG_FILE_NAME, readSettingsFile, type AppConfig, type FileSettings } from "../src/config";
+import { CONFIG_FILE_NAME, type AppConfig } from "../src/config";
+import { readSettingsFile, type FileSettings } from "../src/server/data/settings-schema";
 import type { ContainerManager } from "../src/server/computer/container";
 import { createMockEngine, type AgentEngine } from "../src/server/agent/engine";
 import { createHandover, type Handover } from "../src/server/computer/handover";

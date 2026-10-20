@@ -1,25 +1,31 @@
+import type { ModelId } from "../../shared/model";
 import {
   readSettingsFile,
-  toMcpSettings,
   toModelSettings,
   writeSettingsFile,
   type FileSettings,
   type McpServerSettings,
-  type McpSettings,
+  type McpServersSettings,
   type ModelSettings,
   type ProviderSettings,
-} from "../../config";
-import type { ModelId } from "../../shared/model";
+} from "./settings-schema";
 
 /**
  * モデルとプロバイダ、MCP サーバーの設定。
  * config.json を唯一の保存先にしていて、変更のたびにファイルへ書き戻す。
+ *
+ * 読む口は 1 つにする。モデル用と MCP 用に分けて持つと、同じファイルを二重に読み、
+ * 片方だけ古い状態を持ち続ける余地が生まれるため。
  */
+
+/** 読み出した設定の全体。 */
+export type StoredSettings = ModelSettings & {
+  mcpServers: McpServersSettings;
+};
+
 export type SettingsStore = {
-  /** 現在のモデル設定。 */
-  read(): ModelSettings;
-  /** 現在の MCP サーバーの設定。 */
-  readMcp(): McpSettings;
+  /** 現在の設定の全体。 */
+  read(): StoredSettings;
   /**
    * プロバイダを追加・変更する。
    * 追加ウィザードでモデルまで選んだときは、既定のモデルも同じ書き込みで変える。
@@ -40,6 +46,11 @@ export type SettingsStore = {
   deleteMcpServer(id: string): boolean;
 };
 
+/** 設定ファイルの内容を、実行時に読む形へ揃える。 */
+function toStoredSettings(file: FileSettings): StoredSettings {
+  return { ...toModelSettings(file), mcpServers: file.mcpServers ?? {} };
+}
+
 /**
  * 設定ファイルを読み書きするストアを作る。
  *
@@ -48,23 +59,18 @@ export type SettingsStore = {
  * 読み直した内容が壊れていれば、その時点でエラーになり、書き込みは行わない。
  */
 export function createSettingsStore(configPath: string): SettingsStore {
-  let current = toModelSettings(readSettingsFile(configPath));
-  let currentMcp = toMcpSettings(readSettingsFile(configPath));
+  let current = toStoredSettings(readSettingsFile(configPath));
 
+  /** 変更を当てて、書き込んだ後の全体を覚え直す。変更が無ければ書かない。 */
   function mutate(change: (settings: FileSettings) => boolean): void {
     const settings = readSettingsFile(configPath);
     if (change(settings)) writeSettingsFile(configPath, settings);
-    current = toModelSettings(settings);
-    currentMcp = toMcpSettings(settings);
+    current = toStoredSettings(settings);
   }
 
   return {
     read() {
       return current;
-    },
-
-    readMcp() {
-      return currentMcp;
     },
 
     putProvider(id, provider, defaultModel) {

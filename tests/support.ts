@@ -1,7 +1,8 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { CONFIG_FILE_NAME, type FileSettings } from "../src/config";
+import { CONFIG_FILE_NAME } from "../src/config";
+import type { FileSettings } from "../src/server/data/settings-schema";
 import type { CommandResult, CommandRunner } from "../src/server/computer/command";
 import type { CodingToolset } from "../src/server/agent/tools/coding";
 import { ContainerError, type ContainerManager } from "../src/server/computer/container";

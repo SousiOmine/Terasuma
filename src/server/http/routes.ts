@@ -1,4 +1,4 @@
-import type { ProviderSettings } from "../../config";
+import type { ProviderSettings } from "../data/settings-schema";
 import { isReplyLanguage } from "../../shared/language";
 import { isModelId, modelParts, modelProvider } from "../../shared/model";
 import { findEndpointPreset } from "../../shared/providers";
@@ -120,7 +120,7 @@ export function createApiHandlers(deps: ApiDeps) {
     } catch (error) {
       return jsonError(500, "settings_write_failed", describeError(error));
     }
-    return Response.json(toMcpView(settings.readMcp().servers, deps.mcp));
+    return Response.json(toMcpView(settings.read().mcpServers, deps.mcp));
   }
 
   /**
@@ -439,7 +439,7 @@ export function createApiHandlers(deps: ApiDeps) {
 
     /** MCP サーバーの一覧（設定と、いま分かっている接続状態）。 */
     listMcpServers(): Response {
-      return Response.json(toMcpView(settings.readMcp().servers, deps.mcp));
+      return Response.json(toMcpView(settings.read().mcpServers, deps.mcp));
     },
 
     /**
@@ -450,7 +450,7 @@ export function createApiHandlers(deps: ApiDeps) {
       const parsed = await readMcpForm(req);
       if (parsed instanceof Response) return parsed;
 
-      if (settings.readMcp().servers[parsed.id] !== undefined) {
+      if (settings.read().mcpServers[parsed.id] !== undefined) {
         return jsonError(409, "mcp_server_exists", `MCP サーバー ${parsed.id} はすでに追加されています`);
       }
 
@@ -475,7 +475,7 @@ export function createApiHandlers(deps: ApiDeps) {
     /** MCP サーバーの設定を変える。接続は次に確かめたときから新しい設定になる。 */
     async updateMcpServer(req: ApiRequest<{ id: string }>): Promise<Response> {
       const id = req.params.id;
-      if (settings.readMcp().servers[id] === undefined) {
+      if (settings.read().mcpServers[id] === undefined) {
         return jsonError(404, "mcp_server_not_found", `MCP サーバー ${id} は設定されていません`);
       }
 
@@ -491,7 +491,7 @@ export function createApiHandlers(deps: ApiDeps) {
 
     removeMcpServer(req: ApiRequest<{ id: string }>): Response {
       const id = req.params.id;
-      if (settings.readMcp().servers[id] === undefined) {
+      if (settings.read().mcpServers[id] === undefined) {
         return jsonError(404, "mcp_server_not_found", `MCP サーバー ${id} は設定されていません`);
       }
 
@@ -502,7 +502,7 @@ export function createApiHandlers(deps: ApiDeps) {
     /** 接続を確かめ、公開されているツールを返す。 */
     async checkMcpServer(req: ApiRequest<{ id: string }>): Promise<Response> {
       const id = req.params.id;
-      if (settings.readMcp().servers[id] === undefined) {
+      if (settings.read().mcpServers[id] === undefined) {
         return jsonError(404, "mcp_server_not_found", `MCP サーバー ${id} は設定されていません`);
       }
 
@@ -516,7 +516,7 @@ export function createApiHandlers(deps: ApiDeps) {
     /** OAuth の認可を始める。ブラウザで開く URL を返す。 */
     async authorizeMcpServer(req: ApiRequest<{ id: string }>): Promise<Response> {
       const id = req.params.id;
-      if (settings.readMcp().servers[id] === undefined) {
+      if (settings.read().mcpServers[id] === undefined) {
         return jsonError(404, "mcp_server_not_found", `MCP サーバー ${id} は設定されていません`);
       }
 
@@ -532,12 +532,12 @@ export function createApiHandlers(deps: ApiDeps) {
     /** 待っている認可を取り消す。 */
     cancelMcpAuthorization(req: ApiRequest<{ id: string }>): Response {
       const id = req.params.id;
-      if (settings.readMcp().servers[id] === undefined) {
+      if (settings.read().mcpServers[id] === undefined) {
         return jsonError(404, "mcp_server_not_found", `MCP サーバー ${id} は設定されていません`);
       }
 
       deps.mcp.cancelAuthorization(id);
-      return Response.json(toMcpView(settings.readMcp().servers, deps.mcp));
+      return Response.json(toMcpView(settings.read().mcpServers, deps.mcp));
     },
 
     /**

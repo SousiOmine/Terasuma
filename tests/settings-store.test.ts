@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync, writeFileSync } from "node:fs";
-import { readSettingsFile } from "../src/config";
+import { readSettingsFile } from "../src/server/data/settings-schema";
 import { withTempSettings } from "./support";
 
 describe("設定ストア", () => {
@@ -12,6 +12,7 @@ describe("設定ストア", () => {
         model: null,
         providers: { deepseek: { apiKey: "sk-1" } },
         modelOptions: {},
+        mcpServers: {},
       });
       expect(readSettingsFile(path)).toEqual({ port: 4567, providers: { deepseek: { apiKey: "sk-1" } } });
     });
@@ -88,6 +89,7 @@ describe("設定ストア", () => {
         model: "openai/gpt-5.6-sol",
         providers: { deepseek: { apiKey: "sk-1" }, openai: { apiKey: "sk-2" } },
         modelOptions: {},
+        mcpServers: {},
       });
       expect(readSettingsFile(path).providers?.["openai"]).toEqual({ apiKey: "sk-2" });
     });
@@ -97,8 +99,8 @@ describe("設定ストア", () => {
     await withTempSettings({ port: 4567 }, async (store, path) => {
       store.putMcpServer("local", { type: "stdio", command: "bunx", args: ["-y", "server-filesystem"] });
 
-      expect(store.readMcp()).toEqual({
-        servers: { local: { type: "stdio", command: "bunx", args: ["-y", "server-filesystem"] } },
+      expect(store.read().mcpServers).toEqual({
+        local: { type: "stdio", command: "bunx", args: ["-y", "server-filesystem"] },
       });
       expect(readSettingsFile(path).mcpServers).toEqual({
         local: { type: "stdio", command: "bunx", args: ["-y", "server-filesystem"] },
@@ -107,7 +109,7 @@ describe("設定ストア", () => {
       expect(readSettingsFile(path).port).toBe(4567);
 
       expect(store.deleteMcpServer("local")).toBe(true);
-      expect(store.readMcp().servers).toEqual({});
+      expect(store.read().mcpServers).toEqual({});
       expect(readSettingsFile(path).mcpServers).toEqual({});
       expect(store.deleteMcpServer("local")).toBe(false);
     });

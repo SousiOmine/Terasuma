@@ -8,7 +8,7 @@ import {
 } from "@modelcontextprotocol/client";
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
 import { jsonSchema, tool, type JSONSchema7, type ToolSet } from "ai";
-import type { McpHttpServerSettings, McpServerSettings, McpServersSettings } from "../../config";
+import type { McpHttpServerSettings, McpServerSettings, McpServersSettings } from "../data/settings-schema";
 import { toolNameFor } from "../../shared/tools";
 import type { ImageRef, McpAuthorizationView, McpServerStatusView, McpTestView } from "../../shared/types";
 import {
@@ -304,7 +304,7 @@ export function createMcpManager(options: McpManagerOptions): McpManager {
 
   /** 設定から MCP サーバー 1 件を取り出す。無ければ失敗させる。 */
   function requireServer(serverId: string): McpServerSettings {
-    const server = settings.readMcp().servers[serverId];
+    const server = settings.read().mcpServers[serverId];
     if (server === undefined) throw new McpServerNotFound(serverId);
     return server;
   }
@@ -329,7 +329,7 @@ export function createMcpManager(options: McpManagerOptions): McpManager {
     },
 
     async check(serverId) {
-      const servers = settings.readMcp().servers;
+      const servers = settings.read().mcpServers;
       if (servers[serverId] === undefined) throw new McpServerNotFound(serverId);
       // 認可を待っている間は繋ぎに行かない。接続を試すと認可の要求が作り直され、
       // ブラウザで開いている URL が使えなくなる。
@@ -390,7 +390,7 @@ export function createMcpManager(options: McpManagerOptions): McpManager {
     },
 
     async toolset() {
-      const servers = settings.readMcp().servers;
+      const servers = settings.read().mcpServers;
       if (Object.keys(servers).length === 0) return {};
 
       await ensureConnections(servers);
@@ -427,7 +427,7 @@ export function createMcpManager(options: McpManagerOptions): McpManager {
       if (serverId === null) throw new Error("認可の state を読めませんでした（認可をやり直してください）");
 
       // 保存前の確認で始めた認可は、その候補の接続先で終わらせる（設定にはまだ書かれていない）。
-      const candidate = pendingTests.get(serverId)?.server ?? settings.readMcp().servers[serverId];
+      const candidate = pendingTests.get(serverId)?.server ?? settings.read().mcpServers[serverId];
       if (candidate === undefined) throw new McpServerNotFound(serverId);
       const server = asHttpServer(serverId, candidate);
 
