@@ -1,3 +1,4 @@
+import { isChatEvent } from "./chat-event";
 import type { ChatEvent } from "./types";
 
 /**
@@ -40,7 +41,8 @@ export function decodeChatEvents(buffer: string): { events: ChatEvent[]; rest: s
     } catch (error) {
       throw new Error(`JSON として読めない SSE フレームを受け取った: ${data}`, { cause: error });
     }
-    events.push(parsed as ChatEvent);
+    if (!isChatEvent(parsed)) throw new Error(`読めない ChatEvent を受け取った: ${data}`);
+    events.push(parsed);
   }
 
   return { events, rest: buffer.slice(cursor) };

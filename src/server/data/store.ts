@@ -1,4 +1,5 @@
 import { Database } from "bun:sqlite";
+import { isMessagePart } from "../../shared/chat-event";
 import type { ChatMessage, MessagePart, MessageRole, Tera, TokenUsage } from "../../shared/types";
 
 /**
@@ -100,10 +101,10 @@ function readParts(row: MessageRow): MessagePart[] | null {
   if (row.parts === null) return null;
 
   const parsed: unknown = JSON.parse(row.parts);
-  if (!Array.isArray(parsed)) {
-    throw new Error(`メッセージ ${row.id} の parts は配列ではありません`);
+  if (!Array.isArray(parsed) || !parsed.every(isMessagePart)) {
+    throw new Error(`メッセージ ${row.id} の parts は部品の配列ではありません`);
   }
-  return parsed as MessagePart[];
+  return parsed;
 }
 
 export type CreateStoreOptions = {
