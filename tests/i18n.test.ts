@@ -1,7 +1,48 @@
 import { describe, expect, test } from "bun:test";
+import { readdirSync, readFileSync } from "node:fs";
+import { join, relative } from "node:path";
 import { setLocale, t } from "../src/client/i18n";
 import { en } from "../src/client/i18n/en";
 import { ja } from "../src/client/i18n/ja";
+import { API_ERROR_CODES } from "../src/shared/types";
+
+const root = join(import.meta.dir, "..");
+
+function walk(dir: string): string[] {
+  const files: string[] = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) files.push(...walk(path));
+    else if (entry.name.endsWith(".ts") || entry.name.endsWith(".tsx")) files.push(path);
+  }
+  return files;
+}
+
+/** 画面のコードが参照しているキー。辞書そのものは数えない。 */
+function referencedKeys(): Set<string> {
+  const keys = new Set<string>();
+
+  for (const file of walk(join(root, "src/client"))) {
+    const where = relative(root, file).split("\\").join("/");
+    if (where.startsWith("src/client/i18n/")) continue;
+
+    const source = readFileSync(file, "utf8");
+    for (const match of source.matchAll(/"([a-z][a-zA-Z0-9]*(?:\.[a-zA-Z0-9_]+)+)"/g)) {
+      const key = match[1];
+      if (key !== undefined) keys.add(key);
+    }
+  }
+
+  // 失敗の文言は `error.${code}` で組み立てるので、コードの一覧から足す。
+  for (const code of [...API_ERROR_CODES, "network", "input", "mcp_unreachable"]) keys.add(`error.${code}`);
+
+  return keys;
+}
+
+/** 文言に埋め込む差し込みの名前。 */
+function placeholders(text: string): string[] {
+  return [...text.matchAll(/\{(\w+)\}/g)].map((match) => match[1] ?? "").sort();
+}
 
 describe("i18n", () => {
   test("ja と en は同じキーを持つ", () => {
@@ -22,6 +63,31 @@ describe("i18n", () => {
       if (key === "app.name") continue; // 固有名詞
       expect(/[ぁ-んァ-ヶ一-龯]/.test(value), `ja: ${key} = ${value}`).toBe(true);
     }
+  });
+
+  test("差し込みの名前は ja と en で揃っている", () => {
+    for (const key of Object.keys(en) as (keyof typeof en)[]) {
+      expect(placeholders(ja[key]), key).toEqual(placeholders(en[key]));
+    }
+  });
+
+  test("差し込んだ値が文言に入る", () => {
+    setLocale("en");
+    expect(t("settings.mcp.tools", { count: 3 })).toBe("Tools (3)");
+
+    setLocale("ja");
+    expect(t("settings.mcp.tools", { count: 3 })).toBe("ツール (3)");
+  });
+
+  test("画面が参照するキーはすべて辞書にある", () => {
+    const missing = [...referencedKeys()].filter((key) => !(key in en));
+    expect(missing).toEqual([]);
+  });
+
+  test("辞書のキーはすべて画面から参照されている", () => {
+    const referenced = referencedKeys();
+    const unused = Object.keys(en).filter((key) => !referenced.has(key));
+    expect(unused).toEqual([]);
   });
 
   test("ロケールを切り替えると文言が変わる", () => {

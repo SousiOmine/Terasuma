@@ -27,7 +27,9 @@ function importsOf(file: string): string[] {
   const from = relative(root, file).split("\\").join("/");
 
   return [...source.matchAll(/(?:from|import)\s*\(?\s*["'](\.[^"']+)["']/g)].map((match) => {
-    const target = relative(root, join(root, dirname(from), match[1] ?? "")).split("\\").join("/");
+    const target = relative(root, join(root, dirname(from), match[1] ?? ""))
+      .split("\\")
+      .join("/");
     return target;
   });
 }
@@ -66,9 +68,13 @@ describe("依存の向き", () => {
   });
 
   test("プロバイダの種別表は AI SDK を読み込まない", () => {
-    const source = readFileSync(join(root, "src/server/provider/kinds.ts"), "utf8");
-    expect(source).not.toContain('from "ai"');
-    expect(source).not.toContain("@ai-sdk/");
-    expect(source).not.toContain("@openrouter/");
+    const file = join(root, "src/server/provider/kinds.ts");
+    const source = readFileSync(file, "utf8");
+    // npm 名は表のデータとして載っているので、import の行だけを見る。
+    const imported = [...source.matchAll(/from\s+["']([^"']+)["']/g)].map((match) => match[1] ?? "");
+
+    expect(
+      imported.filter((name) => name === "ai" || name.startsWith("@ai-sdk/") || name.startsWith("@openrouter/")),
+    ).toEqual([]);
   });
 });
