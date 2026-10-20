@@ -1,8 +1,8 @@
-import { view } from "../state";
-import { ChatView } from "./ChatView";
-import { ComputerPane } from "./ComputerPane";
-import { SettingsView } from "./SettingsView";
-import { Sidebar } from "./Sidebar";
+import { view } from "./state/route";
+import { ChatView } from "./features/chat/ChatView";
+import { ComputerPane } from "./features/chat/ComputerPane";
+import { SettingsView } from "./features/settings/SettingsView";
+import { Sidebar } from "./features/chat/Sidebar";
 
 export function App() {
   // 設定は全画面で開くので、チャット側のレイアウトごと差し替える。

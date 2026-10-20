@@ -1,15 +1,15 @@
 import { IconExternalLink } from "@tabler/icons-preact";
 import { useEffect, useRef, useState } from "preact/hooks";
-import { mcpServerIdProblem } from "../../shared/ids";
-import type { McpServerForm, McpServerView, McpTestView } from "../../shared/types";
-import * as api from "../api";
-import { toErrorState, type ErrorState } from "../errors";
-import { t } from "../i18n";
-import { AUTHORIZATION_POLL_MS, AUTHORIZATION_TIMEOUT_MS, saveMcpServer } from "../mcpSettings";
-import { Button } from "./Button";
-import { ErrorNotice } from "./ErrorNotice";
-import { Field } from "./Field";
-import { Modal } from "./Modal";
+import { mcpServerIdProblem } from "../../../shared/ids";
+import type { McpServerForm, McpServerView, McpTestView } from "../../../shared/types";
+import * as api from "../../lib/api";
+import { toErrorState, type ErrorState } from "../../lib/errors";
+import { t } from "../../i18n";
+import { AUTHORIZATION_POLL_MS, AUTHORIZATION_TIMEOUT_MS, saveMcpServer } from "../../state/mcp";
+import { Button } from "../../ui/Button";
+import { ErrorNotice } from "../../ui/ErrorNotice";
+import { Field } from "../../ui/Field";
+import { Modal } from "../../ui/Modal";
 
 /** 新しく追加するか、設定済みのものを変更するか。 */
 export type McpDialogMode = { kind: "add" } | { kind: "edit"; server: McpServerView };

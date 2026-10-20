@@ -1,6 +1,8 @@
 import { IconSettings } from "@tabler/icons-preact";
-import { t } from "../i18n";
-import { activeTeraId, openSettings, openTera, teras } from "../state";
+import { t } from "../../i18n";
+import { openTera } from "../../state/chat";
+import { openSettings } from "../../state/route";
+import { activeTeraId, teras } from "../../state/session";
 
 /**
  * Tera の一覧。会話は Tera ごとに 1 本なので、並ぶのは会話ではなく Tera。

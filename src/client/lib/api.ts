@@ -1,11 +1,8 @@
-import { decodeChatEvents } from "../shared/sse";
-import { describeError } from "../shared/errors";
-import type { ReplyLanguage } from "../shared/language";
-import type { ModelId } from "../shared/model";
-import { API_ERROR_CODES } from "../shared/types";
+import type { ReplyLanguage } from "../../shared/language";
+import type { ModelId } from "../../shared/model";
+import { decodeChatEvents } from "../../shared/sse";
 import type {
   AddProviderForm,
-  ApiErrorCode,
   CatalogProviderView,
   ChatEvent,
   ChatMessage,
@@ -21,10 +18,12 @@ import type {
   ProviderForm,
   ReasoningView,
   Tera,
-} from "../shared/types";
+} from "../../shared/types";
 
-/** サーバが返すコードに、クライアント側だけで発生するコードを足したもの。 */
-export type ClientErrorCode = ApiErrorCode | "network" | "input" | "mcp_unreachable";
+import { ApiError, fetchOrThrow, jsonRequest, request } from "./http";
+
+export type { ClientErrorCode } from "./http";
+export { ApiError } from "./http";
 
 /** モデルとプロバイダの設定。 */
 const MODEL_PATH = "/api/model";
@@ -40,18 +39,6 @@ const CONTAINER_PATH = "/api/container";
 
 /** 画面を渡している間の返事。 */
 const HANDOVER_PATH = "/api/computer/handover";
-
-export class ApiError extends Error {
-  readonly code: ClientErrorCode;
-  readonly detail: string | null;
-
-  constructor(code: ClientErrorCode, detail: string | null = null) {
-    super(detail ?? code);
-    this.name = "ApiError";
-    this.code = code;
-    this.detail = detail;
-  }
-}
 
 /** 画面に並べる Tera の一覧。 */
 export async function listTeras(): Promise<readonly Tera[]> {
@@ -77,18 +64,13 @@ export async function* streamTurn(
 ): AsyncGenerator<ChatEvent> {
   let response: Response;
   try {
-    response = await fetch(messagesPath(teraId), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ content, language }),
-      signal,
-    });
+    response = await fetchOrThrow(messagesPath(teraId), jsonRequest("POST", { content, language }, signal));
   } catch (error) {
+    // 利用者の「停止」は失敗ではないので、そのまま終わる。
     if (signal.aborted) return;
-    throw new ApiError("network", describeError(error));
+    throw error;
   }
 
-  if (!response.ok) throw await toApiError(response);
   if (response.body === null) throw new ApiError("internal_error", "response has no body");
 
   const reader = response.body.getReader();
@@ -235,14 +217,7 @@ export async function answerHandover(
   teraId: string,
   answer: { kind: "done" } | { kind: "text"; text: string },
 ): Promise<void> {
-  let response: Response;
-  try {
-    response = await fetch(HANDOVER_PATH, jsonRequest("POST", { teraId, ...answer }));
-  } catch (error) {
-    throw new ApiError("network", describeError(error));
-  }
-
-  if (!response.ok) throw await toApiError(response);
+  await fetchOrThrow(HANDOVER_PATH, jsonRequest("POST", { teraId, ...answer }));
 }
 
 /** コンテナのいまの状態（podman に問い合わせた結果）。 */
@@ -258,41 +233,4 @@ export async function startContainer(): Promise<ContainerStatusView> {
 /** コンテナを作り直す。ホームの中身も消すかどうかを選べる。 */
 export async function resetContainer(wipeHome: boolean): Promise<ContainerStatusView> {
   return request<ContainerStatusView>(`${CONTAINER_PATH}/reset`, jsonRequest("POST", { wipeHome }));
-}
-
-/** JSON を送るリクエストの共通部分。 */
-function jsonRequest(method: string, body: unknown): RequestInit {
-  return {
-    method,
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  };
-}
-
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  let response: Response;
-  try {
-    response = await fetch(path, init);
-  } catch (error) {
-    throw new ApiError("network", describeError(error));
-  }
-
-  if (!response.ok) throw await toApiError(response);
-  return (await response.json()) as T;
-}
-
-async function toApiError(response: Response): Promise<ApiError> {
-  try {
-    const body = (await response.json()) as { code?: unknown; detail?: unknown };
-    const code: ClientErrorCode = isApiErrorCode(body.code) ? body.code : "internal_error";
-    const detail = typeof body.detail === "string" ? body.detail : `HTTP ${response.status}`;
-    return new ApiError(code, detail);
-  } catch {
-    // 本文が JSON でない場合（404 のプレーンテキストなど）
-    return new ApiError("internal_error", `HTTP ${response.status}`);
-  }
-}
-
-function isApiErrorCode(value: unknown): value is ApiErrorCode {
-  return typeof value === "string" && (API_ERROR_CODES as readonly string[]).includes(value);
 }

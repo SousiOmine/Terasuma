@@ -1,14 +1,18 @@
 import { signal } from "@preact/signals";
-import type { McpServerForm, McpServerStatusView, McpServersView } from "../shared/types";
-import * as api from "./api";
-import { toErrorState, type ErrorState } from "./errors";
+import type { McpServerForm, McpServerStatusView, McpServersView } from "../../shared/types";
+import * as api from "../lib/api";
+import { createErrorSignal } from "../lib/errors";
+import { pollUntil } from "../lib/polling";
 
 /** サーバーから読んだ MCP サーバーの一覧。まだ読めていないときは null。 */
 export const mcpServers = signal<McpServersView | null>(null);
 export const isLoadingMcp = signal(false);
 
 /** 詳細設定の中だけに出す失敗。 */
-export const mcpError = signal<ErrorState | null>(null);
+const failure = createErrorSignal();
+export const mcpError = failure.error;
+export const showMcpError = failure.show;
+export const clearMcpError = failure.clear;
 
 /** 接続を確認しているサーバー。操作中の表示に使う。 */
 export const checkingServer = signal<string | null>(null);
@@ -82,41 +86,29 @@ export async function cancelAuthorization(serverId: string): Promise<void> {
   stopAuthorizing();
 }
 
-export function showMcpError(error: unknown): void {
-  mcpError.value = toErrorState(error);
-}
-
-export function clearMcpError(): void {
-  mcpError.value = null;
-}
-
 /**
  * 認可が終わるまで、接続を確かめる要求を繰り返す。
  * 認可はブラウザの別タブで進むため、こちらからは状態を尋ねるしかない。
  */
 async function waitForAuthorization(serverId: string): Promise<void> {
-  const deadline = Date.now() + AUTHORIZATION_TIMEOUT_MS;
+  const outcome = await pollUntil({
+    intervalMs: AUTHORIZATION_POLL_MS,
+    timeoutMs: AUTHORIZATION_TIMEOUT_MS,
+    cancelled: () => authorizingServer.value !== serverId,
+    probe: () => api.checkMcpServer(serverId),
+    done: (status) => status.state !== "authorizing",
+  });
 
-  while (authorizingServer.value === serverId && Date.now() < deadline) {
-    await new Promise((resolve) => setTimeout(resolve, AUTHORIZATION_POLL_MS));
-    if (authorizingServer.value !== serverId) return;
+  if (outcome.kind === "cancelled") return;
 
-    try {
-      const status = await api.checkMcpServer(serverId);
-      applyStatus(serverId, status);
-      if (status.state !== "authorizing") {
-        stopAuthorizing();
-        return;
-      }
-    } catch (error) {
-      // 確かめられないまま繰り返しても進まないので、理由を出して止める。
-      showMcpError(error);
-      stopAuthorizing();
-      return;
-    }
+  if (outcome.kind === "value") {
+    applyStatus(serverId, outcome.value);
+  } else if (outcome.kind === "error") {
+    // 確かめられないまま繰り返しても進まないので、理由を出して止める。
+    showMcpError(outcome.error);
   }
 
-  if (authorizingServer.value === serverId) stopAuthorizing();
+  stopAuthorizing();
 }
 
 function stopAuthorizing(): void {

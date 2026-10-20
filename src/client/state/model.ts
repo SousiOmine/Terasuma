@@ -1,5 +1,5 @@
 import { computed, signal } from "@preact/signals";
-import { modelProvider, type ModelId } from "../shared/model";
+import { modelProvider, type ModelId } from "../../shared/model";
 import type {
   AddProviderForm,
   CatalogProviderView,
@@ -7,9 +7,9 @@ import type {
   ProviderCredentials,
   ProviderView,
   ReasoningView,
-} from "../shared/types";
-import * as api from "./api";
-import { toErrorState, type ErrorState } from "./errors";
+} from "../../shared/types";
+import * as api from "../lib/api";
+import { createErrorSignal } from "../lib/errors";
 
 /** 既定のモデルが使えない理由。 */
 export type ModelProblem = "unset" | "provider-missing";
@@ -19,7 +19,10 @@ export const modelSettings = signal<ModelSettingsView | null>(null);
 export const isLoadingSettings = signal(false);
 
 /** 設定画面の中だけに出す失敗。チャット側のエラー表示とは分けてある。 */
-export const settingsError = signal<ErrorState | null>(null);
+const failure = createErrorSignal();
+export const settingsError = failure.error;
+export const showSettingsError = failure.show;
+export const clearSettingsError = failure.clear;
 
 /** models.dev のカタログ。まだ読めていないときは null。 */
 export const catalogProviders = signal<readonly CatalogProviderView[] | null>(null);
@@ -101,12 +104,4 @@ export async function updateProvider(providerId: string, credentials: ProviderCr
 
 export async function removeProvider(providerId: string): Promise<void> {
   modelSettings.value = await api.deleteProvider(providerId);
-}
-
-export function showSettingsError(error: unknown): void {
-  settingsError.value = toErrorState(error);
-}
-
-export function clearSettingsError(): void {
-  settingsError.value = null;
 }

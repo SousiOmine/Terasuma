@@ -1,8 +1,8 @@
 import { IconExternalLink, IconPencil, IconPlus, IconRefresh, IconTrash } from "@tabler/icons-preact";
 import { useEffect, useState } from "preact/hooks";
-import type { McpServerState, McpServerView } from "../../shared/types";
-import type { MessageKey } from "../i18n";
-import { t } from "../i18n";
+import type { McpServerState, McpServerView } from "../../../shared/types";
+import type { MessageKey } from "../../i18n";
+import { t } from "../../i18n";
 import {
   authorizationUrl,
   authorizingServer,
@@ -17,10 +17,10 @@ import {
   removeMcpServer,
   showMcpError,
   startAuthorization,
-} from "../mcpSettings";
-import { Button } from "./Button";
-import { ConfirmDialog } from "./ConfirmDialog";
-import { ErrorNotice } from "./ErrorNotice";
+} from "../../state/mcp";
+import { Button } from "../../ui/Button";
+import { ConfirmDialog } from "../../ui/ConfirmDialog";
+import { ErrorNotice } from "../../ui/ErrorNotice";
 import { McpServerDialog, type McpDialogMode } from "./McpServerDialog";
 
 const CARD_ACTION_CLASS = "rounded-lg px-2 py-1 text-xs transition hover:bg-neutral-100 dark:hover:bg-neutral-800";

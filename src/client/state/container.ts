@@ -1,7 +1,7 @@
 import { signal } from "@preact/signals";
-import type { ContainerStatusView } from "../shared/types";
-import * as api from "./api";
-import { toErrorState, type ErrorState } from "./errors";
+import type { ContainerStatusView } from "../../shared/types";
+import * as api from "../lib/api";
+import { createErrorSignal } from "../lib/errors";
 
 /**
  * コンテナの状態と操作。
@@ -20,7 +20,10 @@ export type ContainerOperation = "start" | "reset";
 export const containerBusy = signal<ContainerOperation | null>(null);
 
 /** 設定画面の中だけに出す失敗。 */
-export const containerError = signal<ErrorState | null>(null);
+const failure = createErrorSignal();
+export const containerError = failure.error;
+export const showContainerError = failure.show;
+export const clearContainerError = failure.clear;
 
 /** いまの状態を読み直す。 */
 export async function loadContainer(): Promise<void> {
@@ -46,12 +49,4 @@ async function run(operation: ContainerOperation, call: () => Promise<ContainerS
   } finally {
     containerBusy.value = null;
   }
-}
-
-export function showContainerError(error: unknown): void {
-  containerError.value = toErrorState(error);
-}
-
-export function clearContainerError(): void {
-  containerError.value = null;
 }

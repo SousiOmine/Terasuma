@@ -1,5 +1,5 @@
-import type { MessageRole } from "../../shared/types";
-import { t } from "../i18n";
+import type { MessageRole } from "../../../shared/types";
+import { t } from "../../i18n";
 
 export type MessageBubbleProps = {
   /** 発言者。user か assistant。 */

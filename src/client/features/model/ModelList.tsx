@@ -1,6 +1,6 @@
 import { IconCheck, IconSearch } from "@tabler/icons-preact";
 import { useState } from "preact/hooks";
-import { t } from "../i18n";
+import { t } from "../../i18n";
 
 export type ModelListProps = {
   models: readonly string[];

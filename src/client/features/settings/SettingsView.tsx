@@ -1,10 +1,10 @@
 import { IconArrowLeft } from "@tabler/icons-preact";
-import type { Locale, MessageKey } from "../i18n";
-import { LOCALES, locale, setLocale, t } from "../i18n";
-import { closeSettings, settingsCategory, type SettingsCategory } from "../state";
-import { ContainerSettingsView } from "./ContainerSettingsView";
-import { McpSettingsView } from "./McpSettingsView";
-import { ModelSettingsView } from "./ModelSettingsView";
+import type { Locale, MessageKey } from "../../i18n";
+import { LOCALES, locale, setLocale, t } from "../../i18n";
+import { closeSettings, setSettingsCategory, settingsCategory, type SettingsCategory } from "../../state/route";
+import { ContainerSettingsView } from "../container/ContainerSettingsView";
+import { McpSettingsView } from "../mcp/McpSettingsView";
+import { ModelSettingsView } from "../model/ModelSettingsView";
 
 /** 左ペインに並べるカテゴリ。増やすときはここに足す。 */
 const CATEGORIES: readonly { id: SettingsCategory; labelKey: MessageKey }[] = [
@@ -47,9 +47,7 @@ export function SettingsView() {
                   <button
                     type="button"
                     aria-current={active ? "true" : undefined}
-                    onClick={() => {
-                      settingsCategory.value = item.id;
-                    }}
+                    onClick={() => setSettingsCategory(item.id)}
                     class={`w-full rounded-lg px-3 py-2 text-left text-sm transition ${
                       active
                         ? "bg-white shadow-sm dark:bg-neutral-800"

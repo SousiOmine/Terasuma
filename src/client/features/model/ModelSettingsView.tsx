@@ -1,8 +1,8 @@
 import { IconPencil, IconPlus, IconTrash } from "@tabler/icons-preact";
 import { useEffect, useState } from "preact/hooks";
-import { modelProvider } from "../../shared/model";
-import type { ProviderView } from "../../shared/types";
-import { t } from "../i18n";
+import { modelProvider } from "../../../shared/model";
+import type { ProviderView } from "../../../shared/types";
+import { t } from "../../i18n";
 import {
   catalogProviders,
   clearSettingsError,
@@ -18,10 +18,10 @@ import {
   saveReasoning,
   settingsError,
   showSettingsError,
-} from "../modelSettings";
-import { Button } from "./Button";
-import { ConfirmDialog } from "./ConfirmDialog";
-import { ErrorNotice } from "./ErrorNotice";
+} from "../../state/model";
+import { Button } from "../../ui/Button";
+import { ConfirmDialog } from "../../ui/ConfirmDialog";
+import { ErrorNotice } from "../../ui/ErrorNotice";
 import { ModelPickerDialog } from "./ModelPickerDialog";
 import { ProviderWizard, type WizardMode } from "./ProviderWizard";
 

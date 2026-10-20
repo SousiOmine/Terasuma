@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from "preact/hooks";
-import { modelId, modelParts, modelProvider } from "../../shared/model";
-import * as api from "../api";
-import { toErrorState, type ErrorState } from "../errors";
-import { t } from "../i18n";
-import { modelSettings, providerName, providers, saveDefaultModel } from "../modelSettings";
-import { Button } from "./Button";
-import { ErrorNotice } from "./ErrorNotice";
-import { Modal } from "./Modal";
+import { modelId, modelParts, modelProvider } from "../../../shared/model";
+import * as api from "../../lib/api";
+import { toErrorState, type ErrorState } from "../../lib/errors";
+import { t } from "../../i18n";
+import { modelSettings, providerName, providers, saveDefaultModel } from "../../state/model";
+import { Button } from "../../ui/Button";
+import { ErrorNotice } from "../../ui/ErrorNotice";
+import { Modal } from "../../ui/Modal";
 import { ModelList } from "./ModelList";
 
 export type ModelPickerDialogProps = {

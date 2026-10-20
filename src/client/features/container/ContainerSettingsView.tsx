@@ -1,7 +1,7 @@
 import { useEffect, useState } from "preact/hooks";
-import type { ContainerState } from "../../shared/types";
-import type { MessageKey } from "../i18n";
-import { t } from "../i18n";
+import type { ContainerState } from "../../../shared/types";
+import type { MessageKey } from "../../i18n";
+import { t } from "../../i18n";
 import {
   clearContainerError,
   containerBusy,
@@ -11,10 +11,10 @@ import {
   resetContainer,
   showContainerError,
   startContainer,
-} from "../containerSettings";
-import { Button } from "./Button";
-import { ConfirmDialog } from "./ConfirmDialog";
-import { ErrorNotice } from "./ErrorNotice";
+} from "../../state/container";
+import { Button } from "../../ui/Button";
+import { ConfirmDialog } from "../../ui/ConfirmDialog";
+import { ErrorNotice } from "../../ui/ErrorNotice";
 
 /** 状態の表示。文言は i18n にまとめる（状態に色は付けない）。 */
 const STATE_LABELS: Record<ContainerState, MessageKey> = {

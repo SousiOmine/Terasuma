@@ -1,22 +1,29 @@
 import { IconChevronRight, IconSearch } from "@tabler/icons-preact";
 import { useEffect, useRef, useState } from "preact/hooks";
-import { modelId } from "../../shared/model";
-import { trimOrNull } from "../../shared/strings";
+import { modelId } from "../../../shared/model";
+import { trimOrNull } from "../../../shared/strings";
 import {
   ENDPOINT_PRESETS,
   OPENAI_COMPATIBLE_TEMPLATE,
   findEndpointPreset,
   type EndpointPreset,
-} from "../../shared/providers";
-import type { CatalogProviderView, ProviderCredentials, ProviderView } from "../../shared/types";
-import * as api from "../api";
-import { toErrorState, type ErrorState } from "../errors";
-import { t } from "../i18n";
-import { addProvider, catalogProviders, loadCatalog, modelSettings, providers, updateProvider } from "../modelSettings";
-import { Button } from "./Button";
-import { ErrorNotice } from "./ErrorNotice";
-import { Field } from "./Field";
-import { Modal } from "./Modal";
+} from "../../../shared/providers";
+import type { CatalogProviderView, ProviderCredentials, ProviderView } from "../../../shared/types";
+import * as api from "../../lib/api";
+import { toErrorState, type ErrorState } from "../../lib/errors";
+import { t } from "../../i18n";
+import {
+  addProvider,
+  catalogProviders,
+  loadCatalog,
+  modelSettings,
+  providers,
+  updateProvider,
+} from "../../state/model";
+import { Button } from "../../ui/Button";
+import { ErrorNotice } from "../../ui/ErrorNotice";
+import { Field } from "../../ui/Field";
+import { Modal } from "../../ui/Modal";
 import { ModelList } from "./ModelList";
 
 /** 新しく追加するか、設定済みのものを変更するか。 */

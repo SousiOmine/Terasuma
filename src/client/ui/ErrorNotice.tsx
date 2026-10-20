@@ -1,5 +1,5 @@
 import type { ComponentChildren } from "preact";
-import type { ErrorState } from "../errors";
+import type { ErrorState } from "../lib/errors";
 import { t } from "../i18n";
 
 export type ErrorNoticeProps = {

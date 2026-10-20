@@ -1,8 +1,9 @@
 import { IconPlayerStopFilled, IconSend } from "@tabler/icons-preact";
 import { useEffect, useRef, useState } from "preact/hooks";
-import { isSendKey } from "../composerKeys";
-import { t } from "../i18n";
-import { handoverQuestion, isStreaming, sendMessage, stopStreaming } from "../state";
+import { isSendKey } from "../../lib/composer-keys";
+import { t } from "../../i18n";
+import { isStreaming, sendMessage, stopStreaming } from "../../state/chat";
+import { handoverQuestion } from "../../state/handover";
 
 const MAX_TEXTAREA_HEIGHT = 200;
 

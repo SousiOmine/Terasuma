@@ -1,23 +1,15 @@
 import { IconLayoutSidebarRight } from "@tabler/icons-preact";
 import { useEffect, useMemo, useRef } from "preact/hooks";
-import { containerStatus } from "../containerSettings";
-import { t } from "../i18n";
-import { modelProblem } from "../modelSettings";
-import {
-  activeTera,
-  clearError,
-  computerPaneOpen,
-  errorCode,
-  errorDetail,
-  isLoadingMessages,
-  isStreaming,
-  messages,
-  openSettings,
-  streamingText,
-  toggleComputerPane,
-} from "../state";
+import { containerStatus } from "../../state/container";
+import { t } from "../../i18n";
+import { modelProblem } from "../../state/model";
+import { isLoadingMessages, isStreaming, messages, streamingText } from "../../state/chat";
+import { chatError, clearChatError } from "../../state/failure";
+import { computerPaneOpen, toggleComputerPane } from "../../state/handover";
+import { openSettings } from "../../state/route";
+import { activeTera } from "../../state/session";
 import { Composer } from "./Composer";
-import { ErrorNotice } from "./ErrorNotice";
+import { ErrorNotice } from "../../ui/ErrorNotice";
 import { MessageBubble } from "./MessageBubble";
 
 export function ChatView() {
@@ -25,7 +17,7 @@ export function ChatView() {
   const pending = streamingText.value;
   const streaming = isStreaming.value;
   const loading = isLoadingMessages.value;
-  const error = errorCode.value;
+  const error = chatError.value;
   const problem = modelProblem.value;
   // コンテナが使えないことは、呼んでから失敗させるのではなく、先に画面へ出しておく。
   const containerMissing = containerStatus.value?.state === "podman_missing";
@@ -130,15 +122,19 @@ export function ChatView() {
         <div class="px-5 pb-2">
           <div class="mx-auto w-full max-w-3xl">
             <ErrorNotice
-              error={{ code: error, detail: errorDetail.value }}
+              error={error}
               action={
                 <div class="flex shrink-0 flex-col items-end gap-1">
-                  {error === "model_not_configured" && (
+                  {error.code === "model_not_configured" && (
                     <button type="button" onClick={() => openSettings("model")} class="text-xs underline">
                       {t("chat.openSettings")}
                     </button>
                   )}
-                  <button type="button" onClick={clearError} class="text-xs opacity-70 transition hover:opacity-100">
+                  <button
+                    type="button"
+                    onClick={clearChatError}
+                    class="text-xs opacity-70 transition hover:opacity-100"
+                  >
                     {t("error.dismiss")}
                   </button>
                 </div>

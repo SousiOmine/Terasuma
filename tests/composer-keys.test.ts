@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { isSendKey, type SendKeyEvent } from "../src/client/composerKeys";
+import { isSendKey, type SendKeyEvent } from "../src/client/lib/composer-keys";
 
 /** 押されたキーの組み合わせを作る。既定は Enter 単独。 */
 function press(overrides: Partial<SendKeyEvent>): SendKeyEvent {
