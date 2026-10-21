@@ -127,11 +127,13 @@ export function ComputerPane() {
 
   return (
     <aside class="fixed inset-0 z-30 flex flex-col p-0 md:static md:z-auto md:w-[42%] md:min-w-80 md:shrink-0 md:p-3">
-      <section class="flex min-h-0 flex-1 flex-col overflow-hidden bg-[var(--app-surface)] md:rounded-[28px] md:border md:border-[var(--app-stroke)] md:shadow-[var(--app-shadow-panel)]">
-        <header class="flex h-16 shrink-0 items-center gap-3 border-b border-[var(--app-stroke)] px-4">
-          <h2 class="min-w-0 flex-1 truncate text-[15px] font-semibold tracking-[-0.01em]">{t("chat.computer.title")}</h2>
+      <section class="flex min-h-0 flex-1 flex-col overflow-hidden bg-[var(--app-surface)] md:rounded-[30px] md:border md:border-[var(--app-stroke)] md:shadow-[var(--app-shadow-panel)]">
+        <header class="flex h-16 shrink-0 items-center gap-3 px-4">
+          <h2 class="min-w-0 flex-1 truncate text-[15px] font-semibold tracking-[-0.01em]">
+            {t("chat.computer.title")}
+          </h2>
           {active && (
-            <span class="shrink-0 rounded-full bg-[var(--app-soft)] px-2.5 py-1 text-xs text-[var(--app-text)]">
+            <span class="shrink-0 rounded-full bg-[var(--app-accent-soft)] px-2.5 py-1 text-[11px] font-medium text-[var(--app-accent-ink)]">
               {t("chat.computer.yourTurn")}
             </span>
           )}
@@ -147,14 +149,14 @@ export function ComputerPane() {
         </header>
 
         {active && (
-          <div class="mx-3 mt-3 shrink-0 rounded-2xl bg-[var(--app-soft)] px-4 py-3">
+          <div class="mx-3 mt-3 shrink-0 rounded-[16px] bg-[var(--app-accent-soft)] px-4 py-3">
             <p class="text-xs leading-relaxed whitespace-pre-wrap text-[var(--app-text)]">
               {question ?? t("chat.computer.yourTurn")}
             </p>
             <button
               type="button"
               onClick={() => void answerHandover({ kind: "done" })}
-              class="mt-2 rounded-full bg-[var(--app-ink-fill)] px-3 py-1.5 text-xs font-medium text-[var(--app-on-ink)] transition hover:bg-[var(--app-ink-hover)]"
+              class="mt-2 rounded-full bg-[var(--app-accent-fill)] px-3 py-1.5 text-xs font-medium text-[var(--app-on-accent)] transition hover:bg-[var(--app-accent-hover)]"
             >
               {t("chat.computer.done")}
             </button>
@@ -167,7 +169,7 @@ export function ComputerPane() {
                 void submitAnswer();
               }}
             >
-              <div class="flex items-center gap-1.5 rounded-full border border-[var(--app-stroke)] bg-[var(--app-surface)] px-2 py-2 shadow-[var(--app-shadow-2)] focus-within:border-[var(--app-ink)]">
+              <div class="flex items-center gap-1.5 rounded-full border border-[var(--app-stroke)] bg-[var(--app-surface)] px-2 py-2 shadow-[var(--app-shadow-2)] transition focus-within:border-[var(--app-accent)] focus-within:shadow-[0_0_0_4px_var(--app-ring)]">
                 <input
                   type="text"
                   value={answer}
@@ -182,7 +184,7 @@ export function ComputerPane() {
                   disabled={!canAnswer}
                   title={t("composer.send")}
                   aria-label={t("composer.send")}
-                  class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--app-ink-fill)] text-[var(--app-on-ink)] transition hover:bg-[var(--app-ink-hover)] disabled:opacity-30"
+                  class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--app-accent-fill)] text-[var(--app-on-accent)] transition hover:bg-[var(--app-accent-hover)] disabled:opacity-30"
                 >
                   <IconSend size={16} stroke={1.8} />
                 </button>

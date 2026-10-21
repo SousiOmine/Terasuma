@@ -1,68 +1,103 @@
 @import "tailwindcss";
 
+/* Tailwind の書体ユーティリティ（font-sans / font-mono）を、下のトークンに合わせる。 */
+@theme inline {
+  --font-sans: var(--app-font-sans);
+  --font-mono: var(--app-font-mono);
+}
+
 /*
- * モノクロのトークン。
+ * ソフトミニマリズムのトークン。
  *
- * 色相は使わない。強さは「墨（ink）」「面（surface）」「柔らかい灰（soft）」の
- * 明度差だけで作る。アクセント色は持たない。
- * 角丸は操作 12〜16px、面 24〜28px を基本にし、全体を柔らかく見せる。
+ * 画面は「紙（canvas）・面（surface）・柔らかい灰（soft）」の 3 段だけで組み、
+ * 面の色は無彩色に保つ。色相はアクセントのアイリスと、状態を示す小さな点
+ * （緑・黄・赤）だけに絞る。アクセントは主要な操作、選択、フォーカス、そして
+ * Tera の印（オーブ）に使い、面を塗るのには使わない。
+ *
+ * 角丸は 12（一覧の行）・14（入力）・16（小片）・20（カード）・24（吹き出し）・
+ * 26〜30（パネルと入力枠）と、大きさの順に段を決めてある。
+ * 影は重ねず、面の縁を柔らかくする分だけに留める。
  */
 :root {
   color-scheme: light dark;
 
-  --app-canvas: #f2f2f2;
+  --app-canvas: #f4f4f7;
   --app-surface: #ffffff;
-  --app-surface-alt: #f4f4f4;
-  --app-soft: #ededed;
-  --app-soft-strong: #dedede;
-  --app-stroke: #e6e6e6;
-  --app-stroke-strong: #cfcfcf;
+  --app-surface-alt: #f7f7fa;
+  --app-soft: #eeeef3;
+  --app-soft-strong: #e2e2ea;
+  --app-stroke: #e8e8ef;
+  --app-stroke-strong: #d3d3de;
 
-  --app-text: #111111;
-  --app-text-secondary: #6b6b6b;
-  --app-text-tertiary: #9a9a9a;
+  --app-text: #191920;
+  --app-text-secondary: #52525e;
+  --app-text-tertiary: #747480;
 
-  /* 塗りつぶしの墨。ライトは黒、ダークは白。 */
-  --app-ink: #111111;
-  --app-ink-fill: #111111;
-  --app-ink-hover: #2b2b2b;
-  --app-on-ink: #ffffff;
-  --app-on-ink-soft: rgba(255, 255, 255, 0.16);
-  --app-ring: rgba(17, 17, 17, 0.18);
+  /* アクセント。アイリス 1 色だけを、意味のある場所に限定して使う。 */
+  --app-accent: #5b4bd8;
+  --app-accent-fill: #5b4bd8;
+  --app-accent-hover: #4b3cc4;
+  --app-accent-soft: #efecfe;
+  --app-accent-ink: #4a3ac4;
+  --app-on-accent: #ffffff;
+  --app-ring: rgba(91, 75, 216, 0.22);
+  --app-selection: #ded7ff;
 
-  --app-shadow-2: 0 1px 2px rgba(0, 0, 0, 0.04), 0 2px 8px rgba(0, 0, 0, 0.04);
-  --app-shadow-4: 0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(0, 0, 0, 0.06);
-  --app-shadow-8: 0 2px 4px rgba(0, 0, 0, 0.05), 0 16px 40px rgba(0, 0, 0, 0.1);
-  --app-shadow-16: 0 2px 8px rgba(0, 0, 0, 0.06), 0 28px 72px rgba(0, 0, 0, 0.16);
-  --app-shadow-panel: 0 1px 2px rgba(0, 0, 0, 0.03), 0 20px 56px rgba(0, 0, 0, 0.08);
+  /* 状態の点。塗りつぶしのバッジではなく、小さな点としてだけ使う。 */
+  --app-success: #24845a;
+  --app-warning: #a96a0b;
+  --app-danger: #b4362e;
+  --app-danger-soft: #fceeec;
+
+  /* Tera のオーブ。面の上で唯一、色と光を持つ記号。 */
+  --app-orb-ink: #1a1433;
+
+  --app-shadow-2: 0 1px 2px rgba(23, 23, 42, 0.04), 0 2px 6px -2px rgba(23, 23, 42, 0.08);
+  --app-shadow-4: 0 1px 2px rgba(23, 23, 42, 0.04), 0 10px 24px -12px rgba(23, 23, 42, 0.18);
+  --app-shadow-16: 0 4px 12px rgba(20, 20, 40, 0.06), 0 40px 80px -28px rgba(20, 20, 40, 0.35);
+  --app-shadow-panel: 0 1px 2px rgba(23, 23, 42, 0.03), 0 24px 60px -32px rgba(23, 23, 42, 0.22);
+
+  --app-font-sans:
+    "Inter", "SF Pro Text", ui-sans-serif, system-ui, -apple-system, "Segoe UI", "Noto Sans JP", "Noto Sans CJK JP",
+    "Hiragino Sans", "Yu Gothic UI", sans-serif;
+  --app-font-mono:
+    "JetBrains Mono", ui-monospace, "SFMono-Regular", "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --app-canvas: #0b0b0b;
-    --app-surface: #151515;
-    --app-surface-alt: #1f1f1f;
-    --app-soft: #262626;
-    --app-soft-strong: #333333;
-    --app-stroke: #2a2a2a;
-    --app-stroke-strong: #3d3d3d;
+    --app-canvas: #0c0c11;
+    --app-surface: #15151b;
+    --app-surface-alt: #1b1b23;
+    --app-soft: #23232d;
+    --app-soft-strong: #2e2e3a;
+    --app-stroke: #26262f;
+    --app-stroke-strong: #3b3b47;
 
-    --app-text: #f5f5f5;
-    --app-text-secondary: #a3a3a3;
-    --app-text-tertiary: #737373;
+    --app-text: #f3f3f7;
+    --app-text-secondary: #a5a5b2;
+    --app-text-tertiary: #8b8b98;
 
-    --app-ink: #f5f5f5;
-    --app-ink-fill: #f5f5f5;
-    --app-ink-hover: #d9d9d9;
-    --app-on-ink: #111111;
-    --app-on-ink-soft: rgba(17, 17, 17, 0.1);
-    --app-ring: rgba(245, 245, 245, 0.22);
+    --app-accent: #a79cff;
+    --app-accent-fill: #b9aeff;
+    --app-accent-hover: #cbc2ff;
+    --app-accent-soft: #241f3d;
+    --app-accent-ink: #d6cfff;
+    --app-on-accent: #17131f;
+    --app-ring: rgba(167, 156, 255, 0.28);
+    --app-selection: #3a3266;
 
-    --app-shadow-2: 0 1px 2px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.35);
-    --app-shadow-4: 0 1px 2px rgba(0, 0, 0, 0.5), 0 8px 24px rgba(0, 0, 0, 0.45);
-    --app-shadow-8: 0 2px 4px rgba(0, 0, 0, 0.5), 0 16px 40px rgba(0, 0, 0, 0.55);
-    --app-shadow-16: 0 2px 8px rgba(0, 0, 0, 0.55), 0 28px 72px rgba(0, 0, 0, 0.65);
-    --app-shadow-panel: 0 1px 2px rgba(0, 0, 0, 0.4), 0 20px 56px rgba(0, 0, 0, 0.35);
+    --app-success: #5fd3a2;
+    --app-warning: #f2ba5c;
+    --app-danger: #ff9a90;
+    --app-danger-soft: #2b1715;
+
+    --app-orb-ink: #17122b;
+
+    --app-shadow-2: 0 1px 2px rgba(0, 0, 0, 0.4), 0 2px 6px -2px rgba(0, 0, 0, 0.5);
+    --app-shadow-4: 0 1px 2px rgba(0, 0, 0, 0.4), 0 10px 24px -12px rgba(0, 0, 0, 0.6);
+    --app-shadow-16: 0 4px 12px rgba(0, 0, 0, 0.5), 0 40px 80px -28px rgba(0, 0, 0, 0.75);
+    --app-shadow-panel: 0 1px 2px rgba(0, 0, 0, 0.35), 0 24px 60px -32px rgba(0, 0, 0, 0.65);
   }
 }
 
@@ -81,27 +116,39 @@ body {
   margin: 0;
   background-color: var(--app-canvas);
   color: var(--app-text);
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", "Noto Sans JP", "Hiragino Sans", sans-serif;
+  font-family: var(--app-font-sans);
   font-size: 14px;
-  line-height: 21px;
+  line-height: 22px;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   -webkit-text-size-adjust: 100%;
   /* 下端で引っ張って再読み込みしない（会話のスクロールと取り違えないようにする）。 */
   overscroll-behavior-y: none;
 }
 
 ::selection {
-  background: var(--app-soft-strong);
+  background: var(--app-selection);
+  color: var(--app-text);
 }
 
-/* キーボードで操作したときだけ、墨色のフォーカス矩形を出す。 */
+/* キーボードで操作したときだけ、アクセント色のフォーカス矩形を出す。 */
 :where(button, a, summary, [role="button"]):focus-visible {
-  outline: 2px solid var(--app-ink);
+  outline: 2px solid var(--app-accent);
   outline-offset: 3px;
 }
 
 input[type="checkbox"] {
-  accent-color: var(--app-ink);
+  accent-color: var(--app-accent);
+}
+
+/* 数字の幅を揃える（時刻、件数、モデル名の並び）。 */
+.tera-tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* 見出しの折り返しを、行の長さが揃うように調整する。 */
+.tera-balance {
+  text-wrap: balance;
 }
 
 /* スクロールバーは細く、面の色になじませる。 */
@@ -124,6 +171,32 @@ input[type="checkbox"] {
 }
 
 /*
+ * Tera のオーブ。アイリスのグラデーションに、左上の光と下側の翳りを重ねる。
+ * 文字は墨にして、明るい面の上でも読めるようにする。
+ */
+.tera-orb {
+  background:
+    radial-gradient(90% 90% at 30% 18%, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0) 44%),
+    linear-gradient(145deg, #7a68f2 0%, #8f7dfb 52%, #b9a9ff 100%);
+  box-shadow:
+    inset 0 1px 2px rgba(255, 255, 255, 0.6),
+    inset 0 -8px 14px rgba(55, 38, 150, 0.22),
+    0 8px 20px -10px rgba(86, 70, 220, 0.7);
+}
+
+@media (prefers-color-scheme: dark) {
+  .tera-orb {
+    background:
+      radial-gradient(90% 90% at 30% 18%, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0) 44%),
+      linear-gradient(145deg, #8b7bff 0%, #a190ff 52%, #cfc4ff 100%);
+    box-shadow:
+      inset 0 1px 2px rgba(255, 255, 255, 0.55),
+      inset 0 -8px 14px rgba(60, 44, 160, 0.28),
+      0 10px 24px -12px rgba(140, 124, 255, 0.6);
+  }
+}
+
+/*
  * 画面の下端にあるホームインジケータに、入力欄が重ならないようにする。
  * 余白は Tailwind の pb-3 と同じ 0.75rem を下限にする。
  */
@@ -137,6 +210,24 @@ input[type="checkbox"] {
   textarea,
   select {
     font-size: 16px;
+  }
+}
+
+/* 空の画面を開いたときの、1 回だけの立ち上がり。 */
+@keyframes tera-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .tera-rise {
+    animation: tera-rise 0.5s cubic-bezier(0.22, 0.61, 0.36, 1) both;
   }
 }
 

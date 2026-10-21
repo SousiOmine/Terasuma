@@ -26,7 +26,7 @@ import { ConfirmDialog } from "../../ui/ConfirmDialog";
 import { ModelPickerDialog } from "./ModelPickerDialog";
 import { ProviderWizard, type WizardMode } from "./ProviderWizard";
 import { SettingsSection } from "../../ui/SettingsSection";
-import { INPUT_CLASS } from "../../ui/styles";
+import { CARD_CLASS, INPUT_CLASS } from "../../ui/styles";
 
 /**
  * 設定の「モデル」。
@@ -99,7 +99,7 @@ export function ModelSettingsView() {
           </Button>
         </div>
 
-        <p class="mt-3 truncate text-sm">{settings?.model ?? t("settings.model.default.unset")}</p>
+        <p class="mt-3 truncate font-mono text-[13px]">{settings?.model ?? t("settings.model.default.unset")}</p>
         {problem === "unset" && (
           <p class="mt-1 text-xs text-[var(--app-text-secondary)]">{t("settings.model.default.unsetHint")}</p>
         )}
@@ -119,7 +119,7 @@ export function ModelSettingsView() {
             <select
               value={reasoning.effort ?? ""}
               aria-label={t("settings.model.reasoning.label")}
-              class={`${INPUT_CLASS} sm:w-auto sm:py-1.5`}
+              class={`${INPUT_CLASS} sm:w-auto`}
               onChange={(event) =>
                 void changeReasoning(event.currentTarget.value === "" ? null : event.currentTarget.value)
               }
@@ -200,18 +200,24 @@ function ProviderCard({ provider, isDefault, onEdit, onDelete }: ProviderCardPro
     : t("settings.model.providers.apiKeyUnset");
 
   return (
-    <div class="flex flex-col gap-3 rounded-[24px] border border-[var(--app-stroke)] bg-[var(--app-surface)] p-5 shadow-[var(--app-shadow-4)] sm:flex-row sm:items-start">
+    <div class={`flex flex-col gap-3 sm:flex-row sm:items-start ${CARD_CLASS}`}>
       <div class="min-w-0 flex-1">
         <div class="flex items-center gap-2">
           <p class="truncate text-sm font-medium">{providerName(provider)}</p>
           {isDefault && (
-            <span class="shrink-0 rounded-full bg-[var(--app-soft)] px-2.5 py-1 text-[11px] font-medium text-[var(--app-text)]">
+            <span class="shrink-0 rounded-full bg-[var(--app-surface)] px-2.5 py-1 text-[11px] font-medium text-[var(--app-text-secondary)]">
               {t("common.default")}
             </span>
           )}
         </div>
         <p class="mt-0.5 truncate text-xs text-[var(--app-text-secondary)]">
-          {provider.baseUrl === null ? keyState : `${provider.baseUrl}・${keyState}`}
+          {provider.baseUrl === null ? (
+            keyState
+          ) : (
+            <>
+              <span class="font-mono">{provider.baseUrl}</span>・{keyState}
+            </>
+          )}
         </p>
       </div>
 

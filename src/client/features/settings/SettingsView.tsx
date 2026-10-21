@@ -24,7 +24,7 @@ export function SettingsView() {
 
   return (
     <div class="flex h-full flex-col bg-[var(--app-canvas)]">
-      <header class="flex h-16 shrink-0 items-center gap-3 px-4 sm:px-6">
+      <header class="flex h-16 shrink-0 items-center gap-3 px-3 sm:px-5">
         <button
           type="button"
           onClick={closeSettings}
@@ -40,7 +40,7 @@ export function SettingsView() {
       </header>
 
       <div class="flex min-h-0 flex-1 flex-col md:flex-row">
-        <nav class="shrink-0 border-b border-[var(--app-stroke)] px-3 py-3 md:w-60 md:border-r md:border-b-0 md:px-4 md:py-5">
+        <nav class="shrink-0 px-3 pb-2 md:w-[248px] md:py-1 md:pb-0">
           <h1 class="hidden px-3 pb-2 text-xs font-medium text-[var(--app-text-secondary)] md:block">
             {t("settings.title")}
           </h1>
@@ -53,9 +53,9 @@ export function SettingsView() {
                     type="button"
                     aria-current={active ? "true" : undefined}
                     onClick={() => setSettingsCategory(item.id)}
-                    class={`rounded-2xl px-3.5 py-3 text-left text-sm whitespace-nowrap transition md:w-full ${
+                    class={`rounded-2xl px-3.5 py-2.5 text-left text-sm whitespace-nowrap transition md:w-full ${
                       active
-                        ? "bg-[var(--app-soft)] font-semibold text-[var(--app-text)]"
+                        ? "bg-[var(--app-accent-soft)] font-medium text-[var(--app-accent-ink)]"
                         : "text-[var(--app-text-secondary)] hover:bg-[var(--app-soft)] hover:text-[var(--app-text)]"
                     }`}
                   >
@@ -67,7 +67,7 @@ export function SettingsView() {
           </ul>
         </nav>
 
-        <section class="min-h-0 min-w-0 flex-1 overflow-y-auto px-4 py-8 md:px-10 md:py-10">
+        <section class="min-h-0 min-w-0 flex-1 overflow-y-auto bg-[var(--app-surface)] px-4 py-6 md:m-3 md:ml-0 md:rounded-[30px] md:border md:border-[var(--app-stroke)] md:px-10 md:py-10 md:shadow-[var(--app-shadow-panel)]">
           {category === "general" && <GeneralSettings />}
           {category === "model" && <ModelSettingsView />}
           {category === "container" && <ContainerSettingsView />}
@@ -81,14 +81,11 @@ export function SettingsView() {
 function GeneralSettings() {
   return (
     <div class="mx-auto w-full max-w-2xl">
-      <h2 class="flex items-center gap-2.5 text-[18px] font-semibold tracking-[-0.01em]">
-        <span class="h-2.5 w-2.5 shrink-0 rounded-full bg-[var(--app-ink)]" aria-hidden="true" />
-        {t("settings.general")}
-      </h2>
+      <h2 class="text-[20px] leading-7 font-semibold tracking-[-0.02em]">{t("settings.general")}</h2>
 
       <div class="mt-6 flex flex-col items-start gap-4 border-b border-[var(--app-stroke)] pb-6 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
         <div class="min-w-0">
-          <p class="text-sm font-medium">{t("settings.language.label")}</p>
+          <p class="text-[13px] font-medium">{t("settings.language.label")}</p>
           <p class="mt-1 text-xs leading-5 text-[var(--app-text-secondary)]">{t("settings.language.description")}</p>
         </div>
 

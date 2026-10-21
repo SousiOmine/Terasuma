@@ -22,7 +22,7 @@ export function ModelList({ models, value, onChange, currentModel = null }: Mode
     <div>
       <SearchInput value={query} onInput={setQuery} placeholder={t("settings.model.searchModel")} />
 
-      <div class="mt-2 max-h-64 overflow-y-auto rounded-2xl border border-[var(--app-stroke)] bg-[var(--app-surface)] p-1.5">
+      <div class="mt-2 max-h-64 overflow-y-auto rounded-[16px] bg-[var(--app-surface-alt)] p-1.5">
         {visible.length === 0 ? (
           <p class="px-3 py-4 text-center text-xs text-[var(--app-text-secondary)]">{t("settings.model.noMatch")}</p>
         ) : (
@@ -35,10 +35,10 @@ export function ModelList({ models, value, onChange, currentModel = null }: Mode
                     type="button"
                     aria-pressed={selected}
                     onClick={() => onChange(model)}
-                    class={`flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm transition ${
+                    class={`flex w-full items-center gap-2 rounded-[12px] px-3 py-2 text-left text-sm transition ${
                       selected
-                        ? "bg-[var(--app-soft)] font-medium text-[var(--app-text)]"
-                        : "text-[var(--app-text)] hover:bg-[var(--app-soft)]"
+                        ? "bg-[var(--app-accent-soft)] font-medium text-[var(--app-text)]"
+                        : "text-[var(--app-text)] hover:bg-[var(--app-soft-strong)]"
                     }`}
                   >
                     <span class="min-w-0 flex-1 truncate">{model}</span>

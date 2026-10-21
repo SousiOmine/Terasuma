@@ -67,7 +67,7 @@ export function Modal({ title, subtitle, size = "sm", onClose, footer, children 
   return (
     <div class="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4">
       {/* 背景のクリックで閉じる。 */}
-      <div class="absolute inset-0 bg-black/40 backdrop-blur-md" aria-hidden="true" onClick={onClose} />
+      <div class="absolute inset-0 bg-black/35 backdrop-blur-md" aria-hidden="true" onClick={onClose} />
 
       <div
         ref={dialogRef}
@@ -80,14 +80,14 @@ export function Modal({ title, subtitle, size = "sm", onClose, footer, children 
           size === "lg" ? "max-w-lg" : "max-w-sm"
         }`}
       >
-        <div class="shrink-0 px-4 pt-4 sm:px-5 sm:pt-5">
+        <div class="shrink-0 px-5 pt-5 sm:px-6 sm:pt-6">
           <h2 class="text-[17px] font-semibold tracking-[-0.01em]">{title}</h2>
-          {subtitle !== undefined && <p class="mt-1 text-xs text-[var(--app-text-secondary)]">{subtitle}</p>}
+          {subtitle !== undefined && <p class="mt-1 text-xs leading-5 text-[var(--app-text-secondary)]">{subtitle}</p>}
         </div>
 
-        <div class="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5">{children}</div>
+        <div class="min-h-0 flex-1 overflow-y-auto px-5 py-4 sm:px-6">{children}</div>
 
-        <div class="flex shrink-0 flex-wrap justify-end gap-2 border-t border-[var(--app-stroke)] px-5 py-4">
+        <div class="flex shrink-0 flex-wrap justify-end gap-2 border-t border-[var(--app-stroke)] px-5 py-4 sm:px-6">
           {footer}
         </div>
       </div>

@@ -114,7 +114,7 @@ export function Composer() {
           </div>
         )}
 
-        <div class="flex items-end gap-1.5 rounded-[28px] border border-[var(--app-stroke)] bg-[var(--app-surface-alt)] px-2 py-2 shadow-[var(--app-shadow-2)] transition focus-within:border-[var(--app-ink)] focus-within:bg-[var(--app-surface)] focus-within:shadow-[0_0_0_4px_var(--app-ring)]">
+        <div class="flex items-end gap-1.5 rounded-[26px] border border-[var(--app-stroke)] bg-[var(--app-surface)] px-2 py-2 shadow-[var(--app-shadow-4)] transition focus-within:border-[var(--app-accent)] focus-within:shadow-[0_0_0_4px_var(--app-ring)]">
           <input
             ref={fileInputRef}
             type="file"
@@ -164,7 +164,7 @@ export function Composer() {
               disabled={stopping}
               title={t(stopping ? "composer.stopping" : "composer.stop")}
               aria-label={t(stopping ? "composer.stopping" : "composer.stop")}
-              class="mb-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--app-ink-fill)] text-[var(--app-on-ink)] shadow-[var(--app-shadow-2)] transition hover:bg-[var(--app-ink-hover)] disabled:opacity-50 md:h-9 md:w-9"
+              class="mb-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--app-accent-fill)] text-[var(--app-on-accent)] shadow-[var(--app-shadow-2)] transition hover:bg-[var(--app-accent-hover)] disabled:opacity-50 md:h-9 md:w-9"
             >
               <IconPlayerStopFilled size={16} />
             </button>
@@ -175,7 +175,7 @@ export function Composer() {
               disabled={!canSend}
               title={t("composer.send")}
               aria-label={t("composer.send")}
-              class="mb-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--app-ink-fill)] text-[var(--app-on-ink)] shadow-[var(--app-shadow-2)] transition hover:bg-[var(--app-ink-hover)] disabled:opacity-30 md:h-9 md:w-9"
+              class="mb-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--app-accent-fill)] text-[var(--app-on-accent)] shadow-[var(--app-shadow-2)] transition hover:bg-[var(--app-accent-hover)] disabled:opacity-30 md:h-9 md:w-9"
             >
               <IconSend size={17} stroke={1.8} />
             </button>

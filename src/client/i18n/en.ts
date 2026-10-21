@@ -19,6 +19,7 @@ export const en = {
   "tera.empty": "No Teras yet",
 
   "chat.empty.title": "What can I help you with?",
+  "chat.empty.description": "Look things up, organize files, and use the screen. It all happens inside this computer.",
   "chat.typing": "Typing…",
   "chat.agent.subtitle": "AI assistant",
   "chat.file.download": "Download {name}",

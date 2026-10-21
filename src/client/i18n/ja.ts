@@ -18,6 +18,7 @@ export const ja: Record<MessageKey, string> = {
   "tera.empty": "まだ Tera がありません",
 
   "chat.empty.title": "何をお手伝いしましょうか",
+  "chat.empty.description": "調べものも、ファイルの整理も、画面の操作も。このコンピュータの中で進めます。",
   "chat.typing": "入力中…",
   "chat.agent.subtitle": "AI アシスタント",
   "chat.file.download": "{name} をダウンロード",

@@ -19,7 +19,7 @@ import { AgentMessageBubble, NoticeLine, TypingBubble, UserMessageBubble } from 
 /**
  * チャット画面。
  *
- * 会話は、ユーザーの発言と、エージェントの本文・添付の吹き出しだけで組み立てる。
+ * 会話は、ユーザーの発言と、エージェントの本文・添付だけで組み立てる。
  * 本文は区切りごとに届くので、少しずつ伸びる表示は無い（メッセージは届いた単位で出る）。
  */
 
@@ -71,8 +71,8 @@ export function ChatView() {
   const showEmpty = !loading && items.length === 0 && !streaming;
 
   return (
-    <main class="flex min-w-0 flex-1 flex-col bg-[var(--app-surface)] md:m-3 md:overflow-hidden md:rounded-[28px] md:border md:border-[var(--app-stroke)] md:shadow-[var(--app-shadow-panel)]">
-      <header class="flex h-16 shrink-0 items-center gap-3 border-b border-[var(--app-stroke)] px-4 sm:px-6">
+    <main class="flex min-w-0 flex-1 flex-col bg-[var(--app-surface)] md:m-3 md:overflow-hidden md:rounded-[30px] md:border md:border-[var(--app-stroke)] md:shadow-[var(--app-shadow-panel)]">
+      <header class="flex h-16 shrink-0 items-center gap-3 px-4 sm:px-5">
         {/* 狭い画面ではサイドバーがドロワーになるので、開くボタンをここに置く。 */}
         <button
           type="button"
@@ -84,10 +84,10 @@ export function ChatView() {
         >
           <IconMenu2 size={20} stroke={1.7} />
         </button>
-        <ChatAvatar size={34} />
+        <ChatAvatar size={32} />
         <div class="min-w-0 flex-1">
-          <h1 class="truncate text-[15px] font-semibold tracking-[-0.01em]">{title}</h1>
-          <p class="truncate text-xs text-[var(--app-text-secondary)]">
+          <h1 class="truncate text-[15px] leading-5 font-semibold tracking-[-0.01em]">{title}</h1>
+          <p class="truncate text-[11px] leading-4 text-[var(--app-text-secondary)]">
             {handover ? t("chat.computer.yourTurn") : streaming ? t("chat.typing") : t("chat.agent.subtitle")}
           </p>
         </div>
@@ -125,7 +125,7 @@ export function ChatView() {
         {showEmpty ? (
           <EmptyState />
         ) : (
-          <div class="mx-auto flex w-full max-w-3xl flex-col gap-3 px-4 py-6 sm:px-6">
+          <div class="mx-auto flex w-full max-w-3xl flex-col gap-4 px-4 py-8 sm:px-6">
             {items.map((item) => renderItem(item))}
             {streaming && !handover && <TypingBubble />}
             {loading && <p class="text-center text-sm text-[var(--app-text-secondary)]">{t("common.loading")}</p>}
@@ -174,25 +174,30 @@ function renderItem(item: ChatItem) {
   switch (item.kind) {
     case "date":
       return (
-        <div key={item.key} class="flex justify-center py-1">
-          <span class="rounded-full bg-[var(--app-soft)] px-3 py-1 text-[11px] text-[var(--app-text-secondary)]">
-            {item.label}
-          </span>
+        <div key={item.key} class="flex justify-center py-1.5">
+          <span class="text-[11px] font-medium tracking-[0.06em] text-[var(--app-text-tertiary)]">{item.label}</span>
         </div>
       );
     case "user":
       return <UserMessageBubble key={item.key} message={item.message} time={formatTime(item.message.createdAt, tag)} />;
-    case "agent":
+    case "agent": {
+      const last = item.parts[item.parts.length - 1];
       return (
-        <div key={item.key} class="flex items-start gap-2">
-          <ChatAvatar size={30} class="mt-1" />
-          <div class="flex min-w-0 max-w-[82%] flex-col gap-1.5">
-            {item.parts.map((part, index) => (
-              <AgentMessageBubble key={`${item.key}-${index}`} part={part} time={formatTime(part.at, tag)} />
-            ))}
+        <div key={item.key} class="flex items-start gap-3">
+          <ChatAvatar size={24} class="mt-0.5" />
+          <div class="flex min-w-0 flex-1 flex-col gap-1">
+            <div class="flex min-w-0 flex-col gap-2">
+              {item.parts.map((part, index) => (
+                <AgentMessageBubble key={`${item.key}-${index}`} part={part} />
+              ))}
+            </div>
+            {last !== undefined && (
+              <time class="text-[11px] text-[var(--app-text-tertiary)] tera-tnum">{formatTime(last.at, tag)}</time>
+            )}
           </div>
         </div>
       );
+    }
     case "notice":
       return <NoticeLine key={item.key} part={item.part} />;
   }
@@ -202,7 +207,7 @@ function renderItem(item: ChatItem) {
  * 保存された会話と、届いている途中のターンを、画面の並びへ開く。
  *
  * assistant のメッセージは parts の text・attachment・notice を出す。
- * 連続する text と attachment は、同じターンのまとまりとして 1 つの吹き出し群にする（アイコンは 1 つ）。
+ * 連続する text と attachment は、同じターンの 1 つのまとまりにし、アイコンと時刻は 1 つだけ出す。
  */
 function buildItems(saved: readonly ChatMessage[], live: LiveTurn | null, tag: string): ChatItem[] {
   const items: ChatItem[] = [];
@@ -239,7 +244,7 @@ function visibleParts(parts: readonly MessagePart[]): (VisibleMessagePart | Noti
   );
 }
 
-/** 1 つのターンの parts を、吹き出し群と注記の並びにする。 */
+/** 1 つのターンの parts を、本文のまとまりと注記の並びにする。 */
 function pushParts(
   items: ChatItem[],
   messageId: string,
@@ -262,7 +267,7 @@ function pushParts(
 
   for (const part of parts) {
     const day = dayKey(part.at);
-    // 日付をまたいだら、別の吹き出し群にする（日付の区切りが群の中に入らないように）。
+    // 日付をまたいだら、別のまとまりにする（日付の区切りが群の中に入らないように）。
     if (group.length > 0 && day !== groupDay) flush();
 
     pushDate(part.at);
@@ -306,11 +311,11 @@ function formatTime(at: number, tag: string): string {
 
 function EmptyState() {
   return (
-    <div class="flex h-full flex-col items-center justify-center gap-4 px-6 text-center">
-      <ChatAvatar size={58} />
-      <div>
-        <h2 class="text-[18px] font-semibold tracking-[-0.01em]">{t("chat.empty.title")}</h2>
-        <p class="mt-1 text-xs text-[var(--app-text-secondary)]">{t("chat.agent.subtitle")}</p>
+    <div class="tera-rise flex h-full flex-col items-center justify-center gap-5 px-6 pb-6 text-center">
+      <ChatAvatar size={64} />
+      <div class="max-w-sm">
+        <h2 class="tera-balance text-[22px] leading-8 font-semibold tracking-[-0.02em]">{t("chat.empty.title")}</h2>
+        <p class="mt-2 text-[13px] leading-6 text-[var(--app-text-secondary)]">{t("chat.empty.description")}</p>
       </div>
     </div>
   );

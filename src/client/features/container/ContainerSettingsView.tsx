@@ -15,6 +15,7 @@ import {
 import { Button } from "../../ui/Button";
 import { ConfirmDialog } from "../../ui/ConfirmDialog";
 import { SettingsSection } from "../../ui/SettingsSection";
+import { CARD_CLASS } from "../../ui/styles";
 
 /** 状態の表示。文言は i18n にまとめる（状態に色は付けない）。 */
 const STATE_LABELS: Record<ContainerState, MessageKey> = {
@@ -62,7 +63,7 @@ export function ContainerSettingsView() {
     <SettingsSection title={t("settings.container")} error={error} onDismiss={clearContainerError}>
       <p class="mt-1 text-xs text-[var(--app-text-secondary)]">{t("settings.container.description")}</p>
 
-      <div class="mt-6 rounded-[24px] border border-[var(--app-stroke)] bg-[var(--app-surface)] p-5 shadow-[var(--app-shadow-4)]">
+      <div class={`mt-6 ${CARD_CLASS}`}>
         <div class="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
           <div class="min-w-0">
             <p class="text-xs text-[var(--app-text-secondary)]">{t("settings.container.state.label")}</p>

@@ -5,10 +5,11 @@ import { t } from "../../i18n";
 import { ChatAvatar } from "./ChatAvatar";
 
 /**
- * チャットの吹き出し。
+ * チャットの表示。
  *
- * 画面に出すのは、ユーザーが書いた発言と、エージェントの本文・添付だけ。
- * ツールの記録は、ここへは渡さない。
+ * エージェントの本文は吹き出しで囲まず、面の上にそのまま置く（読むための余白を優先する）。
+ * ユーザーの発言だけを柔らかい面で囲み、自分の発言だと一目で分かるようにする。
+ * 時刻は発言の脇ではなく下に置き、本文の幅を削らない。
  */
 
 export function UserMessageBubble({ message, time }: { message: ChatMessage; time: string }) {
@@ -16,44 +17,39 @@ export function UserMessageBubble({ message, time }: { message: ChatMessage; tim
   if (message.content.length === 0 && files.length === 0) return null;
 
   return (
-    <div class="flex items-end justify-end gap-1.5">
-      <time class="mb-1 shrink-0 text-[11px] text-[var(--app-text-tertiary)]">{time}</time>
-      <div class="min-w-0 max-w-[calc(100%_-_2.75rem)] rounded-[24px] rounded-br-[8px] bg-[var(--app-ink-fill)] px-4 py-2.5 text-[15px] leading-6 text-[var(--app-on-ink)] shadow-[var(--app-shadow-2)]">
+    <div class="flex flex-col items-end gap-1">
+      <div class="max-w-[85%] rounded-[24px] bg-[var(--app-soft)] px-4 py-2.5 text-[15px] leading-[1.7] text-[var(--app-text)]">
         {message.content.length > 0 && <div class="whitespace-pre-wrap break-words">{message.content}</div>}
         {files.length > 0 && (
           <div class={`flex flex-col gap-1.5 ${message.content.length > 0 ? "mt-2" : ""}`}>
             {files.map((file, index) => (
               <span
                 key={`${file.name}-${file.size}-${index}`}
-                class="flex w-64 max-w-full items-center gap-2 rounded-full bg-[var(--app-on-ink-soft)] px-3 py-1.5 text-xs"
+                class="flex w-64 max-w-full items-center gap-2 rounded-full bg-[var(--app-surface)] px-3 py-1.5 text-xs"
               >
-                <IconFile size={14} stroke={1.7} class="shrink-0 opacity-90" />
+                <IconFile size={14} stroke={1.7} class="shrink-0 text-[var(--app-text-secondary)]" />
                 <span class="min-w-0 flex-1 truncate">{file.name}</span>
-                <span class="shrink-0 opacity-70">{formatBytes(file.size)}</span>
+                <span class="shrink-0 text-[var(--app-text-secondary)] tera-tnum">{formatBytes(file.size)}</span>
               </span>
             ))}
           </div>
         )}
       </div>
+      <time class="pr-1 text-[11px] text-[var(--app-text-tertiary)] tera-tnum">{time}</time>
     </div>
   );
 }
 
 /** エージェントの本文、または添付した写真・ファイル 1 件。 */
-export function AgentMessageBubble({ part, time }: { part: TextPart | AttachmentPart; time: string }) {
+export function AgentMessageBubble({ part }: { part: TextPart | AttachmentPart }) {
   const images = part.type === "attachment" ? part.attachments.filter((attachment) => attachment.image !== null) : [];
   const files = part.type === "attachment" ? part.attachments.filter((attachment) => attachment.image === null) : [];
 
   return (
-    <div class="flex items-end gap-1.5">
-      <div class="min-w-0 max-w-[calc(100%_-_2.75rem)] rounded-[24px] rounded-bl-[8px] bg-[var(--app-surface-alt)] px-4 py-2.5 text-[15px] leading-6 text-[var(--app-text)]">
-        <div class="flex flex-col gap-2">
-          {part.type === "text" && <RichText content={part.text} />}
-          {images.length > 0 && <ImageGrid images={images} />}
-          {files.length > 0 && <FileList files={files} />}
-        </div>
-      </div>
-      <time class="mb-1 shrink-0 text-[11px] text-[var(--app-text-tertiary)]">{time}</time>
+    <div class="flex min-w-0 flex-col gap-2 text-[15px] leading-[1.75] text-[var(--app-text)]">
+      {part.type === "text" && <RichText content={part.text} />}
+      {images.length > 0 && <ImageGrid images={images} />}
+      {files.length > 0 && <FileList files={files} />}
     </div>
   );
 }
@@ -70,7 +66,7 @@ function ImageGrid({ images }: { images: readonly SentAttachment[] }) {
         target="_blank"
         rel="noreferrer"
         title={t("chat.image.open", { name: image.name })}
-        class="block overflow-hidden rounded-2xl"
+        class="block w-fit overflow-hidden rounded-[16px]"
       >
         <img
           src={image.url}
@@ -85,7 +81,7 @@ function ImageGrid({ images }: { images: readonly SentAttachment[] }) {
   }
 
   return (
-    <div class="grid w-[min(20rem,100%)] grid-cols-2 gap-1 overflow-hidden rounded-2xl">
+    <div class="grid w-[min(20rem,100%)] grid-cols-2 gap-1 overflow-hidden rounded-[16px]">
       {images.map((image, index) => (
         <a
           key={`${image.url}-${index}`}
@@ -112,14 +108,14 @@ function FileList({ files }: { files: readonly SentAttachment[] }) {
           href={file.url}
           download
           title={t("chat.file.download", { name: file.name })}
-          class="flex w-64 max-w-full items-center gap-2 rounded-2xl border border-[var(--app-stroke)] bg-[var(--app-surface)] px-3 py-2.5 transition hover:bg-[var(--app-soft)]"
+          class="flex w-64 max-w-full items-center gap-2 rounded-[16px] bg-[var(--app-surface-alt)] px-3 py-2.5 transition hover:bg-[var(--app-soft)]"
         >
-          <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--app-soft)] text-[var(--app-text)]">
+          <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--app-surface)] text-[var(--app-text)]">
             <IconFile size={16} stroke={1.7} />
           </span>
           <span class="min-w-0 flex-1">
             <span class="block truncate text-xs font-medium">{file.name}</span>
-            <span class="block text-[11px] text-[var(--app-text-secondary)]">{formatBytes(file.size)}</span>
+            <span class="block text-[11px] text-[var(--app-text-secondary)] tera-tnum">{formatBytes(file.size)}</span>
           </span>
           <IconDownload size={14} stroke={1.7} class="shrink-0 text-[var(--app-text-tertiary)]" />
         </a>
@@ -132,9 +128,7 @@ function FileList({ files }: { files: readonly SentAttachment[] }) {
 export function NoticeLine({ part }: { part: NoticePart }) {
   return (
     <div class="flex justify-center py-1">
-      <p class="max-w-[85%] rounded-full bg-[var(--app-soft)] px-3.5 py-1.5 text-center text-[11px] leading-relaxed text-[var(--app-text-secondary)]">
-        {part.text}
-      </p>
+      <p class="max-w-[85%] text-center text-[11px] leading-relaxed text-[var(--app-text-tertiary)]">{part.text}</p>
     </div>
   );
 }
@@ -142,9 +136,9 @@ export function NoticeLine({ part }: { part: NoticePart }) {
 /** エージェントが動いている間の印。本文は少しずつ出さないので、点だけを出す。 */
 export function TypingBubble() {
   return (
-    <div class="flex items-start gap-2" role="status" aria-label={t("chat.typing")}>
-      <ChatAvatar size={30} />
-      <div class="flex items-center gap-1.5 rounded-[24px] rounded-bl-[8px] bg-[var(--app-surface-alt)] px-4 py-3.5">
+    <div class="flex items-center gap-3" role="status" aria-label={t("chat.typing")}>
+      <ChatAvatar size={24} />
+      <div class="flex items-center gap-1.5 py-1.5">
         <span class="tera-typing-dot h-1.5 w-1.5 rounded-full bg-[var(--app-text-tertiary)]" />
         <span class="tera-typing-dot h-1.5 w-1.5 rounded-full bg-[var(--app-text-tertiary)]" />
         <span class="tera-typing-dot h-1.5 w-1.5 rounded-full bg-[var(--app-text-tertiary)]" />
@@ -166,7 +160,7 @@ function RichText({ content }: { content: string }) {
         index % 2 === 1 ? (
           <pre
             key={index}
-            class="my-1 overflow-x-auto rounded-xl bg-[var(--app-soft)] p-3 text-xs leading-relaxed"
+            class="my-2 overflow-x-auto rounded-[14px] bg-[var(--app-soft)] p-3 font-mono text-xs leading-relaxed"
           >
             <code>{stripLanguageTag(segment)}</code>
           </pre>

@@ -5,6 +5,7 @@ import { openTera } from "../../state/chat";
 import { openSettings } from "../../state/route";
 import { activeTeraId, teras } from "../../state/session";
 import { closeSidebar, sidebarOpen } from "../../state/sidebar";
+import { ChatAvatar } from "./ChatAvatar";
 
 /**
  * Tera の一覧。会話は Tera ごとに 1 本なので、並ぶのは会話ではなく Tera。
@@ -31,20 +32,21 @@ export function Sidebar() {
   return (
     <>
       {/* ドロワーの外側。タップで閉じる。 */}
-      {open && <div class="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm md:hidden" aria-hidden="true" onClick={closeSidebar} />}
+      {open && (
+        <div
+          class="fixed inset-0 z-40 bg-black/35 backdrop-blur-sm md:hidden"
+          aria-hidden="true"
+          onClick={closeSidebar}
+        />
+      )}
 
       <aside
-        class={`fixed inset-y-0 left-0 z-50 flex w-64 max-w-[85vw] shrink-0 flex-col rounded-r-[28px] bg-[var(--app-surface)] transition-[transform,visibility] duration-200 md:visible md:static md:z-auto md:w-60 md:max-w-none md:translate-x-0 md:rounded-none md:bg-transparent md:pt-3 ${
+        class={`fixed inset-y-0 left-0 z-50 flex w-64 max-w-[85vw] shrink-0 flex-col rounded-r-[28px] bg-[var(--app-surface)] transition-[transform,visibility] duration-200 md:visible md:static md:z-auto md:w-[248px] md:max-w-none md:translate-x-0 md:rounded-none md:bg-transparent md:pt-2 ${
           open ? "visible translate-x-0 shadow-[var(--app-shadow-16)] md:shadow-none" : "invisible -translate-x-full"
         }`}
       >
-        <div class="flex h-16 shrink-0 items-center gap-2.5 px-3">
-          <span
-            aria-hidden="true"
-            class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--app-ink-fill)] text-sm font-semibold text-[var(--app-on-ink)]"
-          >
-            T
-          </span>
+        <div class="flex h-16 shrink-0 items-center gap-2.5 px-4">
+          <ChatAvatar size={30} />
           <span class="min-w-0 flex-1 truncate text-[15px] font-semibold tracking-[-0.01em]">{t("app.name")}</span>
           <button
             type="button"
@@ -57,9 +59,9 @@ export function Sidebar() {
           </button>
         </div>
 
-        <nav class="min-h-0 flex-1 overflow-y-auto p-3">
+        <nav class="min-h-0 flex-1 overflow-y-auto px-2.5 py-1">
           {items.length === 0 ? (
-            <p class="px-2 py-3 text-xs text-[var(--app-text-secondary)]">{t("tera.empty")}</p>
+            <p class="px-3 py-3 text-xs text-[var(--app-text-secondary)]">{t("tera.empty")}</p>
           ) : (
             <ul class="space-y-1">
               {items.map((tera) => {
@@ -75,9 +77,9 @@ export function Sidebar() {
                         closeSidebar();
                         void openTera(tera.id);
                       }}
-                      class={`w-full truncate rounded-2xl px-3.5 py-3 text-left text-sm transition ${
+                      class={`w-full truncate rounded-2xl px-3.5 py-2.5 text-left text-sm transition ${
                         active
-                          ? "bg-[var(--app-soft)] font-semibold text-[var(--app-text)]"
+                          ? "bg-[var(--app-accent-soft)] font-medium text-[var(--app-accent-ink)]"
                           : "text-[var(--app-text-secondary)] hover:bg-[var(--app-soft)] hover:text-[var(--app-text)]"
                       }`}
                     >
@@ -98,14 +100,14 @@ export function Sidebar() {
 
 function SettingsButton() {
   return (
-    <div class="shrink-0 p-3">
+    <div class="shrink-0 p-2.5">
       <button
         type="button"
         onClick={() => {
           closeSidebar();
           openSettings();
         }}
-        class="flex w-full items-center gap-2 rounded-2xl px-3.5 py-3 text-left text-sm text-[var(--app-text-secondary)] transition hover:bg-[var(--app-soft)] hover:text-[var(--app-text)]"
+        class="flex w-full items-center gap-2.5 rounded-2xl px-3.5 py-2.5 text-left text-sm text-[var(--app-text-secondary)] transition hover:bg-[var(--app-soft)] hover:text-[var(--app-text)]"
       >
         <IconSettings size={16} stroke={1.6} class="shrink-0" />
         {t("settings.title")}

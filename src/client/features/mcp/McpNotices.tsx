@@ -3,13 +3,13 @@ import { t } from "../../i18n";
 
 /**
  * 接続確認と認可の案内。ダイアログと設定画面のどちらでも同じ見た目にする。
- * 成功も認可待ちも、灰色の面と墨の文字だけで表す。
+ * 成功はアクセントの淡い面、認可待ちは灰色の面で表す。
  */
 
 /** 接続を確かめられたことと、そのときに見えたツール。 */
 export function CheckedNotice({ tools }: { tools: readonly string[] }) {
   return (
-    <div class="rounded-2xl bg-[var(--app-soft)] px-4 py-3 text-xs text-[var(--app-text)]">
+    <div class="rounded-[16px] bg-[var(--app-accent-soft)] px-4 py-3 text-xs text-[var(--app-text)]">
       <p>{t("settings.mcp.form.connected")}</p>
       {tools.length === 0 ? (
         <p class="mt-0.5 text-[var(--app-text-secondary)]">{t("settings.mcp.noTools")}</p>
@@ -32,7 +32,7 @@ export function CheckedNotice({ tools }: { tools: readonly string[] }) {
 /** 認可を待っている間の案内。ブラウザのタブを閉じてしまっても、ここから開き直せる。 */
 export function AuthorizationNotice({ url }: { url: string }) {
   return (
-    <div class="rounded-2xl border border-[var(--app-stroke)] bg-[var(--app-surface-alt)] px-4 py-3 text-xs text-[var(--app-text-secondary)]">
+    <div class="rounded-[16px] bg-[var(--app-surface-alt)] px-4 py-3 text-xs text-[var(--app-text-secondary)]">
       <p>{t("settings.mcp.form.authorize")}</p>
       <a
         href={url}

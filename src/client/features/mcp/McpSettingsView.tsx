@@ -24,7 +24,7 @@ import { DeleteAction, EditAction } from "../../ui/CardActions";
 import { ConfirmDialog } from "../../ui/ConfirmDialog";
 import { SettingsSection } from "../../ui/SettingsSection";
 import { type BadgeTone, StatusBadge } from "../../ui/StatusBadge";
-import { CARD_ACTION_CLASS } from "../../ui/styles";
+import { CARD_ACTION_CLASS, CARD_CLASS } from "../../ui/styles";
 import { McpServerDialog, type McpDialogMode } from "./McpServerDialog";
 
 /** 接続状態の文言。 */
@@ -166,7 +166,7 @@ function McpServerCard({
   const canAuthorize = server.type === "http" && (state === "authorization_required" || state === "failed");
 
   return (
-    <div class="rounded-[24px] border border-[var(--app-stroke)] bg-[var(--app-surface)] p-5 shadow-[var(--app-shadow-4)]">
+    <div class={CARD_CLASS}>
       <div class="flex flex-col gap-3 sm:flex-row sm:items-start">
         <div class="min-w-0 flex-1">
           <div class="flex flex-wrap items-center gap-2">
@@ -176,11 +176,13 @@ function McpServerCard({
             </StatusBadge>
           </div>
 
-          <p class="mt-0.5 truncate text-xs text-[var(--app-text-secondary)]">
+          <p class="mt-0.5 truncate font-mono text-[11px] text-[var(--app-text-secondary)]">
             {server.type === "stdio" ? [server.command, ...server.args].join(" ") : server.url}
           </p>
 
-          {detail !== null && <p class="mt-1.5 break-words text-xs leading-5 text-[var(--app-text-secondary)]">{detail}</p>}
+          {detail !== null && (
+            <p class="mt-1.5 break-words text-xs leading-5 text-[var(--app-text-secondary)]">{detail}</p>
+          )}
 
           {authorizing && authorizationUrl !== null && (
             <a
@@ -206,7 +208,7 @@ function McpServerCard({
                   {tools.map((tool) => (
                     <li
                       key={tool}
-                      class="rounded-full bg-[var(--app-soft)] px-2.5 py-1 font-mono text-[11px] text-[var(--app-text-secondary)]"
+                      class="rounded-full bg-[var(--app-surface)] px-2.5 py-1 font-mono text-[11px] text-[var(--app-text-secondary)]"
                     >
                       {tool}
                     </li>
@@ -233,7 +235,7 @@ function McpServerCard({
                 <button
                   type="button"
                   onClick={() => onAuthorize(authorizationUrl)}
-                  class="rounded-full bg-[var(--app-ink-fill)] px-3 py-1.5 text-xs font-medium text-[var(--app-on-ink)] transition hover:bg-[var(--app-ink-hover)]"
+                  class="rounded-full bg-[var(--app-accent-fill)] px-3 py-1.5 text-xs font-medium text-[var(--app-on-accent)] transition hover:bg-[var(--app-accent-hover)]"
                 >
                   {t("settings.mcp.authorize")}
                 </button>

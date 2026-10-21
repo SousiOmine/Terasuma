@@ -45,9 +45,7 @@ export function ConfirmDialog({
       }
     >
       {subject !== undefined && (
-        <p class="truncate rounded-2xl bg-[var(--app-soft)] px-4 py-2.5 text-sm font-medium">
-          {subject}
-        </p>
+        <p class="truncate rounded-[14px] bg-[var(--app-surface-alt)] px-4 py-2.5 text-sm font-medium">{subject}</p>
       )}
       <p class="mt-3 text-xs leading-5 text-[var(--app-text-secondary)]">{message}</p>
       {children}

@@ -250,7 +250,7 @@ export function ProviderWizard({ mode, onClose }: ProviderWizardProps) {
       {step === "model" && models !== null && (
         <div class="space-y-3">
           {checkNote === "skipped" && (
-            <p class="rounded-2xl border border-[var(--app-stroke)] bg-[var(--app-surface-alt)] px-4 py-3 text-xs leading-5 text-[var(--app-text-secondary)]">
+            <p class="rounded-[16px] bg-[var(--app-surface-alt)] px-4 py-3 text-xs leading-5 text-[var(--app-text-secondary)]">
               {t("settings.wizard.checkSkipped")}
             </p>
           )}
@@ -354,7 +354,7 @@ function StepIndicator({ current }: { current: "choose" | "connect" | "model" })
     <ol class="mb-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-[var(--app-text-secondary)]">
       {ADD_STEPS.map((item, position) => (
         <li key={item.key} class="flex items-center gap-2">
-          <span class={position <= index ? "font-medium text-[var(--app-text)]" : undefined}>
+          <span class={position <= index ? "font-medium text-[var(--app-accent-ink)]" : undefined}>
             {position + 1}. {t(item.key)}
           </span>
           {position < ADD_STEPS.length - 1 && <IconChevronRight size={12} stroke={1.6} class="shrink-0" />}

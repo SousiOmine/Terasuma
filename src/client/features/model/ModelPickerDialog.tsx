@@ -100,7 +100,7 @@ export function ModelPickerDialog({ onClose }: ModelPickerDialogProps) {
                 onClick={() => setActiveId(provider.id)}
                 class={`rounded-full px-3 py-1.5 text-xs transition ${
                   active
-                    ? "bg-[var(--app-ink-fill)] font-medium text-[var(--app-on-ink)]"
+                    ? "bg-[var(--app-accent-fill)] font-medium text-[var(--app-on-accent)]"
                     : "text-[var(--app-text-secondary)] hover:bg-[var(--app-soft)] hover:text-[var(--app-text)]"
                 }`}
               >
