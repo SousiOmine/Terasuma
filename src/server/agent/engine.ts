@@ -3,9 +3,10 @@ import type { LanguageModelUsage, TextStreamPart, ToolSet } from "ai";
 import type { AppConfig } from "../../config";
 import type { ModelSettings } from "../data/settings-schema";
 import type { ReplyLanguage } from "../../shared/language";
-import type { MessagePart, TokenUsage } from "../../shared/types";
+import type { ChatMessage, MessagePart, OutgoingMessage, TokenUsage } from "../../shared/types";
 import type { CodingToolset } from "./tools/coding";
 import type { ComputerToolset } from "./tools/computer";
+import type { MessagingToolset } from "./tools/messaging";
 import type { ImageStore } from "../computer/images";
 import type { McpToolset } from "../mcp/manager";
 import type { CatalogSnapshot } from "../provider/catalog";
@@ -44,6 +45,11 @@ export type EngineInput = {
   teraId: string;
   /** 返事を書く言語。設定画面の言語を使い、ユーザープロンプトの末尾で指示する。 */
   replyLanguage: ReplyLanguage;
+  /**
+   * エージェントがユーザーへメッセージを送る口。chat_send ツールから呼ばれる。
+   * ターンの外へ出るのはこの口だけで、モデルの本文はここを通らない。
+   */
+  send: (message: OutgoingMessage) => void;
 };
 
 /**
@@ -73,6 +79,14 @@ export type ComputerToolsetProvider = {
 };
 
 /**
+ * ユーザーへメッセージを送るツールの供給元。
+ * 送信の口はターンごとに差し替わるので、呼び出しのたびに渡す。
+ */
+export type MessagingToolsetProvider = {
+  toolset(input: { send: (message: OutgoingMessage) => void }): MessagingToolset;
+};
+
+/**
  * LLM 呼び出しのインタフェース。
  * AI SDK に依存する部分はこのインタフェースの内側だけにあるので、実装の差し替え
  * （承認フローの追加、プロファイルごとのエージェント切り替え）はここを実装し直すだけで済む。
@@ -99,6 +113,8 @@ export function createEngine(options: {
   settings: SettingsReader;
   mcp: ToolsetProvider;
   computer: ComputerToolsetProvider;
+  /** ユーザーへメッセージを送るツール。 */
+  messaging: MessagingToolsetProvider;
   /** コンテナのファイルとシェルのツール。ターンごとに変わらないので、そのまま渡す。 */
   coding: CodingToolset;
   /** 撮った画像の置き場。履歴から画像を読み直してモデルへ渡す。 */
@@ -111,6 +127,7 @@ export function createEngine(options: {
     settings: options.settings,
     mcp: options.mcp,
     computer: options.computer,
+    messaging: options.messaging,
     coding: options.coding,
     images: options.images,
     catalog: options.catalog,
@@ -132,6 +149,8 @@ export type AiSdkEngineOptions = {
   settings: SettingsReader;
   mcp: ToolsetProvider;
   computer: ComputerToolsetProvider;
+  /** ユーザーへメッセージを送るツール。 */
+  messaging: MessagingToolsetProvider;
   /** コンテナのファイルとシェルのツール。 */
   coding: CodingToolset;
   images: ImageStore;
@@ -140,7 +159,7 @@ export type AiSdkEngineOptions = {
 };
 
 export function createAiSdkEngine(options: AiSdkEngineOptions): AgentEngine {
-  const { settings, mcp, computer, coding, images, catalog } = options;
+  const { settings, mcp, computer, messaging, coding, images, catalog } = options;
 
   /** 設定とカタログから、今回のモデルを決める。呼び出しのたびに読み直す。 */
   function resolve(): ResolvedModel {
@@ -151,7 +170,7 @@ export function createAiSdkEngine(options: AiSdkEngineOptions): AgentEngine {
 
   return {
     name: "ai-sdk",
-    async stream({ context, signal, teraId, replyLanguage }) {
+    async stream({ context, signal, teraId, replyLanguage, send }) {
       const model = resolve();
 
       // ツールの結果に画像を置けるかはプロバイダ次第。置けない場合は user メッセージで渡す。
@@ -168,11 +187,12 @@ export function createAiSdkEngine(options: AiSdkEngineOptions): AgentEngine {
       // 次のステップの直前に user メッセージとして足す。
       const pendingImages: PendingImages[] = [];
 
-      // MCP とコンテナのツールは呼び出しごとに渡す
+      // MCP とコンテナのツール、それに送信のツールは呼び出しごとに渡す
       // （設定画面でサーバーを足しても、コンテナを止めても作り直さずに済む）。
       const [mcpTools, computerTools] = await Promise.all([mcp.toolset(), computer.toolset({ teraId })]);
+      const messageTools = messaging.toolset({ send });
       const tools = withToolModelOutput(
-        { ...mcpTools, ...computerTools, ...coding },
+        { ...mcpTools, ...computerTools, ...coding, ...messageTools },
         {
           includeImages: toolResultImages,
           images,
@@ -421,7 +441,7 @@ export function createMockEngine(options: { chunkSize?: number; delayMs?: number
 
   return {
     name: "mock",
-    stream({ context, signal, replyLanguage }) {
+    stream({ context, signal, replyLanguage, send }) {
       const lastUser = [...context.messages].reverse().find((message) => message.role === "user");
       const userTurns = context.messages.filter((message) => message.role === "user").length;
 
@@ -442,16 +462,15 @@ export function createMockEngine(options: { chunkSize?: number; delayMs?: number
 
       // 数値は文字数から作った当てずっぽう。実際のキャッシュの値ではない。
       const usage: TokenUsage = {
-        inputTokens: context.messages.reduce(
-          (total, message) => total + (message.role === "user" ? userContentForModel(message) : message.content).length,
-          0,
-        ),
+        inputTokens: context.messages.reduce((total, message) => total + messageTextLength(message), 0),
         outputTokens: reply.length,
         cachedInputTokens: 0,
       };
 
+      // 本物のモデルが考えている間と同じように、少し待ってから 1 件だけ送る。
+      // 待っている間に止められたら、何も送らずに終わる。
       return Promise.resolve({
-        events: chunkText(reply, chunkSize, delayMs, signal),
+        events: mockTyping(reply.length, chunkSize, delayMs, signal, () => send({ text: reply, attachments: [] })),
         usage: Promise.resolve(usage),
       });
     },
@@ -475,15 +494,31 @@ export function createMockEngine(options: { chunkSize?: number; delayMs?: number
   };
 }
 
-async function* chunkText(
-  text: string,
+/**
+ * モックの「考えている時間」。文字数の分だけ少しずつ待ち、終わったら 1 件送る。
+ * 送る内容は少しずつ出さない（本物の応答も、いまはメッセージ単位でしか出ない）。
+ */
+async function* mockTyping(
+  length: number,
   chunkSize: number,
   delayMs: number,
   signal: AbortSignal,
+  send: () => void,
 ): AsyncGenerator<EngineEvent> {
-  for (let index = 0; index < text.length; index += chunkSize) {
+  const steps = Math.ceil(length / chunkSize);
+  for (let step = 0; step < steps; step += 1) {
     if (signal.aborted) return;
     if (delayMs > 0) await new Promise((resolve) => setTimeout(resolve, delayMs));
-    yield { type: "text-delta", delta: text.slice(index, index + chunkSize) };
   }
+  if (signal.aborted) return;
+
+  send();
+}
+
+/** モックの usage を作るための、モデルへ渡る本文の長さ。 */
+function messageTextLength(message: ChatMessage): number {
+  if (message.role === "user") return userContentForModel(message).length;
+  if (message.parts === null) return 0;
+
+  return message.parts.reduce((total, part) => (part.type === "text" ? total + part.text.length : total), 0);
 }

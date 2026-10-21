@@ -28,3 +28,53 @@ body {
     color: var(--color-neutral-100);
   }
 }
+
+/*
+ * チャットの背景。LINE のような、落ち着いた壁紙の代わりに、
+ * 細かい点を敷いて「会話の面」だと分かるようにする。色はごく薄くする。
+ */
+.tera-chat-wallpaper {
+  background-color: #eef3ee;
+  background-image: radial-gradient(circle at 1px 1px, rgba(6, 90, 45, 0.075) 1px, transparent 0);
+  background-size: 22px 22px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .tera-chat-wallpaper {
+    background-color: #0e1411;
+    background-image: radial-gradient(circle at 1px 1px, rgba(120, 230, 160, 0.07) 1px, transparent 0);
+  }
+}
+
+/* 入力中の点。3 つを少しずつずらして弾ませる。 */
+@keyframes tera-typing {
+  0%,
+  60%,
+  100% {
+    opacity: 0.25;
+    transform: translateY(0);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
+}
+
+.tera-typing-dot {
+  animation: tera-typing 1.2s infinite ease-in-out;
+}
+
+.tera-typing-dot:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.tera-typing-dot:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tera-typing-dot {
+    animation: none;
+    opacity: 0.6;
+  }
+}

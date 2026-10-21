@@ -5,7 +5,9 @@ import type { Store } from "../../data/store";
 import type { AgentEngine } from "../../agent/engine";
 import type { Compaction } from "../../agent/compaction";
 import type { ContainerManager } from "../../computer/container";
+import type { FileStore } from "../../computer/files";
 import type { Handover } from "../../computer/handover";
+import type { ImageStore } from "../../computer/images";
 import type { McpManager } from "../../mcp/manager";
 import { McpServerNotFound } from "../../mcp/manager";
 import type { Catalog } from "../../provider/catalog";
@@ -48,6 +50,10 @@ export type ApiDeps = {
   mcp: McpManager;
   /** podman で動かすコンテナ。設定画面からの起動とリセットもここを通す。 */
   container: ContainerManager;
+  /** エージェントが送った画像。画面へ返す。 */
+  images: ImageStore;
+  /** エージェントが送ったファイル。画面へ返す。 */
+  files: FileStore;
   /** ユーザーへ画面を渡す待ち。チャットからの返事をここへ届ける。 */
   handover: Handover;
   /** 過去の対話の圧縮。ターンの前に走っている分を待ち、ターンの後に次を決める。 */

@@ -14,6 +14,7 @@ import {
   CONTAINER_TIMEOUT_MS,
   expectTurnSucceeded,
   report,
+  sentText,
   toolCall,
   toolResultFor,
   toolSequence,
@@ -92,7 +93,7 @@ test(
       expect(saved?.images, "保存された履歴に画像の参照が無い").toBeDefined();
 
       // ここが本題。画像を渡せていなければ、モデルはこの数字を書けない。
-      expect(done.content, "モデルが画面の文字を読めていない").toContain(MARKER_DIGITS);
+      expect(sentText(events), "モデルが画面の文字を読めていない").toContain(MARKER_DIGITS);
     });
   },
   CONTAINER_TIMEOUT_MS,

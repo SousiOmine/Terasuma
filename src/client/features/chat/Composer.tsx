@@ -9,17 +9,18 @@ import {
 import { isSendKey } from "../../lib/composer-keys";
 import { ApiError } from "../../lib/http";
 import { t } from "../../i18n";
-import { isStreaming, sendMessage, stopStreaming } from "../../state/chat";
+import { isStopping, isStreaming, sendMessage, stopStreaming } from "../../state/chat";
 import { clearChatError, showChatError } from "../../state/failure";
 import { handoverActive } from "../../state/handover";
 
-const MAX_TEXTAREA_HEIGHT = 200;
+const MAX_TEXTAREA_HEIGHT = 160;
 
 export function Composer() {
   const [draft, setDraft] = useState("");
   const [files, setFiles] = useState<readonly File[]>([]);
   // 引き受けている間は、送信先がツールの戻り値に変わるだけで、送信はできる。
   const streaming = isStreaming.value && !handoverActive.value;
+  const stopping = isStopping.value;
   // 画面を渡している間は、添付ではなく画面への操作が仕事になる。
   const canAttach = !handoverActive.value;
   // 引き受け中は本文だけ、ふだんは本文かファイルのどちらかがあれば送れる。
@@ -88,14 +89,14 @@ export function Composer() {
   };
 
   return (
-    <div class="shrink-0 px-5 pb-5">
+    <div class="shrink-0 border-t border-black/5 bg-[#f7faf8]/95 px-3 pb-3 pt-2 backdrop-blur dark:border-white/5 dark:bg-[#0e1411]/95 sm:px-6">
       <div class="mx-auto w-full max-w-3xl">
         {files.length > 0 && (
           <div class="mb-2 flex flex-wrap gap-1.5">
             {files.map((file, index) => (
               <span
                 key={`${file.name}-${file.size}-${file.lastModified}-${index}`}
-                class="inline-flex max-w-full items-center gap-1.5 rounded-lg border border-neutral-200 bg-neutral-50 px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-800/60"
+                class="inline-flex max-w-full items-center gap-1.5 rounded-xl border border-black/5 bg-white px-2 py-1 text-xs shadow-sm dark:border-white/10 dark:bg-neutral-900"
               >
                 <span class="max-w-[220px] truncate">{file.name}</span>
                 <span class="shrink-0 text-neutral-500 dark:text-neutral-400">{formatBytes(file.size)}</span>
@@ -104,7 +105,7 @@ export function Composer() {
                   onClick={() => removeFile(index)}
                   title={t("composer.attach.remove", { name: file.name })}
                   aria-label={t("composer.attach.remove", { name: file.name })}
-                  class="shrink-0 rounded p-0.5 text-neutral-500 transition hover:bg-neutral-200 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-700 dark:hover:text-neutral-100"
+                  class="shrink-0 rounded-full p-0.5 text-neutral-500 transition hover:bg-black/5 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-white/10 dark:hover:text-neutral-100"
                 >
                   <IconX size={12} stroke={2} />
                 </button>
@@ -113,7 +114,7 @@ export function Composer() {
           </div>
         )}
 
-        <div class="flex items-end gap-2 rounded-2xl border border-neutral-300 bg-white px-3 py-2 shadow-sm focus-within:border-neutral-400 dark:border-neutral-700 dark:bg-neutral-900 dark:focus-within:border-neutral-600">
+        <div class="flex items-end gap-1.5 rounded-[26px] border border-black/10 bg-white px-1.5 py-1.5 shadow-sm transition focus-within:border-[#06c755]/60 focus-within:ring-2 focus-within:ring-[#06c755]/15 dark:border-white/10 dark:bg-neutral-900 dark:focus-within:border-[#06c755]/50">
           <input
             ref={fileInputRef}
             type="file"
@@ -133,9 +134,9 @@ export function Composer() {
               onClick={() => fileInputRef.current?.click()}
               title={t("composer.attach")}
               aria-label={t("composer.attach")}
-              class="shrink-0 rounded-lg p-2 text-neutral-500 transition hover:bg-neutral-200/70 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
+              class="mb-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-neutral-500 transition hover:bg-black/5 hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-white/10 dark:hover:text-neutral-100"
             >
-              <IconPaperclip size={16} stroke={1.6} />
+              <IconPaperclip size={18} stroke={1.7} />
             </button>
           )}
 
@@ -145,10 +146,10 @@ export function Composer() {
             value={draft}
             placeholder={t("composer.placeholder")}
             aria-label={t("composer.placeholder")}
-            class="max-h-[200px] min-h-6 flex-1 resize-none bg-transparent py-1 text-sm leading-relaxed outline-none placeholder:text-neutral-400"
+            class="max-h-40 min-h-9 flex-1 resize-none bg-transparent px-1 py-2 text-[15px] leading-relaxed outline-none placeholder:text-neutral-400 dark:placeholder:text-neutral-500"
             onInput={(event) => setDraft(event.currentTarget.value)}
             onKeyDown={(event) => {
-              // Enter と Shift + Enter は改行のままにする（送信は Ctrl / Cmd + Enter）。
+              // Enter で送信し、Shift + Enter は改行のままにする。
               if (!isSendKey(event)) return;
               event.preventDefault();
               submit();
@@ -158,10 +159,11 @@ export function Composer() {
           {streaming ? (
             <button
               type="button"
-              onClick={stopStreaming}
-              title={t("composer.stop")}
-              aria-label={t("composer.stop")}
-              class="shrink-0 rounded-lg bg-neutral-200 p-2 text-neutral-700 transition hover:bg-neutral-300 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-700"
+              onClick={() => void stopStreaming()}
+              disabled={stopping}
+              title={t(stopping ? "composer.stopping" : "composer.stop")}
+              aria-label={t(stopping ? "composer.stopping" : "composer.stop")}
+              class="mb-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-neutral-900 text-white transition hover:bg-neutral-700 disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
             >
               <IconPlayerStopFilled size={16} />
             </button>
@@ -172,9 +174,9 @@ export function Composer() {
               disabled={!canSend}
               title={t("composer.send")}
               aria-label={t("composer.send")}
-              class="shrink-0 rounded-lg bg-neutral-900 p-2 text-white transition hover:bg-neutral-700 disabled:opacity-40 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
+              class="mb-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#06c755] text-white shadow-sm transition hover:bg-[#05b34c] disabled:bg-neutral-300 disabled:text-white disabled:shadow-none dark:disabled:bg-neutral-700 dark:disabled:text-neutral-400"
             >
-              <IconSend size={16} stroke={1.6} />
+              <IconSend size={17} stroke={1.8} />
             </button>
           )}
         </div>

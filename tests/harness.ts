@@ -5,7 +5,9 @@ import { CONFIG_FILE_NAME, type AppConfig } from "../src/config";
 import { readSettingsFile, type FileSettings } from "../src/server/data/settings-schema";
 import type { ContainerManager } from "../src/server/computer/container";
 import { createMockEngine, type AgentEngine } from "../src/server/agent/engine";
+import { createFileStore, type FileStore } from "../src/server/computer/files";
 import { createHandover, type Handover } from "../src/server/computer/handover";
+import { createImageStore, type ImageStore } from "../src/server/computer/images";
 import type { McpManager } from "../src/server/mcp/manager";
 import type { Catalog } from "../src/server/provider/catalog";
 import type { ConnectionChecker, ProviderModelLister } from "../src/server/provider/connection";
@@ -63,6 +65,10 @@ export type ServerHarness = {
   store: Store;
   settings: SettingsStore;
   settingsPath: string;
+  /** エージェントが送った画像の置き場（配信のテストで使う）。 */
+  images: ImageStore;
+  /** エージェントが送ったファイルの置き場（配信のテストで使う）。 */
+  files: FileStore;
   handover: Handover;
   request(path: string, init?: RequestInit): Promise<Response>;
   /** 設定ファイルのいまの中身（書き戻されたかを確かめる）。 */
@@ -86,6 +92,8 @@ export async function withServer<T>(
   const store = options.store ?? createStore(":memory:");
   const compaction = createCompactionStub(store);
   const handover = options.handover ?? createHandover();
+  const images = createImageStore(dir);
+  const files = createFileStore(dir);
   const container =
     typeof options.container === "function" ? options.container(dir) : (options.container ?? createContainerStub());
 
@@ -111,6 +119,8 @@ export async function withServer<T>(
       settings,
       mcp: options.mcp ?? createMcpStub(),
       container,
+      images,
+      files,
       handover,
       catalog: options.catalog,
       checkConnection: options.checkConnection,
@@ -131,6 +141,8 @@ export async function withServer<T>(
     store,
     settings,
     settingsPath,
+    images,
+    files,
     handover,
     request: (path, init) => fetch(new URL(path, started.server.url), init),
     file: () => readSettingsFile(settingsPath),

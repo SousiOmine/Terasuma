@@ -52,8 +52,7 @@ export function serializeConversation(messages: readonly ChatMessage[]): string 
     }
 
     if (message.parts === null) {
-      lines.push(`[Assistant]: ${message.content}`);
-      continue;
+      throw new Error(`assistant メッセージ ${message.id} に parts がありません`);
     }
 
     const text = message.parts

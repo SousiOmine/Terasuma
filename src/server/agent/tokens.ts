@@ -22,11 +22,11 @@ export function estimateTokens(text: string): number {
   return Math.ceil((text.length - wide) / 4 + wide);
 }
 
-/** メッセージ 1 件のトークンの目安。parts があるときは部品ごとに数える（本文は parts の text の連結）。 */
+/** メッセージ 1 件のトークンの目安。parts があるときは部品ごとに数える。 */
 export function estimateMessageTokens(message: ChatMessage): number {
   if (message.parts === null) {
-    const content = message.role === "user" ? userContentForModel(message) : message.content;
-    return estimateTokens(content);
+    if (message.role === "user") return estimateTokens(userContentForModel(message));
+    throw new Error(`assistant メッセージ ${message.id} に parts がありません`);
   }
 
   let total = 0;
@@ -40,6 +40,10 @@ export function estimateMessageTokens(message: ChatMessage): number {
         break;
       case "tool-result":
         total += estimateTokens(part.output) + (part.images?.length ?? 0) * IMAGE_TOKENS;
+        break;
+      case "sent":
+      case "notice":
+        // モデルへは渡さない（送った文は chat_send の引数に入っている）。
         break;
     }
   }

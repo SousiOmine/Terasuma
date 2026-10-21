@@ -18,7 +18,10 @@ export const ja: Record<MessageKey, string> = {
   "tera.empty": "まだ Tera がありません",
 
   "chat.empty.title": "何をお手伝いしましょうか",
-  "chat.working": "作業中…",
+  "chat.typing": "入力中…",
+  "chat.agent.subtitle": "AI アシスタント",
+  "chat.file.download": "{name} をダウンロード",
+  "chat.image.open": "{name} を開く",
 
   "chat.model.unset": "使用するモデルが設定されていません。設定からプロバイダを追加してください。",
   "chat.model.providerMissing": "既定のモデルを使うプロバイダがありません。設定で選び直してください。",
@@ -38,6 +41,7 @@ export const ja: Record<MessageKey, string> = {
   "composer.placeholder": "メッセージを入力",
   "composer.send": "送信",
   "composer.stop": "停止",
+  "composer.stopping": "停止しています…",
   "composer.attach": "ファイルを添付",
   "composer.attach.remove": "{name} を外す",
   "composer.attach.tooMany": "添付できるファイルは {max} 件までです。",
@@ -199,6 +203,7 @@ export const ja: Record<MessageKey, string> = {
   "error.container_not_running": "コンピュータが動いていません。",
   "error.handover_not_pending": "この会話は操作を待っていません。",
   "error.turn_in_progress": "この会話はほかで応答を生成しています。",
+  "error.media_not_found": "ファイルが見つかりません。",
   "error.settings_write_failed": "設定を保存できませんでした。",
   "error.internal_error": "問題が発生しました。",
   "error.network": "サーバーに接続できません。",

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { interpretEvent } from "../../src/client/state/chat-events";
-import type { ChatMessage } from "../../src/shared/types";
+import type { ChatMessage, NoticePart, SentPart } from "../../src/shared/types";
 
 /**
  * SSE のイベントを、画面の状態に何をするかへ読み替える部分。
@@ -10,31 +10,42 @@ import type { ChatMessage } from "../../src/shared/types";
 const message: ChatMessage = {
   id: "m1",
   teraId: "t1",
-  seq: 1,
+  seq: 2,
   role: "assistant",
-  content: "こんにちは",
+  content: "",
   attachments: null,
-  parts: null,
+  parts: [{ type: "sent", text: "こんにちは", attachments: [], at: 1 }],
   createdAt: 1,
   usage: null,
 };
 
-describe("チャットのイベントの読み替え", () => {
-  test("本文の差分は追記になる", () => {
-    expect(interpretEvent({ type: "text-delta", id: "a1", delta: "こん" })).toEqual({
-      kind: "text",
-      delta: "こん",
-    });
-  });
+const sent: SentPart = { type: "sent", text: "こんにちは", attachments: [], at: 2 };
+const notice: NoticePart = { type: "notice", text: "上限に達しました", at: 3 };
 
+describe("チャットのイベントの読み替え", () => {
   test("メッセージはそのまま足す", () => {
     expect(interpretEvent({ type: "user-message", message })).toEqual({ kind: "message", message });
     expect(interpretEvent({ type: "assistant-done", message })).toEqual({ kind: "message", message });
   });
 
-  test("生成の開始は本文の入れ替えになる", () => {
+  test("ターンの開始は、届いているターンの入れ替えになる", () => {
     expect(interpretEvent({ type: "assistant-start", id: "a1", createdAt: 1 })).toEqual({
       kind: "assistant-start",
+      id: "a1",
+      createdAt: 1,
+    });
+  });
+
+  test("送ったメッセージと注記は、届いた単位で足す", () => {
+    expect(interpretEvent({ type: "assistant-message", id: "a1", part: sent })).toEqual({
+      kind: "assistant-part",
+      id: "a1",
+      part: sent,
+    });
+    expect(interpretEvent({ type: "notice", id: "a1", part: notice })).toEqual({
+      kind: "assistant-part",
+      id: "a1",
+      part: notice,
     });
   });
 

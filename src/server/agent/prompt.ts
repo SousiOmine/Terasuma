@@ -17,10 +17,13 @@ import { readStoredImages, toolResultOutput, type StoredImages } from "./tool-ou
  */
 export const SYSTEM_PROMPT = [
   "You are Terasuma, a general-purpose assistant running on the user's own machine.",
-  "Answer directly and concisely.",
-  "Always follow the reply-language instruction at the end of the conversation.",
+  "You talk with the user in a chat app.",
+  "The user only sees messages you send with the chat_send tool. Your own text output is internal notes and is never shown.",
+  "Answer with chat_send, never with plain text. Send one short message per thought, like a chat conversation, and send several messages when the answer has separate parts.",
+  "Send files the user should see with chat_send. Images become photos and other files become downloads.",
+  "Always follow the reply-language instruction at the end of the conversation, and write every chat_send message in that language.",
   "The read, write, edit, and bash tools run inside the Debian desktop container that you operate, and the computer_ tools control its screen.",
-  "Relative paths in read, write, and edit, and the working directory of bash, are /home/agent. Absolute paths are container paths.",
+  "Relative paths in read, write, edit, and chat_send, and the working directory of bash, are /home/agent. Absolute paths are container paths.",
   "Use read to examine a file before changing it. Use edit for targeted changes; use write only for new files or complete rewrites.",
 ].join("\n");
 
@@ -98,11 +101,10 @@ export function toModelMessages(
 
     const parts = message.parts;
     if (parts === null) {
-      messages.push({ role: "assistant", content: message.content });
-      continue;
+      throw new Error(`assistant メッセージ ${message.id} に parts がありません`);
     }
 
-    messages.push({ role: "assistant", content: toAssistantParts(parts, message.content) });
+    messages.push({ role: "assistant", content: toAssistantParts(parts) });
 
     // ツールの結果に画像を置けないプロバイダのために、結果の直後に続ける画像を集める。
     // 置けるプロバイダでは、結果そのものに画像が入るので、ここには何も残らない。
@@ -125,8 +127,8 @@ export function toModelMessages(
  * ユーザーの発言が別の言語でも、設定した言語で書かせる。
  */
 const REPLY_LANGUAGE_INSTRUCTIONS: Record<ReplyLanguage, string> = {
-  ja: "Reply in Japanese. Write every part of your reply in Japanese, even if the user's message is in another language.",
-  en: "Reply in English. Write every part of your reply in English, even if the user's message is in another language.",
+  ja: "Reply in Japanese. Write every message you send with chat_send in Japanese, even if the user's message is in another language.",
+  en: "Reply in English. Write every message you send with chat_send in English, even if the user's message is in another language.",
 };
 
 export function replyLanguageInstruction(language: ReplyLanguage): string {
@@ -184,14 +186,29 @@ export function buildModelInput(
   return [{ role: "system", content: SYSTEM_PROMPT }, ...toModelMessages(context, images, replyLanguage, options)];
 }
 
-/** 本文とツール呼び出しを、保存された順のまま並べる。 */
-function toAssistantParts(parts: readonly MessagePart[], content: string): AssistantContent {
-  if (!parts.some((part) => part.type === "tool-call")) return content;
+/**
+ * 内部の本文とツール呼び出しを、保存された順のまま並べる。
+ * ユーザーへ送った sent と notice は、モデルへ戻さない（送った文はツールの引数に残っている）。
+ */
+function toAssistantParts(parts: readonly MessagePart[]): AssistantContent {
+  const hasToolCall = parts.some((part) => part.type === "tool-call");
+  const text = parts
+    .filter((part): part is Extract<MessagePart, { type: "text" }> => part.type === "text")
+    .map((part) => part.text)
+    .join("");
+
+  if (!hasToolCall) {
+    if (text.length === 0) {
+      throw new Error("assistant メッセージに、モデルへ渡せる本文もツール呼び出しもありません");
+    }
+    return text;
+  }
 
   const blocks: Exclude<AssistantContent, string> = [];
   for (const part of parts) {
-    if (part.type === "text") blocks.push({ type: "text", text: part.text });
-    else if (part.type === "tool-call") {
+    if (part.type === "text") {
+      if (part.text.length > 0) blocks.push({ type: "text", text: part.text });
+    } else if (part.type === "tool-call") {
       blocks.push({
         type: "tool-call",
         toolCallId: part.id,

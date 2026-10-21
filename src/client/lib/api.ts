@@ -56,7 +56,8 @@ export async function listMessages(teraId: string): Promise<readonly ChatMessage
  * 1 ターン分のイベントを SSE として受け取る。
  * 本文とファイルは multipart/form-data で送る。ファイルはサーバがコンテナへ置き、
  * そのパスをユーザー発言の後ろに添えてモデルへ渡す。
- * 途中で AbortSignal が立った場合は、例外にせずそのまま終了する（利用者の「停止」操作）。
+ * 画面へ流れるのは、エージェントが送ったメッセージと、引き受けの出来事だけ。
+ * 途中で AbortSignal が立った場合は、例外にせずそのまま終了する（画面の切り替え）。
  */
 export async function* streamTurn(
   teraId: string,
@@ -101,6 +102,14 @@ export async function* streamTurn(
   } finally {
     reader.releaseLock();
   }
+}
+
+/**
+ * 走っているターンを止める。止めたターンは、それまでに送ったメッセージを保存して
+ * assistant-done を返す（SSE は閉じない）。
+ */
+export async function stopTurn(teraId: string): Promise<void> {
+  await fetchOrThrow(`${teraPath(teraId)}/stop`, { method: "POST" });
 }
 
 function teraPath(teraId: string): string {

@@ -3,7 +3,7 @@ import { saveUploads } from "../../computer/uploads";
 import { createTurns } from "../../agent/turns";
 import { ValidationError } from "../../errors";
 import { readTurnForm } from "../body";
-import { json, jsonError } from "../respond";
+import { json, jsonError, noContent } from "../respond";
 import { createSseResponse } from "../sse";
 import { type ApiDeps, type ApiRequest, requireTera } from "./shared";
 
@@ -60,6 +60,17 @@ export function terasHandlers(deps: ApiDeps) {
         return jsonError(409, "turn_in_progress", "この Tera はほかで応答を生成しています");
       }
       return createSseResponse(events);
+    },
+
+    /**
+     * 走っているターンを止める。止めたターンは、それまでに送ったメッセージを保存して
+     * assistant-done で終わる（SSE は閉じない。画面はそのまま結果を受け取れる）。
+     * すでに終わっていても、止めるものが無いだけで成功にする（連打しても害が無い）。
+     */
+    stopTurn(req: ApiRequest<{ id: string }>): Response {
+      requireTera(store, req.params.id);
+      turns.stop(req.params.id);
+      return noContent();
     },
   };
 }

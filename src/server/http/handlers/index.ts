@@ -1,6 +1,7 @@
 import { computerHandlers } from "./computer";
 import { containerHandlers } from "./container";
 import { mcpHandlers } from "./mcp";
+import { mediaHandlers } from "./media";
 import { modelHandlers } from "./model";
 import type { ApiDeps } from "./shared";
 import { terasHandlers } from "./teras";
@@ -16,6 +17,7 @@ export function createApiHandlers(deps: ApiDeps) {
     ...mcpHandlers(deps),
     ...containerHandlers(deps),
     ...computerHandlers(deps),
+    ...mediaHandlers(deps),
   };
 }
 

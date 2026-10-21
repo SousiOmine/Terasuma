@@ -6,13 +6,15 @@
  */
 import { expect, test } from "bun:test";
 import { DEFAULT_TERA_ID } from "../../src/server/data/store";
+import type { MessagePart } from "../../src/shared/types";
 import {
   CONTAINER_TIMEOUT_MS,
   TURN_TIMEOUT_MS,
   expectTurnSucceeded,
-  joinedDeltas,
+  messageText,
   preview,
   report,
+  sentText,
   toolCall,
   toolResultFor,
   withLiveServer,
@@ -29,9 +31,9 @@ test(
       expect(first[1]?.type).toBe("assistant-start");
 
       const done = expectTurnSucceeded(first);
-      const text = joinedDeltas(first);
+      const text = sentText(first);
       expect(text.length, "本文が空だった").toBeGreaterThan(0);
-      expect(done.content, "流れてきた本文と保存された本文が食い違っている").toBe(text);
+      expect(messageText(done), "流れてきた本文と保存された本文が食い違っている").toBe(text);
       expect(done.usage, "トークン数が報告されなかった").not.toBeNull();
       expect(done.usage?.inputTokens ?? 0, "入力トークンが 0 だった").toBeGreaterThan(0);
       expect(done.usage?.outputTokens ?? 0, "出力トークンが 0 だった").toBeGreaterThan(0);
@@ -41,13 +43,15 @@ test(
       // 保存済みの履歴がプロバイダに通るかどうかは、ここでしか分からない。
       const second = await harness.send(DEFAULT_TERA_ID, "いま何と答えましたか。一言で。");
       const secondDone = expectTurnSucceeded(second);
-      expect(joinedDeltas(second).length, "2 ターン目の本文が空だった").toBeGreaterThan(0);
+      expect(sentText(second).length, "2 ターン目の本文が空だった").toBeGreaterThan(0);
       report("2 ターン目", secondDone);
 
       const saved = await harness.messages(DEFAULT_TERA_ID);
       expect(saved.map((message) => message.role)).toEqual(["user", "assistant", "user", "assistant"]);
-      expect(saved[1]?.content).toBe(done.content);
-      expect(saved[3]?.content).toBe(secondDone.content);
+      expect(saved[1]?.content).toBe("");
+      expect(saved[3]?.content).toBe("");
+      expect(saved[1] === undefined ? "" : messageText(saved[1])).toBe(text);
+      expect(saved[3] === undefined ? "" : messageText(saved[3])).toBe(sentText(second));
     });
   },
   TURN_TIMEOUT_MS,
@@ -77,7 +81,7 @@ test(
       expect(result.part.output, "実行結果に印が無い").toContain("terasuma-live-ok");
 
       // モデルは結果を読んでから本文を書く。ここまで来ていれば、1 ターンの中で往復できている。
-      expect(done.content.length, "ツールを使った後の本文が空だった").toBeGreaterThan(0);
+      expect(sentText(events).length, "ツールを使った後の本文が空だった").toBeGreaterThan(0);
 
       // 呼び出しと結果は、本文と同じメッセージの一部として残る。
       const parts = (await harness.messages(DEFAULT_TERA_ID))[1]?.parts ?? [];
@@ -108,8 +112,9 @@ test(
       report("応答", done);
 
       // 要約は先頭の user メッセージとして渡す。プロバイダがこの並びを受け付けるかは、ここでしか分からない。
-      expect(done.content, "畳んだ要約がモデルへ渡っていない").toContain("そら");
-      expect(done.content).toContain("京都");
+      const text = messageText(done);
+      expect(text, "畳んだ要約がモデルへ渡っていない").toContain("そら");
+      expect(text).toContain("京都");
     });
   },
   TURN_TIMEOUT_MS,
@@ -123,11 +128,14 @@ test(
       // 画面から作ると 30 往復かかるので、履歴は直に置く（最後はアシスタントの発言にして、畳める形にする）。
       for (let index = 1; index <= 60; index += 1) {
         const content = `記録 ${index}: ${"terasuma compaction check ".repeat(150)}`;
+        const role = index % 2 === 1 ? "user" : "assistant";
+        const parts: MessagePart[] | null = role === "assistant" ? [{ type: "text", text: content }] : null;
         harness.store.appendMessage({
           id: `seed-${index}`,
           teraId: DEFAULT_TERA_ID,
-          role: index % 2 === 1 ? "user" : "assistant",
-          content,
+          role,
+          content: role === "user" ? content : "",
+          parts,
         });
       }
 

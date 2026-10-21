@@ -1,5 +1,5 @@
 import { signal } from "@preact/signals";
-import type { ChatEvent, ChatMessage } from "../../shared/types";
+import type { ChatEvent, ChatMessage, NoticePart, SentPart } from "../../shared/types";
 import { locale } from "../i18n";
 import * as api from "../lib/api";
 import { ApiError } from "../lib/http";
@@ -11,24 +11,38 @@ import { activeTeraId } from "./session";
 /**
  * チャットの状態と、1 ターンの送信。
  *
- * 確定した会話は messages、生成中の本文は streamingText に置く。
+ * 確定した会話は messages、いま届いているターンは liveTurn に置く。
  * ツールの呼び出しと結果は画面に出さないので持たない（引き受けの判定にだけ使う）。
+ * モデルの本文も持たない。画面に出るのは、エージェントが送ったメッセージだけ。
  */
 
 export const messages = signal<readonly ChatMessage[]>([]);
 
-/**
- * 生成中の本文。完了すると messages へ移り、ここは空に戻る。
- */
-export const streamingText = signal("");
+/** いま届いているターンの、ユーザーへ送られたメッセージと注記。 */
+export type LiveTurn = {
+  id: string;
+  createdAt: number;
+  parts: readonly (SentPart | NoticePart)[];
+};
+
+export const liveTurn = signal<LiveTurn | null>(null);
 export const isStreaming = signal(false);
+/** 停止を頼んで、ターンが止まるのを待っている。 */
+export const isStopping = signal(false);
 export const isLoadingMessages = signal(false);
 
-/** 送信中のターン。停止はここから打ち切る。 */
-let controller: AbortController | null = null;
+/** いま繋いでいるターン。切り替えや停止で、古いターンの後始末が新しい状態を壊さないようにする。 */
+type CurrentTurn = { teraId: string; controller: AbortController };
+let current: CurrentTurn | null = null;
 
 export async function openTera(id: string): Promise<void> {
-  stopStreaming();
+  // 表示中のターンは捨てて、新しい Tera の履歴を読む。
+  // サーバ側のターンは、接続が切れた時点でそれまでの内容を保存して終わる。
+  current?.controller.abort();
+  current = null;
+  liveTurn.value = null;
+  isStreaming.value = false;
+  isStopping.value = false;
   clearChatError();
   activeTeraId.value = id;
   isLoadingMessages.value = true;
@@ -67,27 +81,75 @@ export async function sendMessage(rawContent: string, files: readonly File[]): P
 
   clearChatError();
 
-  const abort = new AbortController();
-  controller = abort;
+  const controller = new AbortController();
+  const turn: CurrentTurn = { teraId, controller };
+  current = turn;
   isStreaming.value = true;
-  streamingText.value = "";
+  isStopping.value = false;
+  liveTurn.value = null;
 
   try {
-    for await (const event of api.streamTurn(teraId, content, locale.value, files, abort.signal)) {
+    for await (const event of api.streamTurn(teraId, content, locale.value, files, controller.signal)) {
       applyEvent(event);
     }
   } catch (error) {
     showChatError(error);
   } finally {
-    isStreaming.value = false;
-    streamingText.value = "";
-    controller = null;
+    // タブを切り替えたあとに古いターンが終わっても、いまの画面は壊さない。
+    if (current === turn) {
+      settleLiveTurn(teraId);
+      current = null;
+      isStreaming.value = false;
+      isStopping.value = false;
+    }
   }
 }
 
-export function stopStreaming(): void {
-  controller?.abort();
-  controller = null;
+/**
+ * assistant-done を受け取れなかったターンを、画面に残す。
+ *
+ * サーバはそれまでに送ったメッセージを必ず保存しているので、読み直せば同じ内容が履歴から出る。
+ * ここでは読み直すまでの間、同じ id のローカルのメッセージとして置いておく。
+ * 保存された連番は読み直したときに付く（画面は配列の順に並べるので、ここでは使わない）。
+ */
+function settleLiveTurn(teraId: string): void {
+  const live = liveTurn.value;
+  liveTurn.value = null;
+  if (live === null || live.parts.length === 0) return;
+  if (activeTeraId.value !== teraId) return;
+
+  messages.value = [
+    ...messages.value,
+    {
+      id: live.id,
+      teraId,
+      seq: 0,
+      role: "assistant",
+      content: "",
+      attachments: null,
+      parts: [...live.parts],
+      createdAt: live.createdAt,
+      usage: null,
+    },
+  ];
+}
+
+/**
+ * 走っているターンを止める。SSE は閉じず、サーバがそれまでの内容を保存して
+ * assistant-done を返すので、画面はそのまま確定した履歴へ移れる。
+ */
+export async function stopStreaming(): Promise<void> {
+  const teraId = activeTeraId.value;
+  if (teraId === null || !isStreaming.value || isStopping.value) return;
+
+  isStopping.value = true;
+  try {
+    await api.stopTurn(teraId);
+  } catch (error) {
+    // 止められなかったので、ターンはそのまま続く。理由を出して、また押せるようにする。
+    showChatError(error);
+    isStopping.value = false;
+  }
 }
 
 /** イベントを状態へ反映する。解釈は chat-events.ts が持つ。 */
@@ -97,15 +159,18 @@ function applyEvent(event: ChatEvent): void {
 
   switch (effect.kind) {
     case "message":
+      if (effect.message.role === "assistant") liveTurn.value = null;
       messages.value = [...messages.value, effect.message];
-      if (effect.message.role === "assistant") streamingText.value = "";
       break;
     case "assistant-start":
-      streamingText.value = "";
+      liveTurn.value = { id: effect.id, createdAt: effect.createdAt, parts: [] };
       break;
-    case "text":
-      streamingText.value += effect.delta;
+    case "assistant-part": {
+      const live = liveTurn.value;
+      if (live === null) throw new Error(`ターンの開始前にメッセージが届きました（${effect.id}）`);
+      liveTurn.value = { ...live, parts: [...live.parts, effect.part] };
       break;
+    }
     case "handover-start":
       beginHandover(effect.question);
       break;

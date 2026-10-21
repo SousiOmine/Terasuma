@@ -15,11 +15,23 @@ export const TOOL_NAME_SEPARATOR = "_";
 /** 内蔵のコンピュータ操作ツールのサーバー id。MCP サーバーの id としては使えない。 */
 export const COMPUTER_SERVER_ID = "computer";
 
+/**
+ * ユーザーへメッセージを送る内蔵ツールのサーバー id。
+ * チャットの送信はこの 1 本だけを通す（モデルの本文は画面に出さない）。
+ */
+export const CHAT_SERVER_ID = "chat";
+
 /** 画面をユーザーへ渡すツール名（サーバー id を付けない形）。 */
 export const ASK_USER_TOOL = "ask_user";
 
 /** モデルへ渡すときの、画面を渡すツールの名前。 */
 export const ASK_USER_TOOL_NAME = `${COMPUTER_SERVER_ID}${TOOL_NAME_SEPARATOR}${ASK_USER_TOOL}`;
+
+/** ユーザーへメッセージを送るツール名（サーバー id を付けない形）。 */
+export const SEND_MESSAGE_TOOL = "send";
+
+/** モデルへ渡すときの、メッセージを送るツールの名前。 */
+export const SEND_MESSAGE_TOOL_NAME = `${CHAT_SERVER_ID}${TOOL_NAME_SEPARATOR}${SEND_MESSAGE_TOOL}`;
 
 /** サーバー id とツール名から、モデルへ渡す名前を組み立てる。 */
 export function toolNameFor(server: string, tool: string): string {

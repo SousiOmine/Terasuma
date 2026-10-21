@@ -7,7 +7,7 @@
  */
 import { expect, test } from "bun:test";
 import { DEFAULT_TERA_ID } from "../../src/server/data/store";
-import { TURN_TIMEOUT_MS, expectTurnSucceeded, joinedDeltas, report, withLiveServer } from "./support";
+import { TURN_TIMEOUT_MS, expectTurnSucceeded, report, sentText, withLiveServer } from "./support";
 
 /** ひらがな・カタカナ・漢字が 1 文字でも含まれているか。 */
 const JAPANESE = /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff]/;
@@ -24,7 +24,7 @@ test(
       const done = expectTurnSucceeded(events);
       report("応答", done);
 
-      const text = joinedDeltas(events);
+      const text = sentText(events);
       expect(text.length, "本文が空だった").toBeGreaterThan(0);
       expect(text, "設定が英語なのに日本語で返している").not.toMatch(JAPANESE);
       expect(text, "英語の本文になっていない").toMatch(/[A-Za-z]/);

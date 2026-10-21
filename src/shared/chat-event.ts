@@ -1,5 +1,13 @@
 import { API_ERROR_CODES } from "./types";
-import type { ChatAttachment, ChatEvent, ChatMessage, ImageRef, MessagePart, TokenUsage } from "./types";
+import type {
+  ChatAttachment,
+  ChatEvent,
+  ChatMessage,
+  ImageRef,
+  MessagePart,
+  SentAttachment,
+  TokenUsage,
+} from "./types";
 
 /**
  * 通信と保存データの形を、実行時に確かめる。
@@ -38,6 +46,16 @@ export function isChatAttachment(value: unknown): value is ChatAttachment {
   return isRecord(value) && isString(value.name) && isNumber(value.size) && isString(value.path);
 }
 
+/** エージェントが送った添付ファイル 1 件。 */
+export function isSentAttachment(value: unknown): value is SentAttachment {
+  if (!isRecord(value)) return false;
+  if (!isString(value.name) || !isNumber(value.size) || !isString(value.url)) return false;
+
+  const image = value.image;
+  if (image === null) return true;
+  return isRecord(image) && isNumber(image.width) && isNumber(image.height);
+}
+
 /** 保存・送信されるメッセージの部品 1 つ。 */
 export function isMessagePart(value: unknown): value is MessagePart {
   if (!isRecord(value)) return false;
@@ -45,6 +63,15 @@ export function isMessagePart(value: unknown): value is MessagePart {
   switch (value.type) {
     case "text":
       return isString(value.text);
+    case "sent":
+      return (
+        isString(value.text) &&
+        isNumber(value.at) &&
+        Array.isArray(value.attachments) &&
+        value.attachments.every(isSentAttachment)
+      );
+    case "notice":
+      return isString(value.text) && isNumber(value.at);
     case "tool-call":
       return isString(value.id) && isString(value.server) && isString(value.tool) && "args" in value;
     case "tool-result":
@@ -88,8 +115,10 @@ export function isChatEvent(value: unknown): value is ChatEvent {
       return isChatMessage(value.message);
     case "assistant-start":
       return isString(value.id) && isNumber(value.createdAt);
-    case "text-delta":
-      return isString(value.id) && isString(value.delta);
+    case "assistant-message":
+      return isString(value.id) && isMessagePart(value.part) && value.part.type === "sent";
+    case "notice":
+      return isString(value.id) && isMessagePart(value.part) && value.part.type === "notice";
     case "tool-call":
       return isString(value.id) && isMessagePart(value.part) && value.part.type === "tool-call";
     case "tool-result":

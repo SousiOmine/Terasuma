@@ -2,6 +2,9 @@ import { Database } from "bun:sqlite";
 import { isChatAttachment, isMessagePart } from "../../shared/chat-event";
 import type { ChatAttachment, ChatMessage, MessagePart, MessageRole, Tera, TokenUsage } from "../../shared/types";
 
+/** 既存の assistant の本文を、画面に出す sent パーツへ移す版。 */
+const CONTENT_TO_SENT_VERSION = 3;
+
 /**
  * 既定の Tera。起動時に 1 体だけ用意する。
  * 増やす導線はまだ無いので、会話の持ち主は当面この 1 つになる。
@@ -13,9 +16,9 @@ export type AppendMessageInput = {
   id: string;
   teraId: string;
   role: MessageRole;
-  /** 画面に出す本文。 */
+  /** ユーザーが書いた本文。assistant では空で、表示する本文は parts の sent が持つ。 */
   content: string;
-  /** 画面に出す添付ファイル。無ければ null。 */
+  /** ユーザーが添付したファイル。無ければ null。 */
   attachments?: ChatAttachment[] | null;
   /** ツール呼び出しを含むときだけ渡す。含まないメッセージは null。 */
   parts?: MessagePart[] | null;
@@ -321,7 +324,7 @@ export function createStore(dbPath: string, options: CreateStoreOptions = {}): S
 }
 
 /** いまの保存の形の版。形を変えたら上げ、migrateSchema に移行を足す。 */
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 
 /**
  * 保存の形を、いまの版に合わせる。
@@ -334,7 +337,70 @@ function migrateSchema(db: Database): void {
 
   dropLegacyTables(db);
   ensureMessageColumns(db);
+  if (version < CONTENT_TO_SENT_VERSION) moveAssistantContentToSent(db);
   db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
+}
+
+/**
+ * v2 までの assistant の本文を、画面に出す sent パーツへ移す。
+ *
+ * 以前は content をそのまま画面に出していた。いまは画面が parts の sent だけを読むので、
+ * そのままにすると過去の返事がどこにも表示されなくなる。本文はモデルへ渡す履歴にも
+ * 必要なので text として残し、同じ文を sent として足す。
+ */
+function moveAssistantContentToSent(db: Database): void {
+  if (!tableExists(db, "messages")) return;
+
+  const rows = db
+    .query<LegacyAssistantRow, []>("SELECT id, content, parts, created_at FROM messages WHERE role = 'assistant'")
+    .all();
+  if (rows.length === 0) return;
+
+  const update = db.query<unknown, [string, string]>("UPDATE messages SET content = '', parts = ? WHERE id = ?");
+  const migrate = db.transaction(() => {
+    for (const row of rows) update.run(JSON.stringify(sentPartsFromLegacy(row)), row.id);
+  });
+  migrate();
+}
+
+type LegacyAssistantRow = {
+  id: string;
+  content: string;
+  parts: string | null;
+  created_at: number;
+};
+
+/** 移行前の 1 行を、いまの形（text と sent の並び）に開く。 */
+function sentPartsFromLegacy(row: LegacyAssistantRow): MessagePart[] {
+  const at = row.created_at;
+
+  if (row.parts === null) {
+    if (row.content.length === 0) return [];
+    return [
+      { type: "text", text: row.content },
+      { type: "sent", text: row.content, attachments: [], at },
+    ];
+  }
+
+  const parsed: unknown = JSON.parse(row.parts);
+  if (!Array.isArray(parsed) || !parsed.every(isMessagePart)) {
+    throw new Error(`メッセージ ${row.id} の parts を移行できませんでした`);
+  }
+
+  const parts: MessagePart[] = [];
+  for (const part of parsed) {
+    parts.push(part);
+    if (part.type === "text" && part.text.length > 0) {
+      parts.push({ type: "sent", text: part.text, attachments: [], at });
+    }
+  }
+  return parts;
+}
+
+/** テーブルがあるかどうか（移行の前に、まだ作られていないテーブルを触らないため）。 */
+function tableExists(db: Database, name: string): boolean {
+  const row = db.query<{ name: string }, [string]>("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?").get(name);
+  return row !== null;
 }
 
 /**

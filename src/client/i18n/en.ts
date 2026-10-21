@@ -19,7 +19,10 @@ export const en = {
   "tera.empty": "No Teras yet",
 
   "chat.empty.title": "What can I help you with?",
-  "chat.working": "Working…",
+  "chat.typing": "Typing…",
+  "chat.agent.subtitle": "AI assistant",
+  "chat.file.download": "Download {name}",
+  "chat.image.open": "Open {name}",
 
   "chat.model.unset": "No model is configured. Add a provider in Settings.",
   "chat.model.providerMissing": "The provider for the default model is missing. Choose another model in Settings.",
@@ -39,6 +42,7 @@ export const en = {
   "composer.placeholder": "Send a message",
   "composer.send": "Send",
   "composer.stop": "Stop",
+  "composer.stopping": "Stopping…",
   "composer.attach": "Attach files",
   "composer.attach.remove": "Remove {name}",
   "composer.attach.tooMany": "You can attach up to {max} files.",
@@ -202,6 +206,7 @@ export const en = {
   "error.container_not_running": "The computer is not running.",
   "error.handover_not_pending": "This conversation is not waiting for you.",
   "error.turn_in_progress": "This conversation is already generating a reply elsewhere.",
+  "error.media_not_found": "The file was not found.",
   "error.settings_write_failed": "The settings could not be saved.",
   "error.internal_error": "Something went wrong.",
   "error.network": "The server is not reachable.",

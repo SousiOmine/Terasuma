@@ -2,17 +2,16 @@
  * 送信のキー操作の判定。
  * Composer から切り出して、ブラウザを介さずにテストできるようにしてある。
  *
- * Enter と Shift + Enter は改行に使い、送信は Ctrl（macOS では Cmd）+ Enter にする。
- * そのため、判定に shiftKey は要らない（Shift が押されていても送信にはならない）。
+ * チャットアプリと同じく、Enter で送信し、Shift + Enter で改行する。
+ * 日本語入力の変換確定の Enter を送信と勘違いしないよう、isComposing を見る。
  */
 export type SendKeyEvent = {
   key: string;
-  ctrlKey: boolean;
-  metaKey: boolean;
+  shiftKey: boolean;
   /** 日本語入力の変換中かどうか。確定の Enter を送信と勘違いしないために見る。 */
   isComposing: boolean;
 };
 
 export function isSendKey(event: SendKeyEvent): boolean {
-  return event.key === "Enter" && (event.ctrlKey || event.metaKey) && !event.isComposing;
+  return event.key === "Enter" && !event.shiftKey && !event.isComposing;
 }

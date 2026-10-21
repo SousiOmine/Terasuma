@@ -25,6 +25,9 @@ const IMAGE_EXTENSIONS: Record<string, string> = {
 /** ファイル名に使えるハッシュの形。パスを組み立てる前に必ずこれで確かめる。 */
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
 
+/** ブラウザから渡されるファイル名の形（<sha256>.<拡張子>）。 */
+const IMAGE_FILE_PATTERN = /^([0-9a-f]{64})\.([a-z0-9]+)$/;
+
 /** ディレクトリ名。データディレクトリの直下に置く。 */
 const IMAGES_DIR_NAME = "images";
 
@@ -36,16 +39,46 @@ export type ImageReader = {
 export type ImageStore = ImageReader & {
   /** 画像を保存して参照を返す。同じ中身なら同じ参照になる。 */
   save(data: Uint8Array, mime: string): ImageRef;
+  /** ブラウザからのファイル名（<sha256>.<拡張子>）で読む。知らない形なら null。 */
+  readByName(file: string): { data: Uint8Array; mime: string } | null;
 };
+
+/** 画像の保存名。URL の末尾にもなる。 */
+export function imageFileName(ref: ImageRef): string {
+  const extension = IMAGE_EXTENSIONS[ref.mime];
+  if (extension === undefined) throw new Error(`Unsupported image type: ${ref.mime}`);
+  return `${ref.sha256}.${extension}`;
+}
+
+/** 画面から画像を開く URL。 */
+export function imageUrl(ref: ImageRef): string {
+  return `/api/images/${imageFileName(ref)}`;
+}
 
 /** 画像 1 枚の大きさ。 */
 type ImageSize = { width: number; height: number };
+
+/** 拡張子から mime を引くための、IMAGE_EXTENSIONS の逆向きの表。 */
+const MIME_BY_EXTENSION: Record<string, string> = Object.fromEntries(
+  Object.entries(IMAGE_EXTENSIONS).map(([mime, extension]) => [extension, mime]),
+);
 
 export function createImageStore(dataDir: string): ImageStore {
   const imagesDir = join(dataDir, IMAGES_DIR_NAME);
 
   function fileFor(sha256: string, mime: string): string {
     return join(imagesDir, `${sha256}.${IMAGE_EXTENSIONS[mime]}`);
+  }
+
+  /** sha256 と mime から実体を読む。参照の形が正しくなければ null。 */
+  function readStored(sha256: string, mime: string): Uint8Array | null {
+    if (normalizeImageMime(mime) === null) return null;
+    // 参照は保存済みの値だが、パスを組み立てる前に形を確かめる。
+    // MCP サーバーのツール結果から作られた参照は、端末の外で決まった値でもある。
+    if (!SHA256_PATTERN.test(sha256)) return null;
+
+    const file = fileFor(sha256, mime);
+    return existsSync(file) ? readFileSync(file) : null;
   }
 
   return {
@@ -71,13 +104,21 @@ export function createImageStore(dataDir: string): ImageStore {
 
     read(ref) {
       const type = normalizeImageMime(ref.mime);
-      if (type === null) return null;
-      // 参照は保存済みの値だが、パスを組み立てる前に形を確かめる。
-      // MCP サーバーのツール結果から作られた参照は、端末の外で決まった値でもある。
-      if (!SHA256_PATTERN.test(ref.sha256)) return null;
+      return type === null ? null : readStored(ref.sha256, type);
+    },
 
-      const file = fileFor(ref.sha256, type);
-      return existsSync(file) ? readFileSync(file) : null;
+    readByName(file) {
+      const match = IMAGE_FILE_PATTERN.exec(file);
+      if (match === null) return null;
+
+      const [, sha256, extension] = match;
+      if (sha256 === undefined || extension === undefined) return null;
+
+      const mime = MIME_BY_EXTENSION[extension];
+      if (mime === undefined) return null;
+
+      const data = readStored(sha256, mime);
+      return data === null ? null : { data, mime };
     },
   };
 }

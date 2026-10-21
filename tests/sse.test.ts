@@ -1,11 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import { decodeChatEvents, encodeChatEvent } from "../src/shared/sse";
-import type { ChatEvent } from "../src/shared/types";
+import type { ChatEvent, SentPart } from "../src/shared/types";
+
+const part: SentPart = { type: "sent", text: "こんにちは", attachments: [], at: 2 };
 
 const events: ChatEvent[] = [
   { type: "assistant-start", id: "a1", createdAt: 1 },
-  { type: "text-delta", id: "a1", delta: "こん" },
-  { type: "text-delta", id: "a1", delta: "にちは" },
+  { type: "assistant-message", id: "a1", part },
+  { type: "notice", id: "a1", part: { type: "notice", text: "止まりました", at: 3 } },
   { type: "error", code: "model_error", detail: "失敗した" },
 ];
 
@@ -49,9 +51,16 @@ describe("SSE", () => {
         teraId: "t1",
         seq: 2,
         role: "assistant",
-        content: "1行目\n2行目\n```ts\nconst a = 1;\n```",
+        content: "",
         attachments: null,
-        parts: null,
+        parts: [
+          {
+            type: "sent",
+            text: "1行目\n2行目\n```ts\nconst a = 1;\n```",
+            attachments: [{ name: "図.png", size: 12, url: "/api/images/x.png", image: { width: 4, height: 3 } }],
+            at: 1,
+          },
+        ],
         createdAt: 1,
         usage: { inputTokens: 1, outputTokens: 2, cachedInputTokens: 3 },
       },

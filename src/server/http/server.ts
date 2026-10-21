@@ -3,6 +3,8 @@ import { join } from "node:path";
 import index from "../../client/index.html";
 import type { AppConfig } from "../../config";
 import type { ContainerManager } from "../computer/container";
+import type { FileStore } from "../computer/files";
+import type { ImageStore } from "../computer/images";
 import { MAX_REQUEST_BODY_BYTES } from "../computer/uploads";
 import type { AgentEngine } from "../agent/engine";
 import type { Handover } from "../computer/handover";
@@ -32,6 +34,10 @@ export type ServerOptions = {
   mcp: McpManager;
   /** podman で動かすコンテナ。設定画面からの操作もここを通る。 */
   container: ContainerManager;
+  /** エージェントが送った画像。画面へ返す。 */
+  images: ImageStore;
+  /** エージェントが送ったファイル。画面へ返す。 */
+  files: FileStore;
   /** ユーザーへ画面を渡す待ち。 */
   handover: Handover;
   /** 過去の対話の圧縮（古いやり取りの畳み方）。テストで差し替える。 */
@@ -77,7 +83,7 @@ const ANY_FREE_PORT = 0;
  * ルートはここでリテラルのパスとして並べる（Bun のルータは文字列リテラルからパラメータ型を作る）。
  */
 export function startServer(options: ServerOptions): StartedServer {
-  const { config, store, engine, compaction, settings, mcp, container, handover } = options;
+  const { config, store, engine, compaction, settings, mcp, container, images, files, handover } = options;
   // 各ハンドラの例外は、ここで 1 度だけ応答に変える（ハンドラ側に try/catch を書かない）。
   const api = withErrorHandling(
     createApiHandlers({
@@ -86,6 +92,8 @@ export function startServer(options: ServerOptions): StartedServer {
       settings,
       mcp,
       container,
+      images,
+      files,
       handover,
       compaction,
       catalog: options.catalog ?? createCatalog({ cachePath: join(config.dataDir, CATALOG_FILE_NAME) }),
@@ -109,6 +117,17 @@ export function startServer(options: ServerOptions): StartedServer {
         "/api/teras/:id/messages": {
           GET: api.listMessages,
           POST: api.sendMessage,
+        },
+        // 生成中のターンを、ここで打ち切る（それまでに送ったメッセージは保存される）。
+        "/api/teras/:id/stop": {
+          POST: api.stopTurn,
+        },
+        // エージェントが送った画像・ファイル。URL は中身のハッシュから決まる。
+        "/api/images/:file": {
+          GET: api.readImage,
+        },
+        "/api/files/:id": {
+          GET: api.readFile,
         },
         "/api/model": {
           GET: api.readModelSettings,

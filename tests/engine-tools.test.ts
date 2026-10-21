@@ -12,14 +12,25 @@ import {
   createAiSdkEngine,
   type ComputerToolsetProvider,
   type EngineEvent,
+  type MessagingToolsetProvider,
   type SettingsReader,
   type ToolsetProvider,
 } from "../src/server/agent/engine";
+import { createMessagingTools } from "../src/server/agent/tools/messaging";
+import { createFileStore } from "../src/server/computer/files";
+import type { ChatMessage, ImageRef, OutgoingMessage } from "../src/shared/types";
 import { createImageStore, type ImageStore } from "../src/server/computer/images";
 import type { CatalogSnapshot } from "../src/server/provider/catalog";
-import type { ChatMessage, ImageRef } from "../src/shared/types";
+
 import { createHandover } from "../src/server/computer/handover";
-import { createCodingStub, createComputerStub, createContainerStub, createImageStub, testPng } from "./support";
+import {
+  createCodingStub,
+  createComputerStub,
+  createContainerStub,
+  createImageStub,
+  createMessagingStub,
+  testPng,
+} from "./support";
 
 /**
  * 1 回目の呼び出しではツールを呼び、2 回目では本文を返す偽のプロバイダ。
@@ -239,12 +250,15 @@ async function run(
   coding: CodingToolset = createCodingStub(),
   images: ImageStore = createImageStub(),
   catalog: CatalogSnapshot | null = null,
+  messaging: MessagingToolsetProvider = createMessagingStub(),
+  sent: OutgoingMessage[] = [],
 ): Promise<EngineEvent[]> {
   const reader: SettingsReader = { read: () => settings };
   const stream = await createAiSdkEngine({
     settings: reader,
     mcp: provider,
     computer,
+    messaging,
     coding,
     images,
     catalog: { snapshot: () => catalog },
@@ -253,6 +267,7 @@ async function run(
     signal: new AbortController().signal,
     teraId: "t1",
     replyLanguage: "ja",
+    send: (message) => sent.push(message),
   });
 
   const events: EngineEvent[] = [];
@@ -385,6 +400,55 @@ describe("MCP のツール呼び出し（AI SDK 経由）", () => {
       expect(JSON.stringify(fake.bodies[1])).toContain("hello from the container");
     } finally {
       await fake.server.stop(true);
+    }
+  });
+
+  test("chat_send ツールがモデルへ渡り、送った内容がターンの外へ出る", async () => {
+    const fake = startFakeProvider({ name: "chat_send", args: '{"text":"こんにちは"}' });
+    const dir = mkdtempSync(join(tmpdir(), "terasuma-engine-"));
+    const images = createImageStore(dir);
+    const files = createFileStore(dir);
+    const sent: OutgoingMessage[] = [];
+    const messaging: MessagingToolsetProvider = {
+      toolset: ({ send }) =>
+        createMessagingTools({
+          container: {
+            readFile: async () => {
+              throw new Error("テストではファイルを読まない");
+            },
+            screenshot: async () => testPng(1280, 800),
+          },
+          root: "/home/agent",
+          images,
+          files,
+          send,
+        }),
+    };
+
+    try {
+      const events = await run(
+        { toolset: async () => ({}) },
+        settingsFor(portOf(fake.server)),
+        createComputerStub(),
+        createCodingStub(),
+        images,
+        null,
+        messaging,
+        sent,
+      );
+
+      // モデルへ渡す名前は "chat_send"（サーバー id とツール名の規則に乗る）。
+      expect(toolNames(fake.bodies[0])).toContain("chat_send");
+      expect(sent).toEqual([{ text: "こんにちは", attachments: [] }]);
+
+      const result = events.find((event) => event.type === "tool-result");
+      if (result?.type !== "tool-result") throw new Error("chat_send の結果が無い");
+      expect(result.part.server).toBe("chat");
+      expect(result.part.tool).toBe("send");
+      expect(result.part.output).toContain("Sent");
+    } finally {
+      await fake.server.stop(true);
+      rmSync(dir, { recursive: true, force: true });
     }
   });
 

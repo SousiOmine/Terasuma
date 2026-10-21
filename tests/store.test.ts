@@ -212,6 +212,76 @@ describe("store", () => {
     }
   });
 
+  test("v2 の DB は、assistant の本文を画面に出す sent へ移して読める", () => {
+    const path = join(tmpdir(), `terasuma-store-${crypto.randomUUID()}.db`);
+
+    try {
+      const legacy = new Database(path, { create: true });
+      legacy.exec(`
+        CREATE TABLE teras (
+          id TEXT PRIMARY KEY, name TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
+        );
+        CREATE TABLE messages (
+          id TEXT PRIMARY KEY, tera_id TEXT NOT NULL, seq INTEGER NOT NULL, role TEXT NOT NULL,
+          content TEXT NOT NULL, attachments TEXT, parts TEXT, created_at INTEGER NOT NULL,
+          input_tokens INTEGER, output_tokens INTEGER, cached_input_tokens INTEGER,
+          UNIQUE (tera_id, seq)
+        );
+        PRAGMA user_version = 2;
+      `);
+      legacy.run("INSERT INTO teras VALUES ('default', 'Tera', 1, 2)");
+      legacy.run(
+        "INSERT INTO messages (id, tera_id, seq, role, content, created_at) VALUES ('m1', 'default', 1, 'user', '質問', 2)",
+      );
+      legacy.run(
+        "INSERT INTO messages (id, tera_id, seq, role, content, created_at) VALUES ('m2', 'default', 2, 'assistant', '古い返事', 3)",
+      );
+      legacy.run(
+        "INSERT INTO messages (id, tera_id, seq, role, content, parts, created_at) VALUES ('m3', 'default', 3, 'assistant', '調べます。分かりました。', ?, 4)",
+        [
+          JSON.stringify([
+            { type: "text", text: "調べます。" },
+            { type: "tool-call", id: "call-1", server: "local", tool: "echo", args: { text: "hi" } },
+            { type: "tool-result", id: "call-1", server: "local", tool: "echo", failed: false, output: "echo: hi" },
+            { type: "text", text: "分かりました。" },
+          ]),
+        ],
+      );
+      legacy.close();
+
+      const store = createStore(path);
+      try {
+        const [user, plain, tool] = store.listMessages(DEFAULT_TERA_ID);
+
+        // ユーザーの発言はそのまま。
+        expect(user?.content).toBe("質問");
+        expect(user?.parts).toBeNull();
+
+        // 本文しか無かった返事は、モデル向けの text と画面向けの sent の 1 組になる。
+        expect(plain?.content).toBe("");
+        expect(plain?.parts).toEqual([
+          { type: "text", text: "古い返事" },
+          { type: "sent", text: "古い返事", attachments: [], at: 3 },
+        ]);
+
+        // ツールを使った返事は、本文の位置ごとに sent を挟む。
+        expect(tool?.content).toBe("");
+        expect(tool?.parts).toEqual([
+          { type: "text", text: "調べます。" },
+          { type: "sent", text: "調べます。", attachments: [], at: 4 },
+          { type: "tool-call", id: "call-1", server: "local", tool: "echo", args: { text: "hi" } },
+          { type: "tool-result", id: "call-1", server: "local", tool: "echo", failed: false, output: "echo: hi" },
+          { type: "text", text: "分かりました。" },
+          { type: "sent", text: "分かりました。", attachments: [], at: 4 },
+        ]);
+      } finally {
+        store.close();
+      }
+    } finally {
+      removeDatabase(path);
+    }
+  });
+
   test("セッションごとに会話を分けていた頃の DB は、Tera の形に作り替える", () => {
     const path = join(tmpdir(), `terasuma-store-${crypto.randomUUID()}.db`);
 

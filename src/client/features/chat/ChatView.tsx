@@ -1,21 +1,45 @@
 import { IconLayoutSidebarRight } from "@tabler/icons-preact";
 import { useEffect, useMemo, useRef } from "preact/hooks";
+import type { ChatMessage, MessagePart, NoticePart, SentPart } from "../../../shared/types";
 import { containerStatus } from "../../state/container";
-import { t } from "../../i18n";
+import { locale, t } from "../../i18n";
 import { modelProblem } from "../../state/model";
-import { isLoadingMessages, isStreaming, messages, streamingText } from "../../state/chat";
+import {
+  isLoadingMessages,
+  isStreaming,
+  liveTurn,
+  messages,
+  type LiveTurn,
+} from "../../state/chat";
 import { chatError, clearChatError } from "../../state/failure";
-import { computerPaneOpen, toggleComputerPane } from "../../state/handover";
+import { computerPaneOpen, handoverActive, toggleComputerPane } from "../../state/handover";
 import { openSettings } from "../../state/route";
 import { activeTera } from "../../state/session";
-import { Composer } from "./Composer";
 import { Banner } from "../../ui/Banner";
 import { ErrorNotice } from "../../ui/ErrorNotice";
-import { MessageBubble } from "./MessageBubble";
+import { ChatAvatar } from "./ChatAvatar";
+import { Composer } from "./Composer";
+import { AgentMessageBubble, NoticeLine, TypingBubble, UserMessageBubble } from "./MessageBubble";
+
+/**
+ * チャット画面。
+ *
+ * 会話は、ユーザーの発言と、エージェントが送ったメッセージの吹き出しだけで組み立てる。
+ * モデルの本文は届かないので、少しずつ伸びる表示は無い（メッセージは届いた単位で出る）。
+ */
+
+type ChatItem =
+  | { kind: "date"; key: string; label: string }
+  | { kind: "user"; key: string; message: ChatMessage }
+  | { kind: "agent"; key: string; parts: readonly SentPart[] }
+  | { kind: "notice"; key: string; part: NoticePart };
 
 export function ChatView() {
-  const items = messages.value;
-  const pending = streamingText.value;
+  const items = useMemo(
+    () => buildItems(messages.value, liveTurn.value, localeTag()),
+    // locale を変えると日付の書き方も変わる。
+    [messages.value, liveTurn.value, locale.value],
+  );
   const streaming = isStreaming.value;
   const loading = isLoadingMessages.value;
   const error = chatError.value;
@@ -25,31 +49,16 @@ export function ChatView() {
   // 画面を開くボタンは、コンテナがある端末にだけ出す（押しても何も出ないボタンを作らない）。
   const containerAvailable = containerStatus.value !== null && !containerMissing;
   const paneOpen = computerPaneOpen.value;
+  const handover = handoverActive.value;
   const scrollRef = useRef<HTMLDivElement>(null);
   /** 末尾にいるかどうか。履歴を読んでいる間は引き戻さない。 */
   const stickToBottom = useRef(true);
 
-  // 確定した会話は、増えたときだけ組み立て直す。
-  // 生成中の本文が伸びるたびに全メッセージの部品を作り直すと、長い会話ほど重くなる。
-  const bubbles = useMemo(
-    () =>
-      items.map((message) => (
-        <MessageBubble
-          key={message.id}
-          author={message.role}
-          content={message.content}
-          attachments={message.attachments}
-        />
-      )),
-    [items],
-  );
-
-  // 新しい内容が来たら末尾へ寄せる。会話が伸びる操作は送信とストリーミングだけなので十分。
-  // 本文は少しずつ伸びるので、メッセージの数だけでは足りない（文字数も見る）。
+  // 新しい内容が来たら末尾へ寄せる。メッセージは届いた単位で増えるので、数を見れば足りる。
   useEffect(() => {
     const node = scrollRef.current;
     if (node !== null && stickToBottom.current) node.scrollTop = node.scrollHeight;
-  }, [items.length, pending.length, loading]);
+  }, [items.length, streaming]);
 
   const handleScroll = (): void => {
     const node = scrollRef.current;
@@ -64,9 +73,15 @@ export function ChatView() {
   const showEmpty = !loading && items.length === 0 && !streaming;
 
   return (
-    <main class="flex min-w-0 flex-1 flex-col">
-      <header class="flex h-12 shrink-0 items-center gap-3 border-b border-neutral-200 px-5 dark:border-neutral-800">
-        <h1 class="min-w-0 flex-1 truncate text-sm font-medium">{title}</h1>
+    <main class="flex min-w-0 flex-1 flex-col bg-[#eef3ee] dark:bg-[#0e1411]">
+      <header class="flex h-14 shrink-0 items-center gap-3 border-b border-black/5 bg-white/85 px-4 backdrop-blur dark:border-white/5 dark:bg-neutral-900/80 sm:px-6">
+        <ChatAvatar size={34} />
+        <div class="min-w-0 flex-1">
+          <h1 class="truncate text-sm font-semibold">{title}</h1>
+          <p class="truncate text-[11px] text-neutral-500 dark:text-neutral-400">
+            {handover ? t("chat.computer.yourTurn") : streaming ? t("chat.typing") : t("chat.agent.subtitle")}
+          </p>
+        </div>
         {containerAvailable && (
           <button
             type="button"
@@ -74,13 +89,13 @@ export function ChatView() {
             aria-pressed={paneOpen}
             title={t(paneOpen ? "chat.computer.hide" : "chat.computer.show")}
             aria-label={t(paneOpen ? "chat.computer.hide" : "chat.computer.show")}
-            class={`shrink-0 rounded-lg p-1.5 transition ${
+            class={`shrink-0 rounded-full p-2 transition ${
               paneOpen
-                ? "bg-neutral-200 text-neutral-900 dark:bg-neutral-800 dark:text-neutral-100"
-                : "text-neutral-500 hover:bg-neutral-200/70 dark:text-neutral-400 dark:hover:bg-neutral-800"
+                ? "bg-[#06c755]/15 text-[#078f45] dark:bg-[#06c755]/20 dark:text-[#59d98a]"
+                : "text-neutral-500 hover:bg-black/5 dark:text-neutral-400 dark:hover:bg-white/10"
             }`}
           >
-            <IconLayoutSidebarRight size={16} stroke={1.6} />
+            <IconLayoutSidebarRight size={17} stroke={1.7} />
           </button>
         )}
       </header>
@@ -97,20 +112,20 @@ export function ChatView() {
         </Banner>
       )}
 
-      <div ref={scrollRef} onScroll={handleScroll} class="min-h-0 flex-1 overflow-y-auto">
+      <div ref={scrollRef} onScroll={handleScroll} class="tera-chat-wallpaper min-h-0 flex-1 overflow-y-auto">
         {showEmpty ? (
           <EmptyState />
         ) : (
-          <div class="mx-auto flex w-full max-w-3xl flex-col gap-6 px-5 py-8">
-            {bubbles}
-            {streaming && <MessageBubble author="assistant" content={pending} working />}
-            {loading && <p class="text-sm text-neutral-500 dark:text-neutral-400">{t("common.loading")}</p>}
+          <div class="mx-auto flex w-full max-w-3xl flex-col gap-3 px-4 py-6 sm:px-6">
+            {items.map((item) => renderItem(item))}
+            {streaming && !handover && <TypingBubble />}
+            {loading && <p class="text-center text-sm text-neutral-500 dark:text-neutral-400">{t("common.loading")}</p>}
           </div>
         )}
       </div>
 
       {error !== null && (
-        <div class="px-5 pb-2">
+        <div class="px-4 pb-2 sm:px-6">
           <div class="mx-auto w-full max-w-3xl">
             <ErrorNotice
               error={error}
@@ -140,10 +155,151 @@ export function ChatView() {
   );
 }
 
+function renderItem(item: ChatItem) {
+  const tag = localeTag();
+
+  switch (item.kind) {
+    case "date":
+      return (
+        <div key={item.key} class="flex justify-center py-1">
+          <span class="rounded-full bg-black/5 px-3 py-1 text-[11px] text-neutral-600 dark:bg-white/10 dark:text-neutral-300">
+            {item.label}
+          </span>
+        </div>
+      );
+    case "user":
+      return <UserMessageBubble key={item.key} message={item.message} time={formatTime(item.message.createdAt, tag)} />;
+    case "agent":
+      return (
+        <div key={item.key} class="flex items-start gap-2">
+          <ChatAvatar size={30} class="mt-1" />
+          <div class="flex min-w-0 max-w-[82%] flex-col gap-1.5">
+            {item.parts.map((part, index) => (
+              <AgentMessageBubble key={`${item.key}-${index}`} part={part} time={formatTime(part.at, tag)} />
+            ))}
+          </div>
+        </div>
+      );
+    case "notice":
+      return <NoticeLine key={item.key} part={item.part} />;
+  }
+}
+
+/**
+ * 保存された会話と、届いている途中のターンを、画面の並びへ開く。
+ *
+ * assistant のメッセージは parts の sent と notice だけを出す。
+ * 連続する sent は、同じターンのまとまりとして 1 つの吹き出し群にする（アイコンは 1 つ）。
+ */
+function buildItems(
+  saved: readonly ChatMessage[],
+  live: LiveTurn | null,
+  tag: string,
+): ChatItem[] {
+  const items: ChatItem[] = [];
+  let currentDay: string | null = null;
+
+  const pushDate = (at: number): void => {
+    const day = dayKey(at);
+    if (day === currentDay) return;
+
+    currentDay = day;
+    items.push({ kind: "date", key: `date-${day}-${items.length}`, label: formatDate(at, tag) });
+  };
+
+  for (const message of saved) {
+    if (message.role === "user") {
+      pushDate(message.createdAt);
+      items.push({ kind: "user", key: message.id, message });
+      continue;
+    }
+
+    if (message.parts !== null) pushParts(items, message.id, visibleParts(message.parts), pushDate);
+  }
+
+  if (live !== null) pushParts(items, live.id, live.parts, pushDate);
+
+  return items;
+}
+
+/** 記録のうち、画面に出す部分だけを取り出す。 */
+function visibleParts(parts: readonly MessagePart[]): (SentPart | NoticePart)[] {
+  return parts.filter((part): part is SentPart | NoticePart => part.type === "sent" || part.type === "notice");
+}
+
+/** 1 つのターンの parts を、吹き出し群と注記の並びにする。 */
+function pushParts(
+  items: ChatItem[],
+  messageId: string,
+  parts: readonly (SentPart | NoticePart)[],
+  pushDate: (at: number) => void,
+): void {
+  let group: SentPart[] = [];
+  let groupIndex = 0;
+  let groupDay: string | null = null;
+  let noticeIndex = 0;
+
+  const flush = (): void => {
+    if (group.length === 0) return;
+
+    items.push({ kind: "agent", key: `${messageId}-group-${groupIndex}`, parts: group });
+    group = [];
+    groupIndex += 1;
+    groupDay = null;
+  };
+
+  for (const part of parts) {
+    const day = dayKey(part.at);
+    // 日付をまたいだら、別の吹き出し群にする（日付の区切りが群の中に入らないように）。
+    if (group.length > 0 && day !== groupDay) flush();
+
+    pushDate(part.at);
+
+    if (part.type === "sent") {
+      group.push(part);
+      groupDay = day;
+      continue;
+    }
+
+    flush();
+    items.push({ kind: "notice", key: `${messageId}-notice-${noticeIndex}`, part });
+    noticeIndex += 1;
+  }
+
+  flush();
+}
+
+function localeTag(): string {
+  return locale.value === "ja" ? "ja-JP" : "en-US";
+}
+
+/** 日付が変わったかどうかを見るための、その端末の暦での日付。 */
+function dayKey(at: number): string {
+  const date = new Date(at);
+  return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
+}
+
+function formatDate(at: number, tag: string): string {
+  return new Intl.DateTimeFormat(tag, {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    weekday: "short",
+  }).format(at);
+}
+
+function formatTime(at: number, tag: string): string {
+  return new Intl.DateTimeFormat(tag, { hour: "2-digit", minute: "2-digit" }).format(at);
+}
+
 function EmptyState() {
   return (
-    <div class="flex h-full flex-col items-center justify-center px-6 text-center">
-      <h2 class="text-lg font-medium">{t("chat.empty.title")}</h2>
+    <div class="flex h-full flex-col items-center justify-center gap-4 px-6 text-center">
+      <ChatAvatar size={58} />
+      <div>
+        <h2 class="text-base font-semibold">{t("chat.empty.title")}</h2>
+        <p class="mt-1 text-xs text-neutral-500 dark:text-neutral-400">{t("chat.agent.subtitle")}</p>
+      </div>
     </div>
   );
 }

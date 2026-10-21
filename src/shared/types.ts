@@ -15,11 +15,49 @@ export type TokenUsage = {
 };
 
 /**
- * メッセージを組み立てている部品。
- * 本文とツールの呼び出しが混ざるため、順序を保ったまま部分ごとに持つ。
+ * エージェントがユーザーへ送った添付ファイル 1 件。
+ * 実体は Terasuma のデータディレクトリに置き、画面は URL だけで読む。
+ */
+export type SentAttachment = {
+  /** 画面に出す名前。 */
+  name: string;
+  /** バイト数。 */
+  size: number;
+  /** ブラウザから開く URL。画像はそのまま表示し、それ以外はダウンロードする。 */
+  url: string;
+  /** 画像のときだけ、表示に使う縦横。画像でなければ null。 */
+  image: { width: number; height: number } | null;
+};
+
+/** エージェントがユーザーへ送ったメッセージ 1 件。画面にはこれだけを出す。 */
+export type SentPart = {
+  type: "sent";
+  /** 画面に出す本文。ファイルだけを送ったときは空。 */
+  text: string;
+  /** 一緒に送ったファイル（送った順）。 */
+  attachments: SentAttachment[];
+  /** 送った時刻。epoch ミリ秒。 */
+  at: number;
+};
+
+/** 画面に出すシステムの注記（操作の上限で止まった、など）。 */
+export type NoticePart = {
+  type: "notice";
+  text: string;
+  at: number;
+};
+
+/**
+ * 1 ターン分の記録を組み立てている部品。
+ *
+ * モデルの本文（text）とツールの呼び出しは内部の記録で、画面には出さない。
+ * ユーザーへ実際に届いたものは sent と notice に残り、画面はここだけを読む。
+ * 順序を保ったまま部分ごとに持つ。
  */
 export type MessagePart =
   | { type: "text"; text: string }
+  | SentPart
+  | NoticePart
   | {
       type: "tool-call";
       /** モデルが発行した呼び出し id。結果と突き合わせる。 */
@@ -78,21 +116,34 @@ export type ChatMessage = {
   /** Tera の中の連番。1 から始まり、履歴の並び順を確定させる。 */
   seq: number;
   role: MessageRole;
-  /** 画面に出す本文。 */
+  /**
+   * ユーザーが書いた本文。
+   * assistant のメッセージでは常に空で、画面に出す本文は parts の sent が持つ。
+   */
   content: string;
   /**
-   * 画面に出す添付ファイル。無ければ null。
+   * ユーザーが添付したファイル。無ければ null。
    * モデルへは、content とこの配列から案内を組み立てて渡す。
    */
   attachments: ChatAttachment[] | null;
   /**
-   * ツール呼び出しを含むメッセージだけが持つ。含まないメッセージでは null。
-   * 画面には出さず、モデルへ渡す履歴にだけ使う。
+   * そのターンに起きたことの記録。assistant では常に配列（空のこともある）。
+   * ユーザーのメッセージでは null。
+   *
+   * text とツールの呼び出しは内部の記録で、画面には出さずモデルへ渡す履歴にだけ使う。
+   * sent と notice はユーザーへ届いたもので、画面はここだけを読む。
    */
   parts: MessagePart[] | null;
   /** epoch ミリ秒 */
   createdAt: number;
   usage: TokenUsage | null;
+};
+
+/** エージェントが tools から 1 件送るメッセージ。保存する前の形。 */
+export type OutgoingMessage = {
+  /** 画面に出す本文。ファイルだけを送るときは空。 */
+  text: string;
+  attachments: SentAttachment[];
 };
 
 /**
@@ -135,6 +186,7 @@ export const API_ERROR_CODES = [
   "container_not_running",
   "handover_not_pending",
   "turn_in_progress",
+  "media_not_found",
   "settings_write_failed",
   "internal_error",
 ] as const;
@@ -210,14 +262,16 @@ export type AddProviderForm = ProviderForm & {
 
 /**
  * 1 ターン分のストリーミングで流れるイベント。
- * ツール呼び出しの本体（引数・結果）はメッセージとして保存されるので、
- * ここでは流れてくる順にそのまま運ぶ。画面には本文だけを出すが、
- * 引き受け（computer_ask_user）の始まりと終わりはツールのイベントで見る。
+ *
+ * モデルの本文は流さない（画面に出さない内部の記録）。ユーザーへ届いたメッセージは
+ * assistant-message で 1 件ずつ、そのままの形で流す。ストリーミングはしない。
+ * ツール呼び出しと結果は、引き受け（computer_ask_user）の始まりと終わりを見るために流す。
  */
 export type ChatEvent =
   | { type: "user-message"; message: ChatMessage }
   | { type: "assistant-start"; id: string; createdAt: number }
-  | { type: "text-delta"; id: string; delta: string }
+  | { type: "assistant-message"; id: string; part: SentPart }
+  | { type: "notice"; id: string; part: NoticePart }
   | { type: "tool-call"; id: string; part: Extract<MessagePart, { type: "tool-call" }> }
   | { type: "tool-result"; id: string; part: Extract<MessagePart, { type: "tool-result" }> }
   | { type: "assistant-done"; message: ChatMessage }

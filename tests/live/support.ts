@@ -13,11 +13,13 @@ import { join } from "node:path";
 import { loadConfig } from "../../src/config";
 import { createCodingToolset } from "../../src/server/agent/tools/coding";
 import { createComputerToolset } from "../../src/server/agent/tools/computer";
+import { createMessagingTools } from "../../src/server/agent/tools/messaging";
 import {
   createContainerManager,
   WORKDIR_IN_CONTAINER,
   type ContainerManager,
 } from "../../src/server/computer/container";
+import { createFileStore } from "../../src/server/computer/files";
 import { createEngine } from "../../src/server/agent/engine";
 import { resolveModel } from "../../src/server/provider/routing";
 import { createHandover } from "../../src/server/computer/handover";
@@ -31,7 +33,7 @@ import { createSettingsStore } from "../../src/server/data/settings";
 import { createStore, type Store } from "../../src/server/data/store";
 import type { ReplyLanguage } from "../../src/shared/language";
 import { decodeChatEvents } from "../../src/shared/sse";
-import type { ChatEvent, ChatMessage, TokenUsage } from "../../src/shared/types";
+import type { ChatEvent, ChatMessage, MessagePart, OutgoingMessage, TokenUsage } from "../../src/shared/types";
 
 /** Containerfile と entry.sh の置き場。src から見たときと同じ場所を指す。 */
 const CONTAINER_DIR = join(import.meta.dir, "..", "..", "container");
@@ -87,12 +89,19 @@ export async function withLiveServer(run: (harness: LiveHarness) => Promise<void
 
   const store = createStore(":memory:");
   const images = createImageStore(config.dataDir);
+  const files = createFileStore(config.dataDir);
   const container = createContainerManager({ dataDir: config.dataDir, containerDir: CONTAINER_DIR });
   const handover = createHandover();
   const computer = createComputerToolset({ container, images, handover });
 
   // read / write / edit / bash は、コンピュータのコンテナの中だけで動く（アプリの起動時と同じ）。
   const coding = createCodingToolset({ container, root: WORKDIR_IN_CONTAINER });
+
+  // ユーザーへ届くのは chat_send で送ったメッセージだけ（アプリの起動時と同じ）。
+  const messaging = {
+    toolset: (input: { send: (message: OutgoingMessage) => void }) =>
+      createMessagingTools({ container, root: WORKDIR_IN_CONTAINER, images, files, send: input.send }),
+  };
 
   // OAuth の戻り先は、待ち受けているポートが決まってから決まる（index.ts と同じ）。
   let boundPort: number | null = null;
@@ -104,7 +113,7 @@ export async function withLiveServer(run: (harness: LiveHarness) => Promise<void
       boundPort === null ? null : new URL(`http://${config.host}:${boundPort}${OAUTH_CALLBACK_PATH}`),
   });
 
-  const engine = createEngine({ config, settings, mcp, computer, coding, images, catalog });
+  const engine = createEngine({ config, settings, mcp, computer, messaging, coding, images, catalog });
 
   // 畳むかどうかはモデルの文脈長から決める。
   const compaction = createCompaction({
@@ -114,7 +123,19 @@ export async function withLiveServer(run: (harness: LiveHarness) => Promise<void
     contextLimit: () => modelContextTokens(catalog.snapshot(), settings.read().model),
   });
 
-  const { server } = startServer({ config, store, engine, compaction, catalog, settings, mcp, container, handover });
+  const { server } = startServer({
+    config,
+    store,
+    engine,
+    compaction,
+    catalog,
+    settings,
+    mcp,
+    container,
+    images,
+    files,
+    handover,
+  });
   boundPort = server.port ?? null;
 
   try {
@@ -153,10 +174,21 @@ export async function withLiveServer(run: (harness: LiveHarness) => Promise<void
   }
 }
 
-export function joinedDeltas(events: ChatEvent[]): string {
+/** エージェントがユーザーへ送った本文を、送った順につなぐ。 */
+export function sentText(events: ChatEvent[]): string {
   return events
-    .filter((event): event is Extract<ChatEvent, { type: "text-delta" }> => event.type === "text-delta")
-    .map((event) => event.delta)
+    .filter((event): event is Extract<ChatEvent, { type: "assistant-message" }> => event.type === "assistant-message")
+    .map((event) => event.part.text)
+    .join("");
+}
+
+/** 保存された assistant メッセージから、ユーザーへ送った本文を取り出す。 */
+export function messageText(message: ChatMessage): string {
+  if (message.parts === null) return message.content;
+
+  return message.parts
+    .filter((part): part is Extract<MessagePart, { type: "sent" }> => part.type === "sent")
+    .map((part) => part.text)
     .join("");
 }
 
@@ -186,7 +218,7 @@ export function preview(content: string, width = 100): string {
  * 実際に何が返ってきたかと、キャッシュが当たったかどうかが、走らせただけで分かるようにする。
  */
 export function report(label: string, message: ChatMessage): void {
-  console.log(`  ${label}: 「${preview(message.content)}」`);
+  console.log(`  ${label}: 「${preview(messageText(message))}」`);
 
   const usage: TokenUsage | null = message.usage;
   if (usage === null) {

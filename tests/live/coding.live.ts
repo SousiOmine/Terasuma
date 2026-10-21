@@ -15,6 +15,7 @@ import {
   expectTurnSucceeded,
   preview,
   report,
+  sentText,
   toolCall,
   toolResultFor,
   withLiveServer,
@@ -69,7 +70,7 @@ test(
         const readResult = toolResultFor(readEvents, readCall.part.id);
         expect(readResult.part.failed, `read が失敗した: ${readResult.part.output}`).toBe(false);
         expect(readResult.part.output).toContain("hello from terasuma");
-        expect(readDone.content, "read の結果が本文に反映されていない").toContain("hello from terasuma");
+        expect(sentText(readEvents), "read の結果が本文に反映されていない").toContain("hello from terasuma");
 
         // 3. edit: 一意な文字列を置き換えさせる。
         const editEvents = await harness.send(
@@ -104,7 +105,7 @@ test(
         const bashResult = toolResultFor(bashEvents, bashCall.part.id);
         expect(bashResult.part.failed, `bash が失敗した: ${bashResult.part.output}`).toBe(false);
         expect(bashResult.part.output).toContain("goodbye from terasuma");
-        expect(bashDone.content, "bash の結果が本文に反映されていない").toContain("goodbye from terasuma");
+        expect(sentText(bashEvents), "bash の結果が本文に反映されていない").toContain("goodbye from terasuma");
       } finally {
         // 作ったファイルをコンテナに残さない。
         await harness.container.shell(`rm -f '${path}'`, { timeoutMs: 10_000 });

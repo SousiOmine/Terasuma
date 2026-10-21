@@ -1,70 +1,155 @@
+import { IconDownload, IconFile } from "@tabler/icons-preact";
 import { formatBytes } from "../../../shared/attachments";
-import type { ChatAttachment, MessageRole } from "../../../shared/types";
+import type { ChatMessage, NoticePart, SentAttachment, SentPart } from "../../../shared/types";
 import { t } from "../../i18n";
+import { ChatAvatar } from "./ChatAvatar";
 
-export type MessageBubbleProps = {
-  /** 発言者。user か assistant。 */
-  author: MessageRole;
-  /** 画面に出す本文。 */
-  content: string;
-  /** 画面に出す添付ファイル。 */
-  attachments?: readonly ChatAttachment[] | null;
-  /** 生成中かどうか。true の間は、本文の下に小さく「作業中…」を出す。 */
-  working?: boolean;
-};
+/**
+ * チャットの吹き出し。
+ *
+ * 画面に出すのは、ユーザーが書いた発言と、エージェントが chat_send で送ったメッセージだけ。
+ * モデルの本文やツールの記録は、ここへは渡さない。
+ */
 
-export function MessageBubble({ author, content, attachments = null, working = false }: MessageBubbleProps) {
-  if (author === "user") {
-    const files = attachments ?? [];
-    // 本文も添付も無い発言は、空の枠を残さない。
-    if (content.length === 0 && files.length === 0) return null;
-
-    return (
-      <div class="flex justify-end">
-        <div class="max-w-[85%] rounded-2xl rounded-br-sm bg-neutral-900 px-4 py-2.5 text-sm leading-relaxed text-white dark:bg-neutral-100 dark:text-neutral-900">
-          {content.length > 0 && <div class="whitespace-pre-wrap break-words">{content}</div>}
-          {files.length > 0 && (
-            <div class={`flex flex-wrap gap-1.5 ${content.length > 0 ? "mt-2" : ""}`}>
-              {files.map((file, index) => (
-                <span
-                  key={`${file.name}-${file.size}-${index}`}
-                  class="inline-flex max-w-full items-center gap-1.5 rounded-md bg-white/15 px-2 py-1 text-xs dark:bg-black/10"
-                >
-                  <span class="max-w-[220px] truncate">{file.name}</span>
-                  <span class="shrink-0 opacity-70">{formatBytes(file.size)}</span>
-                </span>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  // 本文が無いターン（ツールだけを使った場合）は、何も出さない。
-  // 空の枠を残すと、メッセージの間に理由の分からない余白ができる。
-  if (content.length === 0 && !working) return null;
+export function UserMessageBubble({ message, time }: { message: ChatMessage; time: string }) {
+  const files = message.attachments ?? [];
+  if (message.content.length === 0 && files.length === 0) return null;
 
   return (
-    <div class="flex justify-start">
-      <div class="min-w-0 max-w-full flex-1 text-sm leading-relaxed">
-        {content.length > 0 && <RichText content={content} />}
-        {working && <Working hasText={content.length > 0} />}
+    <div class="flex items-end justify-end gap-1.5">
+      <time class="mb-0.5 shrink-0 text-[10px] text-neutral-500 dark:text-neutral-400">{time}</time>
+      <div class="min-w-0 max-w-[calc(100%_-_2.75rem)] rounded-2xl rounded-br-md bg-[#06c755] px-3.5 py-2.5 text-[15px] leading-relaxed text-white shadow-sm">
+        {message.content.length > 0 && <div class="whitespace-pre-wrap break-words">{message.content}</div>}
+        {files.length > 0 && (
+          <div class={`flex flex-col gap-1.5 ${message.content.length > 0 ? "mt-2" : ""}`}>
+            {files.map((file, index) => (
+              <span
+                key={`${file.name}-${file.size}-${index}`}
+                class="flex w-64 max-w-full items-center gap-2 rounded-lg bg-white/15 px-2 py-1.5 text-xs"
+              >
+                <IconFile size={14} stroke={1.7} class="shrink-0 opacity-90" />
+                <span class="min-w-0 flex-1 truncate">{file.name}</span>
+                <span class="shrink-0 opacity-70">{formatBytes(file.size)}</span>
+              </span>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-/**
- * エージェントが動いている間の印。
- * ツールの呼び出しと結果を 1 件ずつ出さない代わりに、動いていることだけを小さく出す。
- */
-function Working({ hasText }: { hasText: boolean }) {
+/** エージェントが送ったメッセージ 1 件。写真とファイルは本文の下に並べる。 */
+export function AgentMessageBubble({ part, time }: { part: SentPart; time: string }) {
+  const images = part.attachments.filter((attachment) => attachment.image !== null);
+  const files = part.attachments.filter((attachment) => attachment.image === null);
+
   return (
-    <p class={`flex items-center gap-1.5 text-xs text-neutral-500 dark:text-neutral-400 ${hasText ? "mt-2" : ""}`}>
-      <span class="h-1.5 w-1.5 animate-pulse rounded-full bg-neutral-400 dark:bg-neutral-500" />
-      {t("chat.working")}
-    </p>
+    <div class="flex items-end gap-1.5">
+      <div class="min-w-0 max-w-[calc(100%_-_2.75rem)] rounded-2xl rounded-bl-md bg-white px-3.5 py-2.5 text-[15px] leading-relaxed text-neutral-900 shadow-sm ring-1 ring-black/5 dark:bg-neutral-800 dark:text-neutral-100 dark:ring-white/5">
+        <div class="flex flex-col gap-2">
+          {images.length > 0 && <ImageGrid images={images} />}
+          {part.text.length > 0 && <RichText content={part.text} />}
+          {files.length > 0 && <FileList files={files} />}
+        </div>
+      </div>
+      <time class="mb-0.5 shrink-0 text-[10px] text-neutral-500 dark:text-neutral-400">{time}</time>
+    </div>
+  );
+}
+
+/** 写真。1 枚なら大きく、複数なら 2 列に並べる。押すと元の大きさで開く。 */
+function ImageGrid({ images }: { images: readonly SentAttachment[] }) {
+  if (images.length === 1) {
+    const image = images[0];
+    if (image === undefined) return null;
+
+    return (
+      <a
+        href={image.url}
+        target="_blank"
+        rel="noreferrer"
+        title={t("chat.image.open", { name: image.name })}
+        class="block overflow-hidden rounded-xl"
+      >
+        <img
+          src={image.url}
+          alt={image.name}
+          width={image.image?.width}
+          height={image.image?.height}
+          loading="lazy"
+          class="max-h-72 w-auto max-w-full object-cover"
+        />
+      </a>
+    );
+  }
+
+  return (
+    <div class="grid w-[min(20rem,100%)] grid-cols-2 gap-1 overflow-hidden rounded-xl">
+      {images.map((image, index) => (
+        <a
+          key={`${image.url}-${index}`}
+          href={image.url}
+          target="_blank"
+          rel="noreferrer"
+          title={t("chat.image.open", { name: image.name })}
+          class="block aspect-square overflow-hidden bg-neutral-100 dark:bg-neutral-900"
+        >
+          <img src={image.url} alt={image.name} loading="lazy" class="h-full w-full object-cover" />
+        </a>
+      ))}
+    </div>
+  );
+}
+
+/** ダウンロードできるファイル。名前と大きさを出し、押すと保存する。 */
+function FileList({ files }: { files: readonly SentAttachment[] }) {
+  return (
+    <div class="flex flex-col gap-1.5">
+      {files.map((file, index) => (
+        <a
+          key={`${file.url}-${index}`}
+          href={file.url}
+          download
+          title={t("chat.file.download", { name: file.name })}
+          class="flex w-64 max-w-full items-center gap-2 rounded-xl border border-black/5 bg-neutral-50 px-2.5 py-2 transition hover:bg-neutral-100 dark:border-white/10 dark:bg-neutral-900/60 dark:hover:bg-neutral-800"
+        >
+          <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#06c755]/10 text-[#078f45] dark:bg-[#06c755]/15 dark:text-[#59d98a]">
+            <IconFile size={16} stroke={1.7} />
+          </span>
+          <span class="min-w-0 flex-1">
+            <span class="block truncate text-xs font-medium">{file.name}</span>
+            <span class="block text-[10px] text-neutral-500 dark:text-neutral-400">{formatBytes(file.size)}</span>
+          </span>
+          <IconDownload size={14} stroke={1.7} class="shrink-0 text-neutral-400" />
+        </a>
+      ))}
+    </div>
+  );
+}
+
+/** システムの注記。発言ではないので、中央に小さく置く。 */
+export function NoticeLine({ part }: { part: NoticePart }) {
+  return (
+    <div class="flex justify-center py-1">
+      <p class="max-w-[85%] rounded-full bg-black/5 px-3 py-1 text-center text-[11px] leading-relaxed text-neutral-600 dark:bg-white/10 dark:text-neutral-300">
+        {part.text}
+      </p>
+    </div>
+  );
+}
+
+/** エージェントが動いている間の印。本文は少しずつ出さないので、点だけを出す。 */
+export function TypingBubble() {
+  return (
+    <div class="flex items-start gap-2" role="status" aria-label={t("chat.typing")}>
+      <ChatAvatar size={30} />
+      <div class="flex items-center gap-1.5 rounded-2xl rounded-bl-md bg-white px-4 py-3.5 shadow-sm ring-1 ring-black/5 dark:bg-neutral-800 dark:ring-white/5">
+        <span class="tera-typing-dot h-1.5 w-1.5 rounded-full bg-neutral-400" />
+        <span class="tera-typing-dot h-1.5 w-1.5 rounded-full bg-neutral-400" />
+        <span class="tera-typing-dot h-1.5 w-1.5 rounded-full bg-neutral-400" />
+      </div>
+    </div>
   );
 }
 
@@ -76,12 +161,12 @@ function RichText({ content }: { content: string }) {
   const segments = content.split("```");
 
   return (
-    <>
+    <div>
       {segments.map((segment, index) =>
         index % 2 === 1 ? (
           <pre
             key={index}
-            class="my-2 overflow-x-auto rounded-lg bg-neutral-100 p-3 text-xs leading-relaxed dark:bg-neutral-900"
+            class="my-1 overflow-x-auto rounded-lg bg-black/5 p-2.5 text-xs leading-relaxed dark:bg-black/30"
           >
             <code>{stripLanguageTag(segment)}</code>
           </pre>
@@ -91,7 +176,7 @@ function RichText({ content }: { content: string }) {
           </span>
         ),
       )}
-    </>
+    </div>
   );
 }
 

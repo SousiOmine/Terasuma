@@ -3,7 +3,7 @@ import { createCompaction, type Compaction } from "../src/server/agent/compactio
 import { estimateMessageTokens, estimateTokens } from "../src/server/agent/tokens";
 import type { CompleteInput } from "../src/server/agent/engine";
 import { DEFAULT_TERA_ID, type Store } from "../src/server/data/store";
-import type { ChatMessage } from "../src/shared/types";
+import type { ChatMessage, MessagePart } from "../src/shared/types";
 import { makeStore } from "./support";
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -30,11 +30,14 @@ function seed(store: Store, tokensEach: number, count: number): number {
   let at = 0;
   for (let index = 1; index <= count; index += 1) {
     const content = body(tokensEach, `m${index}`);
+    const role = index % 2 === 1 ? "user" : "assistant";
+    const parts: MessagePart[] | null = role === "assistant" ? [{ type: "text", text: content }] : null;
     const message = store.appendMessage({
       id: `m${index}`,
       teraId: DEFAULT_TERA_ID,
-      role: index % 2 === 1 ? "user" : "assistant",
-      content,
+      role,
+      content: role === "user" ? content : "",
+      parts,
     });
     at = message.createdAt;
   }
@@ -46,11 +49,13 @@ function seedMessages(store: Store, plan: readonly (readonly [role: "user" | "as
   let at = 0;
   for (const [index, [role, tokens]] of plan.entries()) {
     const content = body(tokens, `p${index + 1}`);
+    const parts: MessagePart[] | null = role === "assistant" ? [{ type: "text", text: content }] : null;
     const message = store.appendMessage({
       id: `p${index + 1}`,
       teraId: DEFAULT_TERA_ID,
       role,
-      content,
+      content: role === "user" ? content : "",
+      parts,
     });
     at = message.createdAt;
   }
@@ -217,7 +222,8 @@ describe("畳み始める時", () => {
       id: "m30",
       teraId: DEFAULT_TERA_ID,
       role: "assistant",
-      content: body(1_000, "m30"),
+      content: "",
+      parts: [{ type: "text", text: body(1_000, "m30") }],
       usage: { inputTokens: 20_000, outputTokens: 500, cachedInputTokens: 0 },
     }).createdAt;
 
@@ -239,7 +245,8 @@ describe("畳み始める時", () => {
       id: "m30",
       teraId: DEFAULT_TERA_ID,
       role: "assistant",
-      content: body(1_000, "m30"),
+      content: "",
+      parts: [{ type: "text", text: body(1_000, "m30") }],
       usage: { inputTokens: 20_000, outputTokens: 500, cachedInputTokens: 0 },
     }).createdAt;
 
@@ -409,6 +416,42 @@ describe("要約の作り方", () => {
     expect(prompt).toContain("[image 1280x800]");
     compaction.close();
   });
+
+  test("ユーザーへ送った sent は、要約に渡さない", async () => {
+    const store = makeStore();
+    const at = Date.now();
+    store.appendMessage({ id: "u1", teraId: DEFAULT_TERA_ID, role: "user", content: body(6_000, "u1") });
+    store.appendMessage({
+      id: "a1",
+      teraId: DEFAULT_TERA_ID,
+      role: "assistant",
+      content: "",
+      parts: [
+        { type: "sent", text: "送った文", attachments: [], at },
+        { type: "tool-call", id: "call-1", server: "chat", tool: "send", args: { text: "送った文" } },
+        {
+          type: "tool-result",
+          id: "call-1",
+          server: "chat",
+          tool: "send",
+          failed: false,
+          output: "Sent the message to the user.",
+        },
+      ],
+    });
+    store.appendMessage({ id: "u2", teraId: DEFAULT_TERA_ID, role: "user", content: body(15_000, "u2") });
+
+    const fake = createEngine(() => SUMMARY);
+    const compaction = compactionWith(store, fake.engine, { limit: 32_000, now: () => at });
+
+    await compaction.update(DEFAULT_TERA_ID, { force: true });
+    const prompt = fake.calls[0]?.prompt ?? "";
+
+    // 送った文はツールの引数としてだけ残り、本文として二重に載らない。
+    expect(prompt).toContain('[Assistant tool calls]: chat_send(text="送った文")');
+    expect(prompt).not.toContain("[Assistant]: 送った文");
+    compaction.close();
+  });
 });
 
 describe("失敗したとき", () => {
@@ -555,15 +598,18 @@ describe("トークンの目安", () => {
     expect(estimateTokens("あbcdef")).toBe(3);
   });
 
-  test("ツールの結果と画像も数える", () => {
+  test("ツールの結果と画像も数え、画面にだけ出す部分は数えない", () => {
     const message: ChatMessage = {
       id: "m1",
       teraId: DEFAULT_TERA_ID,
       seq: 1,
       role: "assistant",
-      content: "abcd",
+      content: "",
       attachments: null,
       parts: [
+        // ユーザーへ送った部分はモデルへ渡さないので、数えない。
+        { type: "sent", text: "送った文", attachments: [], at: 1 },
+        { type: "notice", text: "止まりました", at: 2 },
         { type: "text", text: "abcd" }, // 1
         { type: "tool-call", id: "call-1", server: "local", tool: "echo", args: "abcd" }, // """abcd""" で 2
         {
@@ -582,7 +628,14 @@ describe("トークンの目安", () => {
 
     expect(estimateMessageTokens(message)).toBe(1 + 2 + 2 + 1_000);
 
-    // parts が無いメッセージは、本文だけを数える。
-    expect(estimateMessageTokens({ ...message, parts: null })).toBe(1);
+    // ユーザーの発言は parts を持たず、本文（添付の案内も含む）だけを数える。
+    expect(
+      estimateMessageTokens({
+        ...message,
+        role: "user",
+        content: "abcd",
+        parts: null,
+      }),
+    ).toBe(1);
   });
 });
