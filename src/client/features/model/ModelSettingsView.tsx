@@ -1,4 +1,4 @@
-import { IconPlus } from "@tabler/icons-preact";
+import { IconAlertTriangle, IconPlus } from "@tabler/icons-preact";
 import { useEffect, useState } from "preact/hooks";
 import { modelProvider } from "../../../shared/model";
 import type { ProviderView } from "../../../shared/types";
@@ -26,6 +26,7 @@ import { ConfirmDialog } from "../../ui/ConfirmDialog";
 import { ModelPickerDialog } from "./ModelPickerDialog";
 import { ProviderWizard, type WizardMode } from "./ProviderWizard";
 import { SettingsSection } from "../../ui/SettingsSection";
+import { INPUT_CLASS } from "../../ui/styles";
 
 /**
  * 設定の「モデル」。
@@ -87,13 +88,11 @@ export function ModelSettingsView() {
       onDismiss={clearSettingsError}
       onRetry={settings === null ? reload : undefined}
     >
-      <section class="mt-6 border-b border-neutral-200 pb-5 dark:border-neutral-800">
+      <section class="mt-6 border-b border-[var(--app-stroke)] pb-5">
         <div class="flex flex-col items-start gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
           <div class="min-w-0">
             <p class="text-sm font-medium">{t("settings.model.default.label")}</p>
-            <p class="mt-0.5 text-xs text-neutral-500 dark:text-neutral-400">
-              {t("settings.model.default.description")}
-            </p>
+            <p class="mt-0.5 text-xs text-[var(--app-text-secondary)]">{t("settings.model.default.description")}</p>
           </div>
           <Button disabled={settings === null || settings.providers.length === 0} onClick={() => setPickerOpen(true)}>
             {t("settings.model.default.change")}
@@ -102,24 +101,25 @@ export function ModelSettingsView() {
 
         <p class="mt-3 truncate text-sm">{settings?.model ?? t("settings.model.default.unset")}</p>
         {problem === "unset" && (
-          <p class="mt-1 text-xs text-neutral-500 dark:text-neutral-400">{t("settings.model.default.unsetHint")}</p>
+          <p class="mt-1 text-xs text-[var(--app-text-secondary)]">{t("settings.model.default.unsetHint")}</p>
         )}
         {problem === "provider-missing" && (
-          <p class="mt-1 text-xs text-amber-700 dark:text-amber-400">{t("settings.model.default.missingProvider")}</p>
+          <p class="mt-1 flex items-center gap-1.5 text-xs font-medium text-[var(--app-text)]">
+            <IconAlertTriangle size={14} stroke={1.8} class="shrink-0" />
+            {t("settings.model.default.missingProvider")}
+          </p>
         )}
 
         {reasoning !== null && reasoning.values.length > 0 && (
-          <div class="mt-4 flex flex-col items-start gap-3 border-t border-neutral-200 pt-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6 dark:border-neutral-800">
+          <div class="mt-4 flex flex-col items-start gap-3 border-t border-[var(--app-stroke)] pt-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
             <div class="min-w-0">
               <p class="text-sm font-medium">{t("settings.model.reasoning.label")}</p>
-              <p class="mt-0.5 text-xs text-neutral-500 dark:text-neutral-400">
-                {t("settings.model.reasoning.description")}
-              </p>
+              <p class="mt-0.5 text-xs text-[var(--app-text-secondary)]">{t("settings.model.reasoning.description")}</p>
             </div>
             <select
               value={reasoning.effort ?? ""}
               aria-label={t("settings.model.reasoning.label")}
-              class="w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm outline-none focus:border-neutral-400 sm:w-auto sm:py-1.5 dark:border-neutral-700 dark:bg-neutral-900 dark:focus:border-neutral-600"
+              class={`${INPUT_CLASS} sm:w-auto sm:py-1.5`}
               onChange={(event) =>
                 void changeReasoning(event.currentTarget.value === "" ? null : event.currentTarget.value)
               }
@@ -139,9 +139,7 @@ export function ModelSettingsView() {
         <div class="flex flex-col items-start gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
           <div class="min-w-0">
             <p class="text-sm font-medium">{t("settings.model.providers.label")}</p>
-            <p class="mt-0.5 text-xs text-neutral-500 dark:text-neutral-400">
-              {t("settings.model.providers.description")}
-            </p>
+            <p class="mt-0.5 text-xs text-[var(--app-text-secondary)]">{t("settings.model.providers.description")}</p>
           </div>
           <Button variant="primary" onClick={() => setWizard({ kind: "add" })}>
             <IconPlus size={16} stroke={1.6} class="shrink-0" />
@@ -151,9 +149,9 @@ export function ModelSettingsView() {
 
         <div class="mt-3 space-y-2">
           {settings === null && loading ? (
-            <p class="text-xs text-neutral-500 dark:text-neutral-400">{t("common.loading")}</p>
+            <p class="text-xs text-[var(--app-text-secondary)]">{t("common.loading")}</p>
           ) : settings === null || settings.providers.length === 0 ? (
-            <p class="text-xs text-neutral-500 dark:text-neutral-400">{t("settings.model.providers.empty")}</p>
+            <p class="text-xs text-[var(--app-text-secondary)]">{t("settings.model.providers.empty")}</p>
           ) : (
             settings.providers.map((provider) => (
               <ProviderCard
@@ -202,17 +200,17 @@ function ProviderCard({ provider, isDefault, onEdit, onDelete }: ProviderCardPro
     : t("settings.model.providers.apiKeyUnset");
 
   return (
-    <div class="flex flex-col gap-2 rounded-xl border border-neutral-200 px-4 py-3 sm:flex-row sm:items-start sm:gap-3 dark:border-neutral-800">
+    <div class="flex flex-col gap-3 rounded-[24px] border border-[var(--app-stroke)] bg-[var(--app-surface)] p-5 shadow-[var(--app-shadow-4)] sm:flex-row sm:items-start">
       <div class="min-w-0 flex-1">
         <div class="flex items-center gap-2">
           <p class="truncate text-sm font-medium">{providerName(provider)}</p>
           {isDefault && (
-            <span class="shrink-0 rounded-full bg-neutral-200 px-2 py-0.5 text-[11px] dark:bg-neutral-800">
+            <span class="shrink-0 rounded-full bg-[var(--app-soft)] px-2.5 py-1 text-[11px] font-medium text-[var(--app-text)]">
               {t("common.default")}
             </span>
           )}
         </div>
-        <p class="mt-0.5 truncate text-xs text-neutral-500 dark:text-neutral-400">
+        <p class="mt-0.5 truncate text-xs text-[var(--app-text-secondary)]">
           {provider.baseUrl === null ? keyState : `${provider.baseUrl}・${keyState}`}
         </p>
       </div>

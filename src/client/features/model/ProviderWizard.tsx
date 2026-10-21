@@ -228,7 +228,7 @@ export function ProviderWizard({ mode, onClose }: ProviderWizardProps) {
               <button
                 type="button"
                 onClick={() => setRevealKey(!revealKey)}
-                class="shrink-0 rounded-lg px-2 py-1 text-xs text-neutral-500 transition hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-neutral-800"
+                class="shrink-0 rounded-full px-2.5 py-1 text-xs text-[var(--app-text-secondary)] transition hover:bg-[var(--app-soft)] hover:text-[var(--app-text)]"
               >
                 {t(revealKey ? "settings.wizard.apiKey.hide" : "settings.wizard.apiKey.show")}
               </button>
@@ -236,7 +236,7 @@ export function ProviderWizard({ mode, onClose }: ProviderWizardProps) {
           </Field>
 
           {target.kind === "catalog" && (
-            <p class="pt-1 text-xs text-neutral-500 dark:text-neutral-400">{t("settings.wizard.catalogHint")}</p>
+            <p class="pt-1 text-xs text-[var(--app-text-secondary)]">{t("settings.wizard.catalogHint")}</p>
           )}
 
           {error !== null && (
@@ -250,7 +250,7 @@ export function ProviderWizard({ mode, onClose }: ProviderWizardProps) {
       {step === "model" && models !== null && (
         <div class="space-y-3">
           {checkNote === "skipped" && (
-            <p class="rounded-lg border border-neutral-200 px-3 py-2 text-xs text-neutral-600 dark:border-neutral-700 dark:text-neutral-300">
+            <p class="rounded-2xl border border-[var(--app-stroke)] bg-[var(--app-surface-alt)] px-4 py-3 text-xs leading-5 text-[var(--app-text-secondary)]">
               {t("settings.wizard.checkSkipped")}
             </p>
           )}
@@ -268,7 +268,7 @@ export function ProviderWizard({ mode, onClose }: ProviderWizardProps) {
             <span class="min-w-0">
               {t("settings.wizard.model.setDefault")}
               {currentDefault === null && (
-                <span class="mt-0.5 block text-neutral-500 dark:text-neutral-400">
+                <span class="mt-0.5 block text-[var(--app-text-secondary)]">
                   {t("settings.wizard.model.alwaysDefault")}
                 </span>
               )}
@@ -351,10 +351,10 @@ function StepIndicator({ current }: { current: "choose" | "connect" | "model" })
   const index = ADD_STEPS.findIndex((item) => item.key === `settings.wizard.step.${current}`);
 
   return (
-    <ol class="mb-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-neutral-500 dark:text-neutral-400">
+    <ol class="mb-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-[var(--app-text-secondary)]">
       {ADD_STEPS.map((item, position) => (
         <li key={item.key} class="flex items-center gap-2">
-          <span class={position <= index ? "font-medium text-neutral-900 dark:text-neutral-100" : undefined}>
+          <span class={position <= index ? "font-medium text-[var(--app-text)]" : undefined}>
             {position + 1}. {t(item.key)}
           </span>
           {position < ADD_STEPS.length - 1 && <IconChevronRight size={12} stroke={1.6} class="shrink-0" />}

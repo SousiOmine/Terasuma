@@ -1,5 +1,5 @@
 import { signal } from "@preact/signals";
-import type { ChatEvent, ChatMessage, NoticePart, SentPart } from "../../shared/types";
+import type { AttachmentPart, ChatEvent, ChatMessage, NoticePart, TextPart } from "../../shared/types";
 import { locale } from "../i18n";
 import * as api from "../lib/api";
 import { ApiError } from "../lib/http";
@@ -13,16 +13,16 @@ import { activeTeraId } from "./session";
  *
  * 確定した会話は messages、いま届いているターンは liveTurn に置く。
  * ツールの呼び出しと結果は画面に出さないので持たない（引き受けの判定にだけ使う）。
- * モデルの本文も持たない。画面に出るのは、エージェントが送ったメッセージだけ。
+ * 画面に出るのは、モデルの本文・添付・注記だけ。
  */
 
 export const messages = signal<readonly ChatMessage[]>([]);
 
-/** いま届いているターンの、ユーザーへ送られたメッセージと注記。 */
+/** いま届いているターンの、画面に出す本文・添付・注記。 */
 export type LiveTurn = {
   id: string;
   createdAt: number;
-  parts: readonly (SentPart | NoticePart)[];
+  parts: readonly (TextPart | AttachmentPart | NoticePart)[];
 };
 
 export const liveTurn = signal<LiveTurn | null>(null);
@@ -108,7 +108,7 @@ export async function sendMessage(rawContent: string, files: readonly File[]): P
 /**
  * assistant-done を受け取れなかったターンを、画面に残す。
  *
- * サーバはそれまでに送ったメッセージを必ず保存しているので、読み直せば同じ内容が履歴から出る。
+ * サーバはそれまでの本文や添付を必ず保存しているので、読み直せば同じ内容が履歴から出る。
  * ここでは読み直すまでの間、同じ id のローカルのメッセージとして置いておく。
  * 保存された連番は読み直したときに付く（画面は配列の順に並べるので、ここでは使わない）。
  */

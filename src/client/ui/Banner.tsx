@@ -2,21 +2,23 @@ import type { ComponentChildren } from "preact";
 
 /**
  * チャットの上に出す案内（モデル未設定、podman が無いなど）。
- * 同じ形の帯を 2 つ並べていたので、色だけを選べるようにして 1 つにまとめる。
+ * 色は使わず、灰色の面と細い点で「案内」だと分かるようにする。
  */
 
-export type BannerTone = "warning" | "muted";
+export type BannerTone = "info" | "muted";
 
-const TONES: Record<BannerTone, { frame: string; text: string; button: string }> = {
-  warning: {
-    frame: "border-amber-200 bg-amber-50 dark:border-amber-900/60 dark:bg-amber-950/40",
-    text: "text-amber-900 dark:text-amber-200",
-    button: "border-amber-300 hover:bg-amber-100 dark:border-amber-800 dark:hover:bg-amber-900/40",
+const TONES: Record<BannerTone, { frame: string; dot: string; button: string }> = {
+  info: {
+    frame: "bg-[var(--app-soft)] text-[var(--app-text)]",
+    dot: "bg-[var(--app-ink)]",
+    button:
+      "border-[var(--app-stroke)] bg-[var(--app-surface)] text-[var(--app-text)] hover:bg-[var(--app-soft-strong)]",
   },
   muted: {
-    frame: "border-neutral-200 bg-neutral-100 dark:border-neutral-800 dark:bg-neutral-900",
-    text: "text-neutral-700 dark:text-neutral-300",
-    button: "border-neutral-300 hover:bg-neutral-200 dark:border-neutral-700 dark:hover:bg-neutral-800",
+    frame: "bg-[var(--app-surface-alt)] text-[var(--app-text-secondary)]",
+    dot: "bg-[var(--app-text-tertiary)]",
+    button:
+      "border-[var(--app-stroke)] bg-[var(--app-surface)] text-[var(--app-text-secondary)] hover:bg-[var(--app-soft)]",
   },
 };
 
@@ -33,15 +35,18 @@ export function Banner({
   const colors = TONES[tone];
 
   return (
-    <div class={`shrink-0 border-b px-4 py-2 sm:px-5 ${colors.frame}`}>
+    <div class="shrink-0 px-3 pt-3 sm:px-4">
       <div
-        class={`mx-auto flex w-full max-w-3xl flex-col items-start gap-2 text-sm sm:flex-row sm:items-center sm:gap-3 ${colors.text}`}
+        class={`mx-auto flex w-full max-w-3xl flex-col items-start gap-2 rounded-2xl px-4 py-3 text-sm sm:flex-row sm:items-center sm:gap-3 ${colors.frame}`}
       >
-        <p class="min-w-0 flex-1">{children}</p>
+        <div class="flex min-w-0 flex-1 items-start gap-2.5">
+          <span class={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${colors.dot}`} aria-hidden="true" />
+          <p class="min-w-0">{children}</p>
+        </div>
         <button
           type="button"
           onClick={action.onClick}
-          class={`shrink-0 rounded-lg border px-2.5 py-1.5 text-xs transition sm:py-1 ${colors.button}`}
+          class={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium transition ${colors.button}`}
         >
           {action.label}
         </button>

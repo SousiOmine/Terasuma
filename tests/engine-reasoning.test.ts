@@ -2,13 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { ModelSettings } from "../src/server/data/settings-schema";
 import { createAiSdkEngine, type SettingsReader } from "../src/server/agent/engine";
 import type { ChatMessage } from "../src/shared/types";
-import {
-  createCodingStub,
-  createComputerStub,
-  createImageStub,
-  createMcpStub,
-  createMessagingStub,
-} from "./support";
+import { createCodingStub, createComputerStub, createImageStub, createMcpStub, createAttachmentsStub } from "./support";
 
 /**
  * OpenAI 互換のストリーミング応答を返す偽のプロバイダ。
@@ -88,7 +82,7 @@ async function runEngine(settings: ModelSettings): Promise<string> {
     settings: reader,
     mcp: createMcpStub(),
     computer: createComputerStub(),
-    messaging: createMessagingStub(),
+    attachments: createAttachmentsStub(),
     coding: createCodingStub(),
     images: createImageStub(),
     catalog: { snapshot: () => null },
@@ -97,7 +91,7 @@ async function runEngine(settings: ModelSettings): Promise<string> {
     signal: new AbortController().signal,
     teraId: "t1",
     replyLanguage: "ja",
-    send: () => undefined,
+    attach: () => undefined,
   });
 
   let text = "";

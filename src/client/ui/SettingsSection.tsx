@@ -25,7 +25,10 @@ export function SettingsSection({
 }) {
   return (
     <div class="mx-auto w-full max-w-2xl">
-      <h2 class="text-base font-semibold">{title}</h2>
+      <h2 class="flex items-center gap-2.5 text-[18px] font-semibold tracking-[-0.01em]">
+        <span class="h-2.5 w-2.5 shrink-0 rounded-full bg-[var(--app-ink)]" aria-hidden="true" />
+        {title}
+      </h2>
 
       {error !== null && (
         <div class="mt-4">

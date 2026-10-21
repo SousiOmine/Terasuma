@@ -319,7 +319,7 @@ export function McpServerDialog({
             {checkedNow !== null && <CheckedNotice tools={checkedNow.tools} />}
             {authorizing !== null && <AuthorizationNotice url={authorizing} />}
             {checkedNow === null && authorizing === null && (
-              <p class="pt-2 text-xs text-neutral-500 dark:text-neutral-400">{t("settings.mcp.form.needCheck")}</p>
+              <p class="pt-2 text-xs text-[var(--app-text-secondary)]">{t("settings.mcp.form.needCheck")}</p>
             )}
           </>
         )}

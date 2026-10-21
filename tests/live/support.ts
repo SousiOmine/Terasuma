@@ -13,7 +13,7 @@ import { join } from "node:path";
 import { loadConfig } from "../../src/config";
 import { createCodingToolset } from "../../src/server/agent/tools/coding";
 import { createComputerToolset } from "../../src/server/agent/tools/computer";
-import { createMessagingTools } from "../../src/server/agent/tools/messaging";
+import { createAttachmentTools } from "../../src/server/agent/tools/attachments";
 import {
   createContainerManager,
   WORKDIR_IN_CONTAINER,
@@ -33,7 +33,7 @@ import { createSettingsStore } from "../../src/server/data/settings";
 import { createStore, type Store } from "../../src/server/data/store";
 import type { ReplyLanguage } from "../../src/shared/language";
 import { decodeChatEvents } from "../../src/shared/sse";
-import type { ChatEvent, ChatMessage, MessagePart, OutgoingMessage, TokenUsage } from "../../src/shared/types";
+import type { ChatEvent, ChatMessage, MessagePart, SentAttachment, TokenUsage } from "../../src/shared/types";
 
 /** Containerfile と entry.sh の置き場。src から見たときと同じ場所を指す。 */
 const CONTAINER_DIR = join(import.meta.dir, "..", "..", "container");
@@ -97,10 +97,10 @@ export async function withLiveServer(run: (harness: LiveHarness) => Promise<void
   // read / write / edit / bash は、コンピュータのコンテナの中だけで動く（アプリの起動時と同じ）。
   const coding = createCodingToolset({ container, root: WORKDIR_IN_CONTAINER });
 
-  // ユーザーへ届くのは chat_send で送ったメッセージだけ（アプリの起動時と同じ）。
-  const messaging = {
-    toolset: (input: { send: (message: OutgoingMessage) => void }) =>
-      createMessagingTools({ container, root: WORKDIR_IN_CONTAINER, images, files, send: input.send }),
+  // 画像やファイルは chat_attach で添付する（アプリの起動時と同じ）。
+  const attachments = {
+    toolset: (input: { attach: (attachments: SentAttachment[]) => void }) =>
+      createAttachmentTools({ container, root: WORKDIR_IN_CONTAINER, images, files, attach: input.attach }),
   };
 
   // OAuth の戻り先は、待ち受けているポートが決まってから決まる（index.ts と同じ）。
@@ -113,7 +113,7 @@ export async function withLiveServer(run: (harness: LiveHarness) => Promise<void
       boundPort === null ? null : new URL(`http://${config.host}:${boundPort}${OAUTH_CALLBACK_PATH}`),
   });
 
-  const engine = createEngine({ config, settings, mcp, computer, messaging, coding, images, catalog });
+  const engine = createEngine({ config, settings, mcp, computer, attachments, coding, images, catalog });
 
   // 畳むかどうかはモデルの文脈長から決める。
   const compaction = createCompaction({
@@ -174,20 +174,21 @@ export async function withLiveServer(run: (harness: LiveHarness) => Promise<void
   }
 }
 
-/** エージェントがユーザーへ送った本文を、送った順につなぐ。 */
-export function sentText(events: ChatEvent[]): string {
-  return events
-    .filter((event): event is Extract<ChatEvent, { type: "assistant-message" }> => event.type === "assistant-message")
-    .map((event) => event.part.text)
-    .join("");
+/** 画面に流れた本文を、届いた順につなぐ。 */
+export function visibleText(events: ChatEvent[]): string {
+  let text = "";
+  for (const event of events) {
+    if (event.type === "assistant-message" && event.part.type === "text") text += event.part.text;
+  }
+  return text;
 }
 
-/** 保存された assistant メッセージから、ユーザーへ送った本文を取り出す。 */
+/** 保存された assistant メッセージから、本文を取り出す。 */
 export function messageText(message: ChatMessage): string {
   if (message.parts === null) return message.content;
 
   return message.parts
-    .filter((part): part is Extract<MessagePart, { type: "sent" }> => part.type === "sent")
+    .filter((part): part is Extract<MessagePart, { type: "text" }> => part.type === "text")
     .map((part) => part.text)
     .join("");
 }

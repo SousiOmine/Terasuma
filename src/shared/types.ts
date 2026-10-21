@@ -15,7 +15,7 @@ export type TokenUsage = {
 };
 
 /**
- * エージェントがユーザーへ送った添付ファイル 1 件。
+ * エージェントがチャットへ添付したファイル 1 件。
  * 実体は Terasuma のデータディレクトリに置き、画面は URL だけで読む。
  */
 export type SentAttachment = {
@@ -29,14 +29,20 @@ export type SentAttachment = {
   image: { width: number; height: number } | null;
 };
 
-/** エージェントがユーザーへ送ったメッセージ 1 件。画面にはこれだけを出す。 */
-export type SentPart = {
-  type: "sent";
-  /** 画面に出す本文。ファイルだけを送ったときは空。 */
+/** モデルの本文。画面にそのまま出す。 */
+export type TextPart = {
+  type: "text";
   text: string;
-  /** 一緒に送ったファイル（送った順）。 */
+  /** 本文が始まった時刻。epoch ミリ秒。 */
+  at: number;
+};
+
+/** エージェントがチャットへ添付した画像・ファイルのまとまり。 */
+export type AttachmentPart = {
+  type: "attachment";
+  /** 一緒に添付したファイル（添付した順）。 */
   attachments: SentAttachment[];
-  /** 送った時刻。epoch ミリ秒。 */
+  /** 添付した時刻。epoch ミリ秒。 */
   at: number;
 };
 
@@ -47,16 +53,18 @@ export type NoticePart = {
   at: number;
 };
 
+/** 画面に出す部品。 */
+export type VisiblePart = TextPart | AttachmentPart | NoticePart;
+
 /**
  * 1 ターン分の記録を組み立てている部品。
  *
- * モデルの本文（text）とツールの呼び出しは内部の記録で、画面には出さない。
- * ユーザーへ実際に届いたものは sent と notice に残り、画面はここだけを読む。
- * 順序を保ったまま部分ごとに持つ。
+ * text・attachment・notice は画面に出す。ツールの呼び出しと結果は内部の記録で、
+ * 画面には出さずモデルへ渡す履歴にだけ使う。順序を保ったまま部分ごとに持つ。
  */
 export type MessagePart =
-  | { type: "text"; text: string }
-  | SentPart
+  | TextPart
+  | AttachmentPart
   | NoticePart
   | {
       type: "tool-call";
@@ -118,7 +126,7 @@ export type ChatMessage = {
   role: MessageRole;
   /**
    * ユーザーが書いた本文。
-   * assistant のメッセージでは常に空で、画面に出す本文は parts の sent が持つ。
+   * assistant のメッセージでは常に空で、画面に出す本文は parts の text が持つ。
    */
   content: string;
   /**
@@ -130,20 +138,13 @@ export type ChatMessage = {
    * そのターンに起きたことの記録。assistant では常に配列（空のこともある）。
    * ユーザーのメッセージでは null。
    *
-   * text とツールの呼び出しは内部の記録で、画面には出さずモデルへ渡す履歴にだけ使う。
-   * sent と notice はユーザーへ届いたもので、画面はここだけを読む。
+   * text・attachment・notice は画面に出す。ツールの呼び出しと結果は内部の記録で、
+   * 画面には出さずモデルへ渡す履歴にだけ使う。
    */
   parts: MessagePart[] | null;
   /** epoch ミリ秒 */
   createdAt: number;
   usage: TokenUsage | null;
-};
-
-/** エージェントが tools から 1 件送るメッセージ。保存する前の形。 */
-export type OutgoingMessage = {
-  /** 画面に出す本文。ファイルだけを送るときは空。 */
-  text: string;
-  attachments: SentAttachment[];
 };
 
 /**
@@ -263,14 +264,15 @@ export type AddProviderForm = ProviderForm & {
 /**
  * 1 ターン分のストリーミングで流れるイベント。
  *
- * モデルの本文は流さない（画面に出さない内部の記録）。ユーザーへ届いたメッセージは
- * assistant-message で 1 件ずつ、そのままの形で流す。ストリーミングはしない。
- * ツール呼び出しと結果は、引き受け（computer_ask_user）の始まりと終わりを見るために流す。
+ * モデルの本文は、区切りごとに text パートとして assistant-message で流す。
+ * 画像やファイルの添付は attachment パートとして流す。どちらも少しずつではなく、
+ * 区切りが付いた時点で 1 件ずつ流す。ツール呼び出しと結果は、引き受け
+ * （computer_ask_user）の始まりと終わりを見るために流す。
  */
 export type ChatEvent =
   | { type: "user-message"; message: ChatMessage }
   | { type: "assistant-start"; id: string; createdAt: number }
-  | { type: "assistant-message"; id: string; part: SentPart }
+  | { type: "assistant-message"; id: string; part: TextPart | AttachmentPart }
   | { type: "notice"; id: string; part: NoticePart }
   | { type: "tool-call"; id: string; part: Extract<MessagePart, { type: "tool-call" }> }
   | { type: "tool-result"; id: string; part: Extract<MessagePart, { type: "tool-result" }> }

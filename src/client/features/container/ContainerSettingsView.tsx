@@ -60,12 +60,12 @@ export function ContainerSettingsView() {
 
   return (
     <SettingsSection title={t("settings.container")} error={error} onDismiss={clearContainerError}>
-      <p class="mt-1 text-xs text-neutral-500 dark:text-neutral-400">{t("settings.container.description")}</p>
+      <p class="mt-1 text-xs text-[var(--app-text-secondary)]">{t("settings.container.description")}</p>
 
-      <div class="mt-6 rounded-xl border border-neutral-200 p-4 dark:border-neutral-800">
+      <div class="mt-6 rounded-[24px] border border-[var(--app-stroke)] bg-[var(--app-surface)] p-5 shadow-[var(--app-shadow-4)]">
         <div class="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
           <div class="min-w-0">
-            <p class="text-xs text-neutral-500 dark:text-neutral-400">{t("settings.container.state.label")}</p>
+            <p class="text-xs text-[var(--app-text-secondary)]">{t("settings.container.state.label")}</p>
             <p class="mt-1 text-sm">{status === null ? t("common.checking") : t(STATE_LABELS[status.state])}</p>
           </div>
 
@@ -90,15 +90,15 @@ export function ContainerSettingsView() {
         </div>
 
         {status?.detail != null && (
-          <p class="mt-3 break-words text-xs text-amber-800 dark:text-amber-300">{status.detail}</p>
+          <p class="mt-3 break-words text-xs text-[var(--app-text-secondary)]">{status.detail}</p>
         )}
 
         {status?.state === "podman_missing" && (
-          <p class="mt-3 text-xs text-neutral-500 dark:text-neutral-400">{t("settings.container.podmanMissing")}</p>
+          <p class="mt-3 text-xs text-[var(--app-text-secondary)]">{t("settings.container.podmanMissing")}</p>
         )}
 
         {status !== null && status.state !== "running" && status.state !== "podman_missing" && (
-          <p class="mt-3 text-xs text-neutral-500 dark:text-neutral-400">{t("settings.container.firstBuild")}</p>
+          <p class="mt-3 text-xs text-[var(--app-text-secondary)]">{t("settings.container.firstBuild")}</p>
         )}
       </div>
 

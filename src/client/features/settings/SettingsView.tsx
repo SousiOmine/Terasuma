@@ -2,6 +2,7 @@ import { IconArrowLeft } from "@tabler/icons-preact";
 import type { Locale, MessageKey } from "../../i18n";
 import { LOCALES, locale, setLocale, t } from "../../i18n";
 import { closeSettings, setSettingsCategory, settingsCategory, type SettingsCategory } from "../../state/route";
+import { Segmented } from "../../ui/Segmented";
 import { ContainerSettingsView } from "../container/ContainerSettingsView";
 import { McpSettingsView } from "../mcp/McpSettingsView";
 import { ModelSettingsView } from "../model/ModelSettingsView";
@@ -22,26 +23,28 @@ export function SettingsView() {
   const category = settingsCategory.value;
 
   return (
-    <div class="flex h-full flex-col">
-      <header class="flex h-12 shrink-0 items-center gap-2 border-b border-neutral-200 px-3 dark:border-neutral-800">
+    <div class="flex h-full flex-col bg-[var(--app-canvas)]">
+      <header class="flex h-16 shrink-0 items-center gap-3 px-4 sm:px-6">
         <button
           type="button"
           onClick={closeSettings}
-          class="flex items-center gap-1.5 rounded-lg px-2 py-2 text-sm text-neutral-600 transition hover:bg-neutral-200/70 md:py-1 dark:text-neutral-300 dark:hover:bg-neutral-800"
+          class="flex items-center gap-2 rounded-full px-3 py-2 text-sm text-[var(--app-text-secondary)] transition hover:bg-[var(--app-soft)] hover:text-[var(--app-text)]"
         >
-          <IconArrowLeft size={16} stroke={1.6} class="shrink-0" />
+          <IconArrowLeft size={17} stroke={1.7} class="shrink-0" />
           {t("settings.back")}
         </button>
         {/* md 未満ではカテゴリの見出しを見せないので、何の画面かをここに出す。 */}
-        <h1 class="min-w-0 flex-1 truncate text-sm font-semibold md:hidden">{t("settings.title")}</h1>
+        <h1 class="min-w-0 flex-1 truncate text-[15px] font-semibold tracking-[-0.01em] md:hidden">
+          {t("settings.title")}
+        </h1>
       </header>
 
       <div class="flex min-h-0 flex-1 flex-col md:flex-row">
-        <nav class="shrink-0 border-b border-neutral-200 px-2 py-2 md:w-56 md:border-r md:border-b-0 md:p-2 dark:border-neutral-800">
-          <h1 class="hidden px-3 pb-2 pt-1 text-xs font-medium text-neutral-500 md:block dark:text-neutral-400">
+        <nav class="shrink-0 border-b border-[var(--app-stroke)] px-3 py-3 md:w-60 md:border-r md:border-b-0 md:px-4 md:py-5">
+          <h1 class="hidden px-3 pb-2 text-xs font-medium text-[var(--app-text-secondary)] md:block">
             {t("settings.title")}
           </h1>
-          <ul class="flex flex-wrap gap-1 md:flex-col md:gap-0.5">
+          <ul class="flex flex-wrap gap-1 md:flex-col md:gap-1">
             {CATEGORIES.map((item) => {
               const active = category === item.id;
               return (
@@ -50,10 +53,10 @@ export function SettingsView() {
                     type="button"
                     aria-current={active ? "true" : undefined}
                     onClick={() => setSettingsCategory(item.id)}
-                    class={`rounded-lg px-3 py-2.5 text-left text-sm whitespace-nowrap transition md:w-full md:py-2 ${
+                    class={`rounded-2xl px-3.5 py-3 text-left text-sm whitespace-nowrap transition md:w-full ${
                       active
-                        ? "bg-white shadow-sm dark:bg-neutral-800"
-                        : "hover:bg-neutral-200/60 dark:hover:bg-neutral-800/50"
+                        ? "bg-[var(--app-soft)] font-semibold text-[var(--app-text)]"
+                        : "text-[var(--app-text-secondary)] hover:bg-[var(--app-soft)] hover:text-[var(--app-text)]"
                     }`}
                   >
                     {t(item.labelKey)}
@@ -64,7 +67,7 @@ export function SettingsView() {
           </ul>
         </nav>
 
-        <section class="min-h-0 min-w-0 flex-1 overflow-y-auto px-4 py-6 md:px-6 md:py-8">
+        <section class="min-h-0 min-w-0 flex-1 overflow-y-auto px-4 py-8 md:px-10 md:py-10">
           {category === "general" && <GeneralSettings />}
           {category === "model" && <ModelSettingsView />}
           {category === "container" && <ContainerSettingsView />}
@@ -78,33 +81,23 @@ export function SettingsView() {
 function GeneralSettings() {
   return (
     <div class="mx-auto w-full max-w-2xl">
-      <h2 class="text-base font-semibold">{t("settings.general")}</h2>
+      <h2 class="flex items-center gap-2.5 text-[18px] font-semibold tracking-[-0.01em]">
+        <span class="h-2.5 w-2.5 shrink-0 rounded-full bg-[var(--app-ink)]" aria-hidden="true" />
+        {t("settings.general")}
+      </h2>
 
-      <div class="mt-6 flex flex-col items-start gap-3 border-b border-neutral-200 pb-5 sm:flex-row sm:items-center sm:justify-between sm:gap-6 dark:border-neutral-800">
+      <div class="mt-6 flex flex-col items-start gap-4 border-b border-[var(--app-stroke)] pb-6 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
         <div class="min-w-0">
           <p class="text-sm font-medium">{t("settings.language.label")}</p>
-          <p class="mt-0.5 text-xs text-neutral-500 dark:text-neutral-400">{t("settings.language.description")}</p>
+          <p class="mt-1 text-xs leading-5 text-[var(--app-text-secondary)]">{t("settings.language.description")}</p>
         </div>
 
-        <div class="flex shrink-0 gap-1 rounded-lg bg-neutral-200/60 p-0.5 dark:bg-neutral-800">
-          {LOCALES.map((code) => {
-            const active = locale.value === code;
-            return (
-              <button
-                key={code}
-                type="button"
-                aria-pressed={active}
-                onClick={() => setLocale(code)}
-                class={`rounded-md px-3 py-1.5 text-xs transition md:py-1 ${
-                  active
-                    ? "bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900"
-                    : "text-neutral-600 hover:bg-neutral-200 dark:text-neutral-300 dark:hover:bg-neutral-700"
-                }`}
-              >
-                {LOCALE_LABELS[code]}
-              </button>
-            );
-          })}
+        <div class="w-48 shrink-0">
+          <Segmented
+            options={LOCALES.map((code) => ({ value: code, label: LOCALE_LABELS[code] }))}
+            value={locale.value}
+            onChange={setLocale}
+          />
         </div>
       </div>
     </div>

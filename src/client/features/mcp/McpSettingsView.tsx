@@ -72,7 +72,7 @@ export function McpSettingsView() {
   return (
     <SettingsSection title={t("settings.mcp.title")} error={error} onDismiss={clearMcpError}>
       <div class="mt-6 flex flex-col items-start gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
-        <p class="min-w-0 text-xs text-neutral-500 dark:text-neutral-400">{t("settings.mcp.description")}</p>
+        <p class="min-w-0 text-xs text-[var(--app-text-secondary)]">{t("settings.mcp.description")}</p>
         <Button variant="primary" onClick={() => setDialog({ kind: "add" })}>
           <IconPlus size={16} stroke={1.6} class="shrink-0" />
           {t("settings.mcp.add")}
@@ -81,9 +81,9 @@ export function McpSettingsView() {
 
       <div class="mt-3 space-y-2">
         {view === null ? (
-          <p class="text-xs text-neutral-500 dark:text-neutral-400">{t("common.loading")}</p>
+          <p class="text-xs text-[var(--app-text-secondary)]">{t("common.loading")}</p>
         ) : view.servers.length === 0 ? (
-          <p class="text-xs text-neutral-500 dark:text-neutral-400">{t("settings.mcp.empty")}</p>
+          <p class="text-xs text-[var(--app-text-secondary)]">{t("settings.mcp.empty")}</p>
         ) : (
           view.servers.map((server) => (
             <McpServerCard
@@ -166,7 +166,7 @@ function McpServerCard({
   const canAuthorize = server.type === "http" && (state === "authorization_required" || state === "failed");
 
   return (
-    <div class="rounded-xl border border-neutral-200 px-4 py-3 dark:border-neutral-800">
+    <div class="rounded-[24px] border border-[var(--app-stroke)] bg-[var(--app-surface)] p-5 shadow-[var(--app-shadow-4)]">
       <div class="flex flex-col gap-3 sm:flex-row sm:items-start">
         <div class="min-w-0 flex-1">
           <div class="flex flex-wrap items-center gap-2">
@@ -176,11 +176,11 @@ function McpServerCard({
             </StatusBadge>
           </div>
 
-          <p class="mt-0.5 truncate text-xs text-neutral-500 dark:text-neutral-400">
+          <p class="mt-0.5 truncate text-xs text-[var(--app-text-secondary)]">
             {server.type === "stdio" ? [server.command, ...server.args].join(" ") : server.url}
           </p>
 
-          {detail !== null && <p class="mt-1 break-words text-xs text-red-600 dark:text-red-400">{detail}</p>}
+          {detail !== null && <p class="mt-1.5 break-words text-xs leading-5 text-[var(--app-text-secondary)]">{detail}</p>}
 
           {authorizing && authorizationUrl !== null && (
             <a
@@ -196,17 +196,17 @@ function McpServerCard({
 
           {state === "connected" && (
             <details class="mt-2">
-              <summary class="cursor-pointer text-xs text-neutral-500 dark:text-neutral-400">
+              <summary class="cursor-pointer text-xs text-[var(--app-text-secondary)]">
                 {t("settings.mcp.tools", { count: tools.length })}
               </summary>
               {tools.length === 0 ? (
-                <p class="mt-1 text-xs text-neutral-500 dark:text-neutral-400">{t("settings.mcp.noTools")}</p>
+                <p class="mt-1 text-xs text-[var(--app-text-secondary)]">{t("settings.mcp.noTools")}</p>
               ) : (
                 <ul class="mt-1 flex flex-wrap gap-1">
                   {tools.map((tool) => (
                     <li
                       key={tool}
-                      class="rounded bg-neutral-100 px-1.5 py-0.5 font-mono text-[11px] dark:bg-neutral-800"
+                      class="rounded-full bg-[var(--app-soft)] px-2.5 py-1 font-mono text-[11px] text-[var(--app-text-secondary)]"
                     >
                       {tool}
                     </li>
@@ -233,7 +233,7 @@ function McpServerCard({
                 <button
                   type="button"
                   onClick={() => onAuthorize(authorizationUrl)}
-                  class="rounded-lg bg-neutral-900 px-2 py-1 text-xs text-white transition hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
+                  class="rounded-full bg-[var(--app-ink-fill)] px-3 py-1.5 text-xs font-medium text-[var(--app-on-ink)] transition hover:bg-[var(--app-ink-hover)]"
                 >
                   {t("settings.mcp.authorize")}
                 </button>

@@ -1,13 +1,14 @@
 import type { ReplyLanguage } from "../../shared/language";
 import { describeError } from "../../shared/errors";
 import type {
+  AttachmentPart,
   ChatAttachment,
   ChatEvent,
   ChatMessage,
   MessagePart,
   NoticePart,
-  OutgoingMessage,
-  SentPart,
+  SentAttachment,
+  TextPart,
   TokenUsage,
 } from "../../shared/types";
 import type { Compaction } from "./compaction";
@@ -20,8 +21,8 @@ import type { Store } from "../data/store";
  * 保存 → モデル呼び出し → 保存、の順で進み、履歴は常に追記だけになる。
  * 「実行中かどうか」はこのモジュールの中だけで持ち、HTTP 層へ Set を渡さない。
  *
- * モデルの本文はユーザーへ流さない。ユーザーへ届くのは、エージェントが chat_send で
- * 送ったメッセージ（parts の sent）と、システムの注記（notice）だけになる。
+ * モデルの本文は text パートとして画面へ流す。画像やファイルはエージェントが
+ * chat_attach で添付し（parts の attachment）、システムの注記は notice に残る。
  */
 
 /** ターンを流すのに必要なもの。 */
@@ -49,8 +50,8 @@ export type Turns = {
    */
   begin(teraId: string, input: TurnInput): AsyncIterable<ChatEvent> | null;
   /**
-   * 走っているターンを止める。エージェントはそこで打ち切り、それまでに送った
-   * メッセージは保存して assistant-done で返す。
+   * 走っているターンを止める。エージェントはそこで打ち切り、それまでに書いた
+   * 本文や添付は保存して assistant-done で返す。
    * 止めるターンが無ければ false（すでに終わっている。呼び直しても害はない）。
    */
   stop(teraId: string): boolean;
@@ -141,30 +142,45 @@ async function* turnEvents(
   const createdAt = Date.now();
   yield { type: "assistant-start", id: assistantId, createdAt };
 
-  /** このターンの記録（内部の本文・ツール・送ったメッセージ・注記）。保存される並びそのもの。 */
+  /** このターンの記録（本文・ツール・添付・注記）。保存される並びそのもの。 */
   const parts: MessagePart[] = [];
-  /** まだ画面へ流していない、送ったメッセージ。 */
-  const outgoing: SentPart[] = [];
+  /** まだ画面へ流していない、本文と添付。 */
+  const outgoing: (TextPart | AttachmentPart)[] = [];
+  /** いま伸びている本文。区切りが付くまで、画面へは流さない。 */
+  let pendingText: TextPart | null = null;
 
   /**
-   * 送信の口。parts へはその場で足す（止められても、送ったメッセージは保存に残す）。
-   * 画面へは、次のモデルの出来事を待つ間にまとめて流す。
+   * 添付の口。parts へはその場で足す（止められても、添付は保存に残す）。
+   * 画面へは、次のモデルの出来事を待つ間に流す。
    */
-  const send = (message: OutgoingMessage): void => {
-    const part: SentPart = {
-      type: "sent",
-      text: message.text,
-      attachments: message.attachments,
-      at: Date.now(),
-    };
+  const attach = (attachments: SentAttachment[]): void => {
+    if (attachments.length === 0) throw new Error("添付なしで attach が呼ばれました");
+
+    const part: AttachmentPart = { type: "attachment", attachments, at: Date.now() };
     parts.push(part);
     outgoing.push(part);
   };
 
   const appendText = (delta: string): void => {
+    if (delta.length === 0) return;
+
     const last = parts.at(-1);
-    if (last?.type === "text") last.text += delta;
-    else parts.push({ type: "text", text: delta });
+    if (last?.type === "text") {
+      last.text += delta;
+      pendingText = last;
+      return;
+    }
+
+    const part: TextPart = { type: "text", text: delta, at: Date.now() };
+    parts.push(part);
+    pendingText = part;
+  };
+
+  /** いま伸びている本文を、区切りとして画面へ流せるようにする。 */
+  const flushText = (): void => {
+    if (pendingText === null) return;
+    outgoing.push(pendingText);
+    pendingText = null;
   };
 
   let usage: TokenUsage | null = null;
@@ -201,11 +217,14 @@ async function* turnEvents(
       signal: turn.controller.signal,
       teraId,
       replyLanguage: language,
-      send,
+      attach,
     });
 
     for await (const event of stream.events) {
-      // エージェントが送ったメッセージを、次のモデルの出来事より先に流す。
+      // 本文は、次の区切り（ツール呼び出し・結果・注記・終了）で確定する。
+      if (event.type !== "text-delta") flushText();
+
+      // 確定した本文と添付を、次のモデルの出来事より先に流す。
       while (outgoing.length > 0) {
         const part = outgoing.shift();
         if (part !== undefined) yield { type: "assistant-message", id: assistantId, part };
@@ -213,7 +232,7 @@ async function* turnEvents(
 
       switch (event.type) {
         case "text-delta":
-          // モデルの本文は画面に出さない。次のターンの履歴にだけ残す。
+          // 本文は画面に出す。区切りが付くまで溜め、まとめて 1 つの吹き出しにする。
           appendText(event.delta);
           break;
         case "tool-call":
@@ -225,10 +244,8 @@ async function* turnEvents(
           yield { type: "tool-result", id: assistantId, part: event.part };
           break;
         case "step-limit": {
-          // 上限で打ち切られたことを、内部の本文と画面の両方に残す。
-          const note = stepLimitNote(language);
-          appendText(`\n\n${note}`);
-          const part: NoticePart = { type: "notice", text: note, at: Date.now() };
+          // 上限で打ち切られたことを、画面に残す。
+          const part: NoticePart = { type: "notice", text: stepLimitNote(language), at: Date.now() };
           parts.push(part);
           yield { type: "notice", id: assistantId, part };
           break;
@@ -244,16 +261,17 @@ async function* turnEvents(
     persist();
   }
 
-  // 送ったメッセージがまだ流れていない（最後の出来事のあとに送った）場合に流し切る。
+  // 最後の本文と、まだ流していない添付を流し切る。
+  flushText();
   while (outgoing.length > 0) {
     const part = outgoing.shift();
     if (part !== undefined) yield { type: "assistant-message", id: assistantId, part };
   }
 
-  // 何も送らずに終わったターンは、黙って終わらせない。
-  // ユーザーには応答が届いておらず、このままでは何も起きたように見えない。
+  // 何も書かずに終わったターンは、黙って終わらせない。
+  // 本文も添付も注記も無ければ、ユーザーには何も届いていない。
   if (failure === null && !turn.stopped && !turn.controller.signal.aborted && !hasVisiblePart(parts)) {
-    failure = "The model finished without sending a message to the user.";
+    failure = "The model finished without writing a reply.";
   }
 
   if (failure === null) {
@@ -269,7 +287,10 @@ async function* turnEvents(
 
 /** ユーザーの目に触れる部分があるかどうか。 */
 function hasVisiblePart(parts: readonly MessagePart[]): boolean {
-  return parts.some((part) => part.type === "sent" || part.type === "notice");
+  return parts.some(
+    (part) =>
+      (part.type === "text" && part.text.trim().length > 0) || part.type === "attachment" || part.type === "notice",
+  );
 }
 
 /**

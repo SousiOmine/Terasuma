@@ -21,7 +21,7 @@ export function DeleteAction({ onClick }: { onClick: () => void }) {
     <button
       type="button"
       onClick={onClick}
-      class={`${CARD_ACTION_CLASS} flex items-center gap-1 text-red-600 dark:text-red-400`}
+      class={`${CARD_ACTION_CLASS} flex items-center gap-1`}
     >
       <IconTrash size={14} stroke={1.6} class="shrink-0" />
       {t("common.delete")}

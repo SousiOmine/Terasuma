@@ -1,16 +1,10 @@
 import { IconLayoutSidebarRight, IconMenu2 } from "@tabler/icons-preact";
 import { useEffect, useMemo, useRef } from "preact/hooks";
-import type { ChatMessage, MessagePart, NoticePart, SentPart } from "../../../shared/types";
+import type { AttachmentPart, ChatMessage, MessagePart, NoticePart, TextPart } from "../../../shared/types";
 import { containerStatus } from "../../state/container";
 import { locale, t } from "../../i18n";
 import { modelProblem } from "../../state/model";
-import {
-  isLoadingMessages,
-  isStreaming,
-  liveTurn,
-  messages,
-  type LiveTurn,
-} from "../../state/chat";
+import { isLoadingMessages, isStreaming, liveTurn, messages, type LiveTurn } from "../../state/chat";
 import { chatError, clearChatError } from "../../state/failure";
 import { computerPaneOpen, handoverActive, toggleComputerPane } from "../../state/handover";
 import { openSettings } from "../../state/route";
@@ -25,14 +19,17 @@ import { AgentMessageBubble, NoticeLine, TypingBubble, UserMessageBubble } from 
 /**
  * チャット画面。
  *
- * 会話は、ユーザーの発言と、エージェントが送ったメッセージの吹き出しだけで組み立てる。
- * モデルの本文は届かないので、少しずつ伸びる表示は無い（メッセージは届いた単位で出る）。
+ * 会話は、ユーザーの発言と、エージェントの本文・添付の吹き出しだけで組み立てる。
+ * 本文は区切りごとに届くので、少しずつ伸びる表示は無い（メッセージは届いた単位で出る）。
  */
+
+/** 画面に出す、本文と添付。注記は別に扱う。 */
+type VisibleMessagePart = TextPart | AttachmentPart;
 
 type ChatItem =
   | { kind: "date"; key: string; label: string }
   | { kind: "user"; key: string; message: ChatMessage }
-  | { kind: "agent"; key: string; parts: readonly SentPart[] }
+  | { kind: "agent"; key: string; parts: readonly VisibleMessagePart[] }
   | { kind: "notice"; key: string; part: NoticePart };
 
 export function ChatView() {
@@ -74,8 +71,8 @@ export function ChatView() {
   const showEmpty = !loading && items.length === 0 && !streaming;
 
   return (
-    <main class="flex min-w-0 flex-1 flex-col bg-[#eef3ee] dark:bg-[#0e1411]">
-      <header class="flex h-14 shrink-0 items-center gap-2 border-b border-black/5 bg-white/85 px-3 backdrop-blur sm:gap-3 sm:px-6 dark:border-white/5 dark:bg-neutral-900/80">
+    <main class="flex min-w-0 flex-1 flex-col bg-[var(--app-surface)] md:m-3 md:overflow-hidden md:rounded-[28px] md:border md:border-[var(--app-stroke)] md:shadow-[var(--app-shadow-panel)]">
+      <header class="flex h-16 shrink-0 items-center gap-3 border-b border-[var(--app-stroke)] px-4 sm:px-6">
         {/* 狭い画面ではサイドバーがドロワーになるので、開くボタンをここに置く。 */}
         <button
           type="button"
@@ -83,14 +80,14 @@ export function ChatView() {
           aria-expanded={sidebarOpen.value}
           title={t("chat.menu.open")}
           aria-label={t("chat.menu.open")}
-          class="-ml-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-neutral-500 transition hover:bg-black/5 md:hidden dark:text-neutral-400 dark:hover:bg-white/10"
+          class="-ml-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[var(--app-text-secondary)] transition hover:bg-[var(--app-soft)] hover:text-[var(--app-text)] md:hidden"
         >
           <IconMenu2 size={20} stroke={1.7} />
         </button>
         <ChatAvatar size={34} />
         <div class="min-w-0 flex-1">
-          <h1 class="truncate text-sm font-semibold">{title}</h1>
-          <p class="truncate text-[11px] text-neutral-500 dark:text-neutral-400">
+          <h1 class="truncate text-[15px] font-semibold tracking-[-0.01em]">{title}</h1>
+          <p class="truncate text-xs text-[var(--app-text-secondary)]">
             {handover ? t("chat.computer.yourTurn") : streaming ? t("chat.typing") : t("chat.agent.subtitle")}
           </p>
         </div>
@@ -103,8 +100,8 @@ export function ChatView() {
             aria-label={t(paneOpen ? "chat.computer.hide" : "chat.computer.show")}
             class={`flex shrink-0 items-center justify-center rounded-full p-2.5 transition md:p-2 ${
               paneOpen
-                ? "bg-[#06c755]/15 text-[#078f45] dark:bg-[#06c755]/20 dark:text-[#59d98a]"
-                : "text-neutral-500 hover:bg-black/5 dark:text-neutral-400 dark:hover:bg-white/10"
+                ? "bg-[var(--app-soft)] text-[var(--app-text)]"
+                : "text-[var(--app-text-secondary)] hover:bg-[var(--app-soft)] hover:text-[var(--app-text)]"
             }`}
           >
             <IconLayoutSidebarRight size={17} stroke={1.7} />
@@ -113,7 +110,7 @@ export function ChatView() {
       </header>
 
       {problem !== null && (
-        <Banner tone="warning" action={{ label: t("chat.openSettings"), onClick: () => openSettings("model") }}>
+        <Banner tone="info" action={{ label: t("chat.openSettings"), onClick: () => openSettings("model") }}>
           {t(problem === "unset" ? "chat.model.unset" : "chat.model.providerMissing")}
         </Banner>
       )}
@@ -124,14 +121,14 @@ export function ChatView() {
         </Banner>
       )}
 
-      <div ref={scrollRef} onScroll={handleScroll} class="tera-chat-wallpaper min-h-0 flex-1 overflow-y-auto">
+      <div ref={scrollRef} onScroll={handleScroll} class="min-h-0 flex-1 overflow-y-auto bg-[var(--app-surface)]">
         {showEmpty ? (
           <EmptyState />
         ) : (
           <div class="mx-auto flex w-full max-w-3xl flex-col gap-3 px-4 py-6 sm:px-6">
             {items.map((item) => renderItem(item))}
             {streaming && !handover && <TypingBubble />}
-            {loading && <p class="text-center text-sm text-neutral-500 dark:text-neutral-400">{t("common.loading")}</p>}
+            {loading && <p class="text-center text-sm text-[var(--app-text-secondary)]">{t("common.loading")}</p>}
           </div>
         )}
       </div>
@@ -144,7 +141,11 @@ export function ChatView() {
               action={
                 <div class="flex shrink-0 flex-col items-end gap-1">
                   {error.code === "model_not_configured" && (
-                    <button type="button" onClick={() => openSettings("model")} class="text-xs underline">
+                    <button
+                      type="button"
+                      onClick={() => openSettings("model")}
+                      class="text-xs font-medium text-[var(--app-text)] underline-offset-2 hover:underline"
+                    >
                       {t("chat.openSettings")}
                     </button>
                   )}
@@ -174,7 +175,7 @@ function renderItem(item: ChatItem) {
     case "date":
       return (
         <div key={item.key} class="flex justify-center py-1">
-          <span class="rounded-full bg-black/5 px-3 py-1 text-[11px] text-neutral-600 dark:bg-white/10 dark:text-neutral-300">
+          <span class="rounded-full bg-[var(--app-soft)] px-3 py-1 text-[11px] text-[var(--app-text-secondary)]">
             {item.label}
           </span>
         </div>
@@ -200,14 +201,10 @@ function renderItem(item: ChatItem) {
 /**
  * 保存された会話と、届いている途中のターンを、画面の並びへ開く。
  *
- * assistant のメッセージは parts の sent と notice だけを出す。
- * 連続する sent は、同じターンのまとまりとして 1 つの吹き出し群にする（アイコンは 1 つ）。
+ * assistant のメッセージは parts の text・attachment・notice を出す。
+ * 連続する text と attachment は、同じターンのまとまりとして 1 つの吹き出し群にする（アイコンは 1 つ）。
  */
-function buildItems(
-  saved: readonly ChatMessage[],
-  live: LiveTurn | null,
-  tag: string,
-): ChatItem[] {
+function buildItems(saved: readonly ChatMessage[], live: LiveTurn | null, tag: string): ChatItem[] {
   const items: ChatItem[] = [];
   let currentDay: string | null = null;
 
@@ -235,18 +232,21 @@ function buildItems(
 }
 
 /** 記録のうち、画面に出す部分だけを取り出す。 */
-function visibleParts(parts: readonly MessagePart[]): (SentPart | NoticePart)[] {
-  return parts.filter((part): part is SentPart | NoticePart => part.type === "sent" || part.type === "notice");
+function visibleParts(parts: readonly MessagePart[]): (VisibleMessagePart | NoticePart)[] {
+  return parts.filter(
+    (part): part is VisibleMessagePart | NoticePart =>
+      (part.type === "text" && part.text.length > 0) || part.type === "attachment" || part.type === "notice",
+  );
 }
 
 /** 1 つのターンの parts を、吹き出し群と注記の並びにする。 */
 function pushParts(
   items: ChatItem[],
   messageId: string,
-  parts: readonly (SentPart | NoticePart)[],
+  parts: readonly (VisibleMessagePart | NoticePart)[],
   pushDate: (at: number) => void,
 ): void {
-  let group: SentPart[] = [];
+  let group: VisibleMessagePart[] = [];
   let groupIndex = 0;
   let groupDay: string | null = null;
   let noticeIndex = 0;
@@ -267,7 +267,7 @@ function pushParts(
 
     pushDate(part.at);
 
-    if (part.type === "sent") {
+    if (part.type !== "notice") {
       group.push(part);
       groupDay = day;
       continue;
@@ -309,8 +309,8 @@ function EmptyState() {
     <div class="flex h-full flex-col items-center justify-center gap-4 px-6 text-center">
       <ChatAvatar size={58} />
       <div>
-        <h2 class="text-base font-semibold">{t("chat.empty.title")}</h2>
-        <p class="mt-1 text-xs text-neutral-500 dark:text-neutral-400">{t("chat.agent.subtitle")}</p>
+        <h2 class="text-[18px] font-semibold tracking-[-0.01em]">{t("chat.empty.title")}</h2>
+        <p class="mt-1 text-xs text-[var(--app-text-secondary)]">{t("chat.agent.subtitle")}</p>
       </div>
     </div>
   );

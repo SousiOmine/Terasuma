@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { decodeChatEvents, encodeChatEvent } from "../src/shared/sse";
-import type { ChatEvent, SentPart } from "../src/shared/types";
+import type { ChatEvent, TextPart } from "../src/shared/types";
 
-const part: SentPart = { type: "sent", text: "こんにちは", attachments: [], at: 2 };
+const part: TextPart = { type: "text", text: "こんにちは", at: 2 };
 
 const events: ChatEvent[] = [
   { type: "assistant-start", id: "a1", createdAt: 1 },
@@ -55,10 +55,14 @@ describe("SSE", () => {
         attachments: null,
         parts: [
           {
-            type: "sent",
+            type: "text",
             text: "1行目\n2行目\n```ts\nconst a = 1;\n```",
-            attachments: [{ name: "図.png", size: 12, url: "/api/images/x.png", image: { width: 4, height: 3 } }],
             at: 1,
+          },
+          {
+            type: "attachment",
+            attachments: [{ name: "図.png", size: 12, url: "/api/images/x.png", image: { width: 4, height: 3 } }],
+            at: 2,
           },
         ],
         createdAt: 1,

@@ -62,12 +62,12 @@ export function isMessagePart(value: unknown): value is MessagePart {
 
   switch (value.type) {
     case "text":
-      return isString(value.text);
-    case "sent":
+      return isString(value.text) && isNumber(value.at);
+    case "attachment":
       return (
-        isString(value.text) &&
         isNumber(value.at) &&
         Array.isArray(value.attachments) &&
+        value.attachments.length > 0 &&
         value.attachments.every(isSentAttachment)
       );
     case "notice":
@@ -116,7 +116,11 @@ export function isChatEvent(value: unknown): value is ChatEvent {
     case "assistant-start":
       return isString(value.id) && isNumber(value.createdAt);
     case "assistant-message":
-      return isString(value.id) && isMessagePart(value.part) && value.part.type === "sent";
+      return (
+        isString(value.id) &&
+        isMessagePart(value.part) &&
+        (value.part.type === "text" || value.part.type === "attachment")
+      );
     case "notice":
       return isString(value.id) && isMessagePart(value.part) && value.part.type === "notice";
     case "tool-call":

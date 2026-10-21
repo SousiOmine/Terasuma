@@ -118,7 +118,7 @@ export function startServer(options: ServerOptions): StartedServer {
           GET: api.listMessages,
           POST: api.sendMessage,
         },
-        // 生成中のターンを、ここで打ち切る（それまでに送ったメッセージは保存される）。
+        // 生成中のターンを、ここで打ち切る（それまでの本文や添付は保存される）。
         "/api/teras/:id/stop": {
           POST: api.stopTurn,
         },

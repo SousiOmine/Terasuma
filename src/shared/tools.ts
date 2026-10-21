@@ -16,8 +16,8 @@ export const TOOL_NAME_SEPARATOR = "_";
 export const COMPUTER_SERVER_ID = "computer";
 
 /**
- * ユーザーへメッセージを送る内蔵ツールのサーバー id。
- * チャットの送信はこの 1 本だけを通す（モデルの本文は画面に出さない）。
+ * 画像やファイルをチャットへ添付する内蔵ツールのサーバー id。
+ * 本文はモデルの通常のテキストとして届くので、このツールは添付だけを扱う。
  */
 export const CHAT_SERVER_ID = "chat";
 
@@ -27,11 +27,11 @@ export const ASK_USER_TOOL = "ask_user";
 /** モデルへ渡すときの、画面を渡すツールの名前。 */
 export const ASK_USER_TOOL_NAME = `${COMPUTER_SERVER_ID}${TOOL_NAME_SEPARATOR}${ASK_USER_TOOL}`;
 
-/** ユーザーへメッセージを送るツール名（サーバー id を付けない形）。 */
-export const SEND_MESSAGE_TOOL = "send";
+/** 画像やファイルをチャットへ添付するツール名（サーバー id を付けない形）。 */
+export const ATTACH_TOOL = "attach";
 
-/** モデルへ渡すときの、メッセージを送るツールの名前。 */
-export const SEND_MESSAGE_TOOL_NAME = `${CHAT_SERVER_ID}${TOOL_NAME_SEPARATOR}${SEND_MESSAGE_TOOL}`;
+/** モデルへ渡すときの、添付するツールの名前。 */
+export const ATTACH_TOOL_NAME = `${CHAT_SERVER_ID}${TOOL_NAME_SEPARATOR}${ATTACH_TOOL}`;
 
 /** サーバー id とツール名から、モデルへ渡す名前を組み立てる。 */
 export function toolNameFor(server: string, tool: string): string {

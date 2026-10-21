@@ -9,7 +9,15 @@ import { DEFAULT_TERA_ID, createStore } from "../src/server/data/store";
 import type { Store } from "../src/server/data/store";
 import { MAX_ATTACHMENTS } from "../src/shared/attachments";
 import { decodeChatEvents } from "../src/shared/sse";
-import type { ApiErrorCode, ChatEvent, ChatMessage, SentPart, Tera } from "../src/shared/types";
+import type {
+  ApiErrorCode,
+  AttachmentPart,
+  ChatEvent,
+  ChatMessage,
+  SentAttachment,
+  TextPart,
+  Tera,
+} from "../src/shared/types";
 import { fastMock, withServer as withTestServer } from "./harness";
 import { createContainerStub } from "./support";
 
@@ -121,18 +129,25 @@ async function withServer<T>(
   );
 }
 
-/** エージェントがユーザーへ送った本文を、送った順につなぐ。 */
-function sentText(events: ChatEvent[]): string {
-  return events
-    .filter((event): event is Extract<ChatEvent, { type: "assistant-message" }> => event.type === "assistant-message")
-    .map((event) => event.part.text)
-    .join("");
+/** 画面に流れた本文を、届いた順につなぐ。 */
+function visibleText(events: ChatEvent[]): string {
+  let text = "";
+  for (const event of events) {
+    if (event.type === "assistant-message" && event.part.type === "text") text += event.part.text;
+  }
+  return text;
 }
 
-/** 保存されたメッセージから、ユーザーへ送った部分だけを取り出す。 */
-function sentParts(message: ChatMessage): SentPart[] {
+/** 保存されたメッセージから、本文のパーツだけを取り出す。 */
+function textParts(message: ChatMessage): TextPart[] {
   if (message.parts === null) return [];
-  return message.parts.filter((part): part is SentPart => part.type === "sent");
+  return message.parts.filter((part): part is TextPart => part.type === "text");
+}
+
+/** 保存されたメッセージから、添付のパーツだけを取り出す。 */
+function attachmentParts(message: ChatMessage): AttachmentPart[] {
+  if (message.parts === null) return [];
+  return message.parts.filter((part): part is AttachmentPart => part.type === "attachment");
 }
 
 function assistantDone(events: ChatEvent[]): ChatMessage {
@@ -167,13 +182,12 @@ function createRecordingEngine(inner: AgentEngine): AgentEngine & { inputs: Engi
 function createFailingEngine(mode: "immediate" | "mid-stream"): AgentEngine {
   return {
     name: `failing(${mode})`,
-    stream(input): Promise<EngineStream> {
+    stream(): Promise<EngineStream> {
       if (mode === "immediate") return Promise.reject(new Error("モデルに接続できなかった"));
 
       return Promise.resolve({
         events: (async function* () {
-          input.send({ text: "部分", attachments: [] });
-          yield { type: "text-delta", delta: "内部の続き" } as const;
+          yield { type: "text-delta", delta: "部分" } as const;
           throw new Error("途中で切れた");
         })(),
         usage: Promise.resolve(null),
@@ -185,7 +199,7 @@ function createFailingEngine(mode: "immediate" | "mid-stream"): AgentEngine {
   };
 }
 
-/** 送信の口を使い、ツール呼び出しの前後でメッセージを送るエンジン。 */
+/** ツール呼び出しの前後で本文を流すエンジン。 */
 function createToolEngine(): AgentEngine {
   const call = { type: "tool-call", id: "call-1", server: "local", tool: "echo", args: { text: "hi" } } as const;
   const result = {
@@ -199,14 +213,13 @@ function createToolEngine(): AgentEngine {
 
   return {
     name: "tool-engine",
-    stream(input): Promise<EngineStream> {
+    stream(): Promise<EngineStream> {
       return Promise.resolve({
         events: (async function* () {
-          input.send({ text: "調べます。", attachments: [] });
+          yield { type: "text-delta", delta: "調べます。" } as const;
           yield { type: "tool-call", part: call } as const;
           yield { type: "tool-result", part: result } as const;
-          input.send({ text: "分かりました。", attachments: [] });
-          yield { type: "text-delta", delta: "（内部の本文）" } as const;
+          yield { type: "text-delta", delta: "分かりました。" } as const;
         })(),
         usage: Promise.resolve({ inputTokens: 3, outputTokens: 4, cachedInputTokens: 0 }),
       });
@@ -226,8 +239,7 @@ function createSlowMessageEngine(): AgentEngine {
         events: (async function* () {
           for (let index = 0; index < 50; index += 1) {
             if (input.signal.aborted) return;
-            input.send({ text: `${index},`, attachments: [] });
-            yield { type: "text-delta", delta: "" } as const;
+            yield { type: "text-delta", delta: `${index},` } as const;
             await new Promise((resolve) => setTimeout(resolve, 10));
           }
         })(),
@@ -247,8 +259,7 @@ function createStoppableEngine(): AgentEngine {
     stream(input): Promise<EngineStream> {
       return Promise.resolve({
         events: (async function* () {
-          input.send({ text: "途中です。", attachments: [] });
-          yield { type: "text-delta", delta: "" } as const;
+          yield { type: "text-delta", delta: "途中です。" } as const;
           await new Promise<void>((resolve) => {
             if (input.signal.aborted) {
               resolve();
@@ -288,10 +299,10 @@ describe("チャット API", () => {
       ]);
 
       const done = assistantDone(events);
-      const visible = sentParts(done);
+      const visible = textParts(done);
       expect(visible).toHaveLength(1);
-      expect(sentText(events)).toBe(visible[0]?.text ?? "");
-      expect(sentText(events).length).toBeGreaterThan(0);
+      expect(visibleText(events)).toBe(visible[0]?.text ?? "");
+      expect(visibleText(events).length).toBeGreaterThan(0);
       // モデルの本文は画面に出さないので、assistant の content は常に空。
       expect(done.content).toBe("");
       expect(done.usage).not.toBeNull();
@@ -393,8 +404,8 @@ describe("チャット API", () => {
 
       const done = assistantDone(events);
       const parts = done.parts ?? [];
-      expect(parts.map((part) => part.type)).toEqual(["sent", "tool-call", "tool-result", "sent", "text"]);
-      expect(parts.filter((part) => part.type === "sent").map((part) => part.text)).toEqual([
+      expect(parts.map((part) => part.type)).toEqual(["text", "tool-call", "tool-result", "text"]);
+      expect(parts.filter((part) => part.type === "text").map((part) => part.text)).toEqual([
         "調べます。",
         "分かりました。",
       ]);
@@ -406,7 +417,7 @@ describe("チャット API", () => {
     });
   });
 
-  test("送ったメッセージは parts の sent として保存され、content は空になる", async () => {
+  test("本文は parts の text として保存され、content は空になる", async () => {
     await withServer(fastMock(), async (harness) => {
       await harness.send(DEFAULT_TERA_ID, "こんにちは");
 
@@ -414,11 +425,11 @@ describe("チャット API", () => {
       expect(user?.content).toBe("こんにちは");
       if (assistant === undefined) throw new Error("assistant のメッセージが無い");
       expect(assistant.content).toBe("");
-      expect(sentParts(assistant)).toHaveLength(1);
+      expect(textParts(assistant)).toHaveLength(1);
     });
   });
 
-  test("次のターンの履歴には、前のターンの内部の記録と送ったメッセージが入っている", async () => {
+  test("次のターンの履歴には、前のターンの本文とツールの記録が入っている", async () => {
     const recording = createRecordingEngine(createToolEngine());
     await withServer(recording, async (harness) => {
       await harness.send(DEFAULT_TERA_ID, "調べて");
@@ -429,7 +440,7 @@ describe("チャット API", () => {
 
       const assistant = second.context.messages[1];
       if (assistant === undefined) throw new Error("assistant の記録が無い");
-      expect(assistant.parts?.map((part) => part.type)).toEqual(["sent", "tool-call", "tool-result", "sent", "text"]);
+      expect(assistant.parts?.map((part) => part.type)).toEqual(["text", "tool-call", "tool-result", "text"]);
     });
   });
 
@@ -628,8 +639,8 @@ describe("チャット API", () => {
       const decoded = decodeChatEvents(await body);
       expect(decoded.rest).toBe("");
       const done = assistantDone(decoded.events);
-      expect(sentText(decoded.events)).toBe("途中です。");
-      expect(sentParts(done).map((part) => part.text)).toEqual(["途中です。"]);
+      expect(visibleText(decoded.events)).toBe("途中です。");
+      expect(textParts(done).map((part) => part.text)).toEqual(["途中です。"]);
       expect(done.content).toBe("");
     });
   });
@@ -660,9 +671,9 @@ describe("チャット API", () => {
     /** 上限で打ち切られたターンを流すエンジン。 */
     const limitEngine: AgentEngine = {
       name: "limit",
-      stream: async (input) => ({
+      stream: async () => ({
         events: (async function* () {
-          input.send({ text: "画面を確認しています。", attachments: [] });
+          yield { type: "text-delta", delta: "画面を確認しています。" } as const;
           yield { type: "step-limit" } as const;
         })(),
         usage: Promise.resolve(null),
@@ -673,7 +684,7 @@ describe("チャット API", () => {
     await withServer(limitEngine, async (harness) => {
       const events = await harness.send(DEFAULT_TERA_ID, "操作を続けて");
 
-      expect(sentText(events)).toContain("画面を確認しています。");
+      expect(visibleText(events)).toContain("画面を確認しています。");
       const notice = events.find((event) => event.type === "notice");
       if (notice?.type !== "notice") throw new Error("注記が流れなかった");
       expect(notice.part.text).toContain("上限");
@@ -701,23 +712,47 @@ describe("チャット API", () => {
     await withServer(createFailingEngine("mid-stream"), async (harness) => {
       const events = await harness.send(DEFAULT_TERA_ID, "途中で切れる質問");
 
-      expect(sentText(events)).toBe("部分");
+      expect(visibleText(events)).toBe("部分");
       expect(failingEvent(events).code).toBe("model_error");
 
       const messages = await harness.messages(DEFAULT_TERA_ID);
       expect(messages.map((message) => message.role)).toEqual(["user", "assistant"]);
       expect(messages[1]?.content).toBe("");
-      expect(sentParts(messages[1] ?? messages[0]!).map((part) => part.text)).toEqual(["部分"]);
+      expect(textParts(messages[1] ?? messages[0]!).map((part) => part.text)).toEqual(["部分"]);
     });
   });
 
-  test("何も送らずに終わったターンは、黙って終わらせずに失敗させる", async () => {
+  test("本文だけで終わったターンも、その本文を画面に届ける", async () => {
+    const textOnly: AgentEngine = {
+      name: "text-only",
+      stream: async () => ({
+        events: (async function* () {
+          yield { type: "text-delta", delta: "本文だけの返事" } as const;
+        })(),
+        usage: Promise.resolve(null),
+      }),
+      complete: () => Promise.reject(new Error("テスト用のエンジンでは要約を作れません")),
+    };
+
+    await withServer(textOnly, async (harness) => {
+      const events = await harness.send(DEFAULT_TERA_ID, "返事をください");
+
+      expect(events.at(-1)?.type).toBe("assistant-done");
+      expect(visibleText(events)).toBe("本文だけの返事");
+
+      const messages = await harness.messages(DEFAULT_TERA_ID);
+      const assistant = messages[1];
+      if (assistant === undefined) throw new Error("assistant のメッセージが無い");
+      expect(assistant.content).toBe("");
+      expect(textParts(assistant).map((part) => part.text)).toEqual(["本文だけの返事"]);
+    });
+  });
+
+  test("何も書かずに終わったターンは、黙って終わらせずに失敗させる", async () => {
     const silent: AgentEngine = {
       name: "silent",
       stream: async () => ({
-        events: (async function* () {
-          yield { type: "text-delta", delta: "内部のメモ" } as const;
-        })(),
+        events: (async function* () {})(),
         usage: Promise.resolve(null),
       }),
       complete: () => Promise.reject(new Error("テスト用のエンジンでは要約を作れません")),
@@ -727,16 +762,75 @@ describe("チャット API", () => {
       const events = await harness.send(DEFAULT_TERA_ID, "返事をください");
       const failure = failingEvent(events);
       expect(failure.code).toBe("model_error");
-      expect(failure.detail).toContain("without sending a message");
+      expect(failure.detail).toContain("without writing a reply");
 
-      // 内部のメモは残す（次のターンのモデルが読める）。画面には出ない。
+      // 何も無いターンは、空のメッセージを残さない。
       const messages = await harness.messages(DEFAULT_TERA_ID);
-      expect(messages[1]?.parts).toEqual([{ type: "text", text: "内部のメモ" }]);
-      expect(messages[1]?.content).toBe("");
+      expect(messages.map((message) => message.role)).toEqual(["user"]);
     });
   });
 
-  test("途中で購読をやめても、そこまでに送ったメッセージは保存される", async () => {
+  test("添付は attachment パートとして流れ、保存される", async () => {
+    const attachment: SentAttachment = {
+      name: "screenshot.png",
+      size: 3,
+      url: "/api/images/x.png",
+      image: { width: 4, height: 3 },
+    };
+    const call = {
+      type: "tool-call",
+      id: "call-1",
+      server: "chat",
+      tool: "attach",
+      args: {},
+    } as const;
+    const result = {
+      type: "tool-result",
+      id: "call-1",
+      server: "chat",
+      tool: "attach",
+      failed: false,
+      output: "Attached 1 file to the chat.",
+    } as const;
+
+    const withAttachment: AgentEngine = {
+      name: "attachment",
+      stream: async (input) => ({
+        events: (async function* () {
+          yield { type: "text-delta", delta: "画面です。" } as const;
+          yield { type: "tool-call", part: call } as const;
+          input.attach([attachment]);
+          yield { type: "tool-result", part: result } as const;
+        })(),
+        usage: Promise.resolve(null),
+      }),
+      complete: () => Promise.reject(new Error("テスト用のエンジンでは要約を作れません")),
+    };
+
+    await withServer(withAttachment, async (harness) => {
+      const events = await harness.send(DEFAULT_TERA_ID, "画面を見せて");
+
+      expect(events.map((event) => event.type)).toEqual([
+        "user-message",
+        "assistant-start",
+        "assistant-message",
+        "tool-call",
+        "assistant-message",
+        "tool-result",
+        "assistant-done",
+      ]);
+      expect(visibleText(events)).toBe("画面です。");
+
+      const messages = await harness.messages(DEFAULT_TERA_ID);
+      const assistant = messages[1];
+      if (assistant === undefined) throw new Error("assistant のメッセージが無い");
+      expect(attachmentParts(assistant)).toEqual([
+        { type: "attachment", attachments: [attachment], at: expect.any(Number) },
+      ]);
+    });
+  });
+
+  test("途中で購読をやめても、そこまでに書いた本文は保存される", async () => {
     await withServer(createSlowMessageEngine(), async (harness) => {
       const controller = new AbortController();
       const response = await harness.request(
@@ -760,10 +854,13 @@ describe("チャット API", () => {
       expect(assistant.role).toBe("assistant");
       expect(assistant.content).toBe("");
 
-      const saved = sentParts(assistant).map((part) => part.text);
+      const saved = textParts(assistant)
+        .map((part) => part.text)
+        .join("");
+      const full = Array.from({ length: 50 }, (_, index) => `${index},`).join("");
       expect(saved.length).toBeGreaterThan(0);
       // 最後まで流したわけではないので、途中で止まったことが分かる。
-      expect(saved.length).toBeLessThan(50);
+      expect(saved.length).toBeLessThan(full.length);
     });
   });
 });

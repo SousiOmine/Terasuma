@@ -22,13 +22,11 @@ export function ModelList({ models, value, onChange, currentModel = null }: Mode
     <div>
       <SearchInput value={query} onInput={setQuery} placeholder={t("settings.model.searchModel")} />
 
-      <div class="mt-2 max-h-64 overflow-y-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
+      <div class="mt-2 max-h-64 overflow-y-auto rounded-2xl border border-[var(--app-stroke)] bg-[var(--app-surface)] p-1.5">
         {visible.length === 0 ? (
-          <p class="px-3 py-4 text-center text-xs text-neutral-500 dark:text-neutral-400">
-            {t("settings.model.noMatch")}
-          </p>
+          <p class="px-3 py-4 text-center text-xs text-[var(--app-text-secondary)]">{t("settings.model.noMatch")}</p>
         ) : (
-          <ul class="p-1">
+          <ul class="space-y-0.5">
             {visible.map((model) => {
               const selected = model === value;
               return (
@@ -37,15 +35,15 @@ export function ModelList({ models, value, onChange, currentModel = null }: Mode
                     type="button"
                     aria-pressed={selected}
                     onClick={() => onChange(model)}
-                    class={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition ${
+                    class={`flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm transition ${
                       selected
-                        ? "bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900"
-                        : "hover:bg-neutral-100 dark:hover:bg-neutral-800"
+                        ? "bg-[var(--app-soft)] font-medium text-[var(--app-text)]"
+                        : "text-[var(--app-text)] hover:bg-[var(--app-soft)]"
                     }`}
                   >
                     <span class="min-w-0 flex-1 truncate">{model}</span>
                     {model === currentModel && (
-                      <span class="flex shrink-0 items-center gap-1 text-[11px] opacity-70">
+                      <span class="flex shrink-0 items-center gap-1 text-[11px] text-[var(--app-text-secondary)]">
                         <IconCheck size={14} stroke={1.6} />
                         {t("settings.model.current")}
                       </span>

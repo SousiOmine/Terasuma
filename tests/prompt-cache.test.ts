@@ -51,7 +51,7 @@ describe("プロンプトキャッシュ保護", () => {
       teraId: DEFAULT_TERA_ID,
       role: "assistant",
       content: "",
-      parts: [{ type: "text", text: "回答" }],
+      parts: [{ type: "text", text: "回答", at: 1 }],
     });
 
     expect(buildInput(contextOf(store), createImageStub())).toEqual([
@@ -100,7 +100,7 @@ describe("プロンプトキャッシュ保護", () => {
       teraId: DEFAULT_TERA_ID,
       role: "assistant",
       content: "",
-      parts: [{ type: "text", text: "最初の回答" }],
+      parts: [{ type: "text", text: "最初の回答", at: 1 }],
     });
     store.appendMessage({ id: "m3", teraId: DEFAULT_TERA_ID, role: "user", content: "次の質問" });
     const turn2 = buildInput(contextOf(store), createImageStub());
@@ -125,7 +125,7 @@ describe("ツールを使ったターンの入力", () => {
       role: "assistant",
       content: "調べます。",
       parts: [
-        { type: "text", text: "調べます。" },
+        { type: "text", text: "調べます。", at: 1 },
         { type: "tool-call", id: "call-1", server: "local", tool: "echo", args: { text: "hi" } },
         { type: "tool-result", id: "call-1", server: "local", tool: "echo", failed: false, output: "echo: hi" },
       ],
@@ -216,7 +216,7 @@ describe("ツールを使ったターンの入力", () => {
     });
   });
 
-  test("ユーザーへ送った sent は、モデルへ戻さない", () => {
+  test("添付と注記は、モデルへ戻さない", () => {
     const store = makeStore();
     store.appendMessage({ id: "m1", teraId: DEFAULT_TERA_ID, role: "user", content: "調べて" });
     store.appendMessage({
@@ -225,28 +225,60 @@ describe("ツールを使ったターンの入力", () => {
       role: "assistant",
       content: "",
       parts: [
-        { type: "sent", text: "調べます。", attachments: [], at: 1 },
-        { type: "tool-call", id: "call-1", server: "chat", tool: "send", args: { text: "調べます。" } },
+        { type: "text", text: "調べます。", at: 1 },
+        { type: "tool-call", id: "call-1", server: "chat", tool: "attach", args: { files: ["x.png"] } },
         {
           type: "tool-result",
           id: "call-1",
           server: "chat",
-          tool: "send",
+          tool: "attach",
           failed: false,
-          output: "Sent the message to the user.",
+          output: "Attached 1 file to the chat.",
         },
+        {
+          type: "attachment",
+          attachments: [{ name: "x.png", size: 3, url: "/api/images/x.png", image: { width: 4, height: 3 } }],
+          at: 2,
+        },
+        { type: "notice", text: "注記", at: 3 },
       ],
     });
 
     const input = buildInput(contextOf(store), createImageStub());
-    // 送った文はツールの引数にだけ残る（sent そのものは渡さない）。
-    expect(JSON.stringify(input)).not.toContain('"type":"sent"');
+    // 本文とツールの呼び出しは戻り、添付と注記は戻らない。
     expect(input[2]).toEqual({
       role: "assistant",
       content: [
-        { type: "tool-call", toolCallId: "call-1", toolName: "chat_send", input: { text: "調べます。" } },
+        { type: "text", text: "調べます。" },
+        { type: "tool-call", toolCallId: "call-1", toolName: "chat_attach", input: { files: ["x.png"] } },
       ],
     });
+    expect(JSON.stringify(input)).not.toContain('"type":"attachment"');
+    expect(JSON.stringify(input)).not.toContain("/api/images/x.png");
+    expect(JSON.stringify(input)).not.toContain("注記");
+  });
+
+  test("添付だけのターンは、モデルへの履歴から省く", () => {
+    const store = makeStore();
+    store.appendMessage({ id: "m1", teraId: DEFAULT_TERA_ID, role: "user", content: "見て" });
+    store.appendMessage({
+      id: "m2",
+      teraId: DEFAULT_TERA_ID,
+      role: "assistant",
+      content: "",
+      parts: [
+        {
+          type: "attachment",
+          attachments: [{ name: "x.png", size: 3, url: "/api/images/x.png", image: { width: 4, height: 3 } }],
+          at: 2,
+        },
+        { type: "notice", text: "注記", at: 3 },
+      ],
+    });
+    store.appendMessage({ id: "m3", teraId: DEFAULT_TERA_ID, role: "user", content: "次" });
+
+    const input = buildInput(contextOf(store), createImageStub());
+    expect(input.some((message) => message.role === "assistant")).toBe(false);
   });
 
   test("ツールを使った後も、次の入力は前の入力で始まる", () => {
@@ -287,7 +319,7 @@ describe("画像つきのツール結果", () => {
       role: "assistant",
       content: "見ます。",
       parts: [
-        { type: "text", text: "見ます。" },
+        { type: "text", text: "見ます。", at: 1 },
         { type: "tool-call", id: "call-1", server: "computer", tool: "screenshot", args: {} },
         {
           type: "tool-result",
@@ -462,7 +494,7 @@ describe("畳んだ要約を渡すとき", () => {
       teraId: DEFAULT_TERA_ID,
       role: "assistant",
       content: "",
-      parts: [{ type: "text", text: "承知しました" }],
+      parts: [{ type: "text", text: "承知しました", at: 1 }],
     });
     store.appendMessage({ id: "m3", teraId: DEFAULT_TERA_ID, role: "user", content: "次の質問" });
     store.writeCompaction(DEFAULT_TERA_ID, { summary, throughSeq, tokensBefore: 1_000, createdAt: 1 });
@@ -498,7 +530,7 @@ describe("畳んだ要約を渡すとき", () => {
       teraId: DEFAULT_TERA_ID,
       role: "assistant",
       content: "",
-      parts: [{ type: "text", text: "回答" }],
+      parts: [{ type: "text", text: "回答", at: 1 }],
     });
     store.appendMessage({ id: "m5", teraId: DEFAULT_TERA_ID, role: "user", content: "さらに質問" });
     const turn2 = buildInput(contextOf(store), createImageStub());

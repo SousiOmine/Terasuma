@@ -31,7 +31,7 @@ function seed(store: Store, tokensEach: number, count: number): number {
   for (let index = 1; index <= count; index += 1) {
     const content = body(tokensEach, `m${index}`);
     const role = index % 2 === 1 ? "user" : "assistant";
-    const parts: MessagePart[] | null = role === "assistant" ? [{ type: "text", text: content }] : null;
+    const parts: MessagePart[] | null = role === "assistant" ? [{ type: "text", text: content, at: index }] : null;
     const message = store.appendMessage({
       id: `m${index}`,
       teraId: DEFAULT_TERA_ID,
@@ -49,7 +49,7 @@ function seedMessages(store: Store, plan: readonly (readonly [role: "user" | "as
   let at = 0;
   for (const [index, [role, tokens]] of plan.entries()) {
     const content = body(tokens, `p${index + 1}`);
-    const parts: MessagePart[] | null = role === "assistant" ? [{ type: "text", text: content }] : null;
+    const parts: MessagePart[] | null = role === "assistant" ? [{ type: "text", text: content, at: index }] : null;
     const message = store.appendMessage({
       id: `p${index + 1}`,
       teraId: DEFAULT_TERA_ID,
@@ -223,7 +223,7 @@ describe("畳み始める時", () => {
       teraId: DEFAULT_TERA_ID,
       role: "assistant",
       content: "",
-      parts: [{ type: "text", text: body(1_000, "m30") }],
+      parts: [{ type: "text", text: body(1_000, "m30"), at: 1 }],
       usage: { inputTokens: 20_000, outputTokens: 500, cachedInputTokens: 0 },
     }).createdAt;
 
@@ -246,7 +246,7 @@ describe("畳み始める時", () => {
       teraId: DEFAULT_TERA_ID,
       role: "assistant",
       content: "",
-      parts: [{ type: "text", text: body(1_000, "m30") }],
+      parts: [{ type: "text", text: body(1_000, "m30"), at: 1 }],
       usage: { inputTokens: 20_000, outputTokens: 500, cachedInputTokens: 0 },
     }).createdAt;
 
@@ -380,7 +380,7 @@ describe("要約の作り方", () => {
       role: "assistant",
       content: "調べます。",
       parts: [
-        { type: "text", text: "調べます。" },
+        { type: "text", text: "調べます。", at },
         { type: "tool-call", id: "call-1", server: "", tool: "bash", args: { command: "uname -a" } },
         {
           type: "tool-result",
@@ -417,7 +417,7 @@ describe("要約の作り方", () => {
     compaction.close();
   });
 
-  test("ユーザーへ送った sent は、要約に渡さない", async () => {
+  test("添付は要約に渡さず、本文は渡す", async () => {
     const store = makeStore();
     const at = Date.now();
     store.appendMessage({ id: "u1", teraId: DEFAULT_TERA_ID, role: "user", content: body(6_000, "u1") });
@@ -427,15 +427,20 @@ describe("要約の作り方", () => {
       role: "assistant",
       content: "",
       parts: [
-        { type: "sent", text: "送った文", attachments: [], at },
-        { type: "tool-call", id: "call-1", server: "chat", tool: "send", args: { text: "送った文" } },
+        { type: "text", text: "送った文", at },
+        { type: "tool-call", id: "call-1", server: "chat", tool: "attach", args: { files: ["x.png"] } },
         {
           type: "tool-result",
           id: "call-1",
           server: "chat",
-          tool: "send",
+          tool: "attach",
           failed: false,
-          output: "Sent the message to the user.",
+          output: "Attached 1 file to the chat.",
+        },
+        {
+          type: "attachment",
+          attachments: [{ name: "x.png", size: 3, url: "/api/images/x.png", image: { width: 4, height: 3 } }],
+          at,
         },
       ],
     });
@@ -447,9 +452,10 @@ describe("要約の作り方", () => {
     await compaction.update(DEFAULT_TERA_ID, { force: true });
     const prompt = fake.calls[0]?.prompt ?? "";
 
-    // 送った文はツールの引数としてだけ残り、本文として二重に載らない。
-    expect(prompt).toContain('[Assistant tool calls]: chat_send(text="送った文")');
-    expect(prompt).not.toContain("[Assistant]: 送った文");
+    // 本文はそのまま載り、添付の参照は載らない。
+    expect(prompt).toContain("[Assistant]: 送った文");
+    expect(prompt).toContain('[Assistant tool calls]: chat_attach(files=["x.png"])');
+    expect(prompt).not.toContain("/api/images/x.png");
     compaction.close();
   });
 });
@@ -607,10 +613,14 @@ describe("トークンの目安", () => {
       content: "",
       attachments: null,
       parts: [
-        // ユーザーへ送った部分はモデルへ渡さないので、数えない。
-        { type: "sent", text: "送った文", attachments: [], at: 1 },
+        // 画面にだけ出す添付と注記は、モデルへ渡さないので数えない。
+        {
+          type: "attachment",
+          attachments: [{ name: "x.png", size: 3, url: "/api/images/x.png", image: { width: 4, height: 3 } }],
+          at: 1,
+        },
         { type: "notice", text: "止まりました", at: 2 },
-        { type: "text", text: "abcd" }, // 1
+        { type: "text", text: "abcd", at: 3 }, // 1
         { type: "tool-call", id: "call-1", server: "local", tool: "echo", args: "abcd" }, // """abcd""" で 2
         {
           type: "tool-result",

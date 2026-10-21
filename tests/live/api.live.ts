@@ -14,7 +14,7 @@ import {
   messageText,
   preview,
   report,
-  sentText,
+  visibleText,
   toolCall,
   toolResultFor,
   withLiveServer,
@@ -31,7 +31,7 @@ test(
       expect(first[1]?.type).toBe("assistant-start");
 
       const done = expectTurnSucceeded(first);
-      const text = sentText(first);
+      const text = visibleText(first);
       expect(text.length, "本文が空だった").toBeGreaterThan(0);
       expect(messageText(done), "流れてきた本文と保存された本文が食い違っている").toBe(text);
       expect(done.usage, "トークン数が報告されなかった").not.toBeNull();
@@ -43,7 +43,7 @@ test(
       // 保存済みの履歴がプロバイダに通るかどうかは、ここでしか分からない。
       const second = await harness.send(DEFAULT_TERA_ID, "いま何と答えましたか。一言で。");
       const secondDone = expectTurnSucceeded(second);
-      expect(sentText(second).length, "2 ターン目の本文が空だった").toBeGreaterThan(0);
+      expect(visibleText(second).length, "2 ターン目の本文が空だった").toBeGreaterThan(0);
       report("2 ターン目", secondDone);
 
       const saved = await harness.messages(DEFAULT_TERA_ID);
@@ -51,7 +51,7 @@ test(
       expect(saved[1]?.content).toBe("");
       expect(saved[3]?.content).toBe("");
       expect(saved[1] === undefined ? "" : messageText(saved[1])).toBe(text);
-      expect(saved[3] === undefined ? "" : messageText(saved[3])).toBe(sentText(second));
+      expect(saved[3] === undefined ? "" : messageText(saved[3])).toBe(visibleText(second));
     });
   },
   TURN_TIMEOUT_MS,
@@ -81,7 +81,7 @@ test(
       expect(result.part.output, "実行結果に印が無い").toContain("terasuma-live-ok");
 
       // モデルは結果を読んでから本文を書く。ここまで来ていれば、1 ターンの中で往復できている。
-      expect(sentText(events).length, "ツールを使った後の本文が空だった").toBeGreaterThan(0);
+      expect(visibleText(events).length, "ツールを使った後の本文が空だった").toBeGreaterThan(0);
 
       // 呼び出しと結果は、本文と同じメッセージの一部として残る。
       const parts = (await harness.messages(DEFAULT_TERA_ID))[1]?.parts ?? [];
@@ -129,7 +129,7 @@ test(
       for (let index = 1; index <= 60; index += 1) {
         const content = `記録 ${index}: ${"terasuma compaction check ".repeat(150)}`;
         const role = index % 2 === 1 ? "user" : "assistant";
-        const parts: MessagePart[] | null = role === "assistant" ? [{ type: "text", text: content }] : null;
+        const parts: MessagePart[] | null = role === "assistant" ? [{ type: "text", text: content, at: index }] : null;
         harness.store.appendMessage({
           id: `seed-${index}`,
           teraId: DEFAULT_TERA_ID,

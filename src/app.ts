@@ -4,7 +4,7 @@ import { createCompaction, type Compaction } from "./server/agent/compaction";
 import { createEngine } from "./server/agent/engine";
 import { createCodingToolset } from "./server/agent/tools/coding";
 import { createComputerToolset } from "./server/agent/tools/computer";
-import { createMessagingTools } from "./server/agent/tools/messaging";
+import { createAttachmentTools } from "./server/agent/tools/attachments";
 import { createContainerManager, WORKDIR_IN_CONTAINER, type ContainerManager } from "./server/computer/container";
 import { createFileStore } from "./server/computer/files";
 import { createHandover } from "./server/computer/handover";
@@ -15,7 +15,7 @@ import { startServer, type StartedServer } from "./server/http/server";
 import { createMcpManager, type McpManager } from "./server/mcp/manager";
 import { OAUTH_CALLBACK_PATH } from "./server/mcp/oauth";
 import { CATALOG_FILE_NAME, createCatalog, modelContextTokens, type Catalog } from "./server/provider/catalog";
-import type { OutgoingMessage } from "./shared/types";
+import type { SentAttachment } from "./shared/types";
 
 /**
  * 依存を組み立てて、動くアプリを 1 つ作る（合成ルート）。
@@ -74,17 +74,17 @@ export function startApp(config: AppConfig): App {
   // いずれもコンピュータのコンテナの中だけで動き、ホストのファイルには触れない。
   const coding = createCodingToolset({ container, root: WORKDIR_IN_CONTAINER });
 
-  // ユーザーへメッセージを送るツール（chat_send）。送信の口はターンごとに渡す。
-  const messaging = {
-    toolset: (input: { send: (message: OutgoingMessage) => void }) =>
-      createMessagingTools({ container, root: WORKDIR_IN_CONTAINER, images, files, send: input.send }),
+  // 画像やファイルをチャットへ添付するツール（chat_attach）。添付の口はターンごとに渡す。
+  const attachments = {
+    toolset: (input: { attach: (attachments: SentAttachment[]) => void }) =>
+      createAttachmentTools({ container, root: WORKDIR_IN_CONTAINER, images, files, attach: input.attach }),
   };
 
   // 畳むかどうかは、モデルの文脈長（カタログ）から決める。
   // 起動後にカタログを読んでおくので、設定画面を開かなくても文脈長が分かる。
   // エンジンも、プロバイダの呼び出し方を決めるのにカタログを使う。
   const catalog = createCatalog({ cachePath: join(config.dataDir, CATALOG_FILE_NAME) });
-  const engine = createEngine({ config, settings, mcp, computer, messaging, coding, images, catalog });
+  const engine = createEngine({ config, settings, mcp, computer, attachments, coding, images, catalog });
 
   // 古いやり取りは、3 時間の放置か、文脈長に近づいたときに、背景で要約へ畳む。
   // 失敗は端末に出す（会話は生の履歴のまま続く）。

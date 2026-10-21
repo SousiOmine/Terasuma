@@ -31,31 +31,37 @@ export function Sidebar() {
   return (
     <>
       {/* ドロワーの外側。タップで閉じる。 */}
-      {open && <div class="fixed inset-0 z-40 bg-black/40 md:hidden" aria-hidden="true" onClick={closeSidebar} />}
+      {open && <div class="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm md:hidden" aria-hidden="true" onClick={closeSidebar} />}
 
       <aside
-        class={`fixed inset-y-0 left-0 z-50 flex w-64 max-w-[85vw] shrink-0 flex-col border-r border-black/5 bg-[#f4f8f5] transition-[transform,visibility] duration-200 md:visible md:static md:z-auto md:w-60 md:max-w-none md:translate-x-0 dark:border-white/5 dark:bg-[#0b100d] ${
-          open ? "visible translate-x-0 shadow-xl md:shadow-none" : "invisible -translate-x-full"
+        class={`fixed inset-y-0 left-0 z-50 flex w-64 max-w-[85vw] shrink-0 flex-col rounded-r-[28px] bg-[var(--app-surface)] transition-[transform,visibility] duration-200 md:visible md:static md:z-auto md:w-60 md:max-w-none md:translate-x-0 md:rounded-none md:bg-transparent md:pt-3 ${
+          open ? "visible translate-x-0 shadow-[var(--app-shadow-16)] md:shadow-none" : "invisible -translate-x-full"
         }`}
       >
-        <div class="flex h-14 shrink-0 items-center gap-2 px-4">
-          <span class="min-w-0 flex-1 truncate text-sm font-semibold tracking-wide">{t("app.name")}</span>
+        <div class="flex h-16 shrink-0 items-center gap-2.5 px-3">
+          <span
+            aria-hidden="true"
+            class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--app-ink-fill)] text-sm font-semibold text-[var(--app-on-ink)]"
+          >
+            T
+          </span>
+          <span class="min-w-0 flex-1 truncate text-[15px] font-semibold tracking-[-0.01em]">{t("app.name")}</span>
           <button
             type="button"
             onClick={closeSidebar}
             title={t("chat.menu.close")}
             aria-label={t("chat.menu.close")}
-            class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-neutral-500 transition hover:bg-black/5 md:hidden dark:text-neutral-400 dark:hover:bg-white/5"
+            class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[var(--app-text-secondary)] transition hover:bg-[var(--app-soft)] hover:text-[var(--app-text)] md:hidden"
           >
             <IconX size={18} stroke={1.7} />
           </button>
         </div>
 
-        <nav class="min-h-0 flex-1 overflow-y-auto p-2">
+        <nav class="min-h-0 flex-1 overflow-y-auto p-3">
           {items.length === 0 ? (
-            <p class="px-2 py-3 text-xs text-neutral-500 dark:text-neutral-400">{t("tera.empty")}</p>
+            <p class="px-2 py-3 text-xs text-[var(--app-text-secondary)]">{t("tera.empty")}</p>
           ) : (
-            <ul class="space-y-0.5">
+            <ul class="space-y-1">
               {items.map((tera) => {
                 const active = activeTeraId.value === tera.id;
 
@@ -69,10 +75,10 @@ export function Sidebar() {
                         closeSidebar();
                         void openTera(tera.id);
                       }}
-                      class={`w-full truncate rounded-xl px-3 py-2.5 text-left text-sm transition md:py-2 ${
+                      class={`w-full truncate rounded-2xl px-3.5 py-3 text-left text-sm transition ${
                         active
-                          ? "bg-[#06c755]/12 font-medium text-[#066c36] dark:bg-[#06c755]/15 dark:text-[#7be0a3]"
-                          : "text-neutral-700 hover:bg-black/5 dark:text-neutral-300 dark:hover:bg-white/5"
+                          ? "bg-[var(--app-soft)] font-semibold text-[var(--app-text)]"
+                          : "text-[var(--app-text-secondary)] hover:bg-[var(--app-soft)] hover:text-[var(--app-text)]"
                       }`}
                     >
                       {tera.name}
@@ -92,14 +98,14 @@ export function Sidebar() {
 
 function SettingsButton() {
   return (
-    <div class="shrink-0 border-t border-black/5 p-2 dark:border-white/5">
+    <div class="shrink-0 p-3">
       <button
         type="button"
         onClick={() => {
           closeSidebar();
           openSettings();
         }}
-        class="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm text-neutral-600 transition hover:bg-black/5 md:py-2 dark:text-neutral-300 dark:hover:bg-white/5"
+        class="flex w-full items-center gap-2 rounded-2xl px-3.5 py-3 text-left text-sm text-[var(--app-text-secondary)] transition hover:bg-[var(--app-soft)] hover:text-[var(--app-text)]"
       >
         <IconSettings size={16} stroke={1.6} class="shrink-0" />
         {t("settings.title")}

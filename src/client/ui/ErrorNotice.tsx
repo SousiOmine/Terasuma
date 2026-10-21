@@ -1,3 +1,4 @@
+import { IconAlertTriangle } from "@tabler/icons-preact";
 import type { ComponentChildren } from "preact";
 import type { ErrorState } from "../lib/errors";
 import { t } from "../i18n";
@@ -8,13 +9,22 @@ export type ErrorNoticeProps = {
   action?: ComponentChildren;
 };
 
-/** 失敗の表示。文言は error.<code> から引き、技術的な詳細は小さく添える。 */
+/**
+ * 失敗の表示。
+ * 色は使わず、太い輪郭と警告アイコンで「これは失敗」と分かるようにする。
+ */
 export function ErrorNotice({ error, action }: ErrorNoticeProps) {
   return (
-    <div class="flex items-start gap-3 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/50 dark:text-red-200">
+    <div
+      role="alert"
+      class="flex items-start gap-3 rounded-2xl border-2 border-[var(--app-ink)] bg-[var(--app-surface-alt)] px-4 py-3 text-sm text-[var(--app-text)]"
+    >
+      <IconAlertTriangle size={18} stroke={1.8} class="mt-0.5 shrink-0" />
       <div class="min-w-0 flex-1">
-        <p>{t(`error.${error.code}`)}</p>
-        {error.detail !== null && <p class="mt-0.5 break-words text-xs opacity-70">{error.detail}</p>}
+        <p class="font-medium">{t(`error.${error.code}`)}</p>
+        {error.detail !== null && (
+          <p class="mt-1 break-words text-xs leading-5 text-[var(--app-text-secondary)]">{error.detail}</p>
+        )}
       </div>
       {action}
     </div>

@@ -1,5 +1,5 @@
 import { ASK_USER_TOOL, COMPUTER_SERVER_ID } from "../../shared/tools";
-import type { ChatEvent, ChatMessage, NoticePart, SentPart } from "../../shared/types";
+import type { AttachmentPart, ChatEvent, ChatMessage, NoticePart, TextPart } from "../../shared/types";
 import type { ClientErrorCode } from "../lib/http";
 
 /**
@@ -12,7 +12,7 @@ import type { ClientErrorCode } from "../lib/http";
 export type ChatEventEffect =
   | { kind: "message"; message: ChatMessage }
   | { kind: "assistant-start"; id: string; createdAt: number }
-  | { kind: "assistant-part"; id: string; part: SentPart | NoticePart }
+  | { kind: "assistant-part"; id: string; part: TextPart | AttachmentPart | NoticePart }
   | { kind: "handover-start"; question: string | null }
   | { kind: "handover-end" }
   | { kind: "error"; code: ClientErrorCode; detail: string | null };
@@ -27,7 +27,7 @@ export function interpretEvent(event: ChatEvent): ChatEventEffect | null {
       return { kind: "assistant-start", id: event.id, createdAt: event.createdAt };
     case "assistant-message":
     case "notice":
-      // ユーザーへ届いたメッセージと注記。届いた単位のまま、その場で画面へ足す。
+      // 本文・添付・注記。届いた単位のまま、その場で画面へ足す。
       return { kind: "assistant-part", id: event.id, part: event.part };
     case "tool-call":
       // ツールの呼び出しは画面に出さない。画面を渡す頼みが来たときだけ、その場で操作できる状態にする。

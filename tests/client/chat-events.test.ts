@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { interpretEvent } from "../../src/client/state/chat-events";
-import type { ChatMessage, NoticePart, SentPart } from "../../src/shared/types";
+import type { AttachmentPart, ChatMessage, NoticePart, TextPart } from "../../src/shared/types";
 
 /**
  * SSE のイベントを、画面の状態に何をするかへ読み替える部分。
@@ -14,13 +14,18 @@ const message: ChatMessage = {
   role: "assistant",
   content: "",
   attachments: null,
-  parts: [{ type: "sent", text: "こんにちは", attachments: [], at: 1 }],
+  parts: [{ type: "text", text: "こんにちは", at: 1 }],
   createdAt: 1,
   usage: null,
 };
 
-const sent: SentPart = { type: "sent", text: "こんにちは", attachments: [], at: 2 };
-const notice: NoticePart = { type: "notice", text: "上限に達しました", at: 3 };
+const text: TextPart = { type: "text", text: "こんにちは", at: 2 };
+const attachment: AttachmentPart = {
+  type: "attachment",
+  attachments: [{ name: "図.png", size: 12, url: "/api/images/x.png", image: { width: 4, height: 3 } }],
+  at: 3,
+};
+const notice: NoticePart = { type: "notice", text: "上限に達しました", at: 4 };
 
 describe("チャットのイベントの読み替え", () => {
   test("メッセージはそのまま足す", () => {
@@ -36,11 +41,16 @@ describe("チャットのイベントの読み替え", () => {
     });
   });
 
-  test("送ったメッセージと注記は、届いた単位で足す", () => {
-    expect(interpretEvent({ type: "assistant-message", id: "a1", part: sent })).toEqual({
+  test("本文・添付・注記は、届いた単位で足す", () => {
+    expect(interpretEvent({ type: "assistant-message", id: "a1", part: text })).toEqual({
       kind: "assistant-part",
       id: "a1",
-      part: sent,
+      part: text,
+    });
+    expect(interpretEvent({ type: "assistant-message", id: "a1", part: attachment })).toEqual({
+      kind: "assistant-part",
+      id: "a1",
+      part: attachment,
     });
     expect(interpretEvent({ type: "notice", id: "a1", part: notice })).toEqual({
       kind: "assistant-part",

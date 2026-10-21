@@ -1,11 +1,69 @@
 @import "tailwindcss";
 
 /*
- * ベーススタイルは Tailwind のユーティリティ解決に依存させず、素の CSS で書く。
- * ダークモードは OS 設定に追従する（テーマ切替 UI は持たない）。
+ * モノクロのトークン。
+ *
+ * 色相は使わない。強さは「墨（ink）」「面（surface）」「柔らかい灰（soft）」の
+ * 明度差だけで作る。アクセント色は持たない。
+ * 角丸は操作 12〜16px、面 24〜28px を基本にし、全体を柔らかく見せる。
  */
 :root {
   color-scheme: light dark;
+
+  --app-canvas: #f2f2f2;
+  --app-surface: #ffffff;
+  --app-surface-alt: #f4f4f4;
+  --app-soft: #ededed;
+  --app-soft-strong: #dedede;
+  --app-stroke: #e6e6e6;
+  --app-stroke-strong: #cfcfcf;
+
+  --app-text: #111111;
+  --app-text-secondary: #6b6b6b;
+  --app-text-tertiary: #9a9a9a;
+
+  /* 塗りつぶしの墨。ライトは黒、ダークは白。 */
+  --app-ink: #111111;
+  --app-ink-fill: #111111;
+  --app-ink-hover: #2b2b2b;
+  --app-on-ink: #ffffff;
+  --app-on-ink-soft: rgba(255, 255, 255, 0.16);
+  --app-ring: rgba(17, 17, 17, 0.18);
+
+  --app-shadow-2: 0 1px 2px rgba(0, 0, 0, 0.04), 0 2px 8px rgba(0, 0, 0, 0.04);
+  --app-shadow-4: 0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(0, 0, 0, 0.06);
+  --app-shadow-8: 0 2px 4px rgba(0, 0, 0, 0.05), 0 16px 40px rgba(0, 0, 0, 0.1);
+  --app-shadow-16: 0 2px 8px rgba(0, 0, 0, 0.06), 0 28px 72px rgba(0, 0, 0, 0.16);
+  --app-shadow-panel: 0 1px 2px rgba(0, 0, 0, 0.03), 0 20px 56px rgba(0, 0, 0, 0.08);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --app-canvas: #0b0b0b;
+    --app-surface: #151515;
+    --app-surface-alt: #1f1f1f;
+    --app-soft: #262626;
+    --app-soft-strong: #333333;
+    --app-stroke: #2a2a2a;
+    --app-stroke-strong: #3d3d3d;
+
+    --app-text: #f5f5f5;
+    --app-text-secondary: #a3a3a3;
+    --app-text-tertiary: #737373;
+
+    --app-ink: #f5f5f5;
+    --app-ink-fill: #f5f5f5;
+    --app-ink-hover: #d9d9d9;
+    --app-on-ink: #111111;
+    --app-on-ink-soft: rgba(17, 17, 17, 0.1);
+    --app-ring: rgba(245, 245, 245, 0.22);
+
+    --app-shadow-2: 0 1px 2px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.35);
+    --app-shadow-4: 0 1px 2px rgba(0, 0, 0, 0.5), 0 8px 24px rgba(0, 0, 0, 0.45);
+    --app-shadow-8: 0 2px 4px rgba(0, 0, 0, 0.5), 0 16px 40px rgba(0, 0, 0, 0.55);
+    --app-shadow-16: 0 2px 8px rgba(0, 0, 0, 0.55), 0 28px 72px rgba(0, 0, 0, 0.65);
+    --app-shadow-panel: 0 1px 2px rgba(0, 0, 0, 0.4), 0 20px 56px rgba(0, 0, 0, 0.35);
+  }
 }
 
 /*
@@ -21,20 +79,48 @@ body,
 
 body {
   margin: 0;
-  background-color: var(--color-neutral-50);
-  color: var(--color-neutral-900);
-  font-family: system-ui, -apple-system, "Segoe UI", "Noto Sans JP", "Hiragino Sans", sans-serif;
+  background-color: var(--app-canvas);
+  color: var(--app-text);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", "Noto Sans JP", "Hiragino Sans", sans-serif;
+  font-size: 14px;
+  line-height: 21px;
   -webkit-font-smoothing: antialiased;
   -webkit-text-size-adjust: 100%;
   /* 下端で引っ張って再読み込みしない（会話のスクロールと取り違えないようにする）。 */
   overscroll-behavior-y: none;
 }
 
-@media (prefers-color-scheme: dark) {
-  body {
-    background-color: var(--color-neutral-950);
-    color: var(--color-neutral-100);
-  }
+::selection {
+  background: var(--app-soft-strong);
+}
+
+/* キーボードで操作したときだけ、墨色のフォーカス矩形を出す。 */
+:where(button, a, summary, [role="button"]):focus-visible {
+  outline: 2px solid var(--app-ink);
+  outline-offset: 3px;
+}
+
+input[type="checkbox"] {
+  accent-color: var(--app-ink);
+}
+
+/* スクロールバーは細く、面の色になじませる。 */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--app-stroke-strong) transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--app-stroke-strong);
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 /*
@@ -51,23 +137,6 @@ body {
   textarea,
   select {
     font-size: 16px;
-  }
-}
-
-/*
- * チャットの背景。LINE のような、落ち着いた壁紙の代わりに、
- * 細かい点を敷いて「会話の面」だと分かるようにする。色はごく薄くする。
- */
-.tera-chat-wallpaper {
-  background-color: #eef3ee;
-  background-image: radial-gradient(circle at 1px 1px, rgba(6, 90, 45, 0.075) 1px, transparent 0);
-  background-size: 22px 22px;
-}
-
-@media (prefers-color-scheme: dark) {
-  .tera-chat-wallpaper {
-    background-color: #0e1411;
-    background-image: radial-gradient(circle at 1px 1px, rgba(120, 230, 160, 0.07) 1px, transparent 0);
   }
 }
 

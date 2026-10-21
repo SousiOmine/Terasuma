@@ -18,12 +18,12 @@ import { readStoredImages, toolResultOutput, type StoredImages } from "./tool-ou
 export const SYSTEM_PROMPT = [
   "You are Terasuma, a general-purpose assistant running on the user's own machine.",
   "You talk with the user in a chat app.",
-  "The user only sees messages you send with the chat_send tool. Your own text output is internal notes and is never shown.",
-  "Answer with chat_send, never with plain text. Send one short message per thought, like a chat conversation, and send several messages when the answer has separate parts.",
-  "Send files the user should see with chat_send. Images become photos and other files become downloads.",
-  "Always follow the reply-language instruction at the end of the conversation, and write every chat_send message in that language.",
+  "Your text output is shown to the user as chat messages. Write your reply as normal text; keep it concise and readable.",
+  "Use the chat_attach tool only to show an image or file: pass paths inside the computer, or set screenshot to true. It cannot send text.",
+  "Images become photos and other files become downloads.",
+  "Always follow the reply-language instruction at the end of the conversation, and write your reply in that language.",
   "The read, write, edit, and bash tools run inside the Debian desktop container that you operate, and the computer_ tools control its screen.",
-  "Relative paths in read, write, edit, and chat_send, and the working directory of bash, are /home/agent. Absolute paths are container paths.",
+  "Relative paths in read, write, edit, and chat_attach, and the working directory of bash, are /home/agent. Absolute paths are container paths.",
   "Use read to examine a file before changing it. Use edit for targeted changes; use write only for new files or complete rewrites.",
 ].join("\n");
 
@@ -104,6 +104,10 @@ export function toModelMessages(
       throw new Error(`assistant メッセージ ${message.id} に parts がありません`);
     }
 
+    // 添付や注記だけのターンは、モデルへ渡す本文もツールの呼び出しも無い。
+    // 空の assistant メッセージを送るとプロバイダに拒まれるので、履歴から省く。
+    if (!hasModelContent(parts)) continue;
+
     messages.push({ role: "assistant", content: toAssistantParts(parts) });
 
     // ツールの結果に画像を置けないプロバイダのために、結果の直後に続ける画像を集める。
@@ -127,8 +131,8 @@ export function toModelMessages(
  * ユーザーの発言が別の言語でも、設定した言語で書かせる。
  */
 const REPLY_LANGUAGE_INSTRUCTIONS: Record<ReplyLanguage, string> = {
-  ja: "Reply in Japanese. Write every message you send with chat_send in Japanese, even if the user's message is in another language.",
-  en: "Reply in English. Write every message you send with chat_send in English, even if the user's message is in another language.",
+  ja: "Reply in Japanese. Write your reply in Japanese, even if the user's message is in another language.",
+  en: "Reply in English. Write your reply in English, even if the user's message is in another language.",
 };
 
 export function replyLanguageInstruction(language: ReplyLanguage): string {
@@ -186,9 +190,14 @@ export function buildModelInput(
   return [{ role: "system", content: SYSTEM_PROMPT }, ...toModelMessages(context, images, replyLanguage, options)];
 }
 
+/** モデルへ渡せる本文かツールの呼び出しがあるかどうか。 */
+function hasModelContent(parts: readonly MessagePart[]): boolean {
+  return parts.some((part) => (part.type === "text" && part.text.length > 0) || part.type === "tool-call");
+}
+
 /**
- * 内部の本文とツール呼び出しを、保存された順のまま並べる。
- * ユーザーへ送った sent と notice は、モデルへ戻さない（送った文はツールの引数に残っている）。
+ * 本文とツール呼び出しを、保存された順のまま並べる。
+ * 添付（attachment）と注記（notice）は、モデルへ戻さない。
  */
 function toAssistantParts(parts: readonly MessagePart[]): AssistantContent {
   const hasToolCall = parts.some((part) => part.type === "tool-call");

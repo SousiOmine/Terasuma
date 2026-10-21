@@ -89,23 +89,23 @@ export function Composer() {
   };
 
   return (
-    <div class="tera-safe-bottom shrink-0 border-t border-black/5 bg-[#f7faf8]/95 px-3 pt-2 backdrop-blur dark:border-white/5 dark:bg-[#0e1411]/95 sm:px-6">
+    <div class="tera-safe-bottom shrink-0 bg-[var(--app-surface)] px-3 pb-3 pt-2 sm:px-6">
       <div class="mx-auto w-full max-w-3xl">
         {files.length > 0 && (
           <div class="mb-2 flex flex-wrap gap-1.5">
             {files.map((file, index) => (
               <span
                 key={`${file.name}-${file.size}-${file.lastModified}-${index}`}
-                class="inline-flex max-w-full items-center gap-1.5 rounded-xl border border-black/5 bg-white px-2 py-1 text-xs shadow-sm dark:border-white/10 dark:bg-neutral-900"
+                class="inline-flex max-w-full items-center gap-1.5 rounded-full bg-[var(--app-soft)] px-3 py-1.5 text-xs"
               >
                 <span class="max-w-[220px] truncate">{file.name}</span>
-                <span class="shrink-0 text-neutral-500 dark:text-neutral-400">{formatBytes(file.size)}</span>
+                <span class="shrink-0 text-[var(--app-text-secondary)]">{formatBytes(file.size)}</span>
                 <button
                   type="button"
                   onClick={() => removeFile(index)}
                   title={t("composer.attach.remove", { name: file.name })}
                   aria-label={t("composer.attach.remove", { name: file.name })}
-                  class="shrink-0 rounded-full p-0.5 text-neutral-500 transition hover:bg-black/5 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-white/10 dark:hover:text-neutral-100"
+                  class="shrink-0 rounded-full p-0.5 text-[var(--app-text-secondary)] transition hover:bg-[var(--app-soft-strong)] hover:text-[var(--app-text)]"
                 >
                   <IconX size={12} stroke={2} />
                 </button>
@@ -114,7 +114,7 @@ export function Composer() {
           </div>
         )}
 
-        <div class="flex items-end gap-1.5 rounded-[26px] border border-black/10 bg-white px-1.5 py-1.5 shadow-sm transition focus-within:border-[#06c755]/60 focus-within:ring-2 focus-within:ring-[#06c755]/15 dark:border-white/10 dark:bg-neutral-900 dark:focus-within:border-[#06c755]/50">
+        <div class="flex items-end gap-1.5 rounded-[28px] border border-[var(--app-stroke)] bg-[var(--app-surface-alt)] px-2 py-2 shadow-[var(--app-shadow-2)] transition focus-within:border-[var(--app-ink)] focus-within:bg-[var(--app-surface)] focus-within:shadow-[0_0_0_4px_var(--app-ring)]">
           <input
             ref={fileInputRef}
             type="file"
@@ -134,7 +134,7 @@ export function Composer() {
               onClick={() => fileInputRef.current?.click()}
               title={t("composer.attach")}
               aria-label={t("composer.attach")}
-              class="mb-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-neutral-500 transition hover:bg-black/5 hover:text-neutral-800 md:h-9 md:w-9 dark:text-neutral-400 dark:hover:bg-white/10 dark:hover:text-neutral-100"
+              class="mb-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[var(--app-text-secondary)] transition hover:bg-[var(--app-soft)] hover:text-[var(--app-text)] md:h-9 md:w-9"
             >
               <IconPaperclip size={18} stroke={1.7} />
             </button>
@@ -147,7 +147,7 @@ export function Composer() {
             placeholder={t("composer.placeholder")}
             aria-label={t("composer.placeholder")}
             enterkeyhint="send"
-            class="max-h-40 min-h-9 flex-1 resize-none bg-transparent px-1 py-2 text-[15px] leading-relaxed outline-none placeholder:text-neutral-400 dark:placeholder:text-neutral-500"
+            class="max-h-40 min-h-9 flex-1 resize-none bg-transparent px-1.5 py-2 text-[15px] leading-6 text-[var(--app-text)] outline-none placeholder:text-[var(--app-text-tertiary)]"
             onInput={(event) => setDraft(event.currentTarget.value)}
             onKeyDown={(event) => {
               // Enter で送信し、Shift + Enter は改行のままにする。
@@ -164,7 +164,7 @@ export function Composer() {
               disabled={stopping}
               title={t(stopping ? "composer.stopping" : "composer.stop")}
               aria-label={t(stopping ? "composer.stopping" : "composer.stop")}
-              class="mb-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-neutral-900 text-white transition hover:bg-neutral-700 disabled:opacity-50 md:h-9 md:w-9 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
+              class="mb-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--app-ink-fill)] text-[var(--app-on-ink)] shadow-[var(--app-shadow-2)] transition hover:bg-[var(--app-ink-hover)] disabled:opacity-50 md:h-9 md:w-9"
             >
               <IconPlayerStopFilled size={16} />
             </button>
@@ -175,7 +175,7 @@ export function Composer() {
               disabled={!canSend}
               title={t("composer.send")}
               aria-label={t("composer.send")}
-              class="mb-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#06c755] text-white shadow-sm transition hover:bg-[#05b34c] disabled:bg-neutral-300 disabled:text-white disabled:shadow-none md:h-9 md:w-9 dark:disabled:bg-neutral-700 dark:disabled:text-neutral-400"
+              class="mb-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--app-ink-fill)] text-[var(--app-on-ink)] shadow-[var(--app-shadow-2)] transition hover:bg-[var(--app-ink-hover)] disabled:opacity-30 md:h-9 md:w-9"
             >
               <IconSend size={17} stroke={1.8} />
             </button>

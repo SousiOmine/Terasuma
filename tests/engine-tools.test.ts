@@ -12,13 +12,13 @@ import {
   createAiSdkEngine,
   type ComputerToolsetProvider,
   type EngineEvent,
-  type MessagingToolsetProvider,
+  type AttachmentToolsetProvider,
   type SettingsReader,
   type ToolsetProvider,
 } from "../src/server/agent/engine";
-import { createMessagingTools } from "../src/server/agent/tools/messaging";
+import { createAttachmentTools } from "../src/server/agent/tools/attachments";
 import { createFileStore } from "../src/server/computer/files";
-import type { ChatMessage, ImageRef, OutgoingMessage } from "../src/shared/types";
+import type { ChatMessage, ImageRef, SentAttachment } from "../src/shared/types";
 import { createImageStore, type ImageStore } from "../src/server/computer/images";
 import type { CatalogSnapshot } from "../src/server/provider/catalog";
 
@@ -28,7 +28,7 @@ import {
   createComputerStub,
   createContainerStub,
   createImageStub,
-  createMessagingStub,
+  createAttachmentsStub,
   testPng,
 } from "./support";
 
@@ -250,15 +250,15 @@ async function run(
   coding: CodingToolset = createCodingStub(),
   images: ImageStore = createImageStub(),
   catalog: CatalogSnapshot | null = null,
-  messaging: MessagingToolsetProvider = createMessagingStub(),
-  sent: OutgoingMessage[] = [],
+  attachments: AttachmentToolsetProvider = createAttachmentsStub(),
+  attached: SentAttachment[] = [],
 ): Promise<EngineEvent[]> {
   const reader: SettingsReader = { read: () => settings };
   const stream = await createAiSdkEngine({
     settings: reader,
     mcp: provider,
     computer,
-    messaging,
+    attachments,
     coding,
     images,
     catalog: { snapshot: () => catalog },
@@ -267,7 +267,7 @@ async function run(
     signal: new AbortController().signal,
     teraId: "t1",
     replyLanguage: "ja",
-    send: (message) => sent.push(message),
+    attach: (files) => attached.push(...files),
   });
 
   const events: EngineEvent[] = [];
@@ -403,15 +403,15 @@ describe("MCP のツール呼び出し（AI SDK 経由）", () => {
     }
   });
 
-  test("chat_send ツールがモデルへ渡り、送った内容がターンの外へ出る", async () => {
-    const fake = startFakeProvider({ name: "chat_send", args: '{"text":"こんにちは"}' });
+  test("chat_attach ツールがモデルへ渡り、添付がターンの外へ出る", async () => {
+    const fake = startFakeProvider({ name: "chat_attach", args: '{"screenshot":true}' });
     const dir = mkdtempSync(join(tmpdir(), "terasuma-engine-"));
     const images = createImageStore(dir);
     const files = createFileStore(dir);
-    const sent: OutgoingMessage[] = [];
-    const messaging: MessagingToolsetProvider = {
-      toolset: ({ send }) =>
-        createMessagingTools({
+    const attached: SentAttachment[] = [];
+    const attachments: AttachmentToolsetProvider = {
+      toolset: ({ attach }) =>
+        createAttachmentTools({
           container: {
             readFile: async () => {
               throw new Error("テストではファイルを読まない");
@@ -421,7 +421,7 @@ describe("MCP のツール呼び出し（AI SDK 経由）", () => {
           root: "/home/agent",
           images,
           files,
-          send,
+          attach,
         }),
     };
 
@@ -433,19 +433,21 @@ describe("MCP のツール呼び出し（AI SDK 経由）", () => {
         createCodingStub(),
         images,
         null,
-        messaging,
-        sent,
+        attachments,
+        attached,
       );
 
-      // モデルへ渡す名前は "chat_send"（サーバー id とツール名の規則に乗る）。
-      expect(toolNames(fake.bodies[0])).toContain("chat_send");
-      expect(sent).toEqual([{ text: "こんにちは", attachments: [] }]);
+      // モデルへ渡す名前は "chat_attach"（サーバー id とツール名の規則に乗る）。
+      expect(toolNames(fake.bodies[0])).toContain("chat_attach");
+      expect(attached).toHaveLength(1);
+      expect(attached[0]?.name).toBe("screenshot.png");
+      expect(attached[0]?.image).toEqual({ width: 1280, height: 800 });
 
       const result = events.find((event) => event.type === "tool-result");
-      if (result?.type !== "tool-result") throw new Error("chat_send の結果が無い");
+      if (result?.type !== "tool-result") throw new Error("chat_attach の結果が無い");
       expect(result.part.server).toBe("chat");
-      expect(result.part.tool).toBe("send");
-      expect(result.part.output).toContain("Sent");
+      expect(result.part.tool).toBe("attach");
+      expect(result.part.output).toContain("Attached");
     } finally {
       await fake.server.stop(true);
       rmSync(dir, { recursive: true, force: true });

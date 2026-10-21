@@ -41,9 +41,9 @@ export function estimateMessageTokens(message: ChatMessage): number {
       case "tool-result":
         total += estimateTokens(part.output) + (part.images?.length ?? 0) * IMAGE_TOKENS;
         break;
-      case "sent":
+      case "attachment":
       case "notice":
-        // モデルへは渡さない（送った文は chat_send の引数に入っている）。
+        // モデルへは渡さない。添付はツールの呼び出しと結果に、注記は画面にだけ残る。
         break;
     }
   }

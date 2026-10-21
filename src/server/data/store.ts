@@ -1,9 +1,24 @@
 import { Database } from "bun:sqlite";
-import { isChatAttachment, isMessagePart } from "../../shared/chat-event";
-import type { ChatAttachment, ChatMessage, MessagePart, MessageRole, Tera, TokenUsage } from "../../shared/types";
+import { isChatAttachment, isMessagePart, isSentAttachment } from "../../shared/chat-event";
+import { CHAT_SERVER_ID } from "../../shared/tools";
+import type {
+  ChatAttachment,
+  ChatMessage,
+  MessagePart,
+  MessageRole,
+  SentAttachment,
+  Tera,
+  TokenUsage,
+} from "../../shared/types";
 
-/** 既存の assistant の本文を、画面に出す sent パーツへ移す版。 */
-const CONTENT_TO_SENT_VERSION = 3;
+/** v2 までの assistant の本文を、parts の text へ移す版。 */
+const MESSAGE_CONTENT_VERSION = 3;
+
+/** v3 までの sent を、画面に出す text と attachment へ分ける版。 */
+const VISIBLE_TEXT_VERSION = 4;
+
+/** v3 で本文を送っていたツールの名前。移行のときだけ参照する。 */
+const LEGACY_SEND_TOOL = "send";
 
 /**
  * 既定の Tera。起動時に 1 体だけ用意する。
@@ -16,7 +31,7 @@ export type AppendMessageInput = {
   id: string;
   teraId: string;
   role: MessageRole;
-  /** ユーザーが書いた本文。assistant では空で、表示する本文は parts の sent が持つ。 */
+  /** ユーザーが書いた本文。assistant では空で、表示する本文は parts の text が持つ。 */
   content: string;
   /** ユーザーが添付したファイル。無ければ null。 */
   attachments?: ChatAttachment[] | null;
@@ -324,7 +339,7 @@ export function createStore(dbPath: string, options: CreateStoreOptions = {}): S
 }
 
 /** いまの保存の形の版。形を変えたら上げ、migrateSchema に移行を足す。 */
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
 
 /**
  * 保存の形を、いまの版に合わせる。
@@ -337,30 +352,9 @@ function migrateSchema(db: Database): void {
 
   dropLegacyTables(db);
   ensureMessageColumns(db);
-  if (version < CONTENT_TO_SENT_VERSION) moveAssistantContentToSent(db);
+  if (version < MESSAGE_CONTENT_VERSION) moveLegacyAssistantContent(db);
+  if (version < VISIBLE_TEXT_VERSION) moveSentToVisibleParts(db);
   db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
-}
-
-/**
- * v2 までの assistant の本文を、画面に出す sent パーツへ移す。
- *
- * 以前は content をそのまま画面に出していた。いまは画面が parts の sent だけを読むので、
- * そのままにすると過去の返事がどこにも表示されなくなる。本文はモデルへ渡す履歴にも
- * 必要なので text として残し、同じ文を sent として足す。
- */
-function moveAssistantContentToSent(db: Database): void {
-  if (!tableExists(db, "messages")) return;
-
-  const rows = db
-    .query<LegacyAssistantRow, []>("SELECT id, content, parts, created_at FROM messages WHERE role = 'assistant'")
-    .all();
-  if (rows.length === 0) return;
-
-  const update = db.query<unknown, [string, string]>("UPDATE messages SET content = '', parts = ? WHERE id = ?");
-  const migrate = db.transaction(() => {
-    for (const row of rows) update.run(JSON.stringify(sentPartsFromLegacy(row)), row.id);
-  });
-  migrate();
 }
 
 type LegacyAssistantRow = {
@@ -370,36 +364,182 @@ type LegacyAssistantRow = {
   created_at: number;
 };
 
-/** 移行前の 1 行を、いまの形（text と sent の並び）に開く。 */
-function sentPartsFromLegacy(row: LegacyAssistantRow): MessagePart[] {
-  const at = row.created_at;
+/**
+ * v2 までの assistant の本文を、画面に出す text パーツへ移す。
+ *
+ * 以前は content をそのまま画面に出していた。いまは本文を parts の text から読む。
+ * parts があるときは、そちらの text が画面に出ていた本文なので content は使わない
+ * （v2 では content と parts の text が同じ文を二重に持っていた）。
+ */
+function moveLegacyAssistantContent(db: Database): void {
+  if (!tableExists(db, "messages")) return;
 
+  const rows = db
+    .query<LegacyAssistantRow, []>("SELECT id, content, parts, created_at FROM messages WHERE role = 'assistant'")
+    .all();
+  if (rows.length === 0) return;
+
+  const update = db.query<unknown, [string, string]>("UPDATE messages SET content = '', parts = ? WHERE id = ?");
+  const migrate = db.transaction(() => {
+    for (const row of rows) update.run(JSON.stringify(legacyParts(row)), row.id);
+  });
+  migrate();
+}
+
+/**
+ * v3 までの sent を、画面に出す text と attachment に分ける。
+ *
+ * text は v3 ではモデル向けの内部の記録だったが、いまは画面にも出す。同じ文を sent にも
+ * 持つ場合は text の位置だけを残し、二重にしない。sent の本文が text に無ければ sent の位置に足す。
+ *
+ * chat_send の呼び出しと結果は、いまのツールに無い。履歴に残すと、次のターンで知らない
+ * ツールの呼び出しとしてプロバイダに拒まれることがあるので、この組は落とす。
+ */
+function moveSentToVisibleParts(db: Database): void {
+  if (!tableExists(db, "messages")) return;
+
+  const rows = db
+    .query<LegacyAssistantRow, []>("SELECT id, content, parts, created_at FROM messages WHERE role = 'assistant'")
+    .all();
+  if (rows.length === 0) return;
+
+  const update = db.query<unknown, [string, string]>("UPDATE messages SET content = '', parts = ? WHERE id = ?");
+  const migrate = db.transaction(() => {
+    for (const row of rows) update.run(JSON.stringify(visiblePartsFromLegacy(row)), row.id);
+  });
+  migrate();
+}
+
+/** v2 までの 1 行を、いまの形（text は at を持つ）に開く。 */
+function legacyParts(row: LegacyAssistantRow): MessagePart[] {
   if (row.parts === null) {
     if (row.content.length === 0) return [];
-    return [
-      { type: "text", text: row.content },
-      { type: "sent", text: row.content, attachments: [], at },
-    ];
-  }
-
-  const parsed: unknown = JSON.parse(row.parts);
-  if (!Array.isArray(parsed) || !parsed.every(isMessagePart)) {
-    throw new Error(`メッセージ ${row.id} の parts を移行できませんでした`);
+    return [{ type: "text", text: row.content, at: row.created_at }];
   }
 
   const parts: MessagePart[] = [];
-  for (const part of parsed) {
-    parts.push(part);
-    if (part.type === "text" && part.text.length > 0) {
-      parts.push({ type: "sent", text: part.text, attachments: [], at });
+  for (const part of parseLegacyParts(row.parts, row.id)) {
+    if (part.type === "text") {
+      if (part.text.length > 0) parts.push({ type: "text", text: part.text, at: row.created_at });
+      continue;
     }
+    if (part.type === "sent") {
+      if (part.text.length > 0) parts.push({ type: "text", text: part.text, at: part.at });
+      if (part.attachments.length > 0) {
+        parts.push({ type: "attachment", attachments: part.attachments, at: part.at });
+      }
+      continue;
+    }
+    parts.push(part);
   }
   return parts;
 }
 
+/** v3 までの 1 行を、いまの形に開く。 */
+function visiblePartsFromLegacy(row: LegacyAssistantRow): MessagePart[] {
+  if (row.parts === null) {
+    if (row.content.length === 0) return [];
+    return [{ type: "text", text: row.content, at: row.created_at }];
+  }
+
+  const parsed = parseLegacyParts(row.parts, row.id);
+  const texts = new Set(
+    parsed
+      .filter((part): part is Extract<LegacyPart, { type: "text" }> => part.type === "text")
+      .map((part) => part.text),
+  );
+
+  const parts: MessagePart[] = [];
+  for (const part of parsed) {
+    if (part.type === "text") {
+      if (part.text.length > 0) parts.push({ type: "text", text: part.text, at: part.at ?? row.created_at });
+      continue;
+    }
+    if (part.type === "sent") {
+      if (part.text.length > 0 && !texts.has(part.text)) {
+        parts.push({ type: "text", text: part.text, at: part.at });
+      }
+      if (part.attachments.length > 0) {
+        parts.push({ type: "attachment", attachments: part.attachments, at: part.at });
+      }
+      continue;
+    }
+    parts.push(part);
+  }
+
+  return dropLegacySendParts(parts);
+}
+
+/** 移行の前に保存されていた部品。text は at を持たないことがある。 */
+type LegacyPart =
+  | { type: "text"; text: string; at?: number }
+  | { type: "sent"; text: string; attachments: SentAttachment[]; at: number }
+  | Extract<MessagePart, { type: "notice" | "tool-call" | "tool-result" }>;
+
+/** 保存されていた parts を、移行前の形として読む。壊れた値は黙って捨てず、そのまま失敗させる。 */
+function parseLegacyParts(raw: string, messageId: string): LegacyPart[] {
+  const parsed: unknown = JSON.parse(raw);
+  if (!Array.isArray(parsed)) {
+    throw new Error(`メッセージ ${messageId} の parts は部品の配列ではありません`);
+  }
+
+  return parsed.map((part) => {
+    if (typeof part !== "object" || part === null) {
+      throw new Error(`メッセージ ${messageId} の parts に、読めない部品があります`);
+    }
+
+    const value = part as Record<string, unknown>;
+    switch (value.type) {
+      case "text":
+        if (typeof value.text !== "string") {
+          throw new Error(`メッセージ ${messageId} の text 部品に本文がありません`);
+        }
+        return typeof value.at === "number"
+          ? { type: "text", text: value.text, at: value.at }
+          : { type: "text", text: value.text };
+      case "sent": {
+        const attachments = value.attachments;
+        if (
+          typeof value.text !== "string" ||
+          typeof value.at !== "number" ||
+          !Array.isArray(attachments) ||
+          !attachments.every(isSentAttachment)
+        ) {
+          throw new Error(`メッセージ ${messageId} の sent 部品が壊れています`);
+        }
+        return { type: "sent", text: value.text, attachments, at: value.at };
+      }
+      case "notice":
+      case "tool-call":
+      case "tool-result":
+        if (!isMessagePart(value)) {
+          throw new Error(`メッセージ ${messageId} の ${String(value.type)} 部品が壊れています`);
+        }
+        return value as Extract<MessagePart, { type: "notice" | "tool-call" | "tool-result" }>;
+      default:
+        throw new Error(`メッセージ ${messageId} の parts に、知らない部品があります`);
+    }
+  });
+}
+
+/** v3 で使っていた chat_send の呼び出しと結果を、履歴から落とす。 */
+function dropLegacySendParts(parts: MessagePart[]): MessagePart[] {
+  const ids = new Set<string>();
+  for (const part of parts) {
+    if (part.type === "tool-call" && part.server === CHAT_SERVER_ID && part.tool === LEGACY_SEND_TOOL) {
+      ids.add(part.id);
+    }
+  }
+  if (ids.size === 0) return parts;
+
+  return parts.filter((part) => !((part.type === "tool-call" || part.type === "tool-result") && ids.has(part.id)));
+}
+
 /** テーブルがあるかどうか（移行の前に、まだ作られていないテーブルを触らないため）。 */
 function tableExists(db: Database, name: string): boolean {
-  const row = db.query<{ name: string }, [string]>("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?").get(name);
+  const row = db
+    .query<{ name: string }, [string]>("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?")
+    .get(name);
   return row !== null;
 }
 

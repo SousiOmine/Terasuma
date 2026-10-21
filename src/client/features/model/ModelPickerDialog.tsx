@@ -98,10 +98,10 @@ export function ModelPickerDialog({ onClose }: ModelPickerDialogProps) {
                 type="button"
                 aria-pressed={active}
                 onClick={() => setActiveId(provider.id)}
-                class={`rounded-lg px-2.5 py-1 text-xs transition ${
+                class={`rounded-full px-3 py-1.5 text-xs transition ${
                   active
-                    ? "bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900"
-                    : "text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
+                    ? "bg-[var(--app-ink-fill)] font-medium text-[var(--app-on-ink)]"
+                    : "text-[var(--app-text-secondary)] hover:bg-[var(--app-soft)] hover:text-[var(--app-text)]"
                 }`}
               >
                 {providerName(provider)}
@@ -125,9 +125,7 @@ export function ModelPickerDialog({ onClose }: ModelPickerDialogProps) {
       )}
 
       {loading ? (
-        <p class="py-6 text-center text-xs text-neutral-500 dark:text-neutral-400">
-          {t("settings.model.loadingModels")}
-        </p>
+        <p class="py-6 text-center text-xs text-[var(--app-text-secondary)]">{t("settings.model.loadingModels")}</p>
       ) : (
         models !== null && (
           <ModelList

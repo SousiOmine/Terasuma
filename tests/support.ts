@@ -6,7 +6,7 @@ import type { FileSettings } from "../src/server/data/settings-schema";
 import type { CommandResult, CommandRunner } from "../src/server/computer/command";
 import type { CodingToolset } from "../src/server/agent/tools/coding";
 import { ContainerError, type ContainerManager } from "../src/server/computer/container";
-import type { ComputerToolsetProvider, MessagingToolsetProvider } from "../src/server/agent/engine";
+import type { AttachmentToolsetProvider, ComputerToolsetProvider } from "../src/server/agent/engine";
 import type { ImageStore } from "../src/server/computer/images";
 import type { McpManager } from "../src/server/mcp/manager";
 import { createSettingsStore, type SettingsStore } from "../src/server/data/settings";
@@ -88,8 +88,8 @@ export function createComputerStub(): ComputerToolsetProvider {
   return { toolset: async () => ({}) };
 }
 
-/** メッセージ送信のツールを渡さないテストのための差し替え。 */
-export function createMessagingStub(): MessagingToolsetProvider {
+/** 添付のツールを渡さないテストのための差し替え。 */
+export function createAttachmentsStub(): AttachmentToolsetProvider {
   return { toolset: () => ({}) };
 }
 

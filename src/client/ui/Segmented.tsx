@@ -28,7 +28,7 @@ export function Segmented<Value extends string>({
             type="button"
             aria-pressed={active}
             onClick={() => onChange(option.value)}
-            class={`flex-1 rounded-md px-3 py-1.5 text-xs transition md:py-1 ${active ? SEGMENTED_ON_CLASS : SEGMENTED_OFF_CLASS}`}
+            class={`flex-1 rounded-full px-3 py-1.5 text-xs transition md:py-1 ${active ? SEGMENTED_ON_CLASS : SEGMENTED_OFF_CLASS}`}
           >
             {option.label}
           </button>

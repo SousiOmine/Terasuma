@@ -16,11 +16,11 @@ export type FieldProps = {
  */
 export function Field({ label, description, hint, children }: FieldProps) {
   return (
-    <div class="py-2">
+    <div class="py-2.5">
       <p class="text-sm font-medium">{label}</p>
-      {description !== undefined && <p class="mt-0.5 text-xs text-neutral-500 dark:text-neutral-400">{description}</p>}
+      {description !== undefined && <p class="mt-0.5 text-xs text-[var(--app-text-secondary)]">{description}</p>}
       <div class="mt-2">{children}</div>
-      {hint !== undefined && <p class="mt-1 text-xs text-neutral-500 dark:text-neutral-400">{hint}</p>}
+      {hint !== undefined && <p class="mt-1 text-xs text-[var(--app-text-secondary)]">{hint}</p>}
     </div>
   );
 }
