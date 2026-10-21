@@ -7,6 +7,7 @@ import type { ChatMessage, MessagePart, SentAttachment, TokenUsage } from "../..
 import type { CodingToolset } from "./tools/coding";
 import type { ComputerToolset } from "./tools/computer";
 import type { AttachmentToolset } from "./tools/attachments";
+import type { HistoryToolset } from "./tools/history";
 import type { ImageStore } from "../computer/images";
 import type { McpToolset } from "../mcp/manager";
 import type { CatalogSnapshot } from "../provider/catalog";
@@ -91,6 +92,14 @@ export type AttachmentToolsetProvider = {
 };
 
 /**
+ * 過去の対話履歴を検索するツールの供給元。
+ * 引く履歴はターンの対象の Tera のものなので、ターンごとに teraId を渡す。
+ */
+export type HistoryToolsetProvider = {
+  toolset(input: { teraId: string }): HistoryToolset;
+};
+
+/**
  * LLM 呼び出しのインタフェース。
  * AI SDK に依存する部分はこのインタフェースの内側だけにあるので、実装の差し替え
  * （承認フローの追加、プロファイルごとのエージェント切り替え）はここを実装し直すだけで済む。
@@ -119,6 +128,8 @@ export function createEngine(options: {
   computer: ComputerToolsetProvider;
   /** 画像やファイルをチャットへ添付するツール。 */
   attachments: AttachmentToolsetProvider;
+  /** 過去の対話履歴を検索するツール。 */
+  history: HistoryToolsetProvider;
   /** コンテナのファイルとシェルのツール。ターンごとに変わらないので、そのまま渡す。 */
   coding: CodingToolset;
   /** 撮った画像の置き場。履歴から画像を読み直してモデルへ渡す。 */
@@ -132,6 +143,7 @@ export function createEngine(options: {
     mcp: options.mcp,
     computer: options.computer,
     attachments: options.attachments,
+    history: options.history,
     coding: options.coding,
     images: options.images,
     catalog: options.catalog,
@@ -155,6 +167,8 @@ export type AiSdkEngineOptions = {
   computer: ComputerToolsetProvider;
   /** 画像やファイルをチャットへ添付するツール。 */
   attachments: AttachmentToolsetProvider;
+  /** 過去の対話履歴を検索するツール。 */
+  history: HistoryToolsetProvider;
   /** コンテナのファイルとシェルのツール。 */
   coding: CodingToolset;
   images: ImageStore;
@@ -163,7 +177,7 @@ export type AiSdkEngineOptions = {
 };
 
 export function createAiSdkEngine(options: AiSdkEngineOptions): AgentEngine {
-  const { settings, mcp, computer, attachments, coding, images, catalog } = options;
+  const { settings, mcp, computer, attachments, history, coding, images, catalog } = options;
 
   // スキルは組み込みで、ターンによって変わらない。エージェントを作るときに 1 度だけ組む。
   const skillTools = createSkillTools(BUILTIN_SKILLS);
@@ -185,7 +199,8 @@ export function createAiSdkEngine(options: AiSdkEngineOptions): AgentEngine {
 
       // 畳んだ要約を先頭に、生の履歴をその後ろに置く。生の履歴には要約も並べ替えもしない
       // （プロンプトキャッシュが当たり続けるようにするため）。
-      const messages = toModelMessages(context, images, replyLanguage, { toolResultImages });
+      // 今日の日付は履歴の末尾に置く（先頭を変えず、履歴検索の期間指定に使えるようにする）。
+      const messages = toModelMessages(context, images, replyLanguage, { toolResultImages }, Date.now());
 
       // 思考強度はプロバイダごとに渡し方が違うので、ここで組み立てて呼び出しごとに渡す。
       const providerOptions = reasoningProviderOptions(model.provider, model.reasoningEffort);
@@ -204,10 +219,14 @@ export function createAiSdkEngine(options: AiSdkEngineOptions): AgentEngine {
       // 添付の口はターンごとに差し替わるので、ここで組む。
       const attachmentTools = attachments.toolset({ attach });
 
+      // 過去の履歴を引く先はターンの対象の Tera なので、ここで組む。
+      const historyTools = history.toolset({ teraId });
+
       const tools = withToolModelOutput(
         {
           ...coding,
           ...attachmentTools,
+          ...historyTools,
           ...createDiscoveryTools(registry),
           ...skillTools,
         },

@@ -14,6 +14,7 @@ import { loadConfig } from "../../src/config";
 import { createCodingToolset } from "../../src/server/agent/tools/coding";
 import { createComputerToolset } from "../../src/server/agent/tools/computer";
 import { createAttachmentTools } from "../../src/server/agent/tools/attachments";
+import { createHistoryToolset } from "../../src/server/agent/tools/history";
 import {
   createContainerManager,
   WORKDIR_IN_CONTAINER,
@@ -104,6 +105,9 @@ export async function withLiveServer(run: (harness: LiveHarness) => Promise<void
       createAttachmentTools({ container, root: WORKDIR_IN_CONTAINER, images, files, attach: input.attach }),
   };
 
+  // 過去の対話履歴は history_search で引く（アプリの起動時と同じ）。
+  const history = createHistoryToolset({ store });
+
   // OAuth の戻り先は、待ち受けているポートが決まってから決まる（index.ts と同じ）。
   let boundPort: number | null = null;
   const mcp = createMcpManager({
@@ -114,7 +118,7 @@ export async function withLiveServer(run: (harness: LiveHarness) => Promise<void
       boundPort === null ? null : new URL(`http://${config.host}:${boundPort}${OAUTH_CALLBACK_PATH}`),
   });
 
-  const engine = createEngine({ config, settings, mcp, computer, attachments, coding, images, catalog });
+  const engine = createEngine({ config, settings, mcp, computer, attachments, history, coding, images, catalog });
 
   // 畳むかどうかはモデルの文脈長から決める。
   const compaction = createCompaction({

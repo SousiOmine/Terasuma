@@ -500,3 +500,73 @@ describe("過去のやり取りの要約", () => {
     }
   });
 });
+
+describe("listMessagesBetween", () => {
+  /** 時刻を差し替えられるストア。日付の境界を作るために使う。 */
+  function createClockStore(): { store: ReturnType<typeof createStore>; at: (time: number) => void } {
+    let clock = new Date(2026, 9, 1, 0, 0).getTime();
+    const store = createStore(":memory:", { now: () => clock });
+    return {
+      store,
+      at: (time) => {
+        clock = time;
+      },
+    };
+  }
+
+  /** 2026 年 10 月の、その日のローカル時刻。 */
+  function localDay(day: number, hour = 0, minute = 0): number {
+    return new Date(2026, 9, day, hour, minute).getTime();
+  }
+
+  test("since 以上 until 未満のメッセージを、古い順に返す", () => {
+    const { store, at } = createClockStore();
+
+    at(localDay(1, 23, 59));
+    store.appendMessage({ id: "m1", teraId: DEFAULT_TERA_ID, role: "user", content: "前日" });
+    at(localDay(2, 0, 0));
+    store.appendMessage({ id: "m2", teraId: DEFAULT_TERA_ID, role: "user", content: "初日" });
+    at(localDay(2, 23, 59));
+    store.appendMessage({ id: "m3", teraId: DEFAULT_TERA_ID, role: "user", content: "同じ日" });
+    at(localDay(3, 0, 0));
+    store.appendMessage({ id: "m4", teraId: DEFAULT_TERA_ID, role: "user", content: "翌日" });
+
+    const range = { since: localDay(2), until: localDay(3) };
+    expect(store.listMessagesBetween(DEFAULT_TERA_ID, range).map((message) => message.content)).toEqual([
+      "初日",
+      "同じ日",
+    ]);
+  });
+
+  test("端が null なら、その側は制限しない", () => {
+    const { store, at } = createClockStore();
+
+    at(localDay(1));
+    store.appendMessage({ id: "m1", teraId: DEFAULT_TERA_ID, role: "user", content: "1 日" });
+    at(localDay(2));
+    store.appendMessage({ id: "m2", teraId: DEFAULT_TERA_ID, role: "user", content: "2 日" });
+
+    expect(
+      store.listMessagesBetween(DEFAULT_TERA_ID, { since: null, until: localDay(2) }).map((message) => message.content),
+    ).toEqual(["1 日"]);
+    expect(
+      store.listMessagesBetween(DEFAULT_TERA_ID, { since: localDay(2), until: null }).map((message) => message.content),
+    ).toEqual(["2 日"]);
+    expect(
+      store.listMessagesBetween(DEFAULT_TERA_ID, { since: null, until: null }).map((message) => message.content),
+    ).toEqual(["1 日", "2 日"]);
+  });
+
+  test("別の Tera のメッセージは混ざらない", () => {
+    const { store, at } = createClockStore();
+    store.ensureTera("second", "2 体目");
+
+    at(localDay(1));
+    store.appendMessage({ id: "m1", teraId: DEFAULT_TERA_ID, role: "user", content: "既定へ" });
+    store.appendMessage({ id: "m2", teraId: "second", role: "user", content: "2 体目へ" });
+
+    expect(
+      store.listMessagesBetween(DEFAULT_TERA_ID, { since: null, until: null }).map((message) => message.content),
+    ).toEqual(["既定へ"]);
+  });
+});

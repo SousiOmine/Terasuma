@@ -27,6 +27,12 @@ export const CHAT_SERVER_ID = "chat";
  */
 export const TOOL_SERVER_ID = "tool";
 
+/**
+ * 過去の対話履歴（保存済みのやり取り）を検索する内蔵ツールのサーバー id。
+ * いまの会話へ添付する chat_ とは別に、畳まれて文脈から外れたやり取りを引く。
+ */
+export const HISTORY_SERVER_ID = "history";
+
 /** ツールを検索するツール名（サーバー id を付けない形）。 */
 export const TOOL_SEARCH_TOOL = "search";
 
@@ -38,6 +44,12 @@ export const TOOL_CALL_TOOL = "call";
 
 /** モデルへ渡すときの、見つけたツールを実行するツールの名前。 */
 export const TOOL_CALL_TOOL_NAME = `${TOOL_SERVER_ID}${TOOL_NAME_SEPARATOR}${TOOL_CALL_TOOL}`;
+
+/** 過去の対話履歴を検索するツール名（サーバー id を付けない形）。 */
+export const HISTORY_SEARCH_TOOL = "search";
+
+/** モデルへ渡すときの、過去の対話履歴を検索するツールの名前。 */
+export const HISTORY_SEARCH_TOOL_NAME = `${HISTORY_SERVER_ID}${TOOL_NAME_SEPARATOR}${HISTORY_SEARCH_TOOL}`;
 
 /**
  * スキルを読み込むツール名。

@@ -8,6 +8,7 @@ import {
   buildModelInput,
   replyLanguageInstruction,
   SYSTEM_PROMPT,
+  turnTail,
   type TeraContext,
 } from "../src/server/agent/prompt";
 import { readContext } from "../src/server/agent/compaction";
@@ -22,13 +23,16 @@ function contextOf(store: ReturnType<typeof makeStore>): TeraContext {
   return readContext(store, DEFAULT_TERA_ID);
 }
 
+/** 今日の日付を固定する時刻。テストが日付の変わり目で揺れないようにする。 */
+const NOW = new Date(2026, 9, 21, 12, 0).getTime();
+
 /** このテストの会話は日本語なので、返事の言語は ja に固定する。 */
 function buildInput(context: TeraContext, images: ImageReader) {
-  return buildModelInput(context, images, "ja", { toolResultImages: true });
+  return buildModelInput(context, images, "ja", { toolResultImages: true }, NOW);
 }
 
-/** 入力の末尾に必ず 1 件足される、返事の言語の指示。 */
-const LANGUAGE_MESSAGE = { role: "user", content: replyLanguageInstruction("ja") } as const;
+/** 入力の末尾に必ず 1 件足される、返事の言語と今日の日付。 */
+const TAIL_MESSAGE = { role: "user", content: turnTail("ja", NOW) } as const;
 
 /**
  * プロンプトキャッシュは、リクエストの先頭が前回と一致するほど当たる。
@@ -39,8 +43,17 @@ describe("プロンプトキャッシュ保護", () => {
   test("入力の先頭は常に system プロンプト 1 件", () => {
     expect(buildInput({ summary: null, messages: [] }, createImageStub())).toEqual([
       { role: "system", content: SYSTEM_PROMPT },
-      LANGUAGE_MESSAGE,
+      TAIL_MESSAGE,
     ]);
+  });
+
+  test("今日の日付は末尾にだけ置く", () => {
+    const input = buildInput({ summary: null, messages: [] }, createImageStub());
+
+    expect(JSON.stringify(input.at(-1))).toContain("2026-10-21");
+    expect(JSON.stringify(input.at(-1))).toContain("Wednesday");
+    // 履歴の側には日付を混ぜない（プロンプトキャッシュの当たる先頭を変えない）。
+    expect(JSON.stringify(input.slice(0, -1))).not.toContain("Today is");
   });
 
   test("履歴は保存された順にそのまま並ぶ", () => {
@@ -58,7 +71,7 @@ describe("プロンプトキャッシュ保護", () => {
       { role: "system", content: SYSTEM_PROMPT },
       { role: "user", content: "質問" },
       { role: "assistant", content: "回答" },
-      LANGUAGE_MESSAGE,
+      TAIL_MESSAGE,
     ]);
   });
 
@@ -157,7 +170,7 @@ describe("ツールを使ったターンの入力", () => {
           },
         ],
       },
-      LANGUAGE_MESSAGE,
+      TAIL_MESSAGE,
     ]);
   });
 
@@ -297,12 +310,24 @@ describe("ツールを使ったターンの入力", () => {
 });
 
 describe("返事の言語", () => {
-  test("設定した言語の指示を、入力の末尾に 1 件だけ置く", () => {
-    const ja = buildModelInput({ summary: null, messages: [] }, createImageStub(), "ja", { toolResultImages: true });
-    const en = buildModelInput({ summary: null, messages: [] }, createImageStub(), "en", { toolResultImages: true });
+  test("設定した言語の指示と今日の日付を、入力の末尾に 1 件だけ置く", () => {
+    const ja = buildModelInput(
+      { summary: null, messages: [] },
+      createImageStub(),
+      "ja",
+      { toolResultImages: true },
+      NOW,
+    );
+    const en = buildModelInput(
+      { summary: null, messages: [] },
+      createImageStub(),
+      "en",
+      { toolResultImages: true },
+      NOW,
+    );
 
-    expect(ja.at(-1)).toEqual(LANGUAGE_MESSAGE);
-    expect(en.at(-1)).toEqual({ role: "user", content: replyLanguageInstruction("en") });
+    expect(ja.at(-1)).toEqual(TAIL_MESSAGE);
+    expect(en.at(-1)).toEqual({ role: "user", content: turnTail("en", NOW) });
     expect(replyLanguageInstruction("ja")).toContain("Japanese");
     expect(replyLanguageInstruction("en")).toContain("English");
   });
@@ -342,9 +367,13 @@ describe("画像つきのツール結果", () => {
 
     try {
       const ref = images.save(png, "image/png");
-      const input = buildModelInput(screenshotHistory({ images: [ref] }), images, "ja", {
-        toolResultImages: true,
-      });
+      const input = buildModelInput(
+        screenshotHistory({ images: [ref] }),
+        images,
+        "ja",
+        { toolResultImages: true },
+        NOW,
+      );
 
       expect(input[3]).toEqual({
         role: "tool",
@@ -365,7 +394,7 @@ describe("画像つきのツール結果", () => {
       });
 
       // 画像は結果の中にあるので、user メッセージは足さない。
-      expect(input[4]).toEqual(LANGUAGE_MESSAGE);
+      expect(input[4]).toEqual(TAIL_MESSAGE);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -378,9 +407,13 @@ describe("画像つきのツール結果", () => {
 
     try {
       const ref = images.save(png, "image/png");
-      const input = buildModelInput(screenshotHistory({ images: [ref] }), images, "ja", {
-        toolResultImages: false,
-      });
+      const input = buildModelInput(
+        screenshotHistory({ images: [ref] }),
+        images,
+        "ja",
+        { toolResultImages: false },
+        NOW,
+      );
 
       expect(input[3]).toEqual({
         role: "tool",
@@ -414,9 +447,13 @@ describe("画像つきのツール結果", () => {
 
     try {
       const refs = [images.save(first, "image/png"), images.save(second, "image/png")];
-      const input = buildModelInput(screenshotHistory({ images: refs }), images, "ja", {
-        toolResultImages: false,
-      });
+      const input = buildModelInput(
+        screenshotHistory({ images: refs }),
+        images,
+        "ja",
+        { toolResultImages: false },
+        NOW,
+      );
 
       expect(input[4]).toEqual({
         role: "user",
@@ -473,7 +510,7 @@ describe("画像つきのツール結果", () => {
         ],
       });
       // 読めない画像のために user メッセージは足さない。
-      expect(input[4]).toEqual(LANGUAGE_MESSAGE);
+      expect(input[4]).toEqual(TAIL_MESSAGE);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -508,7 +545,7 @@ describe("畳んだ要約を渡すとき", () => {
       { role: "system", content: SYSTEM_PROMPT },
       { role: "user", content: summaryText(SUMMARY) },
       { role: "user", content: "次の質問" },
-      LANGUAGE_MESSAGE,
+      TAIL_MESSAGE,
     ]);
   });
 

@@ -13,10 +13,12 @@ import {
   type ComputerToolsetProvider,
   type EngineEvent,
   type AttachmentToolsetProvider,
+  type HistoryToolsetProvider,
   type SettingsReader,
   type ToolsetProvider,
 } from "../src/server/agent/engine";
 import { createAttachmentTools } from "../src/server/agent/tools/attachments";
+import { createHistoryToolset } from "../src/server/agent/tools/history";
 import { createFileStore } from "../src/server/computer/files";
 import type { ChatMessage, ImageRef, SentAttachment } from "../src/shared/types";
 import { createImageStore, type ImageStore } from "../src/server/computer/images";
@@ -27,8 +29,10 @@ import {
   createCodingStub,
   createComputerStub,
   createContainerStub,
+  createHistoryStub,
   createImageStub,
   createAttachmentsStub,
+  makeStore,
   testPng,
 } from "./support";
 
@@ -233,6 +237,7 @@ async function run(
   catalog: CatalogSnapshot | null = null,
   attachments: AttachmentToolsetProvider = createAttachmentsStub(),
   attached: SentAttachment[] = [],
+  historyTools: HistoryToolsetProvider = createHistoryStub(),
 ): Promise<EngineEvent[]> {
   const reader: SettingsReader = { read: () => settings };
   const stream = await createAiSdkEngine({
@@ -240,6 +245,7 @@ async function run(
     mcp: provider,
     computer,
     attachments,
+    history: historyTools,
     coding,
     images,
     catalog: { snapshot: () => catalog },
@@ -395,6 +401,65 @@ describe("ツール検索（AI SDK 経由）", () => {
 
       // 本文は次の呼び出しでモデルへ渡る。
       expect(JSON.stringify(fake.bodies[1])).toContain("computer_screenshot");
+    } finally {
+      await fake.server.stop(true);
+    }
+  });
+});
+
+describe("履歴検索（AI SDK 経由）", () => {
+  test("history_search は事前に渡り、保存された過去のやり取りを引ける", async () => {
+    const store = makeStore();
+    // ターンの対象と同じ Tera に履歴を置く（run は teraId "t1" でターンを流す）。
+    store.ensureTera("t1", "テスト");
+    store.appendMessage({ id: "m1", teraId: "t1", role: "user", content: "先週の件はどうなった" });
+    store.appendMessage({
+      id: "m2",
+      teraId: "t1",
+      role: "assistant",
+      content: "",
+      parts: [
+        { type: "text", text: "金曜までに直します。", at: 1 },
+        { type: "tool-call", id: "call-1", server: "", tool: "read", args: { path: "/secret/path" } },
+        { type: "tool-result", id: "call-1", server: "", tool: "read", failed: false, output: "秘密の出力" },
+      ],
+    });
+
+    const fake = startScriptedProvider([
+      { tool: "history_search", args: JSON.stringify({ query: "金曜" }) },
+      { text: "見つけました" },
+    ]);
+
+    try {
+      const events = await run(
+        { toolset: async () => ({}) },
+        settingsFor(portOf(fake.server)),
+        createComputerStub(),
+        createCodingStub(),
+        createImageStub(),
+        null,
+        createAttachmentsStub(),
+        [],
+        createHistoryToolset({ store }),
+      );
+
+      // 履歴検索は tool_search を挟まず、そのままの名前でモデルへ渡る。
+      expect(toolNames(fake.bodies[0])).toContain("history_search");
+
+      const call = callsOf(events, "history", "search")[0];
+      if (call === undefined) throw new Error("history_search が呼ばれなかった");
+
+      const result = resultOf(events, call.part.id);
+      expect(result.part.failed).toBe(false);
+      expect(result.part.output).toContain("金曜までに直します。");
+
+      // ツール呼び出しは名前だけ。引数と結果は検索の結果に載らない。
+      expect(result.part.output).toContain("(tool calls: read)");
+      expect(result.part.output).not.toContain("/secret/path");
+      expect(result.part.output).not.toContain("秘密の出力");
+
+      // 引いた本文は、次の呼び出しでモデルへ渡る。
+      expect(JSON.stringify(fake.bodies[1])).toContain("金曜までに直します。");
     } finally {
       await fake.server.stop(true);
     }

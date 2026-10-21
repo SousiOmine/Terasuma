@@ -63,6 +63,11 @@ export type Store = {
   listMessages(teraId: string): ChatMessage[];
   /** seq より後のメッセージ（古い順）。まだ畳んでいない生の履歴を取り出す。 */
   listMessagesSince(teraId: string, seq: number): ChatMessage[];
+  /**
+   * 期間で絞ったメッセージ（古い順）。since 以上 until 未満。
+   * 端は null で「制限しない」を表す（0 時と 0 を取り違えないよう、時刻ではなく null で表す）。
+   */
+  listMessagesBetween(teraId: string, range: { since: number | null; until: number | null }): ChatMessage[];
   /** 履歴の末尾に追記する。Tera の行が先に存在している必要がある。 */
   appendMessage(input: AppendMessageInput): ChatMessage;
   readCompaction(teraId: string): CompactionState;
@@ -210,6 +215,18 @@ export function createStore(dbPath: string, options: CreateStoreOptions = {}): S
     `SELECT id, tera_id, seq, role, content, attachments, parts, created_at, input_tokens, output_tokens, cached_input_tokens
      FROM messages WHERE tera_id = ? AND seq > ? ORDER BY seq ASC`,
   );
+  // 端が null のときは、その側を制限しない。4 通りの組み合わせを 1 本の文で受ける。
+  const selectMessagesBetween = db.query<
+    MessageRow,
+    [string, number | null, number | null, number | null, number | null]
+  >(
+    `SELECT id, tera_id, seq, role, content, attachments, parts, created_at, input_tokens, output_tokens, cached_input_tokens
+     FROM messages
+     WHERE tera_id = ?
+       AND (? IS NULL OR created_at >= ?)
+       AND (? IS NULL OR created_at < ?)
+     ORDER BY seq ASC`,
+  );
   const insertMessage = db.query<
     { seq: number },
     [
@@ -306,6 +323,10 @@ export function createStore(dbPath: string, options: CreateStoreOptions = {}): S
 
     listMessagesSince(teraId, seq) {
       return selectMessagesSince.all(teraId, seq).map(toMessage);
+    },
+
+    listMessagesBetween(teraId, range) {
+      return selectMessagesBetween.all(teraId, range.since, range.since, range.until, range.until).map(toMessage);
     },
 
     readCompaction(teraId) {

@@ -28,6 +28,7 @@ export const SYSTEM_PROMPT = [
   "Use read to examine a file before changing it. Use edit for targeted changes; use write only for new files or complete rewrites.",
   "MCP server tools and the computer_ tools that drive the container's screen are not in your tool list.",
   "Find them with tool_search (omit the query to list every available tool by name), then run one with tool_call, using the exact name and the arguments its search result describes.",
+  "Use history_search to look up earlier conversation with the user, including turns compacted out of your visible history: terms are regular expressions (all must match), from/to take YYYY-MM-DD dates, limit caps the newest matches, and invert/wholeWord work like grep -v/-w.",
   "Skills (load one with the skill tool before starting work that matches it):",
   SKILL_CATALOG,
 ].join("\n");
@@ -90,6 +91,8 @@ export function toModelMessages(
   images: ImageReader,
   replyLanguage: ReplyLanguage,
   options: ModelInputOptions,
+  /** 今日の日付を決める時刻（epoch ミリ秒）。テストで固定するために渡す。 */
+  now: number,
 ): ModelMessage[] {
   const messages: ModelMessage[] = [];
 
@@ -125,9 +128,9 @@ export function toModelMessages(
     if (imageMessage !== null) messages.push(imageMessage);
   }
 
-  // 返事の言語は、保存済みの履歴のあと（今回のユーザー発言の後ろ）に置く。
-  // 先頭を変えないので、言語が同じ間はプロンプトキャッシュの先頭が当たり続ける。
-  messages.push({ role: "user", content: replyLanguageInstruction(replyLanguage) });
+  // 返事の言語と今日の日付は、保存済みの履歴のあと（今回のユーザー発言の後ろ）に置く。
+  // 先頭を変えないので、プロンプトキャッシュの当たる範囲はそのまま保たれる。
+  messages.push({ role: "user", content: turnTail(replyLanguage, now) });
   return messages;
 }
 
@@ -142,6 +145,24 @@ const REPLY_LANGUAGE_INSTRUCTIONS: Record<ReplyLanguage, string> = {
 
 export function replyLanguageInstruction(language: ReplyLanguage): string {
   return REPLY_LANGUAGE_INSTRUCTIONS[language];
+}
+
+const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"] as const;
+
+/**
+ * 履歴の末尾に 1 件だけ置く指示。返事の言語と、今日の日付。
+ *
+ * 今日の日付は「先週」「先月」を history_search の from/to に直すために要る。
+ * 日付は毎日変わるが、その手前（system と保存済みの履歴）は変えないので、
+ * プロンプトキャッシュの当たる先頭はそのまま保たれる。
+ */
+export function turnTail(language: ReplyLanguage, now: number): string {
+  const date = new Date(now);
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const weekday = WEEKDAYS[date.getDay()] ?? "";
+
+  return `${replyLanguageInstruction(language)}\nToday is ${date.getFullYear()}-${month}-${day} (${weekday}).`;
 }
 
 /** 結果の直後に user メッセージとして渡す画像。どの呼び出しの画像かを本文で示す。 */
@@ -191,8 +212,9 @@ export function buildModelInput(
   images: ImageReader,
   replyLanguage: ReplyLanguage,
   options: ModelInputOptions,
+  now: number,
 ): ModelMessage[] {
-  return [{ role: "system", content: SYSTEM_PROMPT }, ...toModelMessages(context, images, replyLanguage, options)];
+  return [{ role: "system", content: SYSTEM_PROMPT }, ...toModelMessages(context, images, replyLanguage, options, now)];
 }
 
 /** モデルへ渡せる本文かツールの呼び出しがあるかどうか。 */
