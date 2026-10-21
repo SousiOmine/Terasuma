@@ -59,21 +59,45 @@ describe("チャットのイベントの読み替え", () => {
     });
   });
 
-  test("画面を渡す呼び出しだけ、引き受けの開始になる", () => {
+  test("tool_call 越しの画面を渡す呼び出しだけ、引き受けの開始になる", () => {
     expect(
       interpretEvent({
         type: "tool-call",
         id: "a1",
-        part: { type: "tool-call", id: "c1", server: "computer", tool: "ask_user", args: { question: "ログイン" } },
+        part: {
+          type: "tool-call",
+          id: "c1",
+          server: "tool",
+          tool: "call",
+          args: { name: "computer_ask_user", args: { question: "ログイン" } },
+        },
       }),
-    ).toEqual({ kind: "handover-start", question: "ログイン" });
+    ).toEqual({ kind: "handover-start", callId: "c1", question: "ログイン" });
 
-    // ほかのツールは画面に出さない。
+    // 頼みが空でも、引き受けは始まる（何を頼むかを書いていないだけ）。
     expect(
       interpretEvent({
         type: "tool-call",
         id: "a1",
-        part: { type: "tool-call", id: "c2", server: "computer", tool: "screenshot", args: {} },
+        part: { type: "tool-call", id: "c2", server: "tool", tool: "call", args: { name: "computer_ask_user" } },
+      }),
+    ).toEqual({ kind: "handover-start", callId: "c2", question: null });
+
+    // tool_call 越しでも、ほかのツールは画面に出さない。
+    expect(
+      interpretEvent({
+        type: "tool-call",
+        id: "a1",
+        part: { type: "tool-call", id: "c3", server: "tool", tool: "call", args: { name: "computer_screenshot" } },
+      }),
+    ).toBeNull();
+
+    // ツール検索も画面には出さない。
+    expect(
+      interpretEvent({
+        type: "tool-call",
+        id: "a1",
+        part: { type: "tool-call", id: "c4", server: "tool", tool: "search", args: { query: "computer" } },
       }),
     ).toBeNull();
   });
@@ -82,13 +106,13 @@ describe("チャットのイベントの読み替え", () => {
     const part = {
       type: "tool-result" as const,
       id: "c1",
-      server: "computer",
-      tool: "ask_user",
+      server: "tool",
+      tool: "call",
       failed: false,
-      output: "done",
+      output: "[computer_ask_user]\ndone",
     };
 
-    expect(interpretEvent({ type: "tool-result", id: "a1", part })).toEqual({ kind: "handover-end" });
+    expect(interpretEvent({ type: "tool-result", id: "a1", part })).toEqual({ kind: "handover-end", callId: "c1" });
 
     // 失敗した呼び出しでは、まだユーザーの操作待ちが続いている。
     expect(interpretEvent({ type: "tool-result", id: "a1", part: { ...part, failed: true } })).toBeNull();

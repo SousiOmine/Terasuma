@@ -19,6 +19,10 @@ import { userContentForModel } from "./model-content";
 import { readStoredImages, readToolOutput, toolResultOutput } from "./tool-output";
 import { describeError } from "../../shared/errors";
 import { splitToolName } from "../../shared/tools";
+import { createDiscoveryTools } from "./tools/discovery";
+import { createToolRegistry } from "./tools/registry";
+import { createSkillTools } from "./tools/skill";
+import { BUILTIN_SKILLS } from "./skills";
 
 /** モデルから流れてくる出来事。画面へ流す単位でもある。 */
 export type EngineEvent =
@@ -161,6 +165,9 @@ export type AiSdkEngineOptions = {
 export function createAiSdkEngine(options: AiSdkEngineOptions): AgentEngine {
   const { settings, mcp, computer, attachments, coding, images, catalog } = options;
 
+  // スキルは組み込みで、ターンによって変わらない。エージェントを作るときに 1 度だけ組む。
+  const skillTools = createSkillTools(BUILTIN_SKILLS);
+
   /** 設定とカタログから、今回のモデルを決める。呼び出しのたびに読み直す。 */
   function resolve(): ResolvedModel {
     const resolution = resolveModel(settings.read(), catalog.snapshot());
@@ -187,12 +194,23 @@ export function createAiSdkEngine(options: AiSdkEngineOptions): AgentEngine {
       // 次のステップの直前に user メッセージとして足す。
       const pendingImages: PendingImages[] = [];
 
-      // MCP とコンテナのツール、それに添付のツールは呼び出しごとに渡す
-      // （設定画面でサーバーを足しても、コンテナを止めても作り直さずに済む）。
+      // MCP とコンテナのツールは、モデルのツール一覧へは載せない。
+      // 名前・説明・引数スキーマは tool_search で取り寄せ、tool_call で実行する
+      // （サーバーが増えても、使わないツールの定義で毎回の文脈が膨らまないようにするため）。
+      // 一覧は呼び出しのたびに組み直すので、設定画面でサーバーを足しても作り直さずに済む。
       const [mcpTools, computerTools] = await Promise.all([mcp.toolset(), computer.toolset({ teraId })]);
+      const registry = await createToolRegistry({ ...mcpTools, ...computerTools });
+
+      // 添付の口はターンごとに差し替わるので、ここで組む。
       const attachmentTools = attachments.toolset({ attach });
+
       const tools = withToolModelOutput(
-        { ...mcpTools, ...computerTools, ...coding, ...attachmentTools },
+        {
+          ...coding,
+          ...attachmentTools,
+          ...createDiscoveryTools(registry),
+          ...skillTools,
+        },
         {
           includeImages: toolResultImages,
           images,

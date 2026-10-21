@@ -4,6 +4,7 @@ import type { ChatMessage, ImageRef, MessagePart } from "../../shared/types";
 import { toolNameFor } from "../../shared/tools";
 import type { ImageReader } from "../computer/images";
 import { userContentForModel } from "./model-content";
+import { SKILL_CATALOG } from "./skills";
 import { readStoredImages, toolResultOutput, type StoredImages } from "./tool-output";
 
 /**
@@ -22,9 +23,13 @@ export const SYSTEM_PROMPT = [
   "Use the chat_attach tool only to show an image or file: pass paths inside the computer, or set screenshot to true. It cannot send text.",
   "Images become photos and other files become downloads.",
   "Always follow the reply-language instruction at the end of the conversation, and write your reply in that language.",
-  "The read, write, edit, and bash tools run inside the Debian desktop container that you operate, and the computer_ tools control its screen.",
+  "The read, write, edit, and bash tools run inside the Debian desktop container that you operate.",
   "Relative paths in read, write, edit, and chat_attach, and the working directory of bash, are /home/agent. Absolute paths are container paths.",
   "Use read to examine a file before changing it. Use edit for targeted changes; use write only for new files or complete rewrites.",
+  "MCP server tools and the computer_ tools that drive the container's screen are not in your tool list.",
+  "Find them with tool_search (omit the query to list every available tool by name), then run one with tool_call, using the exact name and the arguments its search result describes.",
+  "Skills (load one with the skill tool before starting work that matches it):",
+  SKILL_CATALOG,
 ].join("\n");
 
 /**

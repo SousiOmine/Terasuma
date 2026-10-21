@@ -34,6 +34,9 @@ export const handoverActive = signal(false);
  */
 export const handoverQuestion = signal<string | null>(null);
 
+/** いま引き受けている呼び出しの id。引き受けていなければ null。 */
+let handoverCallId: string | null = null;
+
 /** 右ペインを開く。引き受けが始まったときにも使う。 */
 export function openComputerPane(): void {
   computerPaneOpen.value = true;
@@ -65,16 +68,27 @@ export async function answerHandover(answer: { kind: "done" } | { kind: "text"; 
   }
 }
 
-/** 引き受けを始める。ペインを開き、操作できるようにする。 */
-export function beginHandover(question: string | null): void {
+/**
+ * 引き受けを始める。ペインを開き、操作できるようにする。
+ * 呼び出しの id は、終わりの結果と突き合わせるために覚えておく。
+ */
+export function beginHandover(callId: string, question: string | null): void {
+  handoverCallId = callId;
   handoverActive.value = true;
   handoverQuestion.value = question;
   computerViewOnly.value = false;
   openComputerPane();
 }
 
-/** 引き受けを終える。見るだけに戻す。 */
-export function endHandover(): void {
+/**
+ * 引き受けを終える。見るだけに戻す。
+ * 終えるのは、引き受けている呼び出し自身の結果が届いたときだけ
+ * （並んで走った別のツールの結果で、操作できる状態のまま外れないようにする）。
+ */
+export function endHandover(callId: string): void {
+  if (handoverCallId !== callId) return;
+
+  handoverCallId = null;
   handoverActive.value = false;
   handoverQuestion.value = null;
   computerViewOnly.value = true;

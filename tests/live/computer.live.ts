@@ -16,6 +16,7 @@ import {
   report,
   visibleText,
   toolCall,
+  toolCallByName,
   toolResultFor,
   toolSequence,
   withLiveServer,
@@ -60,9 +61,10 @@ test(
         DEFAULT_TERA_ID,
         [
           "コンピュータ（Debian のデスクトップ）を操作してください。",
-          `1. computer_open ツールで chromium を起動し、引数に file:///home/agent/${PAGE_NAME} を渡して表示させてください。`,
-          "2. computer_wait ツールで 3 秒待ってください。",
-          "3. computer_screenshot ツールで画面を撮ってください。",
+          "computer_ ツールは事前に渡っていないので、まず skill ツールで computer-use を読み、tool_search で computer を検索し、見つけたツールを tool_call で実行してください。",
+          `1. computer_open を実行し、chromium を起動して file:///home/agent/${PAGE_NAME} を表示させてください。`,
+          "2. computer_wait を実行し、3 秒待ってください。",
+          "3. computer_screenshot を実行し、画面を撮ってください。",
           "4. 画面に出ている文字を、そのまま答えてください。",
         ].join("\n"),
       );
@@ -71,10 +73,13 @@ test(
       console.log(`  ツール: ${toolSequence(events)}`);
       report("応答", done);
 
-      // アプリのツールで操作していること（シェルから直接起動したのでは確かめたことにならない）。
-      toolCall(events, "computer", "open");
+      // 事前に渡していないツールを、検索してから実行していること。
+      toolCall(events, "tool", "search");
 
-      const shot = toolCall(events, "computer", "screenshot");
+      // アプリのツールで操作していること（シェルから直接起動したのでは確かめたことにならない）。
+      toolCallByName(events, "computer_open");
+
+      const shot = toolCallByName(events, "computer_screenshot");
       const result = toolResultFor(events, shot.part.id);
       expect(result.part.failed, `画面を撮れなかった: ${result.part.output}`).toBe(false);
 

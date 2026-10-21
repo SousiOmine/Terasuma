@@ -99,7 +99,7 @@ export type ModelSettings = {
 /** MCP サーバー id を受け付けられない理由を、設定ファイルの文言にする。 */
 export function describeMcpServerIdProblem(value: string, problem: McpServerIdProblem): string {
   if (problem === "reserved") {
-    return `${JSON.stringify(value)} は Terasuma の内蔵ツール（computer_...）と同じ名前になるため使えません`;
+    return `${JSON.stringify(value)} は Terasuma の内蔵ツール（computer_ / chat_ / tool_）と同じ名前になるため使えません`;
   }
   return `${JSON.stringify(value)} は英小文字・数字・ハイフンで指定してください`;
 }

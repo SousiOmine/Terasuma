@@ -21,6 +21,30 @@ export const COMPUTER_SERVER_ID = "computer";
  */
 export const CHAT_SERVER_ID = "chat";
 
+/**
+ * ツール検索（tool_search と tool_call）が使う内蔵のサーバー id。
+ * モデルのツール一覧に載せないツールは、ここから見つけて実行する。
+ */
+export const TOOL_SERVER_ID = "tool";
+
+/** ツールを検索するツール名（サーバー id を付けない形）。 */
+export const TOOL_SEARCH_TOOL = "search";
+
+/** モデルへ渡すときの、ツールを検索するツールの名前。 */
+export const TOOL_SEARCH_TOOL_NAME = `${TOOL_SERVER_ID}${TOOL_NAME_SEPARATOR}${TOOL_SEARCH_TOOL}`;
+
+/** 見つけたツールを実行するツール名（サーバー id を付けない形）。 */
+export const TOOL_CALL_TOOL = "call";
+
+/** モデルへ渡すときの、見つけたツールを実行するツールの名前。 */
+export const TOOL_CALL_TOOL_NAME = `${TOOL_SERVER_ID}${TOOL_NAME_SEPARATOR}${TOOL_CALL_TOOL}`;
+
+/**
+ * スキルを読み込むツール名。
+ * 区切りを持たないので、プレフィックスを持つ MCP サーバーのツールとは衝突しない。
+ */
+export const SKILL_TOOL = "skill";
+
 /** 画面をユーザーへ渡すツール名（サーバー id を付けない形）。 */
 export const ASK_USER_TOOL = "ask_user";
 

@@ -33,51 +33,60 @@ import {
 } from "./support";
 
 /**
- * 1 回目の呼び出しではツールを呼び、2 回目では本文を返す偽のプロバイダ。
- * モデルへツールが渡り、呼び出しが実行されて結果が戻るまでを 1 つの流れで確かめる。
+ * 偽のプロバイダが 1 回の呼び出しで返すもの。
+ * ツール検索の流れは何ステップにもなるので、ツール呼び出しと本文を手順として並べる。
  */
-function startFakeProvider(call: { name: string; args: string } = { name: "local_echo", args: '{"text":"hi"}' }) {
+type ProviderStep = { tool: string; args: string } | { text: string };
+
+/**
+ * 手順どおりに応答する偽のプロバイダ。1 回の呼び出しで 1 つのツール呼び出し、または本文を返す。
+ * 手順が尽きたら空の本文で終わる（呼びすぎはテストの手順の側で気づけるようにする）。
+ */
+function startScriptedProvider(steps: readonly ProviderStep[]) {
   const bodies: Record<string, unknown>[] = [];
+  const encoder = new TextEncoder();
+  const chunk = (delta: Record<string, unknown>, finish: string | null) =>
+    encoder.encode(
+      `data: ${JSON.stringify({
+        id: "chatcmpl-1",
+        object: "chat.completion.chunk",
+        created: 0,
+        model: "test-model",
+        choices: [{ index: 0, delta, finish_reason: finish }],
+      })}\n\n`,
+    );
 
   const server = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
     async fetch(request) {
       bodies.push((await request.json()) as Record<string, unknown>);
-      const first = bodies.length === 1;
+      const call = bodies.length;
+      const step = steps[call - 1];
 
-      const encoder = new TextEncoder();
-      const chunk = (delta: Record<string, unknown>, finish: string | null) =>
-        encoder.encode(
-          `data: ${JSON.stringify({
-            id: "chatcmpl-1",
-            object: "chat.completion.chunk",
-            created: 0,
-            model: "test-model",
-            choices: [{ index: 0, delta, finish_reason: finish }],
-          })}\n\n`,
+      const frames: Uint8Array[] = [];
+      if (step !== undefined && "tool" in step) {
+        frames.push(
+          chunk(
+            {
+              role: "assistant",
+              tool_calls: [
+                {
+                  index: 0,
+                  id: `call-${call}`,
+                  type: "function",
+                  function: { name: step.tool, arguments: step.args },
+                },
+              ],
+            },
+            null,
+          ),
+          chunk({}, "tool_calls"),
         );
-
-      const frames: Uint8Array[] = first
-        ? [
-            chunk(
-              {
-                role: "assistant",
-                tool_calls: [
-                  {
-                    index: 0,
-                    id: "call-1",
-                    type: "function",
-                    function: { name: call.name, arguments: call.args },
-                  },
-                ],
-              },
-              null,
-            ),
-            chunk({}, "tool_calls"),
-          ]
-        : [chunk({ role: "assistant", content: "呼び出しました" }, null), chunk({}, "stop")];
-
+      } else {
+        frames.push(chunk({ role: "assistant", content: step !== undefined && "text" in step ? step.text : "" }, null));
+        frames.push(chunk({}, "stop"));
+      }
       frames.push(encoder.encode("data: [DONE]\n\n"));
 
       return new Response(
@@ -95,68 +104,40 @@ function startFakeProvider(call: { name: string; args: string } = { name: "local
   return { server, bodies };
 }
 
-/**
- * 1 ターンの中で、指定した回数だけツールを呼ばせる偽のプロバイダ。
- * 最後の 1 回は本文を返す。1 ターンの上限が小さいままだと途中で打ち切られ、
- * 呼ばれた回数が減るので、上限の回帰をここで見る。
- */
-function startToolLoopProvider(toolCalls: number) {
-  const bodies: Record<string, unknown>[] = [];
-  const encoder = new TextEncoder();
-  const frame = (delta: Record<string, unknown>, finish: string | null) =>
-    encoder.encode(
-      `data: ${JSON.stringify({
-        id: "chatcmpl-1",
-        object: "chat.completion.chunk",
-        created: 0,
-        model: "test-model",
-        choices: [{ index: 0, delta, finish_reason: finish }],
-      })}\n\n`,
-    );
+type ToolCallEvent = Extract<EngineEvent, { type: "tool-call" }>;
+type ToolResultEvent = Extract<EngineEvent, { type: "tool-result" }>;
 
-  const server = Bun.serve({
-    hostname: "127.0.0.1",
-    port: 0,
-    async fetch(request) {
-      bodies.push((await request.json()) as Record<string, unknown>);
-      const callNumber = bodies.length;
+/** 指定したツールの呼び出し。エンジンは名前を "<サーバー id>_<ツール名>" に分けて流す。 */
+function callsOf(events: readonly EngineEvent[], server: string, tool: string): ToolCallEvent[] {
+  return events.filter(
+    (event): event is ToolCallEvent =>
+      event.type === "tool-call" && event.part.server === server && event.part.tool === tool,
+  );
+}
 
-      const frames: Uint8Array[] =
-        callNumber <= toolCalls
-          ? [
-              frame(
-                {
-                  role: "assistant",
-                  tool_calls: [
-                    {
-                      index: 0,
-                      id: `call-${callNumber}`,
-                      type: "function",
-                      function: { name: "local_echo", arguments: '{"text":"hi"}' },
-                    },
-                  ],
-                },
-                null,
-              ),
-              frame({}, "tool_calls"),
-            ]
-          : [frame({ role: "assistant", content: "終わりました" }, null), frame({}, "stop")];
+/** tool_call が実行しようとしているツール名。 */
+function calledName(event: ToolCallEvent): string | null {
+  const args = event.part.args;
+  if (typeof args !== "object" || args === null) return null;
 
-      frames.push(encoder.encode("data: [DONE]\n\n"));
+  const name = (args as { name?: unknown }).name;
+  return typeof name === "string" ? name : null;
+}
 
-      return new Response(
-        new ReadableStream<Uint8Array>({
-          start(controller) {
-            for (const part of frames) controller.enqueue(part);
-            controller.close();
-          },
-        }),
-        { headers: { "Content-Type": "text/event-stream" } },
-      );
-    },
-  });
+/** 呼び出し 1 つ分の結果。返っていなければ止める。 */
+function resultOf(events: readonly EngineEvent[], id: string): ToolResultEvent {
+  const result = events.find((event): event is ToolResultEvent => event.type === "tool-result" && event.part.id === id);
+  if (result === undefined) throw new Error(`ツールの結果が返らなかった（呼び出し ${id}）`);
+  return result;
+}
 
-  return { server, bodies };
+/** 条件が満たされるまで少しずつ待つ。待ち時間を決め打ちにしないため。 */
+async function waitUntil(condition: () => boolean, timeoutMs = 5_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (!condition()) {
+    if (Date.now() > deadline) throw new Error("待っていた状態になりませんでした");
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
 }
 
 /** shell だけを差し替えたコンテナ。実行されたコマンドを記録する。 */
@@ -275,57 +256,53 @@ async function run(
   return events;
 }
 
-describe("MCP のツール呼び出し（AI SDK 経由）", () => {
-  test("ツールがモデルへ渡り、呼び出しと結果が流れて本文で終わる", async () => {
-    const fake = startFakeProvider();
+describe("ツール検索（AI SDK 経由）", () => {
+  test("MCP のツールは最初から渡らず、tool_search で見つけて tool_call で実行できる", async () => {
+    const fake = startScriptedProvider([
+      { tool: "tool_search", args: JSON.stringify({ query: "local" }) },
+      { tool: "tool_call", args: JSON.stringify({ name: "local_echo", args: { text: "hi" } }) },
+      { text: "呼び出しました" },
+    ]);
     const provider = createToolsetProvider();
 
     try {
       const events = await run(provider, settingsFor(portOf(fake.server)));
 
-      expect(toolNames(fake.bodies[0])).toEqual(["local_echo"]);
+      // 事前に渡るのは内蔵のツールだけ。MCP のツール定義はリクエストに載らない。
+      expect(toolNames(fake.bodies[0]).sort()).toEqual(["skill", "tool_call", "tool_search"]);
+
+      // 検索の結果には、名前・説明・引数スキーマが載る。
+      const searched = JSON.stringify(fake.bodies[1]);
+      expect(searched).toContain("local_echo");
+      expect(searched).toContain("Arguments (JSON Schema)");
+      expect(searched).toContain("properties");
+
+      // 見つけたツールは tool_call から実行でき、結果は名前付きでモデルへ渡る。
       expect(provider.executed).toEqual(["hi"]);
+      expect(JSON.stringify(fake.bodies[2])).toContain("[local_echo]");
+      expect(JSON.stringify(fake.bodies[2])).toContain("echo: hi");
 
-      expect(events).toEqual([
-        {
-          type: "tool-call",
-          part: { type: "tool-call", id: "call-1", server: "local", tool: "echo", args: { text: "hi" } },
-        },
-        {
-          type: "tool-result",
-          part: {
-            type: "tool-result",
-            id: "call-1",
-            server: "local",
-            tool: "echo",
-            failed: false,
-            output: "echo: hi",
-          },
-        },
-        { type: "text-delta", delta: "呼び出しました" },
-      ]);
+      expect(callsOf(events, "tool", "search")).toHaveLength(1);
 
-      // 2 回目の呼び出しには、ツールの結果が載っている。
-      expect(fake.bodies).toHaveLength(2);
-      expect(JSON.stringify(fake.bodies[1])).toContain("echo: hi");
+      const call = callsOf(events, "tool", "call")[0];
+      if (call === undefined) throw new Error("tool_call がモデルへ渡らなかった");
+      expect(calledName(call)).toBe("local_echo");
+
+      const result = resultOf(events, call.part.id);
+      expect(result.part.failed).toBe(false);
+      expect(result.part.output).toBe("[local_echo]\necho: hi");
     } finally {
       await fake.server.stop(true);
     }
   });
 
-  test("ツールが無ければ、プロバイダへツールを送らない", async () => {
-    const fake = startFakeProvider();
-
-    try {
-      await run({ toolset: async () => ({}) }, settingsFor(portOf(fake.server)));
-      expect(fake.bodies[0]?.["tools"]).toBeUndefined();
-    } finally {
-      await fake.server.stop(true);
-    }
-  });
-
-  test("コンテナのツールもモデルへ渡り、computer_open が実行される", async () => {
-    const fake = startFakeProvider({ name: "computer_open", args: '{"command":"xterm"}' });
+  test("スキル → ツール検索 → tool_call の流れが 1 ターンで通る", async () => {
+    const fake = startScriptedProvider([
+      { tool: "skill", args: JSON.stringify({ name: "computer-use" }) },
+      { tool: "tool_search", args: JSON.stringify({ query: "computer" }) },
+      { tool: "tool_call", args: JSON.stringify({ name: "computer_open", args: { command: "xterm" } }) },
+      { text: "起動しました" },
+    ]);
     const { container, commands } = createShellContainer("");
 
     try {
@@ -334,37 +311,152 @@ describe("MCP のツール呼び出し（AI SDK 経由）", () => {
           createComputerTools({ container, images: createImageStub(), handover: createHandover(), teraId: "t1" }),
       });
 
-      // MCP と同じ名前空間（"<ツールセット名>_<ツール名>"）でモデルへ渡る。
-      expect(toolNames(fake.bodies[0])).toContain("computer_open");
+      // スキルの本文 → 検索結果 → 実行、の順にモデルへ渡る。
+      expect(JSON.stringify(fake.bodies[1])).toContain("tool_search");
+      expect(JSON.stringify(fake.bodies[2])).toContain("computer_open");
       expect(commands).toEqual(["nohup 'xterm' >/dev/null 2>&1 &"]);
 
-      expect(events).toEqual([
-        {
-          type: "tool-call",
-          part: { type: "tool-call", id: "call-1", server: "computer", tool: "open", args: { command: "xterm" } },
-        },
-        {
-          type: "tool-result",
-          part: {
-            type: "tool-result",
-            id: "call-1",
-            server: "computer",
-            tool: "open",
-            failed: false,
-            output: "started xterm",
-          },
-        },
-        { type: "text-delta", delta: "呼び出しました" },
-      ]);
-
-      // 2 回目の呼び出しには、起動したアプリ名が載っている。
-      expect(JSON.stringify(fake.bodies[1])).toContain("started xterm");
+      expect(callsOf(events, "", "skill")).toHaveLength(1);
+      expect(callsOf(events, "tool", "search")).toHaveLength(1);
+      expect(callsOf(events, "tool", "call")).toHaveLength(1);
     } finally {
       await fake.server.stop(true);
     }
   });
 
-  test("コンテナの read ツールもモデルへ渡り、ファイルを読める", async () => {
+  test("つなぐツールが無くても、内蔵のツール（tool_search / tool_call / skill）は渡す", async () => {
+    const fake = startScriptedProvider([{ text: "はい" }]);
+
+    try {
+      await run({ toolset: async () => ({}) }, settingsFor(portOf(fake.server)));
+      expect(toolNames(fake.bodies[0]).sort()).toEqual(["skill", "tool_call", "tool_search"]);
+    } finally {
+      await fake.server.stop(true);
+    }
+  });
+
+  test("知らない名前は、理由つきの失敗としてモデルへ返る", async () => {
+    const fake = startScriptedProvider([
+      { tool: "tool_call", args: JSON.stringify({ name: "nope_nope", args: {} }) },
+      { text: "分かりました" },
+    ]);
+
+    try {
+      const events = await run({ toolset: async () => ({}) }, settingsFor(portOf(fake.server)));
+      const call = callsOf(events, "tool", "call")[0];
+      if (call === undefined) throw new Error("tool_call が呼ばれなかった");
+
+      const result = resultOf(events, call.part.id);
+      expect(result.part.failed).toBe(true);
+      expect(result.part.output).toContain('Unknown tool "nope_nope"');
+      expect(result.part.output).toContain("tool_search");
+    } finally {
+      await fake.server.stop(true);
+    }
+  });
+
+  test("引数がスキーマに合わないときは、理由つきの失敗としてモデルへ返る", async () => {
+    const fake = startScriptedProvider([
+      { tool: "tool_call", args: JSON.stringify({ name: "local_echo", args: {} }) },
+      { text: "分かりました" },
+    ]);
+    const provider = createToolsetProvider();
+
+    try {
+      const events = await run(provider, settingsFor(portOf(fake.server)));
+      const call = callsOf(events, "tool", "call")[0];
+      if (call === undefined) throw new Error("tool_call が呼ばれなかった");
+
+      const result = resultOf(events, call.part.id);
+      expect(result.part.failed).toBe(true);
+      expect(result.part.output).toContain('Invalid arguments for "local_echo"');
+      expect(provider.executed).toEqual([]);
+    } finally {
+      await fake.server.stop(true);
+    }
+  });
+
+  test("computer-use スキルを読め、本文にツール検索の手順が載っている", async () => {
+    const fake = startScriptedProvider([
+      { tool: "skill", args: JSON.stringify({ name: "computer-use" }) },
+      { text: "読みました" },
+    ]);
+
+    try {
+      const events = await run({ toolset: async () => ({}) }, settingsFor(portOf(fake.server)));
+
+      const call = callsOf(events, "", "skill")[0];
+      if (call === undefined) throw new Error("skill が呼ばれなかった");
+
+      const result = resultOf(events, call.part.id);
+      expect(result.part.failed).toBe(false);
+      expect(result.part.output).toContain("tool_search");
+      expect(result.part.output).toContain("computer_screenshot");
+
+      // 本文は次の呼び出しでモデルへ渡る。
+      expect(JSON.stringify(fake.bodies[1])).toContain("computer_screenshot");
+    } finally {
+      await fake.server.stop(true);
+    }
+  });
+});
+
+describe("コンテナのツール（tool_call 経由）", () => {
+  test("computer_open が tool_call から実行される", async () => {
+    const fake = startScriptedProvider([
+      { tool: "tool_call", args: JSON.stringify({ name: "computer_open", args: { command: "xterm" } }) },
+      { text: "起動しました" },
+    ]);
+    const { container, commands } = createShellContainer("");
+
+    try {
+      const events = await run({ toolset: async () => ({}) }, settingsFor(portOf(fake.server)), {
+        toolset: async () =>
+          createComputerTools({ container, images: createImageStub(), handover: createHandover(), teraId: "t1" }),
+      });
+
+      // コンテナのツールは事前に渡らず、tool_call からだけ実行できる。
+      expect(toolNames(fake.bodies[0])).not.toContain("computer_open");
+      expect(commands).toEqual(["nohup 'xterm' >/dev/null 2>&1 &"]);
+
+      const call = callsOf(events, "tool", "call")[0];
+      if (call === undefined) throw new Error("tool_call が呼ばれなかった");
+      expect(calledName(call)).toBe("computer_open");
+      expect(resultOf(events, call.part.id).part.output).toBe("[computer_open]\nstarted xterm");
+    } finally {
+      await fake.server.stop(true);
+    }
+  });
+
+  test("computer_ask_user は tool_call 越しでもユーザーの返事を待ち、戻り値になる", async () => {
+    const fake = startScriptedProvider([
+      {
+        tool: "tool_call",
+        args: JSON.stringify({ name: "computer_ask_user", args: { question: "ログインしてください" } }),
+      },
+      { text: "ありがとうございます" },
+    ]);
+    const handover = createHandover();
+
+    try {
+      const running = run({ toolset: async () => ({}) }, settingsFor(portOf(fake.server)), {
+        toolset: async () =>
+          createComputerTools({ container: createContainerStub(), images: createImageStub(), handover, teraId: "t1" }),
+      });
+
+      // 引き受けが始まるまで待ち、ユーザーの返事を届ける。
+      await waitUntil(() => handover.answer("t1", { kind: "text", text: "できました" }));
+      const events = await running;
+
+      const call = callsOf(events, "tool", "call")[0];
+      if (call === undefined) throw new Error("tool_call が呼ばれなかった");
+      expect(resultOf(events, call.part.id).part.output).toBe("[computer_ask_user]\nできました");
+    } finally {
+      await fake.server.stop(true);
+    }
+  });
+
+  test("読み書きのツールは事前に渡り、read でファイルを読める", async () => {
     const container: ContainerManager = {
       ...createContainerStub(),
       readFile: async (path) => {
@@ -373,7 +465,10 @@ describe("MCP のツール呼び出し（AI SDK 経由）", () => {
       },
     };
 
-    const fake = startFakeProvider({ name: "read", args: JSON.stringify({ path: "note.txt" }) });
+    const fake = startScriptedProvider([
+      { tool: "read", args: JSON.stringify({ path: "note.txt" }) },
+      { text: "読みました" },
+    ]);
 
     try {
       const events = await run(
@@ -383,16 +478,13 @@ describe("MCP のツール呼び出し（AI SDK 経由）", () => {
         createCodingToolset({ container, root: "/home/agent" }),
       );
 
-      // コンテナのツールは接頭辞を付けず、そのままの名前でモデルへ渡る。
+      // コンテナの読み書きは、ツール検索を挟まずにそのままの名前でモデルへ渡る。
       expect(toolNames(fake.bodies[0])).toContain("read");
 
-      expect(events[0]).toEqual({
-        type: "tool-call",
-        part: { type: "tool-call", id: "call-1", server: "", tool: "read", args: { path: "note.txt" } },
-      });
+      const call = callsOf(events, "", "read")[0];
+      if (call === undefined) throw new Error("read が呼ばれなかった");
 
-      const result = events[1];
-      if (result?.type !== "tool-result") throw new Error("read の結果が返らなかった");
+      const result = resultOf(events, call.part.id);
       expect(result.part.failed).toBe(false);
       expect(result.part.output).toContain("hello from the container");
 
@@ -402,9 +494,11 @@ describe("MCP のツール呼び出し（AI SDK 経由）", () => {
       await fake.server.stop(true);
     }
   });
+});
 
+describe("添付", () => {
   test("chat_attach ツールがモデルへ渡り、添付がターンの外へ出る", async () => {
-    const fake = startFakeProvider({ name: "chat_attach", args: '{"screenshot":true}' });
+    const fake = startScriptedProvider([{ tool: "chat_attach", args: '{"screenshot":true}' }, { text: "送りました" }]);
     const dir = mkdtempSync(join(tmpdir(), "terasuma-engine-"));
     const images = createImageStore(dir);
     const files = createFileStore(dir);
@@ -426,7 +520,7 @@ describe("MCP のツール呼び出し（AI SDK 経由）", () => {
     };
 
     try {
-      const events = await run(
+      await run(
         { toolset: async () => ({}) },
         settingsFor(portOf(fake.server)),
         createComputerStub(),
@@ -442,20 +536,19 @@ describe("MCP のツール呼び出し（AI SDK 経由）", () => {
       expect(attached).toHaveLength(1);
       expect(attached[0]?.name).toBe("screenshot.png");
       expect(attached[0]?.image).toEqual({ width: 1280, height: 800 });
-
-      const result = events.find((event) => event.type === "tool-result");
-      if (result?.type !== "tool-result") throw new Error("chat_attach の結果が無い");
-      expect(result.part.server).toBe("chat");
-      expect(result.part.tool).toBe("attach");
-      expect(result.part.output).toContain("Attached");
     } finally {
       await fake.server.stop(true);
       rmSync(dir, { recursive: true, force: true });
     }
   });
+});
 
+describe("ツールの結果", () => {
   test("失敗したツールの結果は、JSON の包装ではなくエラー本文で渡る", async () => {
-    const fake = startFakeProvider({ name: "local_fail", args: "{}" });
+    const fake = startScriptedProvider([
+      { tool: "tool_call", args: JSON.stringify({ name: "local_fail", args: {} }) },
+      { text: "失敗しました" },
+    ]);
     const provider: ToolsetProvider = {
       toolset: async () => ({
         local_fail: tool({
@@ -470,9 +563,10 @@ describe("MCP のツール呼び出し（AI SDK 経由）", () => {
 
     try {
       const events = await run(provider, settingsFor(portOf(fake.server)));
-      const result = events[1];
-      if (result?.type !== "tool-result") throw new Error("ツールの結果が返らなかった");
+      const call = callsOf(events, "tool", "call")[0];
+      if (call === undefined) throw new Error("tool_call が呼ばれなかった");
 
+      const result = resultOf(events, call.part.id);
       expect(result.part.failed).toBe(true);
       expect(result.part.output).toBe("boom");
     } finally {
@@ -480,13 +574,16 @@ describe("MCP のツール呼び出し（AI SDK 経由）", () => {
     }
   });
 
-  test("ツールが返した画像は、ツールの結果としてモデルへ渡る", async () => {
+  test("ツールが返した画像は、tool_call 越しでもツールの結果としてモデルへ渡る", async () => {
     const dir = mkdtempSync(join(tmpdir(), "terasuma-engine-"));
     const images = createImageStore(dir);
     const png = testPng(4, 3);
     const ref = images.save(png, "image/png");
 
-    const fake = startFakeProvider({ name: "local_shot", args: "{}" });
+    const fake = startScriptedProvider([
+      { tool: "tool_call", args: JSON.stringify({ name: "local_shot" }) },
+      { text: "撮りました" },
+    ]);
 
     try {
       const events = await run(
@@ -497,16 +594,18 @@ describe("MCP のツール呼び出し（AI SDK 経由）", () => {
         images,
       );
 
-      const result = events.find((event) => event.type === "tool-result");
-      if (result?.type !== "tool-result") throw new Error("ツールの結果が返らなかった");
-      expect(result.part.output).toBe("撮りました");
+      const call = callsOf(events, "tool", "call")[0];
+      if (call === undefined) throw new Error("tool_call が呼ばれなかった");
+
+      const result = resultOf(events, call.part.id);
+      expect(result.part.output).toBe("[local_shot]\n撮りました");
       expect(result.part.images).toEqual([ref]);
 
       // 2 回目の呼び出しでは、ツールの結果そのものに画像が入っている。
       const messages = (fake.bodies[1]?.["messages"] ?? []) as { role: string; content: unknown }[];
       const toolMessage = messages.find((message) => message.role === "tool");
       expect(toolMessage?.content).toEqual([
-        { type: "text", text: "撮りました" },
+        { type: "text", text: "[local_shot]\n撮りました" },
         {
           type: "image_url",
           image_url: { url: `data:image/png;base64,${Buffer.from(png).toString("base64")}` },
@@ -524,7 +623,10 @@ describe("MCP のツール呼び出し（AI SDK 経由）", () => {
     const png = testPng(4, 3);
     const ref = images.save(png, "image/png");
 
-    const fake = startFakeProvider({ name: "local_shot", args: "{}" });
+    const fake = startScriptedProvider([
+      { tool: "tool_call", args: JSON.stringify({ name: "local_shot" }) },
+      { text: "撮りました" },
+    ]);
     const catalog: CatalogSnapshot = {
       fetchedAt: 0,
       providers: [
@@ -552,18 +654,20 @@ describe("MCP のツール呼び出し（AI SDK 経由）", () => {
         catalog,
       );
 
-      const result = events.find((event) => event.type === "tool-result");
-      if (result?.type !== "tool-result") throw new Error("ツールの結果が返らなかった");
+      const call = callsOf(events, "tool", "call")[0];
+      if (call === undefined) throw new Error("tool_call が呼ばれなかった");
+
+      const result = resultOf(events, call.part.id);
       expect(result.part.images).toEqual([ref]);
 
       // ツールの結果には画像を置かず、結果の直後の user メッセージで渡す。
       const messages = (fake.bodies[1]?.["messages"] ?? []) as { role: string; content: unknown }[];
       const toolMessage = messages.find((message) => message.role === "tool");
-      expect(toolMessage?.content).toBe("撮りました");
+      expect(toolMessage?.content).toBe("[local_shot]\n撮りました");
 
       const imageMessage = messages.filter((message) => message.role === "user").at(-1);
       expect(imageMessage?.content).toEqual([
-        { type: "text", text: "(image from the local_shot call)" },
+        { type: "text", text: "(image from the tool_call call)" },
         {
           type: "image_url",
           image_url: { url: `data:image/png;base64,${Buffer.from(png).toString("base64")}` },
@@ -577,27 +681,33 @@ describe("MCP のツール呼び出し（AI SDK 経由）", () => {
 
   test("1 ターンで 5 回を超えてツールを呼べる", async () => {
     const toolCalls = 6;
-    const fake = startToolLoopProvider(toolCalls);
+    const steps: ProviderStep[] = Array.from({ length: toolCalls }, () => ({
+      tool: "tool_call",
+      args: JSON.stringify({ name: "local_echo", args: { text: "hi" } }),
+    }));
+    steps.push({ text: "終わりました" });
+
+    const fake = startScriptedProvider(steps);
     const provider = createToolsetProvider();
 
     try {
       const events = await run(provider, settingsFor(portOf(fake.server)));
-      const reportedCalls = events.filter((event) => event.type === "tool-call").length;
       const text = events
         .filter((event): event is Extract<EngineEvent, { type: "text-delta" }> => event.type === "text-delta")
         .map((event) => event.delta)
         .join("");
 
       expect(provider.executed).toHaveLength(toolCalls);
-      expect(reportedCalls).toBe(toolCalls);
+      expect(callsOf(events, "tool", "call")).toHaveLength(toolCalls);
       expect(fake.bodies).toHaveLength(toolCalls + 1);
       expect(text).toContain("終わりました");
-      expect(text).not.toContain("上限");
     } finally {
       await fake.server.stop(true);
     }
   });
+});
 
+describe("失敗", () => {
   // AI SDK は 5xx を既定で 2 回まで再試行するので、その分だけ待つ。
   test("プロバイダが失敗したら、空の応答にせず失敗させる", async () => {
     // ストリームの途中でエラーがチャンクとして流れてくる場合も、黙って空文字にしない。

@@ -1,4 +1,4 @@
-import { ASK_USER_TOOL, COMPUTER_SERVER_ID } from "../../shared/tools";
+import { ASK_USER_TOOL_NAME, TOOL_CALL_TOOL, TOOL_SERVER_ID } from "../../shared/tools";
 import type { AttachmentPart, ChatEvent, ChatMessage, NoticePart, TextPart } from "../../shared/types";
 import type { ClientErrorCode } from "../lib/http";
 
@@ -13,8 +13,8 @@ export type ChatEventEffect =
   | { kind: "message"; message: ChatMessage }
   | { kind: "assistant-start"; id: string; createdAt: number }
   | { kind: "assistant-part"; id: string; part: TextPart | AttachmentPart | NoticePart }
-  | { kind: "handover-start"; question: string | null }
-  | { kind: "handover-end" }
+  | { kind: "handover-start"; callId: string; question: string | null }
+  | { kind: "handover-end"; callId: string }
   | { kind: "error"; code: ClientErrorCode; detail: string | null };
 
 /** イベントを、画面に必要な効果へ読み替える。表示に関係しないものは null。 */
@@ -31,24 +31,36 @@ export function interpretEvent(event: ChatEvent): ChatEventEffect | null {
       return { kind: "assistant-part", id: event.id, part: event.part };
     case "tool-call":
       // ツールの呼び出しは画面に出さない。画面を渡す頼みが来たときだけ、その場で操作できる状態にする。
-      return isAskUser(event.part) ? { kind: "handover-start", question: questionOf(event.part.args) } : null;
+      return isAskUserCall(event.part)
+        ? { kind: "handover-start", callId: event.part.id, question: questionOf(event.part.args) }
+        : null;
     case "tool-result":
-      // こちらも画面には出さない。引き受けの結果が届いたら、見るだけに戻す。
-      return isAskUser(event.part) && event.part.failed === false ? { kind: "handover-end" } : null;
+      // こちらも画面には出さない。どの呼び出しの結果かは id で分かるので、引き受けている
+      // 呼び出し自身の結果なら、見るだけに戻す（失敗した呼び出しでは待ちが続いている）。
+      return event.part.failed ? null : { kind: "handover-end", callId: event.part.id };
     case "error":
       return { kind: "error", code: event.code, detail: event.detail };
   }
 }
 
-/** 画面を渡す呼び出しかどうか。 */
-function isAskUser(part: { server: string; tool: string }): boolean {
-  return part.server === COMPUTER_SERVER_ID && part.tool === ASK_USER_TOOL;
+/**
+ * 画面を渡す呼び出しかどうか。
+ * computer_ask_user は事前ロードされていないので、tool_call 越しに呼ばれる。
+ */
+function isAskUserCall(part: { server: string; tool: string; args: unknown }): boolean {
+  if (part.server !== TOOL_SERVER_ID || part.tool !== TOOL_CALL_TOOL) return false;
+  return recordOf(part.args)?.["name"] === ASK_USER_TOOL_NAME;
 }
 
 /** 呼び出しの引数から、ユーザーへ見せる頼みを取り出す。 */
 function questionOf(args: unknown): string | null {
-  if (typeof args !== "object" || args === null) return null;
-
-  const question = (args as { question?: unknown }).question;
+  const toolArgs = recordOf(recordOf(args)?.["args"]);
+  const question = toolArgs?.["question"];
   return typeof question === "string" && question.trim().length > 0 ? question : null;
+}
+
+/** オブジェクトとして読める値だけを取り出す。 */
+function recordOf(value: unknown): Record<string, unknown> | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
 }

@@ -172,10 +172,10 @@ function applyEvent(event: ChatEvent): void {
       break;
     }
     case "handover-start":
-      beginHandover(effect.question);
+      beginHandover(effect.callId, effect.question);
       break;
     case "handover-end":
-      endHandover();
+      endHandover(effect.callId);
       break;
     case "error":
       showChatError(new ApiError(effect.code, effect.detail));

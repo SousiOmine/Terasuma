@@ -33,6 +33,7 @@ import { createSettingsStore } from "../../src/server/data/settings";
 import { createStore, type Store } from "../../src/server/data/store";
 import type { ReplyLanguage } from "../../src/shared/language";
 import { decodeChatEvents } from "../../src/shared/sse";
+import { TOOL_CALL_TOOL_NAME } from "../../src/shared/tools";
 import type { ChatEvent, ChatMessage, MessagePart, SentAttachment, TokenUsage } from "../../src/shared/types";
 
 /** Containerfile と entry.sh の置き場。src から見たときと同じ場所を指す。 */
@@ -231,12 +232,34 @@ export function report(label: string, message: ChatMessage): void {
   );
 }
 
-/** 呼ばれたツールを、呼ばれた順に並べる。 */
+/** 呼ばれたツールを、呼ばれた順に並べる。tool_call 越しなら、中の名前も添える。 */
 export function toolSequence(events: ChatEvent[]): string {
   const names = events
     .filter((event): event is Extract<ChatEvent, { type: "tool-call" }> => event.type === "tool-call")
-    .map((event) => (event.part.server.length === 0 ? event.part.tool : `${event.part.server}_${event.part.tool}`));
+    .map((event) => {
+      const own = ownToolName(event);
+      const inner = innerToolName(event);
+      return inner === null ? own : `${own}(${inner})`;
+    });
   return names.length === 0 ? "(ツールは呼ばれていない)" : names.join(" → ");
+}
+
+/** イベント自身のツール名（"tool_call"、"read" など）。 */
+export function ownToolName(event: Extract<ChatEvent, { type: "tool-call" }>): string {
+  return event.part.server.length === 0 ? event.part.tool : `${event.part.server}_${event.part.tool}`;
+}
+
+/**
+ * tool_call が実行しようとしているツール名。tool_call でなければ null。
+ * computer_ などの名前は事前にモデルへ渡らず、引数として渡ってくる。
+ */
+export function innerToolName(event: Extract<ChatEvent, { type: "tool-call" }>): string | null {
+  if (ownToolName(event) !== TOOL_CALL_TOOL_NAME) return null;
+
+  const args = event.part.args;
+  if (typeof args !== "object" || args === null) return null;
+  const name = (args as { name?: unknown }).name;
+  return typeof name === "string" ? name : null;
 }
 
 /** ツールの呼び出しを取り出す。呼ばれていなければ、呼ばれた一覧を添えて落とす。 */
@@ -247,6 +270,21 @@ export function toolCall(events: ChatEvent[], server: string, tool: string): Ext
   );
   if (call === undefined) {
     throw new Error(`${server}_${tool} が呼ばれなかった（呼ばれたツール: ${toolSequence(events)}）`);
+  }
+  return call;
+}
+
+/**
+ * tool_call 越しに呼ばれたツールを取り出す。
+ * computer_ などの名前は事前にモデルへ渡らず、tool_call の引数として渡ってくる。
+ */
+export function toolCallByName(events: ChatEvent[], name: string): Extract<ChatEvent, { type: "tool-call" }> {
+  const call = events.find(
+    (event): event is Extract<ChatEvent, { type: "tool-call" }> =>
+      event.type === "tool-call" && innerToolName(event) === name,
+  );
+  if (call === undefined) {
+    throw new Error(`${name} が呼ばれなかった（呼ばれたツール: ${toolSequence(events)}）`);
   }
   return call;
 }
