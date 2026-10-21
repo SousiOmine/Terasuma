@@ -16,9 +16,9 @@ export const TEXTAREA_CLASS = `${INPUT_CLASS} font-mono text-xs leading-relaxed`
 export const SEARCH_INPUT_CLASS =
   "w-full rounded-lg border border-neutral-300 bg-white py-1.5 pl-8 pr-3 text-sm outline-none focus:border-neutral-400 dark:border-neutral-700 dark:bg-neutral-900 dark:focus:border-neutral-600";
 
-/** カードの中の小さな操作（編集・削除・再確認）。 */
+/** カードの中の小さな操作（編集・削除・再確認）。狭い画面では指で押せる高さにする。 */
 export const CARD_ACTION_CLASS =
-  "rounded-lg px-2 py-1 text-xs transition hover:bg-neutral-100 dark:hover:bg-neutral-800";
+  "rounded-lg px-2.5 py-2 text-xs transition hover:bg-neutral-100 md:px-2 md:py-1 dark:hover:bg-neutral-800";
 
 /** 項目の説明文。 */
 export const DESC_CLASS = "mt-0.5 text-xs text-neutral-500 dark:text-neutral-400";

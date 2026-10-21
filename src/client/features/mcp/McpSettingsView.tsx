@@ -71,7 +71,7 @@ export function McpSettingsView() {
 
   return (
     <SettingsSection title={t("settings.mcp.title")} error={error} onDismiss={clearMcpError}>
-      <div class="mt-6 flex items-start justify-between gap-6">
+      <div class="mt-6 flex flex-col items-start gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
         <p class="min-w-0 text-xs text-neutral-500 dark:text-neutral-400">{t("settings.mcp.description")}</p>
         <Button variant="primary" onClick={() => setDialog({ kind: "add" })}>
           <IconPlus size={16} stroke={1.6} class="shrink-0" />
@@ -167,7 +167,7 @@ function McpServerCard({
 
   return (
     <div class="rounded-xl border border-neutral-200 px-4 py-3 dark:border-neutral-800">
-      <div class="flex items-start gap-3">
+      <div class="flex flex-col gap-3 sm:flex-row sm:items-start">
         <div class="min-w-0 flex-1">
           <div class="flex flex-wrap items-center gap-2">
             <p class="truncate text-sm font-medium">{server.id}</p>
@@ -217,7 +217,7 @@ function McpServerCard({
           )}
         </div>
 
-        <div class="flex shrink-0 flex-col items-end gap-1">
+        <div class="flex shrink-0 flex-col items-start gap-1 sm:items-end">
           <div class="flex items-center gap-1">
             <EditAction onClick={onEdit} />
             <DeleteAction onClick={onDelete} />

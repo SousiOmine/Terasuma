@@ -23,7 +23,7 @@ export function Button({ variant = "secondary", disabled = false, onClick, child
       type="button"
       disabled={disabled}
       onClick={onClick}
-      class={`inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-sm transition disabled:opacity-40 ${VARIANTS[variant]}`}
+      class={`inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2.5 text-sm transition disabled:opacity-40 md:py-1.5 ${VARIANTS[variant]}`}
     >
       {children}
     </button>

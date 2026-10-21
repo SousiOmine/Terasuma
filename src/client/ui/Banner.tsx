@@ -33,13 +33,15 @@ export function Banner({
   const colors = TONES[tone];
 
   return (
-    <div class={`shrink-0 border-b px-5 py-2 ${colors.frame}`}>
-      <div class={`mx-auto flex w-full max-w-3xl items-center gap-3 text-sm ${colors.text}`}>
+    <div class={`shrink-0 border-b px-4 py-2 sm:px-5 ${colors.frame}`}>
+      <div
+        class={`mx-auto flex w-full max-w-3xl flex-col items-start gap-2 text-sm sm:flex-row sm:items-center sm:gap-3 ${colors.text}`}
+      >
         <p class="min-w-0 flex-1">{children}</p>
         <button
           type="button"
           onClick={action.onClick}
-          class={`shrink-0 rounded-lg border px-2.5 py-1 text-xs transition ${colors.button}`}
+          class={`shrink-0 rounded-lg border px-2.5 py-1.5 text-xs transition sm:py-1 ${colors.button}`}
         >
           {action.label}
         </button>

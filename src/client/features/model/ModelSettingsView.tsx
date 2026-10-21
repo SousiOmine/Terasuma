@@ -88,7 +88,7 @@ export function ModelSettingsView() {
       onRetry={settings === null ? reload : undefined}
     >
       <section class="mt-6 border-b border-neutral-200 pb-5 dark:border-neutral-800">
-        <div class="flex items-start justify-between gap-6">
+        <div class="flex flex-col items-start gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
           <div class="min-w-0">
             <p class="text-sm font-medium">{t("settings.model.default.label")}</p>
             <p class="mt-0.5 text-xs text-neutral-500 dark:text-neutral-400">
@@ -109,7 +109,7 @@ export function ModelSettingsView() {
         )}
 
         {reasoning !== null && reasoning.values.length > 0 && (
-          <div class="mt-4 flex items-center justify-between gap-6 border-t border-neutral-200 pt-4 dark:border-neutral-800">
+          <div class="mt-4 flex flex-col items-start gap-3 border-t border-neutral-200 pt-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6 dark:border-neutral-800">
             <div class="min-w-0">
               <p class="text-sm font-medium">{t("settings.model.reasoning.label")}</p>
               <p class="mt-0.5 text-xs text-neutral-500 dark:text-neutral-400">
@@ -119,7 +119,7 @@ export function ModelSettingsView() {
             <select
               value={reasoning.effort ?? ""}
               aria-label={t("settings.model.reasoning.label")}
-              class="shrink-0 rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-sm outline-none focus:border-neutral-400 dark:border-neutral-700 dark:bg-neutral-900 dark:focus:border-neutral-600"
+              class="w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm outline-none focus:border-neutral-400 sm:w-auto sm:py-1.5 dark:border-neutral-700 dark:bg-neutral-900 dark:focus:border-neutral-600"
               onChange={(event) =>
                 void changeReasoning(event.currentTarget.value === "" ? null : event.currentTarget.value)
               }
@@ -136,7 +136,7 @@ export function ModelSettingsView() {
       </section>
 
       <section class="mt-6">
-        <div class="flex items-start justify-between gap-6">
+        <div class="flex flex-col items-start gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
           <div class="min-w-0">
             <p class="text-sm font-medium">{t("settings.model.providers.label")}</p>
             <p class="mt-0.5 text-xs text-neutral-500 dark:text-neutral-400">
@@ -202,7 +202,7 @@ function ProviderCard({ provider, isDefault, onEdit, onDelete }: ProviderCardPro
     : t("settings.model.providers.apiKeyUnset");
 
   return (
-    <div class="flex items-start gap-3 rounded-xl border border-neutral-200 px-4 py-3 dark:border-neutral-800">
+    <div class="flex flex-col gap-2 rounded-xl border border-neutral-200 px-4 py-3 sm:flex-row sm:items-start sm:gap-3 dark:border-neutral-800">
       <div class="min-w-0 flex-1">
         <div class="flex items-center gap-2">
           <p class="truncate text-sm font-medium">{providerName(provider)}</p>

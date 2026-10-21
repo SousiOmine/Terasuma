@@ -1,7 +1,10 @@
-import { IconX } from "@tabler/icons-preact";
+import { IconSend, IconX } from "@tabler/icons-preact";
 import { useEffect, useRef, useState } from "preact/hooks";
+import { sendMessage } from "../../state/chat";
 import { containerStatus } from "../../state/container";
+import { chatError, clearChatError } from "../../state/failure";
 import { t } from "../../i18n";
+import { ErrorNotice } from "../../ui/ErrorNotice";
 import {
   answerHandover,
   closeComputerPane,
@@ -53,6 +56,9 @@ export function ComputerPane() {
   const targetRef = useRef<HTMLDivElement>(null);
   const clientRef = useRef<RfbClient | null>(null);
   const [connection, setConnection] = useState<ConnectionState>("connecting");
+  /** 引き受け中に送る返事。全画面で開く狭い画面では、チャットの入力欄に触れない。 */
+  const [answer, setAnswer] = useState("");
+  const [sending, setSending] = useState(false);
 
   const running = status?.state === "running";
 
@@ -98,11 +104,30 @@ export function ComputerPane() {
     if (clientRef.current !== null) clientRef.current.viewOnly = viewOnly;
   }, [viewOnly]);
 
+  const canAnswer = answer.trim().length > 0 && !sending;
+
+  /**
+   * 引き受けの返事を送る。
+   * 引き受け中なので、sendMessage は新しい発言ではなくツールの戻り値として届ける。
+   */
+  const submitAnswer = async (): Promise<void> => {
+    if (!canAnswer) return;
+
+    const text = answer.trim();
+    setAnswer("");
+    setSending(true);
+    try {
+      await sendMessage(text, []);
+    } finally {
+      setSending(false);
+    }
+  };
+
   if (!open) return null;
 
   return (
-    <aside class="flex w-[42%] min-w-80 shrink-0 flex-col p-3">
-      <section class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
+    <aside class="fixed inset-0 z-30 flex flex-col p-0 md:static md:z-auto md:w-[42%] md:min-w-80 md:shrink-0 md:p-3">
+      <section class="flex min-h-0 flex-1 flex-col overflow-hidden bg-white md:rounded-xl md:border md:border-neutral-200 md:shadow-sm dark:bg-neutral-900 md:dark:border-neutral-800">
         <header class="flex h-12 shrink-0 items-center gap-2 border-b border-neutral-200 px-4 dark:border-neutral-800">
           <h2 class="min-w-0 flex-1 truncate text-sm font-medium">{t("chat.computer.title")}</h2>
           {active && (
@@ -115,7 +140,7 @@ export function ComputerPane() {
             onClick={closeComputerPane}
             title={t("chat.computer.hide")}
             aria-label={t("chat.computer.hide")}
-            class="shrink-0 rounded-lg p-1 text-neutral-500 transition hover:bg-neutral-200/70 dark:text-neutral-400 dark:hover:bg-neutral-800"
+            class="-mr-2 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-neutral-500 transition hover:bg-neutral-200/70 md:mr-0 md:h-auto md:w-auto md:p-1 dark:text-neutral-400 dark:hover:bg-neutral-800"
           >
             <IconX size={16} stroke={1.6} />
           </button>
@@ -129,18 +154,66 @@ export function ComputerPane() {
             <button
               type="button"
               onClick={() => void answerHandover({ kind: "done" })}
-              class="mt-2 rounded-lg bg-neutral-900 px-2.5 py-1 text-xs text-white transition hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
+              class="mt-2 rounded-lg bg-neutral-900 px-2.5 py-1.5 text-xs text-white transition hover:bg-neutral-700 md:py-1 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
             >
               {t("chat.computer.done")}
             </button>
+
+            {/* 全画面で開く狭い画面ではチャットの入力欄に触れないので、ここでも返事を書けるようにする。 */}
+            <form
+              class="mt-3 md:hidden"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void submitAnswer();
+              }}
+            >
+              <div class="flex items-center gap-1.5 rounded-2xl border border-black/10 bg-white px-1.5 py-1.5 shadow-sm dark:border-white/10 dark:bg-neutral-900">
+                <input
+                  type="text"
+                  value={answer}
+                  placeholder={t("chat.computer.answer")}
+                  aria-label={t("chat.computer.answer")}
+                  enterkeyhint="send"
+                  class="min-w-0 flex-1 bg-transparent px-2 py-1 outline-none placeholder:text-neutral-400 dark:placeholder:text-neutral-500"
+                  onInput={(event) => setAnswer(event.currentTarget.value)}
+                />
+                <button
+                  type="submit"
+                  disabled={!canAnswer}
+                  title={t("composer.send")}
+                  aria-label={t("composer.send")}
+                  class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#06c755] text-white shadow-sm transition hover:bg-[#05b34c] disabled:bg-neutral-300 disabled:text-white disabled:shadow-none dark:disabled:bg-neutral-700 dark:disabled:text-neutral-400"
+                >
+                  <IconSend size={16} stroke={1.8} />
+                </button>
+              </div>
+            </form>
+
+            {/* チャット側の失敗の表示は、全画面のペインに隠れる。狭い画面ではここにも出す。 */}
+            {chatError.value !== null && (
+              <div class="mt-2 md:hidden">
+                <ErrorNotice
+                  error={chatError.value}
+                  action={
+                    <button
+                      type="button"
+                      onClick={clearChatError}
+                      class="shrink-0 text-xs opacity-70 transition hover:opacity-100"
+                    >
+                      {t("error.dismiss")}
+                    </button>
+                  }
+                />
+              </div>
+            )}
           </div>
         )}
 
         {/* 画面を高さ方向の中央へ寄せる。周りはカードの背景のままにして、色を増やさない。 */}
-        <div class="flex min-h-0 flex-1 overflow-auto p-3">
+        <div class="flex min-h-0 flex-1 overflow-hidden p-0 md:overflow-auto md:p-3">
           {running ? (
-            <div class="relative m-auto w-full">
-              <div ref={targetRef} class="aspect-[16/10] w-full" />
+            <div class="relative m-auto h-full w-full md:h-auto md:aspect-[16/10]">
+              <div ref={targetRef} class="h-full w-full" />
               {connection !== "connected" && (
                 <p class="absolute inset-0 flex items-center justify-center text-xs text-neutral-500 dark:text-neutral-400">
                   {t(connection === "connecting" ? "chat.computer.connecting" : "chat.computer.disconnected")}

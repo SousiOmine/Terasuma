@@ -8,10 +8,15 @@
   color-scheme: light dark;
 }
 
+/*
+ * 画面の高さは、いま見えている領域に合わせる（dvh）。
+ * スマホのブラウザはアドレスバーの伸縮で見える高さが変わるため、
+ * 100% のままだと下端の入力欄が画面の外へはみ出す。
+ */
 html,
 body,
 #root {
-  height: 100%;
+  height: 100dvh;
 }
 
 body {
@@ -20,12 +25,32 @@ body {
   color: var(--color-neutral-900);
   font-family: system-ui, -apple-system, "Segoe UI", "Noto Sans JP", "Hiragino Sans", sans-serif;
   -webkit-font-smoothing: antialiased;
+  -webkit-text-size-adjust: 100%;
+  /* 下端で引っ張って再読み込みしない（会話のスクロールと取り違えないようにする）。 */
+  overscroll-behavior-y: none;
 }
 
 @media (prefers-color-scheme: dark) {
   body {
     background-color: var(--color-neutral-950);
     color: var(--color-neutral-100);
+  }
+}
+
+/*
+ * 画面の下端にあるホームインジケータに、入力欄が重ならないようにする。
+ * 余白は Tailwind の pb-3 と同じ 0.75rem を下限にする。
+ */
+.tera-safe-bottom {
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+}
+
+/* iOS は 16px 未満の入力欄にフォーカスすると画面を拡大する。狭い画面では 16px で揃える。 */
+@media (max-width: 767px) {
+  input,
+  textarea,
+  select {
+    font-size: 16px;
   }
 }
 

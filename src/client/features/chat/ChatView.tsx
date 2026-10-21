@@ -1,4 +1,4 @@
-import { IconLayoutSidebarRight } from "@tabler/icons-preact";
+import { IconLayoutSidebarRight, IconMenu2 } from "@tabler/icons-preact";
 import { useEffect, useMemo, useRef } from "preact/hooks";
 import type { ChatMessage, MessagePart, NoticePart, SentPart } from "../../../shared/types";
 import { containerStatus } from "../../state/container";
@@ -15,6 +15,7 @@ import { chatError, clearChatError } from "../../state/failure";
 import { computerPaneOpen, handoverActive, toggleComputerPane } from "../../state/handover";
 import { openSettings } from "../../state/route";
 import { activeTera } from "../../state/session";
+import { sidebarOpen, toggleSidebar } from "../../state/sidebar";
 import { Banner } from "../../ui/Banner";
 import { ErrorNotice } from "../../ui/ErrorNotice";
 import { ChatAvatar } from "./ChatAvatar";
@@ -74,7 +75,18 @@ export function ChatView() {
 
   return (
     <main class="flex min-w-0 flex-1 flex-col bg-[#eef3ee] dark:bg-[#0e1411]">
-      <header class="flex h-14 shrink-0 items-center gap-3 border-b border-black/5 bg-white/85 px-4 backdrop-blur dark:border-white/5 dark:bg-neutral-900/80 sm:px-6">
+      <header class="flex h-14 shrink-0 items-center gap-2 border-b border-black/5 bg-white/85 px-3 backdrop-blur sm:gap-3 sm:px-6 dark:border-white/5 dark:bg-neutral-900/80">
+        {/* 狭い画面ではサイドバーがドロワーになるので、開くボタンをここに置く。 */}
+        <button
+          type="button"
+          onClick={toggleSidebar}
+          aria-expanded={sidebarOpen.value}
+          title={t("chat.menu.open")}
+          aria-label={t("chat.menu.open")}
+          class="-ml-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-neutral-500 transition hover:bg-black/5 md:hidden dark:text-neutral-400 dark:hover:bg-white/10"
+        >
+          <IconMenu2 size={20} stroke={1.7} />
+        </button>
         <ChatAvatar size={34} />
         <div class="min-w-0 flex-1">
           <h1 class="truncate text-sm font-semibold">{title}</h1>
@@ -89,7 +101,7 @@ export function ChatView() {
             aria-pressed={paneOpen}
             title={t(paneOpen ? "chat.computer.hide" : "chat.computer.show")}
             aria-label={t(paneOpen ? "chat.computer.hide" : "chat.computer.show")}
-            class={`shrink-0 rounded-full p-2 transition ${
+            class={`flex shrink-0 items-center justify-center rounded-full p-2.5 transition md:p-2 ${
               paneOpen
                 ? "bg-[#06c755]/15 text-[#078f45] dark:bg-[#06c755]/20 dark:text-[#59d98a]"
                 : "text-neutral-500 hover:bg-black/5 dark:text-neutral-400 dark:hover:bg-white/10"

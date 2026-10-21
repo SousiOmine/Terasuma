@@ -89,7 +89,7 @@ export function Composer() {
   };
 
   return (
-    <div class="shrink-0 border-t border-black/5 bg-[#f7faf8]/95 px-3 pb-3 pt-2 backdrop-blur dark:border-white/5 dark:bg-[#0e1411]/95 sm:px-6">
+    <div class="tera-safe-bottom shrink-0 border-t border-black/5 bg-[#f7faf8]/95 px-3 pt-2 backdrop-blur dark:border-white/5 dark:bg-[#0e1411]/95 sm:px-6">
       <div class="mx-auto w-full max-w-3xl">
         {files.length > 0 && (
           <div class="mb-2 flex flex-wrap gap-1.5">
@@ -134,7 +134,7 @@ export function Composer() {
               onClick={() => fileInputRef.current?.click()}
               title={t("composer.attach")}
               aria-label={t("composer.attach")}
-              class="mb-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-neutral-500 transition hover:bg-black/5 hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-white/10 dark:hover:text-neutral-100"
+              class="mb-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-neutral-500 transition hover:bg-black/5 hover:text-neutral-800 md:h-9 md:w-9 dark:text-neutral-400 dark:hover:bg-white/10 dark:hover:text-neutral-100"
             >
               <IconPaperclip size={18} stroke={1.7} />
             </button>
@@ -146,6 +146,7 @@ export function Composer() {
             value={draft}
             placeholder={t("composer.placeholder")}
             aria-label={t("composer.placeholder")}
+            enterkeyhint="send"
             class="max-h-40 min-h-9 flex-1 resize-none bg-transparent px-1 py-2 text-[15px] leading-relaxed outline-none placeholder:text-neutral-400 dark:placeholder:text-neutral-500"
             onInput={(event) => setDraft(event.currentTarget.value)}
             onKeyDown={(event) => {
@@ -163,7 +164,7 @@ export function Composer() {
               disabled={stopping}
               title={t(stopping ? "composer.stopping" : "composer.stop")}
               aria-label={t(stopping ? "composer.stopping" : "composer.stop")}
-              class="mb-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-neutral-900 text-white transition hover:bg-neutral-700 disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
+              class="mb-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-neutral-900 text-white transition hover:bg-neutral-700 disabled:opacity-50 md:h-9 md:w-9 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
             >
               <IconPlayerStopFilled size={16} />
             </button>
@@ -174,7 +175,7 @@ export function Composer() {
               disabled={!canSend}
               title={t("composer.send")}
               aria-label={t("composer.send")}
-              class="mb-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#06c755] text-white shadow-sm transition hover:bg-[#05b34c] disabled:bg-neutral-300 disabled:text-white disabled:shadow-none dark:disabled:bg-neutral-700 dark:disabled:text-neutral-400"
+              class="mb-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#06c755] text-white shadow-sm transition hover:bg-[#05b34c] disabled:bg-neutral-300 disabled:text-white disabled:shadow-none md:h-9 md:w-9 dark:disabled:bg-neutral-700 dark:disabled:text-neutral-400"
             >
               <IconSend size={17} stroke={1.8} />
             </button>

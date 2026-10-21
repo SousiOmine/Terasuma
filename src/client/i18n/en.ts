@@ -27,6 +27,8 @@ export const en = {
   "chat.model.unset": "No model is configured. Add a provider in Settings.",
   "chat.model.providerMissing": "The provider for the default model is missing. Choose another model in Settings.",
   "chat.openSettings": "Open Settings",
+  "chat.menu.open": "Open menu",
+  "chat.menu.close": "Close menu",
 
   "chat.container.unavailable": "The computer is not available. podman was not found.",
 
@@ -38,6 +40,7 @@ export const en = {
   "chat.computer.disconnected": "Could not connect to the screen.",
   "chat.computer.yourTurn": "Your turn",
   "chat.computer.done": "I finished",
+  "chat.computer.answer": "Type a reply",
 
   "composer.placeholder": "Send a message",
   "composer.send": "Send",

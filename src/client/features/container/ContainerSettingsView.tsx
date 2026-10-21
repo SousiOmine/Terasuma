@@ -63,14 +63,14 @@ export function ContainerSettingsView() {
       <p class="mt-1 text-xs text-neutral-500 dark:text-neutral-400">{t("settings.container.description")}</p>
 
       <div class="mt-6 rounded-xl border border-neutral-200 p-4 dark:border-neutral-800">
-        <div class="flex items-center justify-between gap-4">
+        <div class="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
           <div class="min-w-0">
             <p class="text-xs text-neutral-500 dark:text-neutral-400">{t("settings.container.state.label")}</p>
             <p class="mt-1 text-sm">{status === null ? t("common.checking") : t(STATE_LABELS[status.state])}</p>
           </div>
 
           {status !== null && status.state !== "podman_missing" && (
-            <div class="flex shrink-0 gap-2">
+            <div class="flex shrink-0 flex-wrap gap-2">
               {status.state !== "running" && (
                 <Button variant="primary" disabled={busy !== null} onClick={() => run(startContainer)}>
                   {busy === "start" ? t("settings.container.starting") : t("settings.container.start")}

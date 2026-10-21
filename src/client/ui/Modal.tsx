@@ -65,7 +65,7 @@ export function Modal({ title, subtitle, size = "sm", onClose, footer, children 
   };
 
   return (
-    <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div class="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4">
       {/* 背景のクリックで閉じる。 */}
       <div class="absolute inset-0 bg-black/40" aria-hidden="true" onClick={onClose} />
 
@@ -76,18 +76,18 @@ export function Modal({ title, subtitle, size = "sm", onClose, footer, children 
         aria-label={title}
         tabIndex={-1}
         onKeyDown={handleKeyDown}
-        class={`relative flex max-h-[85vh] w-full flex-col rounded-xl border border-neutral-200 bg-white shadow-xl outline-none dark:border-neutral-700 dark:bg-neutral-900 ${
+        class={`relative flex max-h-[92dvh] w-full flex-col rounded-xl border border-neutral-200 bg-white shadow-xl outline-none sm:max-h-[85vh] dark:border-neutral-700 dark:bg-neutral-900 ${
           size === "lg" ? "max-w-lg" : "max-w-sm"
         }`}
       >
-        <div class="shrink-0 px-5 pt-5">
+        <div class="shrink-0 px-4 pt-4 sm:px-5 sm:pt-5">
           <h2 class="text-sm font-semibold">{title}</h2>
           {subtitle !== undefined && <p class="mt-1 text-xs text-neutral-500 dark:text-neutral-400">{subtitle}</p>}
         </div>
 
-        <div class="min-h-0 flex-1 overflow-y-auto px-5 py-4">{children}</div>
+        <div class="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5">{children}</div>
 
-        <div class="flex shrink-0 flex-wrap justify-end gap-2 border-t border-neutral-200 px-5 py-3 dark:border-neutral-800">
+        <div class="flex shrink-0 flex-wrap justify-end gap-2 border-t border-neutral-200 px-4 py-3 sm:px-5 dark:border-neutral-800">
           {footer}
         </div>
       </div>

@@ -26,6 +26,8 @@ export const ja: Record<MessageKey, string> = {
   "chat.model.unset": "使用するモデルが設定されていません。設定からプロバイダを追加してください。",
   "chat.model.providerMissing": "既定のモデルを使うプロバイダがありません。設定で選び直してください。",
   "chat.openSettings": "設定を開く",
+  "chat.menu.open": "メニューを開く",
+  "chat.menu.close": "メニューを閉じる",
 
   "chat.container.unavailable": "コンピュータを操作できません。podman が見つかりません。",
 
@@ -37,6 +39,7 @@ export const ja: Record<MessageKey, string> = {
   "chat.computer.disconnected": "画面に接続できませんでした。",
   "chat.computer.yourTurn": "操作してください",
   "chat.computer.done": "操作を完了した",
+  "chat.computer.answer": "返事を入力",
 
   "composer.placeholder": "メッセージを入力",
   "composer.send": "送信",
