@@ -3,10 +3,16 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ToolSet } from "ai";
 import { createConnections, type ConnectionsManager } from "../src/server/connections/manager";
+import type { ConnectionProvider } from "../src/server/connections/providers";
 import { createConnectionTools } from "../src/server/connections/tools";
 import { createSettingsStore, type SettingsStore } from "../src/server/data/settings";
 import { withTempDir } from "./harness";
-import { fakeProvider, startFakeDeviceFlowServer, type FakeDeviceFlowServer } from "./fixtures/device-flow-server";
+import {
+  fakeBotProvider,
+  fakeProvider,
+  startFakeDeviceFlowServer,
+  type FakeDeviceFlowServer,
+} from "./fixtures/device-flow-server";
 
 /**
  * アプリの接続ツール（computer_connect_app / app_request）。
@@ -21,7 +27,10 @@ type Context = {
   server: FakeDeviceFlowServer;
 };
 
-async function withTools(run: (context: Context) => Promise<void>): Promise<void> {
+async function withTools(
+  run: (context: Context) => Promise<void>,
+  extraProviders: (server: FakeDeviceFlowServer) => ConnectionProvider[] = () => [],
+): Promise<void> {
   const server = startFakeDeviceFlowServer();
   try {
     await withTempDir("terasuma-connection-tools-", async (dir) => {
@@ -31,7 +40,7 @@ async function withTools(run: (context: Context) => Promise<void>): Promise<void
       const manager = createConnections({
         settings,
         dataDir: join(dir, "data"),
-        providers: [fakeProvider(server)],
+        providers: [fakeProvider(server), ...extraProviders(server)],
       });
       const tools = createConnectionTools({ connections: manager });
 
@@ -232,5 +241,72 @@ describe("アプリの接続ツール", () => {
       controller.abort();
       expect(await rejected).toMatch(/turn ended/);
     });
+  });
+
+  test("bot は保存したトークンを Bot ヘッダーで送り、メッセージを投稿できる", async () => {
+    await withTools(
+      async ({ tools, manager, server }) => {
+        await manager.setToken("discord", server.botToken);
+
+        const result = await callTool(tools, "app_request", {
+          provider: "discord",
+          method: "POST",
+          path: "/channels/123/messages",
+          body: { content: "hello" },
+        });
+
+        expect(result).toContain("HTTP 200");
+        expect(result).toContain('"content":"hello"');
+      },
+      (server) => [fakeBotProvider(server)],
+    );
+  });
+
+  test("bot はメッセージを読むこともできる", async () => {
+    await withTools(
+      async ({ tools, manager, server }) => {
+        await manager.setToken("discord", server.botToken);
+
+        const result = await callTool(tools, "app_request", {
+          provider: "discord",
+          method: "GET",
+          path: "/channels/123/messages",
+        });
+
+        expect(result).toContain("HTTP 200");
+        expect(result).toContain("hello");
+      },
+      (server) => [fakeBotProvider(server)],
+    );
+  });
+
+  test("bot が未接続なら、設定画面での保存を促す", async () => {
+    await withTools(
+      async ({ tools }) => {
+        const error = await rejectionOf(
+          callTool(
+            tools,
+            "computer_connect_app",
+            { provider: "discord", reason: "通知を送るため" },
+            { abortSignal: new AbortController().signal },
+          ),
+        );
+        expect(error).toMatch(/Settings > Connections/);
+      },
+      (server) => [fakeBotProvider(server)],
+    );
+  });
+
+  test("知らないアプリの案内には、使える id が並ぶ", async () => {
+    await withTools(
+      async ({ tools }) => {
+        const error = await rejectionOf(
+          callTool(tools, "app_request", { provider: "linear", method: "GET", path: "/user" }),
+        );
+        expect(error).toContain("github");
+        expect(error).toContain("discord");
+      },
+      (server) => [fakeBotProvider(server)],
+    );
   });
 });

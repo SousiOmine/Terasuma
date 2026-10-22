@@ -117,6 +117,20 @@ export async function readConnectionForm(req: { json(): Promise<unknown> }): Pro
   return { clientId: trimmed.length === 0 ? null : trimmed };
 }
 
+/**
+ * 画面から来た Bot トークンを読む。空欄は受け付けない（消すときは切断を使う）。
+ */
+export async function readConnectionTokenForm(req: { json(): Promise<unknown> }): Promise<{ token: string }> {
+  const body = await readJsonBody(req);
+  const token = readOptionalString(body, "token");
+  if (token === undefined) throw new ValidationError("token must be a string");
+
+  const trimmed = token?.trim() ?? "";
+  if (trimmed.length === 0) throw new ValidationError("token must not be empty");
+
+  return { token: trimmed };
+}
+
 /** リクエストからプロバイダ id を読む。 */
 export function readProviderId(body: Record<string, unknown> | null): string {
   const id = body?.["id"];

@@ -2,8 +2,12 @@ import { join } from "node:path";
 import type { ConnectionFlowView, ConnectionsView } from "../../shared/types";
 import type { SettingsStore } from "../data/settings";
 import { ConnectionNotConfigured, ConnectionNotFound } from "../errors";
-import { fetchAccount, pollToken, requestDeviceCode, type DeviceCode } from "./device-flow";
-import { CONNECTION_PROVIDERS, type DeviceFlowProvider } from "./providers";
+import { fetchAccount, pollToken, requestDeviceCode, verifyAccount, type DeviceCode } from "./device-flow";
+import {
+  CONNECTION_PROVIDERS,
+  type ConnectionProvider,
+  type DeviceFlowProvider,
+} from "./providers";
 import { createTokenStore, type TokenStore } from "./token-store";
 
 /**
@@ -39,9 +43,16 @@ export type ConnectionsManager = {
   /** 設定画面に出す現在の状態。 */
   view(): ConnectionsView;
   /** id の定義。無ければ ConnectionNotFound。 */
-  provider(id: string): DeviceFlowProvider;
+  provider(id: string): ConnectionProvider;
+  /** 定義されているプロバイダの id。ツールの案内に使う。 */
+  ids(): readonly string[];
   /** Client ID を変える。null で設定ごと消す。進行中の認可は止める。 */
   setClientId(id: string, clientId: string | null): ConnectionsView;
+  /**
+   * Bot トークンを保存する（kind が "bot" のプロバイダだけ）。
+   * 保存する前にアカウントを読んで、受け付けられないトークンは保存しない。
+   */
+  setToken(id: string, token: string): Promise<ConnectionsView>;
   /**
    * 認可を始める。進行中なら同じコードを返し、接続済みなら null を返す。
    * Client ID が未設定なら ConnectionNotConfigured。
@@ -69,7 +80,7 @@ export type ConnectionsOptions = {
   /** トークンを置くディレクトリ。 */
   dataDir: string;
   /** 差し替えたいときだけ渡す（テスト用）。 */
-  providers?: readonly DeviceFlowProvider[];
+  providers?: readonly ConnectionProvider[];
 };
 
 /** プロバイダごとのトークンの置き場。 */
@@ -86,7 +97,7 @@ export function createConnections(options: ConnectionsOptions): ConnectionsManag
   /** プロバイダ id → トークンの置き場。 */
   const stores = new Map<string, TokenStore>();
 
-  function requireProvider(id: string): DeviceFlowProvider {
+  function requireProvider(id: string): ConnectionProvider {
     const provider = providers.find((entry) => entry.id === id);
     if (provider === undefined) throw new ConnectionNotFound(id);
     return provider;
@@ -117,15 +128,14 @@ export function createConnections(options: ConnectionsOptions): ConnectionsManag
   }
 
   /** ツールへ返す、接続できたときの文。トークンそのものは含めない。 */
-  function connectedText(provider: DeviceFlowProvider, account: string | null): string {
+  function connectedText(provider: ConnectionProvider, account: string | null): string {
     const who = account === null ? provider.name : `${provider.name} as @${account}`;
     const envName = provider.env[0] ?? "TOKEN";
 
     return [
       `${who} is connected.`,
       `Commands in the computer can use $${envName}; do not print the token.`,
-      `For git over HTTPS, pass -c http.extraHeader="Authorization: Bearer $${envName}".`,
-      "For the API, use app_request (for example GET /user).",
+      provider.usage,
     ].join(" ");
   }
 
@@ -244,18 +254,22 @@ export function createConnections(options: ConnectionsOptions): ConnectionsManag
       providers: providers.map((provider) => {
         const token = tokenStore(provider.id).read();
         const flow = flows.get(provider.id);
+        const clientId = clientIdOf(provider.id);
 
         return {
           id: provider.id,
           name: provider.name,
           description: provider.description,
+          kind: provider.kind,
           setupUrl: provider.setupUrl,
-          scopes: provider.scopes,
+          permissions: permissionsOf(provider),
           env: provider.env,
-          clientId: clientIdOf(provider.id),
+          clientId,
+          connected: token.kind === "token",
           account: token.kind === "token" ? token.token.account : null,
           flow: flow === undefined ? null : flowView(flow),
           detail: token.kind === "unreadable" ? token.detail : null,
+          inviteUrl: inviteUrlOf(provider, clientId),
         };
       }),
     };
@@ -265,6 +279,14 @@ export function createConnections(options: ConnectionsOptions): ConnectionsManag
   async function startAuthorization(id: string): Promise<ConnectionFlowView | null> {
     const provider = requireProvider(id);
     if (tokenStore(id).read().kind === "token") return null;
+
+    // Bot トークンは認可の画面では取れない。設定画面での保存を案内する。
+    if (provider.kind === "bot") {
+      throw new ConnectionNotConfigured(
+        id,
+        `${provider.name} は Bot トークンで接続します。設定 > 接続 でトークンを貼り付けて保存してください。`,
+      );
+    }
 
     const clientId = clientIdOf(id);
     if (clientId === null) throw new ConnectionNotConfigured(id);
@@ -289,6 +311,22 @@ export function createConnections(options: ConnectionsOptions): ConnectionsManag
 
     provider(id) {
       return requireProvider(id);
+    },
+
+    ids() {
+      return providers.map((provider) => provider.id);
+    },
+
+    async setToken(id, token) {
+      const provider = requireProvider(id);
+      if (provider.kind !== "bot") {
+        throw new Error(`${provider.name} does not use a pasted token; it has its own sign-in.`);
+      }
+
+      // 間違ったトークンを保存すると、次のコマンドで初めて 401 になる。ここで確かめる。
+      const account = await verifyAccount(provider, token);
+      tokenStore(id).save({ accessToken: token, scope: null, account, obtainedAt: Date.now() });
+      return view();
     },
 
     setClientId(id, clientId) {
@@ -319,11 +357,22 @@ export function createConnections(options: ConnectionsOptions): ConnectionsManag
 
       const saved = tokenStore(id).read();
       if (saved.kind === "unreadable") {
-        throw new Error(
-          `The saved ${provider.name} authorization could not be read (${saved.detail}). Connect again.`,
-        );
+        const action = provider.kind === "bot" ? "Save the token again." : "Connect again.";
+        const what = provider.kind === "bot" ? "token" : "authorization";
+        throw new Error(`The saved ${provider.name} ${what} could not be read (${saved.detail}). ${action}`);
       }
       if (saved.kind === "token") return connectedText(provider, saved.token.account);
+
+      // Bot トークンは認可の画面では取れない。設定画面で貼ってもらうほかない。
+      if (provider.kind === "bot") {
+        throw new Error(
+          [
+            `${provider.name} is not connected.`,
+            "Ask the user to open Settings > Connections, paste the Application ID and the bot token,",
+            "and save the token. Then call this tool again.",
+          ].join(" "),
+        );
+      }
 
       const clientId = clientIdOf(id);
       if (clientId === null) {
@@ -379,6 +428,22 @@ export function createConnections(options: ConnectionsOptions): ConnectionsManag
       }
     },
   };
+}
+
+/** 画面に出す、要求する権限。device は scope 名、bot は API の権限名。 */
+function permissionsOf(provider: ConnectionProvider): readonly string[] {
+  return provider.kind === "device" ? provider.scopes : provider.permissions;
+}
+
+/** アプリをサーバーへ追加するリンク。clientId が未設定、または invite を持たなければ null。 */
+function inviteUrlOf(provider: ConnectionProvider, clientId: string | null): string | null {
+  if (provider.kind !== "bot" || provider.invite === undefined || clientId === null) return null;
+
+  const url = new URL(provider.invite.authorizeUrl);
+  url.searchParams.set("client_id", clientId);
+  url.searchParams.set("scope", provider.invite.scope);
+  url.searchParams.set("permissions", provider.invite.permissions);
+  return url.toString();
 }
 
 /** 指定した時間だけ待つ。signal が立ったら待つのをやめる。 */

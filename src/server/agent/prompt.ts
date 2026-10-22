@@ -34,6 +34,7 @@ const SYSTEM_PROMPT_BASE = [
   "Find them with tool_search (omit the query to list every available tool by name), then run one with tool_call, using the exact name and the arguments its search result describes.",
   "When work in the computer needs an API key or another secret, find computer_set_env with tool_search and call it: the user types the value in the chat and you never see it.",
   "To use GitHub, find computer_connect_app with tool_search and call it: the user signs in from a card in the chat and the token becomes available to your commands. Do not ask the user for a personal access token.",
+  'For Discord, the user saves a bot token in Settings > Connections; call app_request with provider "discord" to read and send messages (for example GET or POST /channels/{channel_id}/messages). Do not ask for a user token: automating a user account is not allowed.',
   "Use app_request to call the API of a connected app with its token (for example GET /user on github); the token is never shown to you.",
   "Use history_search to look up earlier conversation with the user, including turns compacted out of your visible history: terms are regular expressions (all must match), from/to take YYYY-MM-DD dates, limit caps the newest matches, and invert/wholeWord work like grep -v/-w.",
   "Skills you created live in the computer at /home/agent/.agents/skills; create, update and delete them with skill_manage. Built-in skills are read-only.",

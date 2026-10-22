@@ -251,6 +251,11 @@ export async function saveConnectionClientId(id: string, clientId: string | null
   return request<ConnectionsView>(connectionPath(id), jsonRequest("PUT", { clientId }));
 }
 
+/** Bot トークンを保存する。保存する前に、サーバーがトークンでアカウントを確かめる。 */
+export async function saveConnectionToken(id: string, token: string): Promise<ConnectionsView> {
+  return request<ConnectionsView>(`${connectionPath(id)}/token`, jsonRequest("PUT", { token }));
+}
+
 /** 認可を始める。進行中なら同じコードが返り、接続済みなら flow は null。 */
 export async function authorizeConnection(id: string): Promise<ConnectionAuthorizationView> {
   return request<ConnectionAuthorizationView>(`${connectionPath(id)}/authorize`, { method: "POST" });

@@ -134,7 +134,7 @@ sudo tailscale serve reset
 Tailscale 経由では、MCP サーバーの OAuth 認可は完了しない。
 コールバックの URL が `http://127.0.0.1:3000` で組み立てられるため、リモートのブラウザではその端末の localhost を指してしまう。
 API キーで繋ぐ MCP サーバーはこの制限を受けない。
-`設定 > 接続` で行うアプリの接続（GitHub）は、コールバック URL を使わない Device Flow なので、Tailscale 経由でも完了する。
+`設定 > 接続` で行うアプリの接続（GitHub の Device Flow、Discord の Bot トークン）はコールバック URL を使わないので、Tailscale 経由でも完了する。
 
 ## 最初の設定
 
@@ -163,6 +163,32 @@ OAuth App は自分で 1 つ作る。Device Flow を使うため、client secret
 git は `git -c http.extraHeader="Authorization: Bearer $GH_TOKEN" clone ...` のように使う。
 `gh` コマンドはコンピュータのイメージに入っていない。API はエージェントの `app_request` から叩ける。
 
+## Discord の接続
+
+Discord の OAuth には、ユーザーとしてメッセージを送る scope が無い。
+ユーザーアカウントの自動操作（self-bot）も規約で禁止されているため、bot を作り、そのトークンを使う。
+bot なら、参加しているサーバーのメッセージを読むことも送ることもできる。
+
+1. [Discord Developer Portal](https://discord.com/developers/applications) で New Application を作る。
+2. General Information の **Application ID** を、Terasuma の `設定 > 接続` に貼り付けて保存する。
+3. Bot ページで **Reset Token** を押し、表示されたトークンを `設定 > 接続` の「Bot トークン」に貼り付けて保存する。
+4. 同じ Bot ページの **Privileged Gateway Intents** で **MESSAGE_CONTENT** を ON にする。これを有効にしないと、チャンネルの本文が空で返る（自分が送ったメッセージ、DM、自分へのメンションは例外）。
+5. `設定 > 接続` の「サーバーに追加」を押し、Discord の画面でサーバーと権限を選んで承認する。権限は「チャンネルを見る」「メッセージを送信」「メッセージ履歴を読む」の 3 つ。
+
+トークンは `~/.local/share/terasuma/connections/discord.json`（0600）に保存され、コンピュータの `DISCORD_BOT_TOKEN` にも渡る。
+エージェントは `app_request` で Discord の API を叩く。
+
+| やりたいこと | 呼び出し |
+|---|---|
+| 参加しているサーバーを見る | `GET /users/@me/guilds` |
+| サーバーのチャンネルを見る | `GET /guilds/{guild_id}/channels` |
+| チャンネルのメッセージを読む | `GET /channels/{channel_id}/messages?limit=20` |
+| 新着だけを読む | `GET /channels/{channel_id}/messages?after={message_id}` |
+| メッセージを送る | `POST /channels/{channel_id}/messages`（本文 `{"content": "..."}`） |
+
+bot は、参加しているサーバーの、権限のあるチャンネルしか読めない。
+メッセージの本文を読むには MESSAGE_CONTENT が要る（上の 4 番）。
+
 ## データの場所
 
 Quadlet は、ホストで直接動かすときと同じパスをコンテナにマウントする。
@@ -173,7 +199,7 @@ Quadlet は、ホストで直接動かすときと同じパスをコンテナに
 | `~/.local/share/terasuma/terasuma.db` | 会話の履歴 |
 | `~/.local/share/terasuma/images/` | ツールが撮った画像 |
 | `~/.local/share/terasuma/models-dev.json` | モデルカタログのキャッシュ |
-| `~/.local/share/terasuma/connections/` | アプリの接続のトークン（`github.json`、0600。バックアップに含める） |
+| `~/.local/share/terasuma/connections/` | アプリの接続のトークン（`github.json` / `discord.json`、0600。バックアップに含める） |
 | `~/.local/share/terasuma/container/home/` | コンピュータのホーム（エージェントの read / write / edit / bash の場所。チャットで添付したファイルは `uploads/` に置かれる） |
 | `~/.local/share/terasuma/container/home/.agents/skills/` | エージェントが作成したスキル。コンテナの中では `/home/agent/.agents/skills/` |
 

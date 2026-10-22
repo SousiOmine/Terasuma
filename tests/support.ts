@@ -182,7 +182,9 @@ export function createConnectionsStub(): ConnectionsManager {
     provider() {
       throw new Error("No connection providers in this stub");
     },
+    ids: () => [],
     setClientId: () => empty,
+    setToken: async () => empty,
     start: async () => null,
     cancel: () => undefined,
     disconnect: () => empty,

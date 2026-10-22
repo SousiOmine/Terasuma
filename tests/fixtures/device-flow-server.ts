@@ -1,5 +1,5 @@
 import type { Server } from "bun";
-import type { DeviceFlowProvider } from "../../src/server/connections/providers";
+import type { BotTokenProvider, DeviceFlowProvider } from "../../src/server/connections/providers";
 
 /**
  * テストで使う Device Flow の認可サーバー。
@@ -23,6 +23,10 @@ export type FakeDeviceFlowServer = {
   readonly accessToken: string;
   /** アカウントの名前。 */
   readonly account: string;
+  /** bot プロバイダが使うトークン。 */
+  readonly botToken: string;
+  /** bot のアカウント名。 */
+  readonly botAccount: string;
 };
 
 export function startFakeDeviceFlowServer(): FakeDeviceFlowServer {
@@ -33,6 +37,8 @@ export function startFakeDeviceFlowServer(): FakeDeviceFlowServer {
   const tokenRequests: URLSearchParams[] = [];
   const accessToken = "access-1";
   const account = "octocat";
+  const botToken = "bot-token-1";
+  const botAccount = "terasuma-bot";
 
   const server = Bun.serve({
     hostname: "127.0.0.1",
@@ -85,6 +91,21 @@ export function startFakeDeviceFlowServer(): FakeDeviceFlowServer {
         return new Response("not found", { status: 404 });
       }
 
+      // bot プロバイダ。Authorization は Bearer ではなく `Bot <token>` を要求する。
+      if (url.pathname.startsWith("/bot/")) {
+        const authorized = request.headers.get("authorization") === `Bot ${botToken}`;
+        if (!authorized) return new Response("unauthorized", { status: 401 });
+
+        if (url.pathname === "/bot/user") return Response.json({ username: botAccount });
+        if (url.pathname === "/bot/channels/123/messages") {
+          if (request.method !== "POST") return Response.json([{ id: "1", content: "hello" }]);
+
+          const body = (await request.json()) as { content?: unknown };
+          return Response.json({ id: "999", content: typeof body.content === "string" ? body.content : "" });
+        }
+        return new Response("not found", { status: 404 });
+      }
+
       return new Response("not found", { status: 404 });
     },
   });
@@ -108,12 +129,15 @@ export function startFakeDeviceFlowServer(): FakeDeviceFlowServer {
     },
     accessToken,
     account,
+    botToken,
+    botAccount,
   };
 }
 
 /** テスト用のプロバイダ定義。宛先だけを偽サーバーへ向ける。 */
 export function fakeProvider(server: FakeDeviceFlowServer): DeviceFlowProvider {
   return {
+    kind: "device",
     id: "github",
     name: "GitHub",
     description: "test app",
@@ -122,10 +146,36 @@ export function fakeProvider(server: FakeDeviceFlowServer): DeviceFlowProvider {
     tokenUrl: `${server.origin}/token`,
     scopes: ["repo", "read:user"],
     env: ["GH_TOKEN", "GITHUB_TOKEN"],
+    usage: "For the API, use app_request (for example GET /user).",
     api: {
       baseUrl: `${server.origin}/api`,
       headers: { Accept: "application/json" },
       account: { path: "/user", field: "login" },
+    },
+  };
+}
+
+/** テスト用の bot プロバイダ。トークンを貼る方式（Discord）を真似る。 */
+export function fakeBotProvider(server: FakeDeviceFlowServer): BotTokenProvider {
+  return {
+    kind: "bot",
+    id: "discord",
+    name: "Discord",
+    description: "test bot",
+    setupUrl: `${server.origin}/setup-bot`,
+    permissions: ["View Channel", "Send Messages"],
+    env: ["DISCORD_BOT_TOKEN"],
+    usage: 'For the API, use app_request (for example POST /channels/123/messages with {"content": "..."}).',
+    invite: {
+      authorizeUrl: `${server.origin}/authorize`,
+      scope: "bot",
+      permissions: "68608",
+    },
+    api: {
+      baseUrl: `${server.origin}/bot`,
+      headers: { Accept: "application/json" },
+      account: { path: "/user", field: "username" },
+      authorization: (token) => `Bot ${token}`,
     },
   };
 }

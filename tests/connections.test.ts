@@ -2,10 +2,16 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createConnections, type ConnectionsManager } from "../src/server/connections/manager";
+import type { ConnectionProvider } from "../src/server/connections/providers";
 import { createSettingsStore, type SettingsStore } from "../src/server/data/settings";
 import { ConnectionNotFound, ConnectionNotConfigured } from "../src/server/errors";
 import { withTempDir } from "./harness";
-import { fakeProvider, startFakeDeviceFlowServer, type FakeDeviceFlowServer } from "./fixtures/device-flow-server";
+import {
+  fakeBotProvider,
+  fakeProvider,
+  startFakeDeviceFlowServer,
+  type FakeDeviceFlowServer,
+} from "./fixtures/device-flow-server";
 
 /**
  * アプリの接続（Device Flow）。
@@ -20,7 +26,10 @@ type Context = {
 };
 
 /** 偽の認可サーバーと、一時ディレクトリの設定・トークン置き場を用意する。 */
-async function withConnections(run: (context: Context) => Promise<void>): Promise<void> {
+async function withConnections(
+  run: (context: Context) => Promise<void>,
+  extraProviders: (server: FakeDeviceFlowServer) => ConnectionProvider[] = () => [],
+): Promise<void> {
   const server = startFakeDeviceFlowServer();
   try {
     await withTempDir("terasuma-connections-", async (dir) => {
@@ -30,7 +39,7 @@ async function withConnections(run: (context: Context) => Promise<void>): Promis
       const manager = createConnections({
         settings,
         dataDir: join(dir, "data"),
-        providers: [fakeProvider(server)],
+        providers: [fakeProvider(server), ...extraProviders(server)],
       });
 
       try {
@@ -218,6 +227,80 @@ describe("アプリの接続", () => {
   test("知らない接続 id は失敗する", async () => {
     await withConnections(async ({ manager }) => {
       expect(() => manager.provider("unknown")).toThrow(ConnectionNotFound);
+    });
+  });
+});
+
+describe("Bot トークンの接続", () => {
+  /** bot プロバイダ（Discord）を足して走らせる。 */
+  function withBotConnections(run: (context: Context) => Promise<void>): Promise<void> {
+    return withConnections(run, (server) => [fakeBotProvider(server)]);
+  }
+
+  test("保存すると、接続済みになり環境変数に載る", async () => {
+    await withBotConnections(async ({ manager, dir, server }) => {
+      const view = await manager.setToken("discord", server.botToken);
+      const provider = view.providers.find((entry) => entry.id === "discord");
+
+      expect(provider).toMatchObject({
+        kind: "bot",
+        connected: true,
+        account: server.botAccount,
+        clientId: null,
+        flow: null,
+        detail: null,
+      });
+      expect(provider?.permissions).toEqual(["View Channel", "Send Messages"]);
+      expect(manager.token("discord")).toBe(server.botToken);
+      expect(manager.env()).toEqual({ DISCORD_BOT_TOKEN: server.botToken });
+
+      // トークンは本人だけが読める権限で保存する。
+      const tokenPath = join(dir, "data", "connections", "discord.json");
+      expect(statSync(tokenPath).mode & 0o777).toBe(0o600);
+
+      // 接続済みなら、認可を始め直さない。
+      expect(await manager.start("discord")).toBeNull();
+
+      const connected = await manager.wait("discord", signal());
+      expect(connected).toContain(`@${server.botAccount}`);
+      expect(connected).toContain("$DISCORD_BOT_TOKEN");
+    });
+  });
+
+  test("受け付けられないトークンは保存しない", async () => {
+    await withBotConnections(async ({ manager, dir }) => {
+      expect(await rejectionOf(manager.setToken("discord", "wrong"))).toMatch(/did not accept the token/);
+
+      expect(manager.token("discord")).toBeNull();
+      expect(existsSync(join(dir, "data", "connections", "discord.json"))).toBe(false);
+    });
+  });
+
+  test("トークンが無ければ、認可を始めずに設定を促す", async () => {
+    await withBotConnections(async ({ manager }) => {
+      expect(await rejectionOf(manager.wait("discord", signal()))).toMatch(/Settings > Connections/);
+      expect(await rejectionOf(manager.start("discord"))).toContain("Bot トークン");
+      expect(() => manager.cancel("discord")).not.toThrow();
+    });
+  });
+
+  test("Application ID から招待リンクを組み立てる", async () => {
+    await withBotConnections(async ({ manager, settings, server }) => {
+      settings.setConnectionClientId("discord", "app-1");
+
+      const provider = manager.view().providers.find((entry) => entry.id === "discord");
+      const expected = new URL(`${server.origin}/authorize`);
+      expected.searchParams.set("client_id", "app-1");
+      expected.searchParams.set("scope", "bot");
+      expected.searchParams.set("permissions", "68608");
+
+      expect(provider?.inviteUrl).toBe(expected.toString());
+    });
+  });
+
+  test("Device Flow のアプリには、トークンを保存できない", async () => {
+    await withBotConnections(async ({ manager }) => {
+      expect(await rejectionOf(manager.setToken("github", "token"))).toMatch(/does not use a pasted token/);
     });
   });
 });

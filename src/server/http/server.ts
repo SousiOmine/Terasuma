@@ -209,6 +209,10 @@ export function startServer(options: ServerOptions): StartedServer {
           PUT: api.setConnection,
           DELETE: api.disconnectConnection,
         },
+        // Bot トークンの保存（Discord など、認可の画面では取れないトークン）。
+        "/api/connections/:id/token": {
+          PUT: api.setConnectionToken,
+        },
         "/api/connections/:id/authorize": {
           POST: api.authorizeConnection,
         },

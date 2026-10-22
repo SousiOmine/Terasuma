@@ -61,9 +61,9 @@ export class ConnectionNotFound extends AppError {
   }
 }
 
-/** Client ID が未設定のまま認可を始めようとしたときの失敗。 */
+/** 接続に必要な設定（Client ID や Bot トークン）がまだ無いときの失敗。 */
 export class ConnectionNotConfigured extends AppError {
-  constructor(readonly connectionId: string) {
-    super("connection_not_configured", 400, `接続 ${connectionId} の Client ID が設定されていません`);
+  constructor(readonly connectionId: string, detail?: string) {
+    super("connection_not_configured", 400, detail ?? `接続 ${connectionId} の Client ID が設定されていません`);
   }
 }

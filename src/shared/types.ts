@@ -442,25 +442,33 @@ export type ConnectionFlowView = {
   expiresAt: number;
 };
 
+/** 接続の種類。device は Device Flow、bot は利用者が発行したトークンを貼る。 */
+export type ConnectionKind = "device" | "bot";
+
 /** 設定画面に並べる接続 1 件。トークンそのものは返さない。 */
 export type ConnectionProviderView = {
   id: string;
   name: string;
   description: string;
+  kind: ConnectionKind;
   /** アプリを登録するためのページ。 */
   setupUrl: string;
-  /** 接続で要求する権限。 */
-  scopes: readonly string[];
+  /** 接続で要求する権限。device は scope 名、bot は API の権限名。 */
+  permissions: readonly string[];
   /** 接続がコンピュータへ渡す環境変数の名前。 */
   env: readonly string[];
-  /** 保存済みの Client ID。未設定なら null。 */
+  /** 保存済みの Client ID（bot では Application ID）。未設定なら null。 */
   clientId: string | null;
+  /** トークンが保存されているか。account を読めなくても true になる。 */
+  connected: boolean;
   /** 接続中のアカウント。未接続なら null。 */
   account: string | null;
   /** 進行中の認可。無ければ null。 */
   flow: ConnectionFlowView | null;
   /** 保存されている認可を読めなかった理由。無ければ null。 */
   detail: string | null;
+  /** アプリをサーバーへ追加するリンク。無ければ null。 */
+  inviteUrl: string | null;
 };
 
 /** 接続の設定の現在の状態。設定を変える API はすべてこの形を返す。 */

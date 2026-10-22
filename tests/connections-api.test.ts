@@ -1,9 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import { createConnections } from "../src/server/connections/manager";
-import type { DeviceFlowProvider } from "../src/server/connections/providers";
+import type { ConnectionProvider, DeviceFlowProvider } from "../src/server/connections/providers";
 import type { ConnectionsView } from "../src/shared/types";
 import { type ServerHarness, withServer } from "./harness";
-import { fakeProvider, startFakeDeviceFlowServer, type FakeDeviceFlowServer } from "./fixtures/device-flow-server";
+import {
+  fakeBotProvider,
+  fakeProvider,
+  startFakeDeviceFlowServer,
+  type FakeDeviceFlowServer,
+} from "./fixtures/device-flow-server";
 
 /**
  * アプリの接続の HTTP API。
@@ -16,6 +21,7 @@ type Run = (harness: ServerHarness, server: FakeDeviceFlowServer) => Promise<voi
 async function withConnectionServer(
   run: Run,
   overrides: (server: FakeDeviceFlowServer) => Partial<DeviceFlowProvider> = () => ({}),
+  extraProviders: (server: FakeDeviceFlowServer) => ConnectionProvider[] = () => [],
 ): Promise<void> {
   const server = startFakeDeviceFlowServer();
   try {
@@ -24,7 +30,7 @@ async function withConnectionServer(
         createConnections({
           settings,
           dataDir: dir,
-          providers: [{ ...fakeProvider(server), ...overrides(server) }],
+          providers: [{ ...fakeProvider(server), ...overrides(server) }, ...extraProviders(server)],
         }),
     });
   } finally {
@@ -171,5 +177,84 @@ describe("接続の API", () => {
       expect(response.status).toBe(400);
       expect(((await response.json()) as { code: string }).code).toBe("invalid_request");
     });
+  });
+
+  test("Bot トークンを保存すると、接続済みとして返す", async () => {
+    await withConnectionServer(
+      async (harness, server) => {
+        const response = await harness.request(
+          "/api/connections/discord/token",
+          jsonRequest("PUT", { token: `  ${server.botToken}  ` }),
+        );
+
+        expect(response.status).toBe(200);
+        const provider = ((await response.json()) as ConnectionsView).providers.find(
+          (entry) => entry.id === "discord",
+        );
+        expect(provider).toMatchObject({
+          kind: "bot",
+          connected: true,
+          account: server.botAccount,
+          clientId: null,
+        });
+      },
+      () => ({}),
+      (server) => [fakeBotProvider(server)],
+    );
+  });
+
+  test("受け付けられない Bot トークンは 400", async () => {
+    await withConnectionServer(
+      async (harness) => {
+        const response = await harness.request(
+          "/api/connections/discord/token",
+          jsonRequest("PUT", { token: "wrong" }),
+        );
+
+        expect(response.status).toBe(400);
+        expect(((await response.json()) as { code: string }).code).toBe("invalid_request");
+      },
+      () => ({}),
+      (server) => [fakeBotProvider(server)],
+    );
+  });
+
+  test("空の Bot トークンは 400", async () => {
+    await withConnectionServer(
+      async (harness) => {
+        const response = await harness.request(
+          "/api/connections/discord/token",
+          jsonRequest("PUT", { token: "  " }),
+        );
+
+        expect(response.status).toBe(400);
+      },
+      () => ({}),
+      (server) => [fakeBotProvider(server)],
+    );
+  });
+
+  test("トークンを貼らない方式の接続には、トークンを保存できない", async () => {
+    await withConnectionServer(async (harness) => {
+      const response = await harness.request(
+        "/api/connections/github/token",
+        jsonRequest("PUT", { token: "token" }),
+      );
+
+      expect(response.status).toBe(400);
+    });
+  });
+
+  test("Bot の接続は認可を始められず、設定を促す", async () => {
+    await withConnectionServer(
+      async (harness) => {
+        const response = await harness.request("/api/connections/discord/authorize", { method: "POST" });
+
+        expect(response.status).toBe(400);
+        expect(((await response.json()) as { code: string }).code).toBe("connection_not_configured");
+      },
+      () => ({}),
+      (server) => [fakeBotProvider(server)],
+    );
   });
 });

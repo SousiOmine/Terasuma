@@ -5,6 +5,7 @@ import { describeError } from "../../shared/errors";
 import { APP_REQUEST_TOOL_NAME, CONNECT_APP_TOOL_NAME } from "../../shared/tools";
 import { ConnectionNotFound } from "../errors";
 import type { ConnectionsManager } from "./manager";
+import { authorizationHeader } from "./providers";
 
 /**
  * アプリの接続を扱うツール。
@@ -48,17 +49,20 @@ export function createConnectionToolset(connections: ConnectionsManager): Connec
 
 export function createConnectionTools(options: { connections: ConnectionsManager }): ConnectionToolset {
   const { connections } = options;
+  const appIds = connections.ids();
+  const appList = appIds.join(", ");
+  const firstApp = appIds[0] ?? "github";
 
   return {
     [CONNECT_APP_TOOL_NAME]: tool({
       description: [
-        "Connect an app to the computer with the user's own OAuth sign-in (currently GitHub).",
+        "Connect an app to the computer with the user's own sign-in or a saved bot token.",
         "Call this when a task needs the app and its environment variable is not set.",
-        "The user signs in from a card in the chat; you never see the token.",
-        "Once this returns, the token is available to every command in the computer.",
+        "GitHub opens a card in the chat where the user signs in; Discord needs a bot token saved in Settings > Connections.",
+        "You never see the token. Once this returns, the token is available to every command in the computer.",
       ].join(" "),
       inputSchema: z.object({
-        provider: z.string().min(1).describe('App to connect. Use "github".'),
+        provider: z.string().min(1).describe(`App to connect (${appList}).`),
         reason: z.string().min(1).describe("Why you need it, written for the user to read"),
       }),
       execute: async ({ provider }: { provider: string }, context: ToolContext) => {
@@ -71,7 +75,7 @@ export function createConnectionTools(options: { connections: ConnectionsManager
           return await connections.wait(provider, signal);
         } catch (error) {
           if (error instanceof ConnectionNotFound) {
-            throw new Error(`Unknown app "${provider}". Use "github".`, { cause: error });
+            throw new Error(`Unknown app "${provider}". Use one of: ${appList}.`, { cause: error });
           }
           throw error;
         }
@@ -80,19 +84,19 @@ export function createConnectionTools(options: { connections: ConnectionsManager
 
     [APP_REQUEST_TOOL_NAME]: tool({
       description: [
-        "Call the API of a connected app with its saved OAuth token.",
+        "Call the API of a connected app with its saved token.",
         "Use tool_search to find this when you need the API instead of the CLI.",
-        'path must begin with "/" and stay on the app\'s API, for example "/user" or "/repos/owner/repo/issues".',
+        'path must begin with "/" and stay on the app\'s API, for example "/user" or "/channels/123/messages".',
         "The token is never returned. A 401 means the user must connect the app again.",
       ].join(" "),
       inputSchema: z.object({
-        provider: z.string().min(1).describe('Connected app id, for example "github"'),
+        provider: z.string().min(1).describe(`Connected app id (${appList}), for example "${firstApp}"`),
         method: z.enum(["GET", "POST", "PATCH", "PUT", "DELETE"]).describe("HTTP method"),
         path: z.string().min(1).describe('API path beginning with "/", for example "/user"'),
         body: z.unknown().optional().describe("JSON body for POST, PATCH or PUT"),
       }),
       execute: async ({ provider, method, path, body }: AppRequestInput, context: ToolContext) => {
-        const definition = providerOf(connections, provider);
+        const definition = providerOf(connections, provider, appList);
         const token = connections.token(provider);
         if (token === null) {
           throw new Error(
@@ -103,7 +107,7 @@ export function createConnectionTools(options: { connections: ConnectionsManager
         const url = apiUrl(definition.api.baseUrl, path);
         const headers: Record<string, string> = {
           ...definition.api.headers,
-          Authorization: `Bearer ${token}`,
+          Authorization: authorizationHeader(definition, token),
         };
 
         // GET と DELETE に本文は付けない（付けるとサーバーによっては拒否される）。
@@ -140,12 +144,12 @@ export function createConnectionTools(options: { connections: ConnectionsManager
 }
 
 /** 知らない id は、モデルが読める英語の理由にする。 */
-function providerOf(connections: ConnectionsManager, id: string) {
+function providerOf(connections: ConnectionsManager, id: string, appList: string) {
   try {
     return connections.provider(id);
   } catch (error) {
     if (error instanceof ConnectionNotFound) {
-      throw new Error(`Unknown app "${id}". Use "github".`, { cause: error });
+      throw new Error(`Unknown app "${id}". Use one of: ${appList}.`, { cause: error });
     }
     throw error;
   }

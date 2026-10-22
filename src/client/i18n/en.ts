@@ -51,13 +51,13 @@ export const en = {
   "chat.env.submitting": "Setting…",
   "chat.env.waiting": "Waiting for your input",
 
-  "chat.connection.title": "{app} needs you to sign in",
+  "chat.connection.title": "Connect {app}",
   "chat.connection.starting": "Preparing the sign-in…",
   "chat.connection.code": "Authorization code",
   "chat.connection.open": "Open {app}",
   "chat.connection.waiting": "Enter the code and approve it; the task continues from there.",
   "chat.connection.waitingShort": "Waiting for sign-in",
-  "chat.connection.setup": "Set the Client ID in Settings > Connections, then ask again.",
+  "chat.connection.setup": "Set up this app in Settings > Connections, then ask again.",
   "chat.connection.openSettings": "Open settings",
   "chat.connection.failed": "The sign-in could not be completed. Ask again.",
 
@@ -80,20 +80,34 @@ export const en = {
   "settings.advanced": "Advanced",
 
   "settings.connections": "Connections",
-  "settings.connections.description": "Sign in to services that your CLI commands and tools use.",
+  "settings.connections.description":
+    "Connect services that your CLI commands and tools use. GitHub signs in; Discord uses a bot token.",
   "settings.connections.state.connected": "Connected",
   "settings.connections.state.authorizing": "Waiting for approval",
   "settings.connections.state.disconnected": "Not connected",
   "settings.connections.account": "Connected as {account}",
-  "settings.connections.scopes": "Requested scopes: {scopes}",
+  "settings.connections.permissions": "Requested permissions: {permissions}",
   "settings.connections.clientId.label": "Client ID (GitHub OAuth App)",
   "settings.connections.clientId.description":
     "Create a GitHub OAuth App, enable Device Flow, and paste its Client ID here. No client secret is used.",
   "settings.connections.clientId.placeholder": "For example: Iv1.0123456789abcdef",
   "settings.connections.clientId.save": "Save",
   "settings.connections.clientId.saving": "Saving…",
-  "settings.connections.openSetup": "Open GitHub OAuth Apps",
+  "settings.connections.applicationId.label": "Application ID",
+  "settings.connections.applicationId.description":
+    "Create an app in the Discord Developer Portal and paste its Application ID from General Information.",
+  "settings.connections.applicationId.placeholder": "For example: 123456789012345678",
+  "settings.connections.botToken.label": "Bot token",
+  "settings.connections.botToken.description":
+    "Paste the token from Reset Token on the Bot page. Terasuma checks the account before saving it.",
+  "settings.connections.botToken.placeholder": "Paste the bot token",
+  "settings.connections.botToken.save": "Save",
+  "settings.connections.botToken.saving": "Checking…",
+  "settings.connections.botToken.saved": "The token is saved. Paste a new one only when you want to replace it.",
+  "settings.connections.openSetup": "Open the app settings",
   "settings.connections.authorize": "Sign in",
+  "settings.connections.invite": "Add to server",
+  "settings.connections.inviteNeedsId": "Save the Application ID to show the link that adds the bot to a server.",
   "settings.connections.code": "Authorization code",
   "settings.connections.openAuthorization": "Open the authorization page",
   "settings.connections.cancelAuthorize": "Cancel the sign-in",
@@ -102,7 +116,7 @@ export const en = {
   "settings.connections.disconnect": "Disconnect",
   "settings.connections.disconnectTitle": "Disconnect this app?",
   "settings.connections.disconnectMessage":
-    "The saved authorization is removed, and the token is no longer passed to the computer.",
+    "The saved connection is removed, and the token is no longer passed to the computer.",
 
   "settings.container": "Computer",
   "settings.container.description":
@@ -288,7 +302,7 @@ export const en = {
   "error.mcp_server_exists": "This MCP server is already added.",
   "error.mcp_authorization_failed": "Authorization for the MCP server could not be started.",
   "error.connection_not_found": "This connection is not configured.",
-  "error.connection_not_configured": "The app's Client ID is not configured.",
+  "error.connection_not_configured": "The app's connection settings are not configured.",
   "error.connection_authorization_failed": "Authorization for the app could not be started.",
   "error.web_search_not_found": "This search provider is not configured.",
   "error.web_search_exists": "This search provider is already added.",

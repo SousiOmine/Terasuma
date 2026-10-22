@@ -1,7 +1,7 @@
 import { describeError } from "../../../shared/errors";
 import type { ConnectionAuthorizationView } from "../../../shared/types";
-import { AppError } from "../../errors";
-import { readConnectionForm } from "../body";
+import { AppError, ValidationError } from "../../errors";
+import { readConnectionForm, readConnectionTokenForm } from "../body";
 import { json } from "../respond";
 import type { ApiDeps, ApiRequest } from "./shared";
 
@@ -33,6 +33,27 @@ export function connectionHandlers(deps: ApiDeps) {
 
       const form = await readConnectionForm(req);
       return json(connections.setClientId(id, form.clientId));
+    },
+
+    /**
+     * Bot トークンを保存する（Discord など、認可の画面では取れないトークン）。
+     * 保存する前にアカウントを読んで確かめる。受け付けられないトークンは保存しない。
+     */
+    async setConnectionToken(req: ApiRequest<{ id: string }>): Promise<Response> {
+      const id = req.params.id;
+      const provider = connections.provider(id);
+      if (provider.kind !== "bot") {
+        throw new ValidationError(`${provider.name} はトークンを貼る方式ではありません`);
+      }
+
+      const form = await readConnectionTokenForm(req);
+      try {
+        return json(await connections.setToken(id, form.token));
+      } catch (error) {
+        if (error instanceof AppError) throw error;
+        // 受け付けられないトークン・接続先に届かない、は入力の誤りとして返す。
+        throw new ValidationError(describeError(error));
+      }
     },
 
     /**

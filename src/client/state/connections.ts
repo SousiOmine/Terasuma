@@ -24,6 +24,9 @@ export const clearConnectionsError = failure.clear;
 /** Client ID を保存している接続。操作中の表示に使う。 */
 export const savingConnection = signal<string | null>(null);
 
+/** Bot トークンを保存している接続。操作中の表示に使う。 */
+export const savingBotToken = signal<string | null>(null);
+
 /** 認可を待っている接続と、そのコード。 */
 export const authorizingConnection = signal<string | null>(null);
 export const connectionFlow = signal<ConnectionFlowView | null>(null);
@@ -51,6 +54,16 @@ export async function saveClientId(id: string, clientId: string): Promise<void> 
     connections.value = await api.saveConnectionClientId(id, clientId.trim().length === 0 ? null : clientId.trim());
   } finally {
     if (savingConnection.value === id) savingConnection.value = null;
+  }
+}
+
+/** Bot トークンを保存する。受け付けられなければ、サーバーが理由を返す。 */
+export async function saveBotToken(id: string, token: string): Promise<void> {
+  savingBotToken.value = id;
+  try {
+    connections.value = await api.saveConnectionToken(id, token.trim());
+  } finally {
+    if (savingBotToken.value === id) savingBotToken.value = null;
   }
 }
 
