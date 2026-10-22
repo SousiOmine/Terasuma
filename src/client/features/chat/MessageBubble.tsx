@@ -3,6 +3,7 @@ import { formatBytes } from "../../../shared/attachments";
 import type { AttachmentPart, ChatMessage, NoticePart, SentAttachment, TextPart } from "../../../shared/types";
 import { t } from "../../i18n";
 import { ChatAvatar } from "./ChatAvatar";
+import { Markdown } from "./Markdown";
 
 /**
  * チャットの表示。
@@ -19,7 +20,7 @@ export function UserMessageBubble({ message, time }: { message: ChatMessage; tim
   return (
     <div class="flex flex-col items-end gap-1">
       <div class="max-w-[85%] rounded-[24px] bg-[var(--app-soft)] px-4 py-2.5 text-[15px] leading-[1.7] text-[var(--app-text)]">
-        {message.content.length > 0 && <div class="whitespace-pre-wrap break-words">{message.content}</div>}
+        {message.content.length > 0 && <Markdown content={message.content} />}
         {files.length > 0 && (
           <div class={`flex flex-col gap-1.5 ${message.content.length > 0 ? "mt-2" : ""}`}>
             {files.map((file, index) => (
@@ -47,7 +48,7 @@ export function AgentMessageBubble({ part }: { part: TextPart | AttachmentPart }
 
   return (
     <div class="flex min-w-0 flex-col gap-2 text-[15px] leading-[1.75] text-[var(--app-text)]">
-      {part.type === "text" && <RichText content={part.text} />}
+      {part.type === "text" && <Markdown content={part.text} />}
       {images.length > 0 && <ImageGrid images={images} />}
       {files.length > 0 && <FileList files={files} />}
     </div>
@@ -145,40 +146,4 @@ export function TypingBubble() {
       </div>
     </div>
   );
-}
-
-/**
- * ``` で囲んだ範囲だけをコードブロックとして扱う最小限の整形。
- * Markdown 全体を解釈しないのは、依存を増やさず描画を軽く保つため。必要になったら差し替える。
- */
-function RichText({ content }: { content: string }) {
-  const segments = content.split("```");
-
-  return (
-    <div>
-      {segments.map((segment, index) =>
-        index % 2 === 1 ? (
-          <pre
-            key={index}
-            class="my-2 overflow-x-auto rounded-[14px] bg-[var(--app-soft)] p-3 font-mono text-xs leading-relaxed"
-          >
-            <code>{stripLanguageTag(segment)}</code>
-          </pre>
-        ) : (
-          <span key={index} class="whitespace-pre-wrap break-words">
-            {segment}
-          </span>
-        ),
-      )}
-    </div>
-  );
-}
-
-/** ```ts のように書かれた言語名の行を取り除く。コード本体だけを表示するため。 */
-function stripLanguageTag(block: string): string {
-  const newline = block.indexOf("\n");
-  if (newline === -1) return block;
-
-  const firstLine = block.slice(0, newline).trim();
-  return /^[A-Za-z0-9+#._-]*$/.test(firstLine) ? block.slice(newline + 1) : block;
 }

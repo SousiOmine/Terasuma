@@ -26,6 +26,7 @@ export const en = {
   "chat.agent.subtitle": "AI assistant",
   "chat.file.download": "Download {name}",
   "chat.image.open": "Open {name}",
+  "chat.markdown.task": "Task",
 
   "chat.model.unset": "No model is configured. Add a provider in Settings.",
   "chat.model.providerMissing": "The provider for the default model is missing. Choose another model in Settings.",

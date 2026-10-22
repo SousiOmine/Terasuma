@@ -171,6 +171,195 @@ input[type="checkbox"] {
 }
 
 /*
+ * Markdown の本文（発言）。
+ *
+ * 段落・見出し・一覧・引用・コード・表を、面の 3 段（canvas / surface / soft）と
+ * 罫線だけで組み立てる。要素ごとの余白は持たせず、隣り合うブロックの間で
+ * 一度だけ取る（余白が二重にならないように）。
+ *
+ * セレクタは詳細度の低い順に並べる（後の低い詳細度の規則が黙って負けないように）。
+ */
+.tera-md {
+  min-width: 0;
+  overflow-wrap: break-word;
+}
+
+.tera-md > * {
+  margin: 0;
+}
+
+.tera-md > * + * {
+  margin-top: 0.75rem;
+}
+
+/* 見出し。本文より少しだけ大きくし、太さは 600 までにする（日本語の 700 は重い）。 */
+.tera-md h1,
+.tera-md h2,
+.tera-md h3,
+.tera-md h4,
+.tera-md h5,
+.tera-md h6 {
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: -0.01em;
+}
+
+.tera-md h1 {
+  font-size: 1.1875rem;
+}
+
+.tera-md h2 {
+  font-size: 1.0625rem;
+}
+
+.tera-md h3 {
+  font-size: 1rem;
+}
+
+.tera-md h4,
+.tera-md h5,
+.tera-md h6 {
+  font-size: 0.9375rem;
+}
+
+/* 一覧。点と番号は控えめな灰色にして、本文の濃さを変えない。 */
+.tera-md ul,
+.tera-md ol {
+  padding-left: 1.375rem;
+}
+
+.tera-md ul {
+  list-style: disc;
+}
+
+.tera-md ol {
+  list-style: decimal;
+}
+
+/* タスクリストの項目は点を出さず、印を本文の前に置く。 */
+li.tera-md-task {
+  list-style: none;
+}
+
+/* 引用。左の罫線だけで段を付け、本文は少し薄くする。 */
+.tera-md blockquote {
+  border-left: 2px solid var(--app-stroke-strong);
+  padding-left: 0.75rem;
+  color: var(--app-text-secondary);
+}
+
+/* リンク。本文の中では、下線とアクセント色で押せることを示す。 */
+.tera-md a {
+  color: var(--app-accent-ink);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+.tera-md strong {
+  font-weight: 600;
+}
+
+.tera-md del {
+  color: var(--app-text-secondary);
+}
+
+/* インラインのコード。行の高さを崩さない小ささに留める。 */
+.tera-md code {
+  padding: 0.12em 0.36em;
+  border-radius: 6px;
+  background: var(--app-soft-strong);
+  font-family: var(--app-font-mono);
+  font-size: 0.875em;
+}
+
+/* コードブロック。面の色と罫線で、発言の面の色に関係なく独立させる。 */
+.tera-md pre {
+  padding: 0.75rem 0.9rem;
+  border: 1px solid var(--app-stroke);
+  border-radius: 14px;
+  background: var(--app-surface);
+  font-family: var(--app-font-mono);
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  overflow-x: auto;
+}
+
+/* 表。幅が足りないときは、表だけを横に流す。 */
+.tera-md table {
+  border-collapse: collapse;
+  font-size: 0.9375em;
+}
+
+.tera-md th,
+.tera-md td {
+  padding: 0.3rem 0.6rem;
+  border: 1px solid var(--app-stroke);
+  text-align: left;
+  vertical-align: top;
+}
+
+.tera-md th {
+  background: var(--app-surface-alt);
+  font-weight: 600;
+}
+
+.tera-md hr {
+  border: 0;
+  border-top: 1px solid var(--app-stroke);
+}
+
+/* 引用と項目の中は、段落の余白を外側へ持ち出さない。 */
+.tera-md blockquote > * {
+  margin: 0;
+}
+
+.tera-md blockquote > * + * {
+  margin-top: 0.5rem;
+}
+
+.tera-md li > * {
+  margin: 0;
+}
+
+.tera-md li > * + * {
+  margin-top: 0.375rem;
+}
+
+/* タスクリストの印は一覧の余白へぶら下げ、本文をほかの項目とそろえる。 */
+input.tera-md-check {
+  margin: 0 0.5rem 0 -1.3rem;
+  vertical-align: -0.08em;
+  accent-color: var(--app-accent);
+}
+
+.tera-md li::marker {
+  color: var(--app-text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+.tera-md li + li {
+  margin-top: 0.25rem;
+}
+
+.tera-md li > ul,
+.tera-md li > ol {
+  margin-top: 0.25rem;
+}
+
+.tera-md pre code {
+  padding: 0;
+  border-radius: 0;
+  background: none;
+  font-size: inherit;
+  white-space: pre;
+}
+
+.tera-md a:hover {
+  color: var(--app-accent);
+}
+
+/*
  * Tera のオーブ。アイリスのグラデーションに、左上の光と下側の翳りを重ねる。
  * 文字は墨にして、明るい面の上でも読めるようにする。
  */

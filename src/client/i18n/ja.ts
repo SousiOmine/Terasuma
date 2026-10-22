@@ -25,6 +25,7 @@ export const ja: Record<MessageKey, string> = {
   "chat.agent.subtitle": "AI アシスタント",
   "chat.file.download": "{name} をダウンロード",
   "chat.image.open": "{name} を開く",
+  "chat.markdown.task": "タスク",
 
   "chat.model.unset": "使用するモデルが設定されていません。設定からプロバイダを追加してください。",
   "chat.model.providerMissing": "既定のモデルを使うプロバイダがありません。設定で選び直してください。",
