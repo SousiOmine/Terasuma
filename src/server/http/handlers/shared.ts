@@ -10,6 +10,7 @@ import type { FileStore } from "../../computer/files";
 import type { Handover } from "../../computer/handover";
 import type { ImageStore } from "../../computer/images";
 import type { McpManager } from "../../mcp/manager";
+import type { ConnectionsManager } from "../../connections/manager";
 import { McpServerNotFound } from "../../mcp/manager";
 import type { WebSearchManager } from "../../websearch-manager";
 import type { Catalog } from "../../provider/catalog";
@@ -50,6 +51,8 @@ export type ApiDeps = {
   settings: SettingsStore;
   /** MCP サーバーとの接続。設定画面からの操作もここを通す。 */
   mcp: McpManager;
+  /** アプリの接続（OAuth）。設定画面とチャットのカードからの操作がここを通る。 */
+  connections: ConnectionsManager;
   /** Web 検索の設定と接続確認。設定画面からの操作もここを通す。 */
   webSearch: WebSearchManager;
   /** podman で動かすコンテナ。設定画面からの起動とリセットもここを通す。 */

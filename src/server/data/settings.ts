@@ -3,6 +3,7 @@ import {
   readSettingsFile,
   toModelSettings,
   writeSettingsFile,
+  type ConnectionsSettings,
   type EnvSettings,
   type FileSettings,
   type McpServerSettings,
@@ -23,6 +24,8 @@ import {
 
 /** 読み出した設定の全体。 */
 export type StoredSettings = ModelSettings & {
+  /** アプリの接続（Client ID）。トークンはここには入らない。 */
+  connections: ConnectionsSettings;
   mcpServers: McpServersSettings;
   webSearch: StoredWebSearchSettings;
   /** コンピュータ（デスクトップコンテナ）のコマンドへ渡す環境変数。 */
@@ -51,6 +54,11 @@ export type SettingsStore = {
   /** MCP サーバーを消す。設定が無ければ false を返し、何も書かない。 */
   deleteMcpServer(id: string): boolean;
   /**
+   * アプリの接続に使う Client ID を変える。null で設定ごと消す。
+   * トークンはここではなく接続モジュールが保存する。
+   */
+  setConnectionClientId(id: string, clientId: string | null): void;
+  /**
    * 検索プロバイダを追加・変更する。
    * makeDefault が true、または既定が未設定なら、このプロバイダを既定にする。
    */
@@ -72,6 +80,7 @@ export type SettingsStore = {
 function toStoredSettings(file: FileSettings): StoredSettings {
   return {
     ...toModelSettings(file),
+    connections: file.connections ?? {},
     mcpServers: file.mcpServers ?? {},
     webSearch: {
       default: file.webSearch?.default ?? null,
@@ -172,6 +181,26 @@ export function createSettingsStore(configPath: string): SettingsStore {
         return true;
       });
       return removed;
+    },
+
+    setConnectionClientId(id, clientId) {
+      mutate((settings) => {
+        const connections = { ...settings.connections };
+
+        if (clientId === null) {
+          if (connections[id] === undefined) return false;
+
+          delete connections[id];
+          // 空になったら項目ごと消す（書かない状態と同じ意味なので残さない）。
+          if (Object.keys(connections).length === 0) delete settings.connections;
+          else settings.connections = connections;
+          return true;
+        }
+
+        connections[id] = { clientId };
+        settings.connections = connections;
+        return true;
+      });
     },
 
     putWebSearchProvider(id, provider, makeDefault) {

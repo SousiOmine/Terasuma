@@ -6,6 +6,7 @@ import { locale, t } from "../../i18n";
 import { modelProblem } from "../../state/model";
 import { isLoadingMessages, isStreaming, liveTurn, messages, type LiveTurn } from "../../state/chat";
 import { chatError, clearChatError } from "../../state/failure";
+import { connectionRequest } from "../../state/connection-request";
 import { envRequestActive } from "../../state/env-request";
 import { computerPaneOpen, handoverActive, toggleComputerPane } from "../../state/handover";
 import { openSettings } from "../../state/route";
@@ -15,6 +16,7 @@ import { Banner } from "../../ui/Banner";
 import { ErrorNotice } from "../../ui/ErrorNotice";
 import { ChatAvatar } from "./ChatAvatar";
 import { Composer } from "./Composer";
+import { ConnectionRequestPanel } from "./ConnectionRequestPanel";
 import { EnvRequestPanel } from "./EnvRequestPanel";
 import { AgentMessageBubble, NoticeLine, TypingBubble, UserMessageBubble } from "./MessageBubble";
 
@@ -52,6 +54,8 @@ export function ChatView() {
   const handover = handoverActive.value;
   // 環境変数の入力待ち。引き受けとは別で、チャットの入力欄の上に入力欄を出す。
   const envWaiting = envRequestActive.value;
+  // アプリの認証待ち。同じく入力欄の上にカードを出す。
+  const connectionWaiting = connectionRequest.value !== null;
   const scrollRef = useRef<HTMLDivElement>(null);
   /** 末尾にいるかどうか。履歴を読んでいる間は引き戻さない。 */
   const stickToBottom = useRef(true);
@@ -94,11 +98,13 @@ export function ChatView() {
           <p class="truncate text-[11px] leading-4 text-[var(--app-text-secondary)]">
             {handover
               ? t("chat.computer.yourTurn")
-              : envWaiting
-                ? t("chat.env.waiting")
-                : streaming
-                  ? t("chat.typing")
-                  : t("chat.agent.subtitle")}
+              : connectionWaiting
+                ? t("chat.connection.waitingShort")
+                : envWaiting
+                  ? t("chat.env.waiting")
+                  : streaming
+                    ? t("chat.typing")
+                    : t("chat.agent.subtitle")}
           </p>
         </div>
         {containerAvailable && (
@@ -169,6 +175,15 @@ export function ChatView() {
                 </div>
               }
             />
+          </div>
+        </div>
+      )}
+
+      {/* アプリの認証も、ふだんの入力欄のすぐ上に出す（送る先がチャットとは違うため別の面にする）。 */}
+      {connectionWaiting && (
+        <div class="shrink-0 px-3 pt-2 sm:px-6">
+          <div class="mx-auto w-full max-w-3xl">
+            <ConnectionRequestPanel />
           </div>
         </div>
       )}

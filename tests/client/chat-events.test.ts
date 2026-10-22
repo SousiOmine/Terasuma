@@ -153,6 +153,57 @@ describe("チャットのイベントの読み替え", () => {
     ).toBeNull();
   });
 
+  test("tool_call 越しの接続の呼び出しは、認証カードを出す", () => {
+    expect(
+      interpretEvent({
+        type: "tool-call",
+        id: "a1",
+        part: {
+          type: "tool-call",
+          id: "c8",
+          server: "tool",
+          tool: "call",
+          args: { name: "computer_connect_app", args: { provider: "github", reason: "issue を読むため" } },
+        },
+      }),
+    ).toEqual({
+      kind: "connection-request-start",
+      callId: "c8",
+      provider: "github",
+      reason: "issue を読むため",
+    });
+
+    // 理由が無くても、アプリが分かればカードを出す。
+    expect(
+      interpretEvent({
+        type: "tool-call",
+        id: "a1",
+        part: {
+          type: "tool-call",
+          id: "c9",
+          server: "tool",
+          tool: "call",
+          args: { name: "computer_connect_app", args: { provider: "github" } },
+        },
+      }),
+    ).toEqual({ kind: "connection-request-start", callId: "c9", provider: "github", reason: null });
+
+    // アプリ名が無ければ、どの認可か分からないので何もしない。
+    expect(
+      interpretEvent({
+        type: "tool-call",
+        id: "a1",
+        part: {
+          type: "tool-call",
+          id: "c10",
+          server: "tool",
+          tool: "call",
+          args: { name: "computer_connect_app", args: {} },
+        },
+      }),
+    ).toBeNull();
+  });
+
   test("待ちの結果は、どの呼び出しの結果かだけを伝える", () => {
     const part = {
       type: "tool-result" as const,

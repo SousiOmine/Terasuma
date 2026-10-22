@@ -16,6 +16,7 @@ import type { ConnectionChecker, ProviderModelLister } from "../src/server/provi
 import { startServer, type StartedServer } from "../src/server/http/server";
 import { createSettingsStore, type SettingsStore } from "../src/server/data/settings";
 import { createStore, type Store } from "../src/server/data/store";
+import { createConnections, type ConnectionsManager } from "../src/server/connections/manager";
 import {
   TEST_SETTINGS,
   createCompactionStub,
@@ -52,6 +53,8 @@ export type ServerHarnessOptions = {
   container?: ContainerManager | ((dir: string) => ContainerManager);
   /** MCP 接続。省くと「何も確かめていない」差し替えを使う。 */
   mcp?: McpManager;
+  /** アプリの接続。省くと本物を作る（宛先は本物の GitHub のまま）。 */
+  connections?: ConnectionsManager | ((context: { settings: SettingsStore; dir: string }) => ConnectionsManager);
   /** Web 検索。省くと「プロバイダ未設定」の差し替えを使う。 */
   webSearch?: WebSearchManager;
   /** 引き受け。省くと本物を作る。 */
@@ -110,6 +113,10 @@ export async function withServer<T>(
   const files = createFileStore(dir);
   const container =
     typeof options.container === "function" ? options.container(dir) : (options.container ?? createContainerStub());
+  const connections =
+    typeof options.connections === "function"
+      ? options.connections({ settings, dir })
+      : (options.connections ?? createConnections({ settings, dataDir: dir }));
 
   const config: AppConfig = {
     host: "127.0.0.1",
@@ -132,6 +139,7 @@ export async function withServer<T>(
       compaction,
       settings,
       mcp: options.mcp ?? createMcpStub(),
+      connections,
       webSearch: options.webSearch ?? createWebSearchStub(),
       container,
       images,
@@ -169,6 +177,7 @@ export async function withServer<T>(
     return await run(harness);
   } finally {
     compaction.close();
+    connections.close();
     await started.server.stop(true);
     store.close();
     rmSync(dir, { recursive: true, force: true });

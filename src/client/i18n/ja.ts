@@ -14,6 +14,8 @@ export const ja: Record<MessageKey, string> = {
   "common.saving": "保存しています…",
   "common.default": "既定",
   "common.loading": "読み込み中…",
+  "common.copy": "コピー",
+  "common.copied": "コピーしました",
 
   "tera.empty": "まだ Tera がありません",
 
@@ -48,6 +50,16 @@ export const ja: Record<MessageKey, string> = {
   "chat.env.submitting": "設定しています…",
   "chat.env.waiting": "入力待ち",
 
+  "chat.connection.title": "{app} の認証が必要です",
+  "chat.connection.starting": "認可の準備をしています…",
+  "chat.connection.code": "認可コード",
+  "chat.connection.open": "{app} を開く",
+  "chat.connection.waiting": "コードを入力して承認すると、そのまま続きを進めます。",
+  "chat.connection.waitingShort": "認証待ち",
+  "chat.connection.setup": "設定 > 接続 で Client ID を設定してから、もう一度頼んでください。",
+  "chat.connection.openSettings": "設定を開く",
+  "chat.connection.failed": "認可を完了できませんでした。もう一度頼んでください。",
+
   "composer.placeholder": "メッセージを入力",
   "composer.send": "送信",
   "composer.stop": "停止",
@@ -65,6 +77,31 @@ export const ja: Record<MessageKey, string> = {
   "settings.language.description": "画面の表示と、エージェントの返事に使う言語",
 
   "settings.advanced": "詳細設定",
+
+  "settings.connections": "接続",
+  "settings.connections.description": "CLI やツールから使うサービスに、OAuth でサインインします。",
+  "settings.connections.state.connected": "接続済み",
+  "settings.connections.state.authorizing": "認可待ち",
+  "settings.connections.state.disconnected": "未接続",
+  "settings.connections.account": "{account} として接続中",
+  "settings.connections.scopes": "要求する権限: {scopes}",
+  "settings.connections.clientId.label": "Client ID（GitHub の OAuth App）",
+  "settings.connections.clientId.description":
+    "GitHub の OAuth App を作り、Device Flow を有効にしてから Client ID を貼り付けます。client secret は使いません。",
+  "settings.connections.clientId.placeholder": "例: Iv1.0123456789abcdef",
+  "settings.connections.clientId.save": "保存",
+  "settings.connections.clientId.saving": "保存しています…",
+  "settings.connections.openSetup": "GitHub で OAuth App を開く",
+  "settings.connections.authorize": "認証する",
+  "settings.connections.code": "認可コード",
+  "settings.connections.openAuthorization": "認可ページを開く",
+  "settings.connections.cancelAuthorize": "認可をやめる",
+  "settings.connections.waiting": "認可が終わるまで、この画面はそのまま待ちます。",
+  "settings.connections.env": "コンピュータへ渡す環境変数: {names}",
+  "settings.connections.disconnect": "切断",
+  "settings.connections.disconnectTitle": "接続を切断しますか？",
+  "settings.connections.disconnectMessage":
+    "保存されている認可を消します。コンピュータの環境変数からもトークンが外れます。",
 
   "settings.container": "コンピュータ",
   "settings.container.description":
@@ -247,6 +284,9 @@ export const ja: Record<MessageKey, string> = {
   "error.mcp_server_not_found": "この MCP サーバーは設定されていません。",
   "error.mcp_server_exists": "この MCP サーバーはすでに追加されています。",
   "error.mcp_authorization_failed": "MCP サーバーの認可を始められませんでした。",
+  "error.connection_not_found": "この接続は設定されていません。",
+  "error.connection_not_configured": "アプリの Client ID が設定されていません。",
+  "error.connection_authorization_failed": "アプリの認可を始められませんでした。",
   "error.web_search_not_found": "この検索プロバイダは設定されていません。",
   "error.web_search_exists": "この検索プロバイダはすでに追加されています。",
   "error.mcp_unreachable": "MCP サーバーに接続できませんでした。",

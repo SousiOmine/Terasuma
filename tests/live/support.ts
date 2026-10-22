@@ -24,6 +24,8 @@ import {
 } from "../../src/server/computer/container";
 import { createEnvRequests } from "../../src/server/computer/env";
 import { createFileStore } from "../../src/server/computer/files";
+import { createConnections } from "../../src/server/connections/manager";
+import { createConnectionToolset } from "../../src/server/connections/tools";
 import { createEngine } from "../../src/server/agent/engine";
 import { createSkillFileStore } from "../../src/server/agent/skill-files";
 import { resolveModel } from "../../src/server/provider/routing";
@@ -96,10 +98,11 @@ export async function withLiveServer(run: (harness: LiveHarness) => Promise<void
   const store = createStore(":memory:");
   const images = createImageStore(config.dataDir);
   const files = createFileStore(config.dataDir);
+  const connections = createConnections({ settings, dataDir: config.dataDir });
   const container = createContainerManager({
     dataDir: config.dataDir,
     containerDir: CONTAINER_DIR,
-    env: () => settings.read().env,
+    env: () => ({ ...settings.read().env, ...connections.env() }),
   });
   const handover = createHandover();
   const envRequests = createEnvRequests({ settings });
@@ -139,6 +142,7 @@ export async function withLiveServer(run: (harness: LiveHarness) => Promise<void
     attachments,
     history,
     webSearch,
+    connections: createConnectionToolset(connections),
     coding,
     images,
     catalog,
@@ -161,6 +165,7 @@ export async function withLiveServer(run: (harness: LiveHarness) => Promise<void
     catalog,
     settings,
     mcp,
+    connections,
     webSearch: webSearchManager,
     container,
     images,
@@ -200,6 +205,7 @@ export async function withLiveServer(run: (harness: LiveHarness) => Promise<void
     });
   } finally {
     await server.stop(true);
+    connections.close();
     await mcp.close();
     compaction.close();
     store.close();

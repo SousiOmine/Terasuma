@@ -182,6 +182,9 @@ export const API_ERROR_CODES = [
   "mcp_server_not_found",
   "mcp_server_exists",
   "mcp_authorization_failed",
+  "connection_not_found",
+  "connection_not_configured",
+  "connection_authorization_failed",
   "web_search_not_found",
   "web_search_exists",
   "container_build_failed",
@@ -422,4 +425,50 @@ export type ContainerStatusView = {
  */
 export type ComputerEnvView = {
   variables: readonly string[];
+};
+
+/**
+ * アプリの認可（Device Flow）1 件。
+ * コードはユーザーが認可ページへ入力し、終わるまでサーバーがトークンを問い合わせる。
+ */
+export type ConnectionFlowView = {
+  /** アプリの表示名（"GitHub" など）。チャットのカードに出す。 */
+  providerName: string;
+  /** ユーザーが認可ページへ入力するコード。 */
+  userCode: string;
+  /** ブラウザで開く認可ページ。 */
+  verificationUri: string;
+  /** コードの有効期限。epoch ミリ秒。 */
+  expiresAt: number;
+};
+
+/** 設定画面に並べる接続 1 件。トークンそのものは返さない。 */
+export type ConnectionProviderView = {
+  id: string;
+  name: string;
+  description: string;
+  /** アプリを登録するためのページ。 */
+  setupUrl: string;
+  /** 接続で要求する権限。 */
+  scopes: readonly string[];
+  /** 接続がコンピュータへ渡す環境変数の名前。 */
+  env: readonly string[];
+  /** 保存済みの Client ID。未設定なら null。 */
+  clientId: string | null;
+  /** 接続中のアカウント。未接続なら null。 */
+  account: string | null;
+  /** 進行中の認可。無ければ null。 */
+  flow: ConnectionFlowView | null;
+  /** 保存されている認可を読めなかった理由。無ければ null。 */
+  detail: string | null;
+};
+
+/** 接続の設定の現在の状態。設定を変える API はすべてこの形を返す。 */
+export type ConnectionsView = {
+  providers: ConnectionProviderView[];
+};
+
+/** 認可を始めた結果。すでに接続済みなら flow は null。 */
+export type ConnectionAuthorizationView = {
+  flow: ConnectionFlowView | null;
 };

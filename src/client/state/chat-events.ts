@@ -1,4 +1,4 @@
-import { ASK_USER_TOOL_NAME, SET_ENV_TOOL_NAME, TOOL_CALL_TOOL, TOOL_SERVER_ID } from "../../shared/tools";
+import { ASK_USER_TOOL_NAME, CONNECT_APP_TOOL_NAME, SET_ENV_TOOL_NAME, TOOL_CALL_TOOL, TOOL_SERVER_ID } from "../../shared/tools";
 import type { AttachmentPart, ChatEvent, ChatMessage, NoticePart, TextPart } from "../../shared/types";
 import type { ClientErrorCode } from "../lib/http";
 
@@ -15,6 +15,8 @@ export type ChatEventEffect =
   | { kind: "assistant-part"; id: string; part: TextPart | AttachmentPart | NoticePart }
   | { kind: "handover-start"; callId: string; question: string | null }
   | { kind: "env-request-start"; callId: string; name: string; description: string | null }
+  /** アプリの認可が要る。チャットに認証カードを出す。 */
+  | { kind: "connection-request-start"; callId: string; provider: string; reason: string | null }
   /**
    * ユーザーの入力を待っていた呼び出しの結果が届いた。
    * どちらの待ち（画面の引き受け・環境変数）を終えるかは、id で判定する。
@@ -43,6 +45,21 @@ export function interpretEvent(event: ChatEvent): ChatEventEffect | null {
           kind: "handover-start",
           callId: event.part.id,
           question: typeof question === "string" && question.trim().length > 0 ? question : null,
+        };
+      }
+
+      const connect = toolCallArgs(event.part, CONNECT_APP_TOOL_NAME);
+      if (connect !== null) {
+        const provider = connect["provider"];
+        // どのアプリか分からないとカードを出せないので、その場合は何もしない。
+        if (typeof provider !== "string" || provider.length === 0) return null;
+
+        const reason = connect["reason"];
+        return {
+          kind: "connection-request-start",
+          callId: event.part.id,
+          provider,
+          reason: typeof reason === "string" && reason.trim().length > 0 ? reason : null,
         };
       }
 

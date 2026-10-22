@@ -7,6 +7,7 @@
  */
 
 import {
+  APP_SERVER_ID,
   CHAT_SERVER_ID,
   COMPUTER_SERVER_ID,
   HISTORY_SERVER_ID,
@@ -21,7 +22,7 @@ const ID_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
 /**
  * MCP サーバーの id に使えない名前。
  * ツール名は "<サーバー id>_<ツール名>" になるので、内蔵ツール（"computer_..."、"chat_..."、
- * "tool_..."、"history_..."、"web_..."、"skill_..."）と同じ名前が作れてしまう。
+ * "tool_..."、"history_..."、"web_..."、"skill_..."、"app_..."）と同じ名前が作れてしまう。
  * 同じ名前になると、どちらのツールかモデルにも画面にも区別が付かない。
  */
 export const RESERVED_MCP_SERVER_IDS: readonly string[] = [
@@ -31,6 +32,7 @@ export const RESERVED_MCP_SERVER_IDS: readonly string[] = [
   HISTORY_SERVER_ID,
   WEB_SERVER_ID,
   SKILL_SERVER_ID,
+  APP_SERVER_ID,
 ];
 
 /** MCP サーバー id の受け付けられない理由。使える場合は null。 */

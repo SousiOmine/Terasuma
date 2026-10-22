@@ -15,6 +15,8 @@ export const en = {
   "common.saving": "Saving…",
   "common.default": "Default",
   "common.loading": "Loading…",
+  "common.copy": "Copy",
+  "common.copied": "Copied",
 
   "tera.empty": "No Teras yet",
 
@@ -49,6 +51,16 @@ export const en = {
   "chat.env.submitting": "Setting…",
   "chat.env.waiting": "Waiting for your input",
 
+  "chat.connection.title": "{app} needs you to sign in",
+  "chat.connection.starting": "Preparing the sign-in…",
+  "chat.connection.code": "Authorization code",
+  "chat.connection.open": "Open {app}",
+  "chat.connection.waiting": "Enter the code and approve it; the task continues from there.",
+  "chat.connection.waitingShort": "Waiting for sign-in",
+  "chat.connection.setup": "Set the Client ID in Settings > Connections, then ask again.",
+  "chat.connection.openSettings": "Open settings",
+  "chat.connection.failed": "The sign-in could not be completed. Ask again.",
+
   "composer.placeholder": "Send a message",
   "composer.send": "Send",
   "composer.stop": "Stop",
@@ -66,6 +78,31 @@ export const en = {
   "settings.language.description": "Language used in the interface and in the agent's replies.",
 
   "settings.advanced": "Advanced",
+
+  "settings.connections": "Connections",
+  "settings.connections.description": "Sign in to services that your CLI commands and tools use.",
+  "settings.connections.state.connected": "Connected",
+  "settings.connections.state.authorizing": "Waiting for approval",
+  "settings.connections.state.disconnected": "Not connected",
+  "settings.connections.account": "Connected as {account}",
+  "settings.connections.scopes": "Requested scopes: {scopes}",
+  "settings.connections.clientId.label": "Client ID (GitHub OAuth App)",
+  "settings.connections.clientId.description":
+    "Create a GitHub OAuth App, enable Device Flow, and paste its Client ID here. No client secret is used.",
+  "settings.connections.clientId.placeholder": "For example: Iv1.0123456789abcdef",
+  "settings.connections.clientId.save": "Save",
+  "settings.connections.clientId.saving": "Saving…",
+  "settings.connections.openSetup": "Open GitHub OAuth Apps",
+  "settings.connections.authorize": "Sign in",
+  "settings.connections.code": "Authorization code",
+  "settings.connections.openAuthorization": "Open the authorization page",
+  "settings.connections.cancelAuthorize": "Cancel the sign-in",
+  "settings.connections.waiting": "This screen keeps waiting until the sign-in finishes.",
+  "settings.connections.env": "Environment variables for the computer: {names}",
+  "settings.connections.disconnect": "Disconnect",
+  "settings.connections.disconnectTitle": "Disconnect this app?",
+  "settings.connections.disconnectMessage":
+    "The saved authorization is removed, and the token is no longer passed to the computer.",
 
   "settings.container": "Computer",
   "settings.container.description":
@@ -250,6 +287,9 @@ export const en = {
   "error.mcp_server_not_found": "This MCP server is not configured.",
   "error.mcp_server_exists": "This MCP server is already added.",
   "error.mcp_authorization_failed": "Authorization for the MCP server could not be started.",
+  "error.connection_not_found": "This connection is not configured.",
+  "error.connection_not_configured": "The app's Client ID is not configured.",
+  "error.connection_authorization_failed": "Authorization for the app could not be started.",
   "error.web_search_not_found": "This search provider is not configured.",
   "error.web_search_exists": "This search provider is already added.",
   "error.mcp_unreachable": "Could not connect to the MCP server.",

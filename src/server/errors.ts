@@ -53,3 +53,17 @@ export class WebSearchProviderExists extends AppError {
     super("web_search_exists", 409, `検索プロバイダ ${providerId} はすでに追加されています`);
   }
 }
+
+/** 設定に無い接続プロバイダを触ろうとしたときの失敗。 */
+export class ConnectionNotFound extends AppError {
+  constructor(readonly connectionId: string) {
+    super("connection_not_found", 404, `接続 ${connectionId} は設定されていません`);
+  }
+}
+
+/** Client ID が未設定のまま認可を始めようとしたときの失敗。 */
+export class ConnectionNotConfigured extends AppError {
+  constructor(readonly connectionId: string) {
+    super("connection_not_configured", 400, `接続 ${connectionId} の Client ID が設定されていません`);
+  }
+}

@@ -11,6 +11,7 @@ import type { AgentEngine } from "../agent/engine";
 import type { Handover } from "../computer/handover";
 import { describeError } from "../../shared/errors";
 import { jsonError, withErrorHandling } from "./respond";
+import type { ConnectionsManager } from "../connections/manager";
 import type { McpManager } from "../mcp/manager";
 import { OAUTH_CALLBACK_PATH } from "../mcp/oauth";
 import type { WebSearchManager } from "../websearch-manager";
@@ -34,6 +35,8 @@ export type ServerOptions = {
   settings: SettingsStore;
   /** MCP サーバーとの接続。OAuth のコールバックもここを通る。 */
   mcp: McpManager;
+  /** アプリの接続（OAuth）。設定画面とチャットのカードからの操作もここを通る。 */
+  connections: ConnectionsManager;
   /** Web 検索の設定と接続確認。設定画面からの操作もここを通る。 */
   webSearch: WebSearchManager;
   /** podman で動かすコンテナ。設定画面からの操作もここを通る。 */
@@ -96,6 +99,7 @@ export function startServer(options: ServerOptions): StartedServer {
     compaction,
     settings,
     mcp,
+    connections,
     webSearch,
     container,
     images,
@@ -110,6 +114,7 @@ export function startServer(options: ServerOptions): StartedServer {
       engine,
       settings,
       mcp,
+      connections,
       webSearch,
       container,
       images,
@@ -195,6 +200,20 @@ export function startServer(options: ServerOptions): StartedServer {
         "/api/mcp/servers/:id/authorize": {
           POST: api.authorizeMcpServer,
           DELETE: api.cancelMcpAuthorization,
+        },
+        // アプリの接続（Device Flow）。認可の開始・中止と、Client ID の保存。
+        "/api/connections": {
+          GET: api.listConnections,
+        },
+        "/api/connections/:id": {
+          PUT: api.setConnection,
+          DELETE: api.disconnectConnection,
+        },
+        "/api/connections/:id/authorize": {
+          POST: api.authorizeConnection,
+        },
+        "/api/connections/:id/flow": {
+          DELETE: api.cancelConnection,
         },
         // Web 検索のプロバイダ。保存前の確認は接続先へ 1 回検索を投げる。
         "/api/websearch": {

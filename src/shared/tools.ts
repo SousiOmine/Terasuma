@@ -39,6 +39,12 @@ export const HISTORY_SERVER_ID = "history";
  */
 export const WEB_SERVER_ID = "web";
 
+/**
+ * 接続済みアプリの API を叩く内蔵ツールのサーバー id。
+ * アプリごとの API を 1 つの名前にまとめる（"app_request"）。
+ */
+export const APP_SERVER_ID = "app";
+
 /** ツールを検索するツール名（サーバー id を付けない形）。 */
 export const TOOL_SEARCH_TOOL = "search";
 
@@ -101,6 +107,21 @@ export const SET_ENV_TOOL = "set_env";
 
 /** モデルへ渡すときの、環境変数の入力を求めるツールの名前。 */
 export const SET_ENV_TOOL_NAME = `${COMPUTER_SERVER_ID}${TOOL_NAME_SEPARATOR}${SET_ENV_TOOL}`;
+
+/**
+ * アプリ（GitHub など）に OAuth でサインインするツール名（サーバー id を付けない形）。
+ * ユーザーはチャットのカードから認可し、トークンはモデルに渡らない。
+ */
+export const CONNECT_APP_TOOL = "connect_app";
+
+/** モデルへ渡すときの、アプリにサインインするツールの名前。 */
+export const CONNECT_APP_TOOL_NAME = `${COMPUTER_SERVER_ID}${TOOL_NAME_SEPARATOR}${CONNECT_APP_TOOL}`;
+
+/** 接続済みアプリの API を叩くツール名（サーバー id を付けない形）。 */
+export const APP_REQUEST_TOOL = "request";
+
+/** モデルへ渡すときの、アプリの API を叩くツールの名前。 */
+export const APP_REQUEST_TOOL_NAME = `${APP_SERVER_ID}${TOOL_NAME_SEPARATOR}${APP_REQUEST_TOOL}`;
 
 /** 画像やファイルをチャットへ添付するツール名（サーバー id を付けない形）。 */
 export const ATTACH_TOOL = "attach";

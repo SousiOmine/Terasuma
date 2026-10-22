@@ -1,0 +1,170 @@
+import type { ToolSet } from "ai";
+import { tool } from "ai";
+import { z } from "zod";
+import { describeError } from "../../shared/errors";
+import { APP_REQUEST_TOOL_NAME, CONNECT_APP_TOOL_NAME } from "../../shared/tools";
+import { ConnectionNotFound } from "../errors";
+import type { ConnectionsManager } from "./manager";
+
+/**
+ * アプリの接続を扱うツール。
+ *
+ * computer_connect_app はチャットに認証カードを出し、ユーザーが認可するまで待つ。
+ * app_request は接続済みのトークンで API を叩く（トークンはモデルに渡さない）。
+ * どちらもツール一覧には載せず、tool_search で見つけて tool_call で実行する。
+ */
+
+/** モデルへ渡すツール。キーは "computer_connect_app" と "app_request"。 */
+export type ConnectionToolset = ToolSet;
+
+/** ツールの供給元。 */
+export type ConnectionToolsetProvider = {
+  toolset(): ConnectionToolset;
+};
+
+/** API 1 回の待ち時間。応答しないサーバーでターンを止めない。 */
+const API_TIMEOUT_MS = 30_000;
+
+/** モデルへ返す応答の上限（文字数）。 */
+const MAX_RESPONSE_CHARS = 20_000;
+
+type ToolContext = { abortSignal?: AbortSignal };
+
+/** API の引数。method はスキーマの列挙より広い string として受ける。 */
+type AppRequestInput = {
+  provider: string;
+  method: string;
+  path: string;
+  body?: unknown;
+};
+
+export function createConnectionToolset(connections: ConnectionsManager): ConnectionToolsetProvider {
+  return {
+    toolset() {
+      return createConnectionTools({ connections });
+    },
+  };
+}
+
+export function createConnectionTools(options: { connections: ConnectionsManager }): ConnectionToolset {
+  const { connections } = options;
+
+  return {
+    [CONNECT_APP_TOOL_NAME]: tool({
+      description: [
+        "Connect an app to the computer with the user's own OAuth sign-in (currently GitHub).",
+        "Call this when a task needs the app and its environment variable is not set.",
+        "The user signs in from a card in the chat; you never see the token.",
+        "Once this returns, the token is available to every command in the computer.",
+      ].join(" "),
+      inputSchema: z.object({
+        provider: z.string().min(1).describe('App to connect. Use "github".'),
+        reason: z.string().min(1).describe("Why you need it, written for the user to read"),
+      }),
+      execute: async ({ provider }: { provider: string }, context: ToolContext) => {
+        const signal = context.abortSignal;
+        if (signal === undefined) {
+          throw new Error("Cannot wait for the user because the turn's abort signal is not available");
+        }
+
+        try {
+          return await connections.wait(provider, signal);
+        } catch (error) {
+          if (error instanceof ConnectionNotFound) {
+            throw new Error(`Unknown app "${provider}". Use "github".`, { cause: error });
+          }
+          throw error;
+        }
+      },
+    }),
+
+    [APP_REQUEST_TOOL_NAME]: tool({
+      description: [
+        "Call the API of a connected app with its saved OAuth token.",
+        "Use tool_search to find this when you need the API instead of the CLI.",
+        'path must begin with "/" and stay on the app\'s API, for example "/user" or "/repos/owner/repo/issues".',
+        "The token is never returned. A 401 means the user must connect the app again.",
+      ].join(" "),
+      inputSchema: z.object({
+        provider: z.string().min(1).describe('Connected app id, for example "github"'),
+        method: z.enum(["GET", "POST", "PATCH", "PUT", "DELETE"]).describe("HTTP method"),
+        path: z.string().min(1).describe('API path beginning with "/", for example "/user"'),
+        body: z.unknown().optional().describe("JSON body for POST, PATCH or PUT"),
+      }),
+      execute: async ({ provider, method, path, body }: AppRequestInput, context: ToolContext) => {
+        const definition = providerOf(connections, provider);
+        const token = connections.token(provider);
+        if (token === null) {
+          throw new Error(
+            `${definition.name} is not connected. Call ${CONNECT_APP_TOOL_NAME} and let the user sign in first.`,
+          );
+        }
+
+        const url = apiUrl(definition.api.baseUrl, path);
+        const headers: Record<string, string> = {
+          ...definition.api.headers,
+          Authorization: `Bearer ${token}`,
+        };
+
+        // GET と DELETE に本文は付けない（付けるとサーバーによっては拒否される）。
+        const withBody = body !== undefined && method !== "GET" && method !== "DELETE";
+        if (withBody) headers["Content-Type"] = "application/json";
+
+        const timeout = AbortSignal.timeout(API_TIMEOUT_MS);
+        const signal = context.abortSignal === undefined ? timeout : AbortSignal.any([context.abortSignal, timeout]);
+
+        let response: Response;
+        try {
+          response = await fetch(url, {
+            method,
+            headers,
+            ...(withBody ? { body: JSON.stringify(body) } : {}),
+            signal,
+          });
+        } catch (error) {
+          throw new Error(`Could not reach ${definition.name}: ${describeError(error)}`, { cause: error });
+        }
+
+        const text = await response.text();
+        if (response.status === 401) {
+          throw new Error(
+            `${definition.name} rejected the saved authorization. Ask the user to connect again with ${CONNECT_APP_TOOL_NAME}.`,
+          );
+        }
+
+        const status = `HTTP ${response.status}`;
+        return text.length === 0 ? status : `${status}\n${truncate(text)}`;
+      },
+    }),
+  };
+}
+
+/** 知らない id は、モデルが読める英語の理由にする。 */
+function providerOf(connections: ConnectionsManager, id: string) {
+  try {
+    return connections.provider(id);
+  } catch (error) {
+    if (error instanceof ConnectionNotFound) {
+      throw new Error(`Unknown app "${id}". Use "github".`, { cause: error });
+    }
+    throw error;
+  }
+}
+
+/** API の URL を組み立てる。接続先の外へ出るパスは受け付けない。 */
+function apiUrl(baseUrl: string, path: string): URL {
+  if (!path.startsWith("/") || path.startsWith("//")) {
+    throw new Error('path must begin with a single "/"');
+  }
+
+  const base = baseUrl.replace(/\/+$/, "");
+  const url = new URL(`${base}${path}`);
+  if (url.origin !== new URL(base).origin) {
+    throw new Error("path must stay on the connected app's API");
+  }
+  return url;
+}
+
+function truncate(text: string): string {
+  return text.length <= MAX_RESPONSE_CHARS ? text : `${text.slice(0, MAX_RESPONSE_CHARS)}… (truncated)`;
+}

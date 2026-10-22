@@ -9,6 +9,7 @@ import type { ComputerToolset } from "./tools/computer";
 import type { AttachmentToolset } from "./tools/attachments";
 import type { HistoryToolset } from "./tools/history";
 import type { ImageStore } from "../computer/images";
+import type { ConnectionToolsetProvider } from "../connections/tools";
 import type { McpToolset } from "../mcp/manager";
 import type { CatalogSnapshot } from "../provider/catalog";
 import { createLanguageModel } from "../provider/adapters";
@@ -142,6 +143,8 @@ export function createEngine(options: {
   history: HistoryToolsetProvider;
   /** Web 検索とページ取得のツール。 */
   webSearch: WebSearchToolsetProvider;
+  /** アプリの接続（OAuth）のツール。 */
+  connections: ConnectionToolsetProvider;
   /** コンテナのファイルとシェルのツール。ターンごとに変わらないので、そのまま渡す。 */
   coding: CodingToolset;
   /** 撮った画像の置き場。履歴から画像を読み直してモデルへ渡す。 */
@@ -159,6 +162,7 @@ export function createEngine(options: {
     attachments: options.attachments,
     history: options.history,
     webSearch: options.webSearch,
+    connections: options.connections,
     coding: options.coding,
     images: options.images,
     catalog: options.catalog,
@@ -187,6 +191,8 @@ export type AiSdkEngineOptions = {
   history: HistoryToolsetProvider;
   /** Web 検索とページ取得のツール。 */
   webSearch: WebSearchToolsetProvider;
+  /** アプリの接続（OAuth）のツール。 */
+  connections: ConnectionToolsetProvider;
   /** コンテナのファイルとシェルのツール。 */
   coding: CodingToolset;
   images: ImageStore;
@@ -197,7 +203,8 @@ export type AiSdkEngineOptions = {
 };
 
 export function createAiSdkEngine(options: AiSdkEngineOptions): AgentEngine {
-  const { settings, mcp, computer, attachments, history, webSearch, coding, images, catalog, skills } = options;
+  const { settings, mcp, computer, attachments, history, webSearch, connections, coding, images, catalog, skills } =
+    options;
 
   // スキルの一覧はターンの開始時に読み直す。ツールの定義は変わらないので、ここで 1 度だけ組む。
   const library = createSkillLibrary(skills);
@@ -244,7 +251,8 @@ export function createAiSdkEngine(options: AiSdkEngineOptions): AgentEngine {
       // （サーバーが増えても、使わないツールの定義で毎回の文脈が膨らまないようにするため）。
       // 一覧は呼び出しのたびに組み直すので、設定画面でサーバーを足しても作り直さずに済む。
       const [mcpTools, computerTools] = await Promise.all([mcp.toolset(), computer.toolset({ teraId })]);
-      const registry = await createToolRegistry({ ...mcpTools, ...computerTools });
+      // アプリの接続ツール（computer_connect_app と app_request）も、検索してから実行する。
+      const registry = await createToolRegistry({ ...mcpTools, ...computerTools, ...connections.toolset() });
 
       // 添付の口はターンごとに差し替わるので、ここで組む。
       const attachmentTools = attachments.toolset({ attach });

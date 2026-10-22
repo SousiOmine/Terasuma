@@ -16,6 +16,8 @@ import { createHandover } from "./server/computer/handover";
 import { createImageStore } from "./server/computer/images";
 import { createSettingsStore, type SettingsStore } from "./server/data/settings";
 import { createStore, type Store } from "./server/data/store";
+import { createConnections, type ConnectionsManager } from "./server/connections/manager";
+import { createConnectionToolset } from "./server/connections/tools";
 import { startServer, type StartedServer } from "./server/http/server";
 import { createMcpManager, type McpManager } from "./server/mcp/manager";
 import { OAUTH_CALLBACK_PATH } from "./server/mcp/oauth";
@@ -38,6 +40,8 @@ export type App = {
   catalog: Catalog;
   compaction: Compaction;
   mcp: McpManager;
+  /** アプリの接続（GitHub など）。設定画面とチャットのカードから使う。 */
+  connections: ConnectionsManager;
   container: ContainerManager;
   /** Web 検索の設定と接続確認。設定画面からの操作もここを通す。 */
   webSearch: WebSearchManager;
@@ -58,6 +62,10 @@ export function startApp(config: AppConfig): App {
   // エージェントが作ったスキルは、コンピュータのホームの .agents/skills に置く。
   const skills = createSkillFileStore({ dataDir: config.dataDir });
 
+  // アプリの接続。トークンはデータディレクトリに置き、コンピュータの環境変数にも混ぜる。
+  // 接続が設定した値は、設定ファイルの env より優先する（接続し直した結果を使うため）。
+  const connections = createConnections({ settings, dataDir: config.dataDir });
+
   // 認可コードの受け取り先は、待ち受けているポートが決まってから決まる。
   // 実際に使うポートは startServer の戻り値で分かるので、そこまで null のままにする。
   let boundPort: number | null = null;
@@ -75,7 +83,7 @@ export function startApp(config: AppConfig): App {
   const container = createContainerManager({
     dataDir: config.dataDir,
     containerDir: join(import.meta.dir, "..", "container"),
-    env: () => settings.read().env,
+    env: () => ({ ...settings.read().env, ...connections.env() }),
   });
 
   // エージェントがユーザーへ画面を渡すときの待ち（ログインや二段階認証）。
@@ -114,6 +122,7 @@ export function startApp(config: AppConfig): App {
     attachments,
     history,
     webSearch,
+    connections: createConnectionToolset(connections),
     coding,
     images,
     catalog,
@@ -137,6 +146,7 @@ export function startApp(config: AppConfig): App {
     catalog,
     settings,
     mcp,
+    connections,
     webSearch: webSearchManager,
     container,
     images,
@@ -155,12 +165,14 @@ export function startApp(config: AppConfig): App {
     catalog,
     compaction,
     mcp,
+    connections,
     container,
     webSearch: webSearchManager,
 
     async shutdown() {
       // 畳まないと、MCP サーバーの接続と SQLite の WAL、圧縮の予約がそのまま残る。
       await server.stop(true);
+      connections.close();
       await mcp.close();
       compaction.close();
       store.close();

@@ -134,6 +134,7 @@ sudo tailscale serve reset
 Tailscale 経由では、MCP サーバーの OAuth 認可は完了しない。
 コールバックの URL が `http://127.0.0.1:3000` で組み立てられるため、リモートのブラウザではその端末の localhost を指してしまう。
 API キーで繋ぐ MCP サーバーはこの制限を受けない。
+`設定 > 接続` で行うアプリの接続（GitHub）は、コールバック URL を使わない Device Flow なので、Tailscale 経由でも完了する。
 
 ## 最初の設定
 
@@ -145,6 +146,23 @@ API キーで繋ぐ MCP サーバーはこの制限を受けない。
 以降は build 済みのイメージを使い回す。
 イメージには、エージェントがそのまま使える `git`、`tmux`、`pi`（pi-coding-agent）が入っている。
 
+## GitHub の接続
+
+GitHub のリポジトリや API を使うときは、`設定 > 接続` でサインインする。
+OAuth App は自分で 1 つ作る。Device Flow を使うため、client secret は要らない。
+
+1. GitHub の Settings → Developer settings → OAuth Apps → New OAuth App を開く。
+2. Application name は任意（例: Terasuma）。Homepage URL は `http://127.0.0.1:3000` などでよい。
+3. Authorization callback URL は未使用なので、`http://127.0.0.1:3000/` などでよい。
+4. 作成後、アプリの設定で **Enable Device Flow** を ON にする。
+5. 表示された Client ID を、Terasuma の `設定 > 接続` に貼り付けて保存する。
+6. 「認証する」を押し、表示されたコードを `https://github.com/login/device` で入力して承認する。
+
+トークンは `~/.local/share/terasuma/connections/github.json`（0600）に保存される。
+接続すると、コンピュータのコマンドで `GH_TOKEN` と `GITHUB_TOKEN` が使える。
+git は `git -c http.extraHeader="Authorization: Bearer $GH_TOKEN" clone ...` のように使う。
+`gh` コマンドはコンピュータのイメージに入っていない。API はエージェントの `app_request` から叩ける。
+
 ## データの場所
 
 Quadlet は、ホストで直接動かすときと同じパスをコンテナにマウントする。
@@ -155,10 +173,12 @@ Quadlet は、ホストで直接動かすときと同じパスをコンテナに
 | `~/.local/share/terasuma/terasuma.db` | 会話の履歴 |
 | `~/.local/share/terasuma/images/` | ツールが撮った画像 |
 | `~/.local/share/terasuma/models-dev.json` | モデルカタログのキャッシュ |
+| `~/.local/share/terasuma/connections/` | アプリの接続のトークン（`github.json`、0600。バックアップに含める） |
 | `~/.local/share/terasuma/container/home/` | コンピュータのホーム（エージェントの read / write / edit / bash の場所。チャットで添付したファイルは `uploads/` に置かれる） |
 | `~/.local/share/terasuma/container/home/.agents/skills/` | エージェントが作成したスキル。コンテナの中では `/home/agent/.agents/skills/` |
 
 バックアップを取るときは、`~/.config/terasuma` と `~/.local/share/terasuma` をまとめてコピーすればよい。
+接続のトークン（`connections/`）もこの中に入るので、バックアップの扱いには注意する。
 
 ```sh
 tar czf terasuma-backup.tgz -C "$HOME" .config/terasuma .local/share/terasuma

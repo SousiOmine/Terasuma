@@ -29,6 +29,7 @@ import { createHandover } from "../src/server/computer/handover";
 import {
   createCodingStub,
   createComputerStub,
+  createConnectionToolsStub,
   createContainerStub,
   createEnvRequestsStub,
   createHistoryStub,
@@ -252,6 +253,7 @@ async function run(
     attachments,
     history: historyTools,
     webSearch: createWebSearchToolsStub(),
+    connections: createConnectionToolsStub(),
     coding,
     images,
     catalog: { snapshot: () => catalog },

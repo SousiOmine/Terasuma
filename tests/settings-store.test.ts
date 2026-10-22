@@ -14,6 +14,7 @@ describe("設定ストア", () => {
         model: null,
         providers: { deepseek: { apiKey: "sk-1" } },
         modelOptions: {},
+        connections: {},
         mcpServers: {},
         webSearch: { default: null, providers: {} },
         env: {},
@@ -93,6 +94,7 @@ describe("設定ストア", () => {
         model: "openai/gpt-5.6-sol",
         providers: { deepseek: { apiKey: "sk-1" }, openai: { apiKey: "sk-2" } },
         modelOptions: {},
+        connections: {},
         mcpServers: {},
         webSearch: { default: null, providers: {} },
         env: {},
@@ -232,6 +234,27 @@ describe("設定ストア", () => {
 
       // 2 度目は設定が無いので、ファイルにも触らない。
       expect(store.deleteEnv("GITHUB_TOKEN")).toBe(false);
+    });
+  });
+
+  test("接続の Client ID を保存し、空になったら項目ごと消す", async () => {
+    await withTempSettings(null, async (store, path) => {
+      store.setConnectionClientId("github", "Iv1.abc");
+
+      expect(store.read().connections).toEqual({ github: { clientId: "Iv1.abc" } });
+      expect(readSettingsFile(path).connections).toEqual({ github: { clientId: "Iv1.abc" } });
+
+      store.setConnectionClientId("github", "Iv1.def");
+      expect(readSettingsFile(path).connections).toEqual({ github: { clientId: "Iv1.def" } });
+
+      store.setConnectionClientId("github", null);
+      expect(store.read().connections).toEqual({});
+      expect(readSettingsFile(path).connections).toBeUndefined();
+
+      // 2 度目は設定が無いので、ファイルにも触らない。
+      const before = readFileSync(path, "utf8");
+      store.setConnectionClientId("github", null);
+      expect(readFileSync(path, "utf8")).toBe(before);
     });
   });
 

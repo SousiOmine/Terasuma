@@ -47,6 +47,19 @@ export type ProvidersSettings = Record<string, ProviderSettings>;
  */
 export type EnvSettings = Record<string, string>;
 
+/**
+ * 接続 1 件の設定。Client ID だけを保存する。
+ *
+ * トークンは設定ファイルではなく、データディレクトリの別のファイル（0600）に置く。
+ * Client ID は秘密ではないが、利用者ごとに違うので設定として持つ。
+ */
+export type ConnectionSettings = {
+  clientId: string;
+};
+
+/** 接続 id → 設定。並び順は設定ファイルに書かれた順のまま保つ。 */
+export type ConnectionsSettings = Record<string, ConnectionSettings>;
+
 /** この端末で動かす MCP サーバー（stdio）。コマンドを起動して標準入出力で話す。 */
 export type McpStdioServerSettings = {
   type: "stdio";
@@ -102,6 +115,9 @@ export type StoredWebSearchSettings = {
 /** MCP サーバー 1 件に書ける項目。 */
 const MCP_SERVER_KEYS = ["type", "command", "args", "env", "url"] as const;
 
+/** 接続 1 件に書ける項目。 */
+const CONNECTION_KEYS = ["clientId"] as const;
+
 /** Web 検索の設定に書ける項目。 */
 const WEB_SEARCH_KEYS = ["default", "providers"] as const;
 
@@ -114,7 +130,7 @@ const PROVIDER_KEYS = ["apiKey", "baseUrl", "label"] as const;
 /** モデル 1 件に書ける項目。 */
 const MODEL_OPTION_KEYS = ["reasoningEffort"] as const;
 
-const FILE_KEYS = ["model", "providers", "modelOptions", "mcpServers", "webSearch", "env", "port"] as const;
+const FILE_KEYS = ["model", "providers", "modelOptions", "connections", "mcpServers", "webSearch", "env", "port"] as const;
 type FileKey = (typeof FILE_KEYS)[number];
 
 /** config.json に書ける設定。書かなかった項目は既定値になる。 */
@@ -122,6 +138,7 @@ export type FileSettings = Partial<{
   model: ModelId;
   providers: ProvidersSettings;
   modelOptions: ModelOptionsSettings;
+  connections: ConnectionsSettings;
   mcpServers: McpServersSettings;
   webSearch: WebSearchSettings;
   env: EnvSettings;
@@ -194,6 +211,9 @@ export function readSettingsFile(path: string): FileSettings {
   const modelOptions = readModelOptions(source, path);
   if (modelOptions !== undefined) settings.modelOptions = modelOptions;
 
+  const connections = readConnections(source, path);
+  if (connections !== undefined) settings.connections = connections;
+
   const mcpServers = readMcpServers(source, path);
   if (mcpServers !== undefined) settings.mcpServers = mcpServers;
 
@@ -232,6 +252,7 @@ function serialize(settings: FileSettings): string {
   if (settings.model !== undefined) ordered["model"] = settings.model;
   if (settings.providers !== undefined) ordered["providers"] = settings.providers;
   if (settings.modelOptions !== undefined) ordered["modelOptions"] = settings.modelOptions;
+  if (settings.connections !== undefined) ordered["connections"] = settings.connections;
   if (settings.webSearch !== undefined) ordered["webSearch"] = settings.webSearch;
   if (settings.mcpServers !== undefined) ordered["mcpServers"] = settings.mcpServers;
   if (settings.env !== undefined) ordered["env"] = settings.env;
@@ -582,6 +603,47 @@ function readEnv(source: Record<string, unknown>, path: string): EnvSettings | u
     variables[name] = entry;
   }
   return variables;
+}
+
+/**
+ * アプリの接続の設定を読む。
+ * id は接続のプロバイダ名（"github" など）で、値は Client ID だけを持つ。
+ * どの id が使えるかはサーバーの接続モジュールが決めるので、ここでは形だけを確かめる。
+ */
+function readConnections(source: Record<string, unknown>, path: string): ConnectionsSettings | undefined {
+  const value = source["connections"];
+  if (value === undefined) return undefined;
+
+  if (!isRecord(value)) {
+    throw new Error(`${path} の connections はオブジェクトにしてください`);
+  }
+
+  const connections: ConnectionsSettings = {};
+  for (const [id, entry] of Object.entries(value)) {
+    if (!isProviderId(id)) {
+      throw new Error(
+        `${path} の connections に使えない id があります: ${JSON.stringify(id)}（英小文字・数字・ハイフンで指定してください）`,
+      );
+    }
+    connections[id] = readConnectionEntry(id, entry, path);
+  }
+  return connections;
+}
+
+/** 接続 1 件を読む。画面から来た入力を検証するときも、同じ規則をここに任せる。 */
+export function readConnectionEntry(id: string, raw: unknown, path: string): ConnectionSettings {
+  const where = `${path} の connections.${id}`;
+  if (!isRecord(raw)) {
+    throw new Error(`${where} はオブジェクトにしてください`);
+  }
+
+  assertKnownKeys(raw, CONNECTION_KEYS, where);
+  const clientId = raw["clientId"];
+  if (typeof clientId !== "string" || clientId.trim().length === 0) {
+    throw new Error(`${where} の clientId は空でない文字列にしてください`);
+  }
+
+  return { clientId: clientId.trim() };
 }
 
 /** モデルごとの設定（思考強度など）を読む。 */

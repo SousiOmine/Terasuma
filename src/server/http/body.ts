@@ -104,6 +104,19 @@ export async function readWebSearchForm(req: { json(): Promise<unknown> }): Prom
   return { id: id?.trim() ?? "", apiKey };
 }
 
+/**
+ * 画面から来た接続の入力を読む。Client ID を消すときは null を送る。
+ * 空の文字列も「消す」として扱う（入力欄を空にしたときの見た目と揃える）。
+ */
+export async function readConnectionForm(req: { json(): Promise<unknown> }): Promise<{ clientId: string | null }> {
+  const body = await readJsonBody(req);
+  const clientId = readOptionalString(body, "clientId");
+  if (clientId === undefined) throw new ValidationError("clientId must be a string or null");
+
+  const trimmed = clientId?.trim() ?? "";
+  return { clientId: trimmed.length === 0 ? null : trimmed };
+}
+
 /** リクエストからプロバイダ id を読む。 */
 export function readProviderId(body: Record<string, unknown> | null): string {
   const id = body?.["id"];

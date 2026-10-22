@@ -16,6 +16,8 @@ import type {
 import type { LoadedSkill, Skill, SkillFileStore } from "../src/server/agent/skill-types";
 import type { ImageStore } from "../src/server/computer/images";
 import type { McpManager } from "../src/server/mcp/manager";
+import type { ConnectionToolsetProvider } from "../src/server/connections/tools";
+import type { ConnectionsManager } from "../src/server/connections/manager";
 import type { WebSearchManager } from "../src/server/websearch-manager";
 import { createSettingsStore, type SettingsStore } from "../src/server/data/settings";
 import { createStore, type Store } from "../src/server/data/store";
@@ -162,6 +164,33 @@ export function createSkillFileStoreStub(initial: readonly Skill[] = []): SkillF
 /** Web 検索のツールを渡さないテストのための差し替え（エンジン用）。 */
 export function createWebSearchToolsStub(): WebSearchToolsetProvider {
   return { toolset: () => ({}) };
+}
+
+/** アプリの接続ツールを渡さないテストのための差し替え（エンジン用）。 */
+export function createConnectionToolsStub(): ConnectionToolsetProvider {
+  return { toolset: () => ({}) };
+}
+
+/**
+ * 接続を持たないテストのための差し替え。
+ * ツール名を数えるだけの用途（プロバイダを引こうとすると失敗する）。
+ */
+export function createConnectionsStub(): ConnectionsManager {
+  const empty = { providers: [] };
+  return {
+    view: () => empty,
+    provider() {
+      throw new Error("No connection providers in this stub");
+    },
+    setClientId: () => empty,
+    start: async () => null,
+    cancel: () => undefined,
+    disconnect: () => empty,
+    wait: async () => "",
+    token: () => null,
+    env: () => ({}),
+    close: () => undefined,
+  };
 }
 
 /**

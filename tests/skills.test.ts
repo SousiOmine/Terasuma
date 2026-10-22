@@ -10,10 +10,17 @@ import {
   skillCatalogText,
 } from "../src/server/agent/skills";
 import { createComputerTools } from "../src/server/agent/tools/computer";
+import { createConnectionTools } from "../src/server/connections/tools";
 import { createSkillTools } from "../src/server/agent/tools/skill";
 import { createSkillManageTools, type SkillChange } from "../src/server/agent/tools/skill-manage";
 import type { SkillFileStore, SkillLibrary } from "../src/server/agent/skill-types";
-import { createContainerStub, createEnvRequestsStub, createImageStub, createSkillFileStoreStub } from "./support";
+import {
+  createConnectionsStub,
+  createContainerStub,
+  createEnvRequestsStub,
+  createImageStub,
+  createSkillFileStoreStub,
+} from "./support";
 
 /**
  * スキル。
@@ -28,14 +35,19 @@ function mentionedTools(content: string): string[] {
 
 /** 実際にモデルへ渡せる computer_ ツール。 */
 function availableTools(): string[] {
-  const tools = createComputerTools({
+  const computer = createComputerTools({
     container: createContainerStub(),
     images: createImageStub(),
     handover: createHandover(),
     env: createEnvRequestsStub(),
     teraId: "t1",
   });
-  return Object.keys(tools).sort();
+  // 接続のツールも computer_connect_app という名前で同じ名前空間に並ぶ。
+  const connections = createConnectionTools({ connections: createConnectionsStub() });
+
+  return [...Object.keys(computer), ...Object.keys(connections)]
+    .filter((name) => name.startsWith("computer_"))
+    .sort();
 }
 
 /** ツールの実行関数を取り出す。 */
