@@ -192,7 +192,7 @@ export function jsonResponse(body: unknown, status = 200): Response {
 }
 
 /** 一時ディレクトリを作り、確かめ終わったら消す。 */
-export async function withTempDir<T>(prefix: string, run: (dir: string) => Promise<T>): Promise<T> {
+export async function withTempDir<T>(prefix: string, run: (dir: string) => T | Promise<T>): Promise<T> {
   const dir = mkdtempSync(join(tmpdir(), prefix));
 
   try {

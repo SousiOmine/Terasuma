@@ -75,6 +75,18 @@ export const WEB_FETCH_TOOL_NAME = `${WEB_SERVER_ID}${TOOL_NAME_SEPARATOR}${WEB_
  */
 export const SKILL_TOOL = "skill";
 
+/**
+ * スキル関連のツールが使う内蔵のサーバー id。
+ * スキルを管理するツールは "skill_manage" になるので、MCP サーバーの id としては予約する。
+ */
+export const SKILL_SERVER_ID = "skill";
+
+/** スキルを管理するツール名（サーバー id を付けない形）。 */
+export const SKILL_MANAGE_TOOL = "manage";
+
+/** モデルへ渡すときの、スキルを管理するツールの名前。 */
+export const SKILL_MANAGE_TOOL_NAME = `${SKILL_SERVER_ID}${TOOL_NAME_SEPARATOR}${SKILL_MANAGE_TOOL}`;
+
 /** 画面をユーザーへ渡すツール名（サーバー id を付けない形）。 */
 export const ASK_USER_TOOL = "ask_user";
 

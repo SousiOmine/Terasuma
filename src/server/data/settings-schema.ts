@@ -1,7 +1,7 @@
 import { chmodSync, existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { isEnvName } from "../../shared/env";
 import { describeError } from "../../shared/errors";
-import { isProviderId, mcpServerIdProblem, type McpServerIdProblem } from "../../shared/ids";
+import { isProviderId, mcpServerIdProblem, RESERVED_MCP_SERVER_IDS, type McpServerIdProblem } from "../../shared/ids";
 import { isModelId, type ModelId } from "../../shared/model";
 import { isWebSearchProviderId, WEB_SEARCH_PROVIDER_IDS } from "../websearch/index";
 
@@ -140,7 +140,8 @@ export type ModelSettings = {
 /** MCP サーバー id を受け付けられない理由を、設定ファイルの文言にする。 */
 export function describeMcpServerIdProblem(value: string, problem: McpServerIdProblem): string {
   if (problem === "reserved") {
-    return `${JSON.stringify(value)} は Terasuma の内蔵ツール（computer_ / chat_ / tool_）と同じ名前になるため使えません`;
+    const prefixes = RESERVED_MCP_SERVER_IDS.map((id) => `${id}_`).join(" / ");
+    return `${JSON.stringify(value)} は Terasuma の内蔵ツール（${prefixes}）と同じ名前になるため使えません`;
   }
   return `${JSON.stringify(value)} は英小文字・数字・ハイフンで指定してください`;
 }

@@ -9,6 +9,7 @@ import {
   createHistoryStub,
   createImageStub,
   createMcpStub,
+  createSkillFileStoreStub,
   createWebSearchToolsStub,
 } from "./support";
 
@@ -96,6 +97,7 @@ async function runEngine(settings: ModelSettings): Promise<string> {
     coding: createCodingStub(),
     images: createImageStub(),
     catalog: { snapshot: () => null },
+    skills: createSkillFileStoreStub(),
   }).stream({
     context: { summary: null, messages: history() },
     signal: new AbortController().signal,

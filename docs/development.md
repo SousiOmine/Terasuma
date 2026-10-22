@@ -59,6 +59,15 @@ bun run test:live  # 実際のプロバイダに繋ぐ確認（API キーと pod
 モデルへ渡らずに保存される（設定画面には名前だけを出す）。値は `podman exec --env` で、コンテナの中で
 動かすコマンドへ渡す。`config.json` は値を含むため、書き込み時に `0600` にする。
 
+## スキル
+
+エージェントが作ったスキルは、コンピュータのホームの中の `.agents/skills/<name>/SKILL.md` に置く。
+これは Agent Skills のユーザー領域の慣例で、ホスト側では `~/.local/share/terasuma/container/home/.agents/skills/`、コンテナの中では `/home/agent/.agents/skills/` になる。
+`SKILL.md` は YAML frontmatter と Markdown 本文を持つ。frontmatter の `name` と `description` を一覧に使い、本文は `skill` ツールで読んだときだけ渡す。
+`skill_manage` が作成、更新、削除、一覧を受け持つ。読み書きは `server/agent/skill-files.ts`、frontmatter の解析は `Bun.YAML` を使う。
+スキルの一覧は system プロンプトに載る。ターンの途中でスキルが変わったときは、そのターンの system プロンプトを組み直さず、次のモデル呼び出しの前に user メッセージで知らせる。
+スキルはコンテナのホームの中にあるので、ホームを消すリセットでは一緒に消える。
+
 ## 構成
 
 ```

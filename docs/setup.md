@@ -156,6 +156,7 @@ Quadlet は、ホストで直接動かすときと同じパスをコンテナに
 | `~/.local/share/terasuma/images/` | ツールが撮った画像 |
 | `~/.local/share/terasuma/models-dev.json` | モデルカタログのキャッシュ |
 | `~/.local/share/terasuma/container/home/` | コンピュータのホーム（エージェントの read / write / edit / bash の場所。チャットで添付したファイルは `uploads/` に置かれる） |
+| `~/.local/share/terasuma/container/home/.agents/skills/` | エージェントが作成したスキル。コンテナの中では `/home/agent/.agents/skills/` |
 
 バックアップを取るときは、`~/.config/terasuma` と `~/.local/share/terasuma` をまとめてコピーすればよい。
 

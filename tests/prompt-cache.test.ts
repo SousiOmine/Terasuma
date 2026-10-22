@@ -6,11 +6,13 @@ import { createImageStore, type ImageReader } from "../src/server/computer/image
 import {
   summaryText,
   buildModelInput,
+  buildSystemPrompt,
   replyLanguageInstruction,
-  SYSTEM_PROMPT,
   turnTail,
   type TeraContext,
 } from "../src/server/agent/prompt";
+import { BUILTIN_SKILLS } from "../src/server/agent/skills";
+import type { Skill } from "../src/server/agent/skill-types";
 import { readContext } from "../src/server/agent/compaction";
 import { DEFAULT_TERA_ID } from "../src/server/data/store";
 import type { ImageRef } from "../src/shared/types";
@@ -27,9 +29,12 @@ function contextOf(store: ReturnType<typeof makeStore>): TeraContext {
 const NOW = new Date(2026, 9, 21, 12, 0).getTime();
 
 /** このテストの会話は日本語なので、返事の言語は ja に固定する。 */
-function buildInput(context: TeraContext, images: ImageReader) {
-  return buildModelInput(context, images, "ja", { toolResultImages: true }, NOW);
+function buildInput(context: TeraContext, images: ImageReader, skills: readonly Skill[] = BUILTIN_SKILLS) {
+  return buildModelInput(context, images, "ja", { toolResultImages: true }, NOW, skills);
 }
+
+/** 組み込みスキルだけを載せた system プロンプト。 */
+const SYSTEM_PROMPT = buildSystemPrompt(BUILTIN_SKILLS);
 
 /** 入力の末尾に必ず 1 件足される、返事の言語と今日の日付。 */
 const TAIL_MESSAGE = { role: "user", content: turnTail("ja", NOW) } as const;
@@ -317,6 +322,7 @@ describe("返事の言語", () => {
       "ja",
       { toolResultImages: true },
       NOW,
+      BUILTIN_SKILLS,
     );
     const en = buildModelInput(
       { summary: null, messages: [] },
@@ -324,12 +330,31 @@ describe("返事の言語", () => {
       "en",
       { toolResultImages: true },
       NOW,
+      BUILTIN_SKILLS,
     );
 
     expect(ja.at(-1)).toEqual(TAIL_MESSAGE);
     expect(en.at(-1)).toEqual({ role: "user", content: turnTail("en", NOW) });
     expect(replyLanguageInstruction("ja")).toContain("Japanese");
     expect(replyLanguageInstruction("en")).toContain("English");
+  });
+});
+
+describe("スキルの一覧", () => {
+  test("自作スキルは system プロンプトに載り、末尾のメッセージには載らない", () => {
+    const custom: Skill = {
+      name: "deploy-notes",
+      description: "Deploy notes",
+      content: "# Deploy",
+    };
+    const skills = [...BUILTIN_SKILLS, custom];
+    const input = buildInput({ summary: null, messages: [] }, createImageStub(), skills);
+
+    expect(input[0]).toEqual({ role: "system", content: buildSystemPrompt(skills) });
+    expect(JSON.stringify(input[0])).toContain("- computer-use: ");
+    expect(JSON.stringify(input[0])).toContain("- skill-create: ");
+    expect(JSON.stringify(input[0])).toContain("- deploy-notes: Deploy notes");
+    expect(JSON.stringify(input.at(-1))).not.toContain("deploy-notes");
   });
 });
 
@@ -373,6 +398,7 @@ describe("画像つきのツール結果", () => {
         "ja",
         { toolResultImages: true },
         NOW,
+        BUILTIN_SKILLS,
       );
 
       expect(input[3]).toEqual({
@@ -413,6 +439,7 @@ describe("画像つきのツール結果", () => {
         "ja",
         { toolResultImages: false },
         NOW,
+        BUILTIN_SKILLS,
       );
 
       expect(input[3]).toEqual({
@@ -453,6 +480,7 @@ describe("画像つきのツール結果", () => {
         "ja",
         { toolResultImages: false },
         NOW,
+        BUILTIN_SKILLS,
       );
 
       expect(input[4]).toEqual({

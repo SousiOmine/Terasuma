@@ -25,6 +25,7 @@ import {
 import { createEnvRequests } from "../../src/server/computer/env";
 import { createFileStore } from "../../src/server/computer/files";
 import { createEngine } from "../../src/server/agent/engine";
+import { createSkillFileStore } from "../../src/server/agent/skill-files";
 import { resolveModel } from "../../src/server/provider/routing";
 import { createHandover } from "../../src/server/computer/handover";
 import { createImageStore } from "../../src/server/computer/images";
@@ -141,6 +142,7 @@ export async function withLiveServer(run: (harness: LiveHarness) => Promise<void
     coding,
     images,
     catalog,
+    skills: createSkillFileStore({ dataDir: config.dataDir }),
   });
 
   // 畳むかどうかはモデルの文脈長から決める。

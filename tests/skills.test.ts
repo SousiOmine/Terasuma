@@ -1,14 +1,23 @@
 import { describe, expect, test } from "bun:test";
 import { asSchema } from "ai";
+import type { ToolSet } from "ai";
 import { createHandover } from "../src/server/computer/handover";
-import { BUILTIN_SKILLS, COMPUTER_USE_SKILL, SKILL_CATALOG } from "../src/server/agent/skills";
+import {
+  BUILTIN_SKILLS,
+  COMPUTER_USE_SKILL,
+  SKILL_CREATE_SKILL,
+  createSkillLibrary,
+  skillCatalogText,
+} from "../src/server/agent/skills";
 import { createComputerTools } from "../src/server/agent/tools/computer";
 import { createSkillTools } from "../src/server/agent/tools/skill";
-import { createContainerStub, createEnvRequestsStub, createImageStub } from "./support";
+import { createSkillManageTools, type SkillChange } from "../src/server/agent/tools/skill-manage";
+import type { SkillFileStore, SkillLibrary } from "../src/server/agent/skill-types";
+import { createContainerStub, createEnvRequestsStub, createImageStub, createSkillFileStoreStub } from "./support";
 
 /**
- * 組み込みスキル。
- * 本文とツールの一覧がずれると、エージェントは存在しないツールを探しに行く。
+ * スキル。
+ * 一覧と本文がずれると、エージェントは存在しないスキルを探しに行く。
  * ここで名前を突き合わせて、片方だけを直したときに気づけるようにする。
  */
 
@@ -29,47 +38,219 @@ function availableTools(): string[] {
   return Object.keys(tools).sort();
 }
 
+/** ツールの実行関数を取り出す。 */
+function definitionOf(tools: ToolSet, name: string): { execute: (value: never, options: never) => Promise<unknown> } {
+  const definition = tools[name] as { execute?: (value: never, options: never) => unknown } | undefined;
+  if (definition?.execute === undefined) throw new Error(`${name} ツールが無い`);
+  const execute = definition.execute;
+  return { execute: async (value, options) => execute(value, options) };
+}
+
+/** スキル管理ツール一式と、変更の記録。 */
+function skillManageTools(initial: readonly { name: string; description: string; content: string }[] = []) {
+  const store = createSkillFileStoreStub(initial);
+  const library = createSkillLibrary(store);
+  const changes: SkillChange[] = [];
+  const tools = createSkillManageTools({ library, store, onChange: (change) => changes.push(change) });
+  return { store, library, changes, tools };
+}
+
 describe("スキルのカタログ", () => {
-  test("computer-use が説明つきで載る", () => {
-    expect(SKILL_CATALOG).toContain("- computer-use: ");
-    expect(SKILL_CATALOG).toContain(COMPUTER_USE_SKILL.description);
-    expect(BUILTIN_SKILLS.map((skill) => skill.name)).toEqual(["computer-use"]);
+  test("computer-use と skill-create が説明つきで載る", () => {
+    const catalog = skillCatalogText(BUILTIN_SKILLS);
+
+    expect(catalog).toContain("- computer-use: ");
+    expect(catalog).toContain(COMPUTER_USE_SKILL.description);
+    expect(catalog).toContain("- skill-create: ");
+    expect(catalog).toContain(SKILL_CREATE_SKILL.description);
+    expect(BUILTIN_SKILLS.map((skill) => skill.name)).toEqual(["computer-use", "skill-create"]);
   });
 });
 
 describe("skill ツール", () => {
-  test("名前を渡すと本文を返す", async () => {
-    const tools = createSkillTools(BUILTIN_SKILLS);
-    const definition = tools["skill"] as { execute?: (value: never, options: never) => unknown } | undefined;
-    if (definition?.execute === undefined) throw new Error("skill ツールが無い");
+  test("組み込みスキルは本文を返す", async () => {
+    const tools = createSkillTools(createSkillLibrary(createSkillFileStoreStub()));
+    const definition = definitionOf(tools, "skill");
 
     const output = await definition.execute(
       { name: "computer-use" } as never,
-      {
-        toolCallId: "call-1",
-        messages: [],
-      } as never,
+      { toolCallId: "call-1", messages: [] } as never,
     );
 
     expect(output).toBe(COMPUTER_USE_SKILL.content);
   });
 
+  test("自作スキルは本文とディレクトリと同梱ファイルを返す", async () => {
+    const library: SkillLibrary = {
+      all: () => [],
+      get: (name) =>
+        name === "deploy-notes"
+          ? {
+              name,
+              description: "Deploy notes",
+              content: "# Deploy\n\nRun make deploy.",
+              dir: "/home/agent/.agents/skills/deploy-notes",
+              resources: ["references/REFERENCE.md", "scripts/run.sh"],
+              resourcesTruncated: false,
+            }
+          : undefined,
+      isBuiltin: () => false,
+    };
+    const definition = definitionOf(createSkillTools(library), "skill");
+
+    const output = await definition.execute(
+      { name: "deploy-notes" } as never,
+      { toolCallId: "call-1", messages: [] } as never,
+    );
+
+    expect(output).toContain("Run make deploy.");
+    expect(output).toContain("Skill directory: /home/agent/.agents/skills/deploy-notes");
+    expect(output).toContain("- scripts/run.sh");
+    expect(output).toContain("- references/REFERENCE.md");
+  });
+
   test("知らない名前は、存在するスキルを添えて失敗する", async () => {
-    const tools = createSkillTools(BUILTIN_SKILLS);
-    const definition = tools["skill"] as { execute?: (value: never, options: never) => unknown } | undefined;
-    if (definition?.execute === undefined) throw new Error("skill ツールが無い");
+    const tools = createSkillTools(createSkillLibrary(createSkillFileStoreStub()));
+    const definition = definitionOf(tools, "skill");
 
     await expect(
       definition.execute({ name: "nope" } as never, { toolCallId: "call-1", messages: [] } as never),
-    ).rejects.toThrow('Unknown skill "nope". Available skills: computer-use');
+    ).rejects.toThrow('Unknown skill "nope". Available skills: computer-use, skill-create');
   });
 
   test("名前は空を許さない", async () => {
-    const tools = createSkillTools(BUILTIN_SKILLS);
+    const tools = createSkillTools(createSkillLibrary(createSkillFileStoreStub()));
     const schema = asSchema(tools["skill"]?.inputSchema);
     if (schema.validate === undefined) throw new Error("skill の検証が無い");
 
     expect(await schema.validate({ name: "" })).toMatchObject({ success: false });
+  });
+});
+
+describe("skill_manage ツール", () => {
+  test("作成、一覧、更新、削除ができる", async () => {
+    const { tools, store, changes } = skillManageTools();
+    const manage = definitionOf(tools, "skill_manage");
+
+    const created = await manage.execute(
+      {
+        action: "create",
+        name: "deploy-notes",
+        description: "Deploy notes",
+        content: "# Deploy\n\nRun make deploy.",
+      } as never,
+      { toolCallId: "call-1", messages: [] } as never,
+    );
+
+    expect(created).toContain('Created skill "deploy-notes"');
+    expect(store.get("deploy-notes")?.content).toContain("Run make deploy.");
+    expect(changes).toEqual([{ action: "create", name: "deploy-notes", description: "Deploy notes" }]);
+
+    const listed = await manage.execute({ action: "list" } as never, { toolCallId: "call-2", messages: [] } as never);
+    expect(listed).toContain("Built-in skills (read-only):");
+    expect(listed).toContain("- computer-use: ");
+    expect(listed).toContain("- deploy-notes: Deploy notes");
+
+    const updated = await manage.execute(
+      { action: "update", name: "deploy-notes", content: "# Deploy\n\nRun make deploy now." } as never,
+      { toolCallId: "call-3", messages: [] } as never,
+    );
+    expect(updated).toContain('Updated skill "deploy-notes"');
+    expect(store.get("deploy-notes")?.content).toContain("Run make deploy now.");
+    expect(changes.at(-1)).toEqual({ action: "update", name: "deploy-notes" });
+
+    const deleted = await manage.execute(
+      { action: "delete", name: "deploy-notes" } as never,
+      { toolCallId: "call-4", messages: [] } as never,
+    );
+    expect(deleted).toContain('Deleted skill "deploy-notes"');
+    expect(store.get("deploy-notes")).toBeNull();
+    expect(changes.at(-1)).toEqual({ action: "delete", name: "deploy-notes" });
+  });
+
+  test("組み込みスキルは変更も削除もできない", async () => {
+    const { tools } = skillManageTools();
+    const manage = definitionOf(tools, "skill_manage");
+
+    await expect(
+      manage.execute(
+        { action: "update", name: "computer-use", description: "changed" } as never,
+        { toolCallId: "call-1", messages: [] } as never,
+      ),
+    ).rejects.toThrow('"computer-use" is a built-in skill');
+
+    await expect(
+      manage.execute(
+        { action: "delete", name: "skill-create" } as never,
+        { toolCallId: "call-2", messages: [] } as never,
+      ),
+    ).rejects.toThrow('"skill-create" is a built-in skill');
+  });
+
+  test("同じ名前は作れない", async () => {
+    const { tools } = skillManageTools();
+    const manage = definitionOf(tools, "skill_manage");
+    const input = {
+      action: "create",
+      name: "deploy-notes",
+      description: "Deploy notes",
+      content: "body",
+    } as const;
+
+    await manage.execute(input as never, { toolCallId: "call-1", messages: [] } as never);
+    await expect(manage.execute(input as never, { toolCallId: "call-2", messages: [] } as never)).rejects.toThrow(
+      'A skill named "deploy-notes" already exists',
+    );
+  });
+
+  test("必要な項目が無ければ失敗する", async () => {
+    const { tools } = skillManageTools();
+    const manage = definitionOf(tools, "skill_manage");
+
+    await expect(
+      manage.execute({ action: "create" } as never, { toolCallId: "call-1", messages: [] } as never),
+    ).rejects.toThrow('action "create" needs name');
+
+    await expect(
+      manage.execute(
+        { action: "create", name: "deploy-notes", description: "Deploy notes" } as never,
+        { toolCallId: "call-2", messages: [] } as never,
+      ),
+    ).rejects.toThrow('action "create" needs content');
+
+    await expect(
+      manage.execute(
+        { action: "update", name: "deploy-notes" } as never,
+        {
+          toolCallId: "call-3",
+          messages: [],
+        } as never,
+      ),
+    ).rejects.toThrow('action "update" needs description or content');
+  });
+
+  test("list は読み飛ばしたディレクトリを理由付きで出す", async () => {
+    const base = createSkillFileStoreStub();
+    const store: SkillFileStore = {
+      ...base,
+      scan: () => ({
+        skills: [],
+        problems: [{ name: "broken", reason: "invalid YAML frontmatter" }],
+      }),
+    };
+    const tools = createSkillManageTools({
+      library: createSkillLibrary(store),
+      store,
+      onChange: () => undefined,
+    });
+
+    const listed = await definitionOf(tools, "skill_manage").execute(
+      { action: "list" } as never,
+      { toolCallId: "call-1", messages: [] } as never,
+    );
+
+    expect(listed).toContain("Skipped skill directories:");
+    expect(listed).toContain("- broken: invalid YAML frontmatter");
   });
 });
 
@@ -84,5 +265,16 @@ describe("computer-use の本文", () => {
 
   test("名指ししている computer_ ツールは、実際に渡せるツールと一致する", () => {
     expect(mentionedTools(COMPUTER_USE_SKILL.content)).toEqual(availableTools());
+  });
+});
+
+describe("skill-create の本文", () => {
+  test("標準の置き場と作成ツールを書いている", () => {
+    const content = SKILL_CREATE_SKILL.content;
+
+    expect(content).toContain("/home/agent/.agents/skills");
+    expect(content).toContain("SKILL.md");
+    expect(content).toContain("skill_manage");
+    expect(content).toContain("references/");
   });
 });

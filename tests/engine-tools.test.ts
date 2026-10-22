@@ -23,6 +23,7 @@ import { createFileStore } from "../src/server/computer/files";
 import type { ChatMessage, ImageRef, SentAttachment } from "../src/shared/types";
 import { createImageStore, type ImageStore } from "../src/server/computer/images";
 import type { CatalogSnapshot } from "../src/server/provider/catalog";
+import type { SkillFileStore } from "../src/server/agent/skill-types";
 
 import { createHandover } from "../src/server/computer/handover";
 import {
@@ -33,6 +34,7 @@ import {
   createHistoryStub,
   createImageStub,
   createAttachmentsStub,
+  createSkillFileStoreStub,
   createWebSearchToolsStub,
   makeStore,
   testPng,
@@ -240,6 +242,7 @@ async function run(
   attachments: AttachmentToolsetProvider = createAttachmentsStub(),
   attached: SentAttachment[] = [],
   historyTools: HistoryToolsetProvider = createHistoryStub(),
+  skills: SkillFileStore = createSkillFileStoreStub(),
 ): Promise<EngineEvent[]> {
   const reader: SettingsReader = { read: () => settings };
   const stream = await createAiSdkEngine({
@@ -252,6 +255,7 @@ async function run(
     coding,
     images,
     catalog: { snapshot: () => catalog },
+    skills,
   }).stream({
     context: { summary: null, messages: history() },
     signal: new AbortController().signal,
@@ -278,7 +282,7 @@ describe("ツール検索（AI SDK 経由）", () => {
       const events = await run(provider, settingsFor(portOf(fake.server)));
 
       // 事前に渡るのは内蔵のツールだけ。MCP のツール定義はリクエストに載らない。
-      expect(toolNames(fake.bodies[0]).sort()).toEqual(["skill", "tool_call", "tool_search"]);
+      expect(toolNames(fake.bodies[0]).sort()).toEqual(["skill", "skill_manage", "tool_call", "tool_search"]);
 
       // 検索の結果には、名前・説明・引数スキーマが載る。
       const searched = JSON.stringify(fake.bodies[1]);
@@ -339,12 +343,12 @@ describe("ツール検索（AI SDK 経由）", () => {
     }
   });
 
-  test("つなぐツールが無くても、内蔵のツール（tool_search / tool_call / skill）は渡す", async () => {
+  test("つなぐツールが無くても、内蔵のツール（tool_search / tool_call / skill / skill_manage）は渡す", async () => {
     const fake = startScriptedProvider([{ text: "はい" }]);
 
     try {
       await run({ toolset: async () => ({}) }, settingsFor(portOf(fake.server)));
-      expect(toolNames(fake.bodies[0]).sort()).toEqual(["skill", "tool_call", "tool_search"]);
+      expect(toolNames(fake.bodies[0]).sort()).toEqual(["skill", "skill_manage", "tool_call", "tool_search"]);
     } finally {
       await fake.server.stop(true);
     }
@@ -410,6 +414,54 @@ describe("ツール検索（AI SDK 経由）", () => {
 
       // 本文は次の呼び出しでモデルへ渡る。
       expect(JSON.stringify(fake.bodies[1])).toContain("computer_screenshot");
+    } finally {
+      await fake.server.stop(true);
+    }
+  });
+  test("skill_manage で作ったスキルを同じターンで読め、追加は user メッセージで知らせる", async () => {
+    const fake = startScriptedProvider([
+      {
+        tool: "skill_manage",
+        args: JSON.stringify({
+          action: "create",
+          name: "deploy-notes",
+          description: "Deploy notes",
+          content: "# Deploy\n\nRun make deploy.",
+        }),
+      },
+      { tool: "skill", args: JSON.stringify({ name: "deploy-notes" }) },
+      { text: "保存して読みました" },
+    ]);
+    const skills = createSkillFileStoreStub();
+
+    try {
+      const events = await run(
+        { toolset: async () => ({}) },
+        settingsFor(portOf(fake.server)),
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        skills,
+      );
+
+      const manage = callsOf(events, "skill", "manage")[0];
+      if (manage === undefined) throw new Error("skill_manage が呼ばれなかった");
+      expect(resultOf(events, manage.part.id).part.failed).toBe(false);
+
+      // 作成したことが、次の呼び出しの user メッセージとして届く。
+      expect(JSON.stringify(fake.bodies[1])).toContain("A skill was created during this turn");
+      expect(JSON.stringify(fake.bodies[1])).toContain("deploy-notes");
+
+      const load = callsOf(events, "", "skill")[0];
+      if (load === undefined) throw new Error("skill が呼ばれなかった");
+      const loaded = resultOf(events, load.part.id);
+      expect(loaded.part.failed).toBe(false);
+      expect(loaded.part.output).toContain("Run make deploy.");
+      expect(loaded.part.output).toContain("Skill directory: /home/agent/.agents/skills/deploy-notes");
     } finally {
       await fake.server.stop(true);
     }

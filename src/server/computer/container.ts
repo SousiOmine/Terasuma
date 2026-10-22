@@ -1,6 +1,6 @@
 import { mkdirSync, rmSync } from "node:fs";
 import { createServer } from "node:net";
-import { join } from "node:path";
+import { join, posix } from "node:path";
 import type { ContainerStatusView } from "../../shared/types";
 import { describeError } from "../../shared/errors";
 import { AppError } from "../errors";
@@ -25,8 +25,19 @@ export const IMAGE_NAME = "terasuma-container";
 /** エージェントが作業する場所。ホストのデータディレクトリの下がマウントされる。 */
 export const WORKDIR_IN_CONTAINER = "/home/agent";
 
+/**
+ * エージェントが作ったスキルの置き場（コンテナ内）。
+ * Agent Skills のユーザー領域の慣例（~/.agents/skills）に合わせる。
+ */
+export const SKILLS_DIR_IN_CONTAINER = posix.join(WORKDIR_IN_CONTAINER, ".agents", "skills");
+
 /** データディレクトリの下で、ホストとコンテナが共有するフォルダ。 */
 const HOME_DIR_NAME = join("container", "home");
+
+/** ホスト側で、コンテナのホームに対応するディレクトリ。 */
+export function containerHomeDir(dataDir: string): string {
+  return join(dataDir, HOME_DIR_NAME);
+}
 
 /** コンテナの中で noVNC が待ち受けているポート。 */
 const VNC_PORT_IN_CONTAINER = 6080;

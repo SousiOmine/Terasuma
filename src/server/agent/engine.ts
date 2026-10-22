@@ -1,5 +1,5 @@
 import { generateText, stepCountIs, streamText } from "ai";
-import type { LanguageModelUsage, TextStreamPart, ToolSet } from "ai";
+import type { LanguageModelUsage, ModelMessage, TextStreamPart, ToolSet } from "ai";
 import type { AppConfig } from "../../config";
 import type { ModelSettings } from "../data/settings-schema";
 import type { ReplyLanguage } from "../../shared/language";
@@ -15,7 +15,7 @@ import { createLanguageModel } from "../provider/adapters";
 import { toolResultTakesImages } from "../provider/kinds";
 import { reasoningProviderOptions } from "../provider/reasoning";
 import { type ResolvedModel, resolveModel } from "../provider/routing";
-import { imagesMessage, SYSTEM_PROMPT, toModelMessages, type PendingImages, type TeraContext } from "./prompt";
+import { imagesMessage, buildSystemPrompt, toModelMessages, type PendingImages, type TeraContext } from "./prompt";
 import { userContentForModel } from "./model-content";
 import { readStoredImages, readToolOutput, toolResultOutput } from "./tool-output";
 import { describeError } from "../../shared/errors";
@@ -23,7 +23,9 @@ import { splitToolName } from "../../shared/tools";
 import { createDiscoveryTools } from "./tools/discovery";
 import { createToolRegistry } from "./tools/registry";
 import { createSkillTools } from "./tools/skill";
-import { BUILTIN_SKILLS } from "./skills";
+import { createSkillManageTools, type SkillChange } from "./tools/skill-manage";
+import { createSkillLibrary } from "./skills";
+import type { SkillFileStore } from "./skill-types";
 
 /** モデルから流れてくる出来事。画面へ流す単位でもある。 */
 export type EngineEvent =
@@ -146,6 +148,8 @@ export function createEngine(options: {
   images: ImageStore;
   /** models.dev のカタログ。プロバイダの呼び出し方を決めるのに使う。 */
   catalog: CatalogReader;
+  /** エージェントが作ったスキルの置き場。 */
+  skills: SkillFileStore;
 }): AgentEngine {
   if (options.config.engine === "mock") return createMockEngine();
   return createAiSdkEngine({
@@ -158,6 +162,7 @@ export function createEngine(options: {
     coding: options.coding,
     images: options.images,
     catalog: options.catalog,
+    skills: options.skills,
   });
 }
 
@@ -187,13 +192,16 @@ export type AiSdkEngineOptions = {
   images: ImageStore;
   /** models.dev のカタログ。プロバイダの呼び出し方を決めるのに使う。 */
   catalog: CatalogReader;
+  /** エージェントが作ったスキルの置き場。 */
+  skills: SkillFileStore;
 };
 
 export function createAiSdkEngine(options: AiSdkEngineOptions): AgentEngine {
-  const { settings, mcp, computer, attachments, history, webSearch, coding, images, catalog } = options;
+  const { settings, mcp, computer, attachments, history, webSearch, coding, images, catalog, skills } = options;
 
-  // スキルは組み込みで、ターンによって変わらない。エージェントを作るときに 1 度だけ組む。
-  const skillTools = createSkillTools(BUILTIN_SKILLS);
+  // スキルの一覧はターンの開始時に読み直す。ツールの定義は変わらないので、ここで 1 度だけ組む。
+  const library = createSkillLibrary(skills);
+  const skillTools = createSkillTools(library);
 
   /** 設定とカタログから、今回のモデルを決める。呼び出しのたびに読み直す。 */
   function resolve(): ResolvedModel {
@@ -222,6 +230,15 @@ export function createAiSdkEngine(options: AiSdkEngineOptions): AgentEngine {
       // 次のステップの直前に user メッセージとして足す。
       const pendingImages: PendingImages[] = [];
 
+      // ターンの途中でスキルが変わったら、次のモデル呼び出しの前に user メッセージで知らせる。
+      // system プロンプトはターンの開始時に組んだままにし、そのターンの文脈を組み直さない。
+      const skillNotices: string[] = [];
+      const skillManageTools = createSkillManageTools({
+        library,
+        store: skills,
+        onChange: (change) => skillNotices.push(skillNotice(change)),
+      });
+
       // MCP とコンテナのツールは、モデルのツール一覧へは載せない。
       // 名前・説明・引数スキーマは tool_search で取り寄せ、tool_call で実行する
       // （サーバーが増えても、使わないツールの定義で毎回の文脈が膨らまないようにするため）。
@@ -246,6 +263,7 @@ export function createAiSdkEngine(options: AiSdkEngineOptions): AgentEngine {
           ...webTools,
           ...createDiscoveryTools(registry),
           ...skillTools,
+          ...skillManageTools,
         },
         {
           includeImages: toolResultImages,
@@ -260,7 +278,7 @@ export function createAiSdkEngine(options: AiSdkEngineOptions): AgentEngine {
 
       const result = streamText({
         model: createLanguageModel(model),
-        instructions: SYSTEM_PROMPT,
+        instructions: buildSystemPrompt(library.all()),
         messages,
         abortSignal: signal,
         ...(Object.keys(tools).length === 0 ? {} : { tools }),
@@ -272,16 +290,21 @@ export function createAiSdkEngine(options: AiSdkEngineOptions): AgentEngine {
         ...(providerOptions === null ? {} : { providerOptions }),
         // 画像を結果に置けないプロバイダでは、結果の直後に user メッセージとして足し、
         // どの呼び出しの画像かを本文で示す（プロバイダの役割の並びも壊さない）。
-        ...(toolResultImages
-          ? {}
-          : {
-              prepareStep: ({ messages: current }) => {
-                if (pendingImages.length === 0) return undefined;
+        // ターンの途中でスキルが変わったときも、次の呼び出しの前に user メッセージで知らせる。
+        prepareStep: ({ messages: current }) => {
+          const appended: ModelMessage[] = [];
 
-                const message = imagesMessage(pendingImages.splice(0), images);
-                return message === null ? undefined : { messages: [...current, message] };
-              },
-            }),
+          if (!toolResultImages && pendingImages.length > 0) {
+            const message = imagesMessage(pendingImages.splice(0), images);
+            if (message !== null) appended.push(message);
+          }
+
+          if (skillNotices.length > 0) {
+            appended.push({ role: "user", content: skillNotices.splice(0).join("\n\n") });
+          }
+
+          return appended.length === 0 ? undefined : { messages: [...current, ...appended] };
+        },
       });
 
       return toEngineStream(result.fullStream, () => reachedStepLimit);
@@ -302,6 +325,21 @@ export function createAiSdkEngine(options: AiSdkEngineOptions): AgentEngine {
       return result.text;
     },
   };
+}
+
+/**
+ * ターンの途中で起きたスキルの変更を、モデルへ 1 文で知らせる。
+ * そのターンの system プロンプトはターンの開始時に組んだままなので、一覧はまだ古い。
+ */
+function skillNotice(change: SkillChange): string {
+  if (change.action === "create") {
+    const description = change.description === undefined ? "" : ` (${change.description})`;
+    return `A skill was created during this turn: "${change.name}"${description}. The system prompt still has the catalog from the start of this turn. Load it now with skill("${change.name}").`;
+  }
+  if (change.action === "update") {
+    return `A skill was updated during this turn: "${change.name}". Load it again with skill("${change.name}") to see the new content.`;
+  }
+  return `A skill was deleted during this turn: "${change.name}". Do not use it again.`;
 }
 
 /**

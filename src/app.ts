@@ -2,6 +2,7 @@ import { join } from "node:path";
 import type { AppConfig } from "./config";
 import { createCompaction, type Compaction } from "./server/agent/compaction";
 import { createEngine } from "./server/agent/engine";
+import { createSkillFileStore } from "./server/agent/skill-files";
 import { createCodingToolset } from "./server/agent/tools/coding";
 import { createComputerToolset } from "./server/agent/tools/computer";
 import { createAttachmentTools } from "./server/agent/tools/attachments";
@@ -53,6 +54,9 @@ export function startApp(config: AppConfig): App {
   const images = createImageStore(config.dataDir);
   // エージェントがユーザーへ送る、画像以外のファイルの置き場。
   const files = createFileStore(config.dataDir);
+
+  // エージェントが作ったスキルは、コンピュータのホームの .agents/skills に置く。
+  const skills = createSkillFileStore({ dataDir: config.dataDir });
 
   // 認可コードの受け取り先は、待ち受けているポートが決まってから決まる。
   // 実際に使うポートは startServer の戻り値で分かるので、そこまで null のままにする。
@@ -113,6 +117,7 @@ export function startApp(config: AppConfig): App {
     coding,
     images,
     catalog,
+    skills,
   });
 
   // 古いやり取りは、3 時間の放置か、文脈長に近づいたときに、背景で要約へ畳む。

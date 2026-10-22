@@ -13,6 +13,7 @@ import type {
   HistoryToolsetProvider,
   WebSearchToolsetProvider,
 } from "../src/server/agent/engine";
+import type { LoadedSkill, Skill, SkillFileStore } from "../src/server/agent/skill-types";
 import type { ImageStore } from "../src/server/computer/images";
 import type { McpManager } from "../src/server/mcp/manager";
 import type { WebSearchManager } from "../src/server/websearch-manager";
@@ -118,6 +119,44 @@ export function createAttachmentsStub(): AttachmentToolsetProvider {
 /** 履歴検索のツールを渡さないテストのための差し替え。 */
 export function createHistoryStub(): HistoryToolsetProvider {
   return { toolset: () => ({}) };
+}
+
+/** ファイルを使わないテストのための、スキルの置き場。 */
+export function createSkillFileStoreStub(initial: readonly Skill[] = []): SkillFileStore {
+  const skills = new Map(initial.map((skill) => [skill.name, skill]));
+
+  const loaded = (skill: Skill): LoadedSkill => ({
+    ...skill,
+    dir: `/home/agent/.agents/skills/${skill.name}`,
+    resources: [],
+    resourcesTruncated: false,
+  });
+
+  return {
+    scan: () => ({ skills: [...skills.values()], problems: [] }),
+    get: (name) => {
+      const skill = skills.get(name);
+      return skill === undefined ? null : loaded(skill);
+    },
+    create: (input) => {
+      if (skills.has(input.name)) throw new Error(`A skill named "${input.name}" already exists.`);
+      const skill = { name: input.name, description: input.description, content: input.content };
+      skills.set(skill.name, skill);
+      return loaded(skill);
+    },
+    update: (name, patch) => {
+      const skill = skills.get(name);
+      if (skill === undefined) throw new Error(`No skill named "${name}" was created.`);
+      const next = {
+        ...skill,
+        ...(patch.description === undefined ? {} : { description: patch.description }),
+        ...(patch.content === undefined ? {} : { content: patch.content }),
+      };
+      skills.set(name, next);
+      return loaded(next);
+    },
+    delete: (name) => skills.delete(name),
+  };
 }
 
 /** Web 検索のツールを渡さないテストのための差し替え（エンジン用）。 */

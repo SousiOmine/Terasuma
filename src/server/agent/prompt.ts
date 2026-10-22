@@ -4,19 +4,23 @@ import type { ChatMessage, ImageRef, MessagePart } from "../../shared/types";
 import { toolNameFor } from "../../shared/tools";
 import type { ImageReader } from "../computer/images";
 import { userContentForModel } from "./model-content";
-import { SKILL_CATALOG } from "./skills";
+import { skillCatalogText } from "./skills";
+import type { Skill } from "./skill-types";
 import { readStoredImages, toolResultOutput, type StoredImages } from "./tool-output";
 
 /**
  * モデルへ渡す system プロンプト。
  *
- * プロンプトキャッシュは、リクエストの先頭が前回と一致するほど当たる。
- * ここには絶対に可変値を入れない。日時・ユーザー名・件数・ファイル一覧などを混ぜると、
- * 先頭が一致しなくなり、毎回キャッシュが当たらなくなる。
- * 可変の情報をモデルへ渡したくなったら、履歴の末尾（最後の user メッセージの後ろ）に置くこと。
+ * スキルの一覧以外は定数にする。日時・ユーザー名・件数・ファイル一覧などを混ぜると、
+ * リクエストの先頭が一致しなくなり、毎回プロンプトキャッシュが外れる。
+ * スキルの一覧はターンの開始時に組み立てるので、スキルが変わらない限り前のターンと一致する。
+ * スキルが増減したときだけ、そのターンから先頭が変わる。
+ * ターンの途中でスキルが増えた場合は system プロンプトを組み直さず、
+ * 次のモデル呼び出しの前に user メッセージで知らせる（engine.ts）。
+ * 日時のような毎回変わる情報は、履歴の末尾（最後の user メッセージの後ろ）に置く。
  * 畳んだ要約（TeraContext）は、この定数ではなく先頭の user メッセージとして渡す。
  */
-export const SYSTEM_PROMPT = [
+const SYSTEM_PROMPT_BASE = [
   "You are Terasuma, a general-purpose assistant running on the user's own machine.",
   "You talk with the user in a chat app.",
   "Your text output is shown to the user as chat messages. Write your reply as normal text; keep it concise and readable.",
@@ -30,9 +34,17 @@ export const SYSTEM_PROMPT = [
   "Find them with tool_search (omit the query to list every available tool by name), then run one with tool_call, using the exact name and the arguments its search result describes.",
   "When work in the computer needs an API key or another secret, find computer_set_env with tool_search and call it: the user types the value in the chat and you never see it.",
   "Use history_search to look up earlier conversation with the user, including turns compacted out of your visible history: terms are regular expressions (all must match), from/to take YYYY-MM-DD dates, limit caps the newest matches, and invert/wholeWord work like grep -v/-w.",
-  "Skills (load one with the skill tool before starting work that matches it):",
-  SKILL_CATALOG,
-].join("\n");
+  "Skills you created live in the computer at /home/agent/.agents/skills; create, update and delete them with skill_manage. Built-in skills are read-only.",
+];
+
+/** モデルへ渡す system プロンプト。スキルの一覧だけがターンごとに変わる。 */
+export function buildSystemPrompt(skills: readonly Skill[]): string {
+  return [
+    ...SYSTEM_PROMPT_BASE,
+    "Skills (load one with the skill tool before starting work that matches it):",
+    skillCatalogText(skills),
+  ].join("\n");
+}
 
 /**
  * モデルへ渡す文脈。system プロンプトの後ろに、畳んだ要約と生の履歴をこの順で置く。
@@ -203,7 +215,7 @@ export function imagesMessage(entries: readonly PendingImages[], images: ImageRe
 /**
  * モデルへ実際に渡る入力の仕様。
  *
- * AI SDK の streamText には instructions（= SYSTEM_PROMPT）を渡しているので、
+ * AI SDK の streamText には instructions（= buildSystemPrompt()）を渡しているので、
  * プロバイダが受け取るメッセージ列は「system 1 件 + toModelMessages() の結果」になる。
  * ここはそのあるべき形を 1 箇所で表現したもので、キャッシュ保護の回帰テスト
  * （tests/prompt-cache.test.ts）が参照する。
@@ -214,8 +226,12 @@ export function buildModelInput(
   replyLanguage: ReplyLanguage,
   options: ModelInputOptions,
   now: number,
+  skills: readonly Skill[],
 ): ModelMessage[] {
-  return [{ role: "system", content: SYSTEM_PROMPT }, ...toModelMessages(context, images, replyLanguage, options, now)];
+  return [
+    { role: "system", content: buildSystemPrompt(skills) },
+    ...toModelMessages(context, images, replyLanguage, options, now),
+  ];
 }
 
 /** モデルへ渡せる本文かツールの呼び出しがあるかどうか。 */
