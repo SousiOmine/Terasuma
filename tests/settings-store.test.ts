@@ -237,23 +237,23 @@ describe("設定ストア", () => {
     });
   });
 
-  test("接続の Client ID を保存し、空になったら項目ごと消す", async () => {
+  test("接続の Application ID を保存し、空になったら項目ごと消す", async () => {
     await withTempSettings(null, async (store, path) => {
-      store.setConnectionClientId("github", "Iv1.abc");
+      store.setConnectionClientId("discord", "app-1");
 
-      expect(store.read().connections).toEqual({ github: { clientId: "Iv1.abc" } });
-      expect(readSettingsFile(path).connections).toEqual({ github: { clientId: "Iv1.abc" } });
+      expect(store.read().connections).toEqual({ discord: { clientId: "app-1" } });
+      expect(readSettingsFile(path).connections).toEqual({ discord: { clientId: "app-1" } });
 
-      store.setConnectionClientId("github", "Iv1.def");
-      expect(readSettingsFile(path).connections).toEqual({ github: { clientId: "Iv1.def" } });
+      store.setConnectionClientId("discord", "app-2");
+      expect(readSettingsFile(path).connections).toEqual({ discord: { clientId: "app-2" } });
 
-      store.setConnectionClientId("github", null);
+      store.setConnectionClientId("discord", null);
       expect(store.read().connections).toEqual({});
       expect(readSettingsFile(path).connections).toBeUndefined();
 
       // 2 度目は設定が無いので、ファイルにも触らない。
       const before = readFileSync(path, "utf8");
-      store.setConnectionClientId("github", null);
+      store.setConnectionClientId("discord", null);
       expect(readFileSync(path, "utf8")).toBe(before);
     });
   });

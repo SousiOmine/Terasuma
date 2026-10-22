@@ -24,7 +24,7 @@ export type ChatEventEffect =
   | { kind: "chat-ui"; part: Extract<MessagePart, { type: "tool-call" }> }
   | { kind: "handover-start"; callId: string; question: string | null }
   | { kind: "env-request-start"; callId: string; name: string; description: string | null }
-  /** アプリの認可が要る。チャットに認証カードを出す。 */
+  /** アプリの接続が要る。チャットに接続カードを出す。 */
   | { kind: "connection-request-start"; callId: string; provider: string; reason: string | null }
   /**
    * ユーザーの入力を待っていた呼び出しの結果が届いた。

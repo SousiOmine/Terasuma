@@ -1,36 +1,35 @@
 import { describe, expect, test } from "bun:test";
 import { createConnections } from "../src/server/connections/manager";
-import type { ConnectionProvider, DeviceFlowProvider } from "../src/server/connections/providers";
+import type { ConnectionProvider } from "../src/server/connections/providers";
 import type { ConnectionsView } from "../src/shared/types";
 import { type ServerHarness, withServer } from "./harness";
 import {
   fakeBotProvider,
   fakeProvider,
-  startFakeDeviceFlowServer,
-  type FakeDeviceFlowServer,
-} from "./fixtures/device-flow-server";
+  startFakeConnectionServer,
+  type FakeConnectionServer,
+} from "./fixtures/connection-server";
 
 /**
  * アプリの接続の HTTP API。
- * 認可は偽の Device Flow サーバーへ向け、ブラウザの代わりに approve() で進める。
+ * トークンは偽の API サーバーで検証する。
  */
 
-type Run = (harness: ServerHarness, server: FakeDeviceFlowServer) => Promise<void>;
+type Run = (harness: ServerHarness, server: FakeConnectionServer) => Promise<void>;
 
-/** 偽の認可サーバーを宛先にした接続マネージャで、サーバを起こす。 */
+/** 偽の接続先を宛先にした接続マネージャで、サーバを起こす。 */
 async function withConnectionServer(
   run: Run,
-  overrides: (server: FakeDeviceFlowServer) => Partial<DeviceFlowProvider> = () => ({}),
-  extraProviders: (server: FakeDeviceFlowServer) => ConnectionProvider[] = () => [],
+  extraProviders: (server: FakeConnectionServer) => ConnectionProvider[] = () => [],
 ): Promise<void> {
-  const server = startFakeDeviceFlowServer();
+  const server = startFakeConnectionServer();
   try {
     await withServer((harness) => run(harness, server), {
       connections: ({ settings, dir }) =>
         createConnections({
           settings,
           dataDir: dir,
-          providers: [{ ...fakeProvider(server), ...overrides(server) }, ...extraProviders(server)],
+          providers: [fakeProvider(server), ...extraProviders(server)],
         }),
     });
   } finally {
@@ -49,18 +48,8 @@ async function connections(harness: ServerHarness): Promise<ConnectionsView> {
   return (await response.json()) as ConnectionsView;
 }
 
-/** 認可が終わって、アカウントが見えるようになるまで待つ。 */
-async function waitForAccount(harness: ServerHarness): Promise<ConnectionsView> {
-  for (let attempt = 0; attempt < 100; attempt += 1) {
-    const view = await connections(harness);
-    if (view.providers[0]?.account !== null) return view;
-    await Bun.sleep(10);
-  }
-  throw new Error("接続が終わりませんでした");
-}
-
 describe("接続の API", () => {
-  test("一覧は Client ID 未設定の状態を返す", async () => {
+  test("一覧は未設定の状態を返す", async () => {
     await withConnectionServer(async (harness) => {
       const view = await connections(harness);
 
@@ -69,72 +58,60 @@ describe("接続の API", () => {
         id: "github",
         name: "GitHub",
         clientId: null,
+        needsClientId: false,
         account: null,
-        flow: null,
         detail: null,
       });
       expect(view.providers[0]?.env).toEqual(["GH_TOKEN", "GITHUB_TOKEN"]);
+      expect(view.providers[0]?.token.label).toBe("Personal Access Token");
     });
   });
 
-  test("Client ID を保存すると、設定ファイルにも書かれる", async () => {
-    await withConnectionServer(async (harness) => {
+  test("トークンを保存すると、接続済みとして返す", async () => {
+    await withConnectionServer(async (harness, server) => {
       const response = await harness.request(
-        "/api/connections/github",
-        jsonRequest("PUT", { clientId: "  client-1  " }),
+        "/api/connections/github/token",
+        jsonRequest("PUT", { token: `  ${server.accessToken}  ` }),
       );
 
       expect(response.status).toBe(200);
-      const view = (await response.json()) as ConnectionsView;
-      expect(view.providers[0]?.clientId).toBe("client-1");
-      expect(harness.file().connections).toEqual({ github: { clientId: "client-1" } });
+      const provider = ((await response.json()) as ConnectionsView).providers[0];
+      expect(provider).toMatchObject({
+        connected: true,
+        account: server.account,
+      });
     });
   });
 
-  test("空の Client ID は設定ごと消す", async () => {
+  test("受け付けられないトークンは 400", async () => {
     await withConnectionServer(async (harness) => {
-      await harness.request("/api/connections/github", jsonRequest("PUT", { clientId: "client-1" }));
-
-      const response = await harness.request("/api/connections/github", jsonRequest("PUT", { clientId: "  " }));
-
-      expect(response.status).toBe(200);
-      expect(((await response.json()) as ConnectionsView).providers[0]?.clientId).toBeNull();
-      expect(harness.file().connections).toBeUndefined();
-    });
-  });
-
-  test("知らない接続は 404", async () => {
-    await withConnectionServer(async (harness) => {
-      const response = await harness.request("/api/connections/unknown", jsonRequest("PUT", { clientId: "x" }));
-
-      expect(response.status).toBe(404);
-      expect(((await response.json()) as { code: string }).code).toBe("connection_not_found");
-    });
-  });
-
-  test("Client ID が無ければ認可を始められない", async () => {
-    await withConnectionServer(async (harness) => {
-      const response = await harness.request("/api/connections/github/authorize", { method: "POST" });
+      const response = await harness.request(
+        "/api/connections/github/token",
+        jsonRequest("PUT", { token: "wrong" }),
+      );
 
       expect(response.status).toBe(400);
-      expect(((await response.json()) as { code: string }).code).toBe("connection_not_configured");
+      expect(((await response.json()) as { code: string }).code).toBe("invalid_request");
     });
   });
 
-  test("認可を始めるとコードが返り、承認すると接続済みになる", async () => {
+  test("空のトークンは 400", async () => {
+    await withConnectionServer(async (harness) => {
+      const response = await harness.request(
+        "/api/connections/github/token",
+        jsonRequest("PUT", { token: "  " }),
+      );
+
+      expect(response.status).toBe(400);
+    });
+  });
+
+  test("保存したトークンを切断すると消える", async () => {
     await withConnectionServer(async (harness, server) => {
-      await harness.request("/api/connections/github", jsonRequest("PUT", { clientId: "client-1" }));
-
-      const started = await harness.request("/api/connections/github/authorize", { method: "POST" });
-      expect(started.status).toBe(200);
-
-      const flow = ((await started.json()) as { flow: { userCode: string; verificationUri: string } }).flow;
-      expect(flow.userCode).toBe("ABCD-1234");
-      expect(flow.verificationUri).toBe(`${server.origin}/device`);
-
-      server.approve();
-      const view = await waitForAccount(harness);
-      expect(view.providers[0]).toMatchObject({ account: "octocat", flow: null });
+      await harness.request(
+        "/api/connections/github/token",
+        jsonRequest("PUT", { token: server.accessToken }),
+      );
 
       const removed = await harness.request("/api/connections/github", { method: "DELETE" });
       expect(removed.status).toBe(200);
@@ -142,44 +119,101 @@ describe("接続の API", () => {
     });
   });
 
-  test("認可を中止すると、進行中のフローが消える", async () => {
+  test("知らない接続は 404", async () => {
     await withConnectionServer(async (harness) => {
-      await harness.request("/api/connections/github", jsonRequest("PUT", { clientId: "client-1" }));
-      await harness.request("/api/connections/github/authorize", { method: "POST" });
+      const response = await harness.request(
+        "/api/connections/unknown/token",
+        jsonRequest("PUT", { token: "x" }),
+      );
 
-      const response = await harness.request("/api/connections/github/flow", { method: "DELETE" });
-
-      expect(response.status).toBe(200);
-      expect(((await response.json()) as ConnectionsView).providers[0]?.flow).toBeNull();
+      expect(response.status).toBe(404);
+      expect(((await response.json()) as { code: string }).code).toBe("connection_not_found");
     });
   });
 
-  test("認可を始められないときは 502 と理由を返す", async () => {
+  test("Application ID を保存すると、設定ファイルにも書かれる", async () => {
     await withConnectionServer(
       async (harness) => {
-        await harness.request("/api/connections/github", jsonRequest("PUT", { clientId: "client-1" }));
+        const response = await harness.request(
+          "/api/connections/discord",
+          jsonRequest("PUT", { clientId: "  app-1  " }),
+        );
 
-        const response = await harness.request("/api/connections/github/authorize", { method: "POST" });
-
-        expect(response.status).toBe(502);
-        const body = (await response.json()) as { code: string; detail: string };
-        expect(body.code).toBe("connection_authorization_failed");
-        expect(body.detail).toContain("Device Flow");
+        expect(response.status).toBe(200);
+        const provider = ((await response.json()) as ConnectionsView).providers.find(
+          (entry) => entry.id === "discord",
+        );
+        expect(provider?.clientId).toBe("app-1");
+        expect(provider?.needsClientId).toBe(true);
+        expect(harness.file().connections).toEqual({ discord: { clientId: "app-1" } });
       },
-      (server) => ({ deviceCodeUrl: `${server.origin}/html-error` }),
+      (server) => [fakeBotProvider(server)],
     );
   });
 
-  test("Client ID が文字列でも null でもなければ 400", async () => {
-    await withConnectionServer(async (harness) => {
-      const response = await harness.request("/api/connections/github", jsonRequest("PUT", { clientId: 42 }));
+  test("空の Application ID は設定ごと消す", async () => {
+    await withConnectionServer(
+      async (harness) => {
+        await harness.request("/api/connections/discord", jsonRequest("PUT", { clientId: "app-1" }));
 
-      expect(response.status).toBe(400);
-      expect(((await response.json()) as { code: string }).code).toBe("invalid_request");
+        const response = await harness.request(
+          "/api/connections/discord",
+          jsonRequest("PUT", { clientId: "  " }),
+        );
+
+        expect(response.status).toBe(200);
+        const provider = ((await response.json()) as ConnectionsView).providers.find(
+          (entry) => entry.id === "discord",
+        );
+        expect(provider?.clientId).toBeNull();
+        expect(harness.file().connections).toBeUndefined();
+      },
+      (server) => [fakeBotProvider(server)],
+    );
+  });
+
+  test("Application ID が文字列でも null でもなければ 400", async () => {
+    await withConnectionServer(
+      async (harness) => {
+        const response = await harness.request(
+          "/api/connections/discord",
+          jsonRequest("PUT", { clientId: 42 }),
+        );
+
+        expect(response.status).toBe(400);
+        expect(((await response.json()) as { code: string }).code).toBe("invalid_request");
+      },
+      (server) => [fakeBotProvider(server)],
+    );
+  });
+
+  test("Application ID から招待リンクを組み立てる", async () => {
+    await withConnectionServer(
+      async (harness, server) => {
+        await harness.request("/api/connections/discord", jsonRequest("PUT", { clientId: "app-1" }));
+
+        const provider = (await connections(harness)).providers.find((entry) => entry.id === "discord");
+        const expected = new URL(`${server.origin}/authorize`);
+        expected.searchParams.set("client_id", "app-1");
+        expected.searchParams.set("scope", "bot");
+        expected.searchParams.set("permissions", "68608");
+
+        expect(provider?.inviteUrl).toBe(expected.toString());
+      },
+      (server) => [fakeBotProvider(server)],
+    );
+  });
+
+  test("接続の待ちを中止できる", async () => {
+    await withConnectionServer(async (harness) => {
+      const response = await harness.request("/api/connections/github/wait", { method: "DELETE" });
+
+      expect(response.status).toBe(200);
+      expect(((await response.json()) as ConnectionsView).providers[0]?.connected).toBe(false);
     });
   });
 
-  test("Bot トークンを保存すると、接続済みとして返す", async () => {
+  test("Discord のトークンを保存すると、接続済みとして返す", async () => {
     await withConnectionServer(
       async (harness, server) => {
         const response = await harness.request(
@@ -192,18 +226,16 @@ describe("接続の API", () => {
           (entry) => entry.id === "discord",
         );
         expect(provider).toMatchObject({
-          kind: "bot",
           connected: true,
           account: server.botAccount,
           clientId: null,
         });
       },
-      () => ({}),
       (server) => [fakeBotProvider(server)],
     );
   });
 
-  test("受け付けられない Bot トークンは 400", async () => {
+  test("受け付けられない Discord トークンは 400", async () => {
     await withConnectionServer(
       async (harness) => {
         const response = await harness.request(
@@ -212,48 +244,7 @@ describe("接続の API", () => {
         );
 
         expect(response.status).toBe(400);
-        expect(((await response.json()) as { code: string }).code).toBe("invalid_request");
       },
-      () => ({}),
-      (server) => [fakeBotProvider(server)],
-    );
-  });
-
-  test("空の Bot トークンは 400", async () => {
-    await withConnectionServer(
-      async (harness) => {
-        const response = await harness.request(
-          "/api/connections/discord/token",
-          jsonRequest("PUT", { token: "  " }),
-        );
-
-        expect(response.status).toBe(400);
-      },
-      () => ({}),
-      (server) => [fakeBotProvider(server)],
-    );
-  });
-
-  test("トークンを貼らない方式の接続には、トークンを保存できない", async () => {
-    await withConnectionServer(async (harness) => {
-      const response = await harness.request(
-        "/api/connections/github/token",
-        jsonRequest("PUT", { token: "token" }),
-      );
-
-      expect(response.status).toBe(400);
-    });
-  });
-
-  test("Bot の接続は認可を始められず、設定を促す", async () => {
-    await withConnectionServer(
-      async (harness) => {
-        const response = await harness.request("/api/connections/discord/authorize", { method: "POST" });
-
-        expect(response.status).toBe(400);
-        expect(((await response.json()) as { code: string }).code).toBe("connection_not_configured");
-      },
-      () => ({}),
       (server) => [fakeBotProvider(server)],
     );
   });

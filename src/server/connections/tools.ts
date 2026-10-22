@@ -10,7 +10,7 @@ import { authorizationHeader } from "./providers";
 /**
  * アプリの接続を扱うツール。
  *
- * computer_connect_app はチャットに認証カードを出し、ユーザーが認可するまで待つ。
+ * computer_connect_app はチャットに接続カードを出し、ユーザーがトークンを保存するまで待つ。
  * app_request は接続済みのトークンで API を叩く（トークンはモデルに渡さない）。
  * どちらもツール一覧には載せず、tool_search で見つけて tool_call で実行する。
  */
@@ -56,9 +56,9 @@ export function createConnectionTools(options: { connections: ConnectionsManager
   return {
     [CONNECT_APP_TOOL_NAME]: tool({
       description: [
-        "Connect an app to the computer with the user's own sign-in or a saved bot token.",
+        "Connect an app to the computer by having the user paste a token.",
         "Call this when a task needs the app and its environment variable is not set.",
-        "GitHub opens a card in the chat where the user signs in; Discord needs a bot token saved in Settings > Connections.",
+        "A card opens in the chat with a link to create the token and a field to paste it.",
         "You never see the token. Once this returns, the token is available to every command in the computer.",
       ].join(" "),
       inputSchema: z.object({
@@ -100,7 +100,7 @@ export function createConnectionTools(options: { connections: ConnectionsManager
         const token = connections.token(provider);
         if (token === null) {
           throw new Error(
-            `${definition.name} is not connected. Call ${CONNECT_APP_TOOL_NAME} and let the user sign in first.`,
+            `${definition.name} is not connected. Call ${CONNECT_APP_TOOL_NAME} and let the user paste a token first.`,
           );
         }
 
@@ -132,7 +132,7 @@ export function createConnectionTools(options: { connections: ConnectionsManager
         const text = await response.text();
         if (response.status === 401) {
           throw new Error(
-            `${definition.name} rejected the saved authorization. Ask the user to connect again with ${CONNECT_APP_TOOL_NAME}.`,
+            `${definition.name} rejected the saved token. Ask the user to save a new one with ${CONNECT_APP_TOOL_NAME}.`,
           );
         }
 

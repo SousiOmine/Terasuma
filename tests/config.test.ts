@@ -226,20 +226,20 @@ describe("modelOptions の検証", () => {
 describe("connections の検証", () => {
   const read = (connections: unknown) => withConfigFile(JSON.stringify({ connections }), (env) => loadConfig(env));
 
-  test("Client ID を trim して保存する", () => {
-    withConfigFile(JSON.stringify({ connections: { github: { clientId: "  Iv1.abc  " } } }), (env) => {
+  test("Application ID を trim して保存する", () => {
+    withConfigFile(JSON.stringify({ connections: { discord: { clientId: "  app-1  " } } }), (env) => {
       expect(readSettingsFile(loadConfig(env).configPath).connections).toEqual({
-        github: { clientId: "Iv1.abc" },
+        discord: { clientId: "app-1" },
       });
     });
   });
 
   test("書けない値を弾く", () => {
     expect(() => read([])).toThrow(/オブジェクト/);
-    expect(() => read({ GitHub: { clientId: "x" } })).toThrow(/使えない id/);
-    expect(() => read({ github: { clientId: "" } })).toThrow(/空でない文字列/);
-    expect(() => read({ github: { clientId: "x", secret: "y" } })).toThrow(/未知の項目/);
-    expect(() => read({ github: "Iv1.abc" })).toThrow(/オブジェクト/);
+    expect(() => read({ Discord: { clientId: "x" } })).toThrow(/使えない id/);
+    expect(() => read({ discord: { clientId: "" } })).toThrow(/空でない文字列/);
+    expect(() => read({ discord: { clientId: "x", secret: "y" } })).toThrow(/未知の項目/);
+    expect(() => read({ discord: "app-1" })).toThrow(/オブジェクト/);
   });
 });
 

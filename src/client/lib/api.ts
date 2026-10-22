@@ -7,7 +7,6 @@ import type {
   ChatEvent,
   ChatMessage,
   ComputerEnvView,
-  ConnectionAuthorizationView,
   ConnectionsView,
   ContainerStatusView,
   McpAuthorizationView,
@@ -241,32 +240,27 @@ function mcpServerPath(serverId: string): string {
   return `${MCP_PATH}/${encodeURIComponent(serverId)}`;
 }
 
-/** アプリの接続の一覧（Client ID の設定と、接続中のアカウント）。 */
+/** アプリの接続の一覧（Application ID の設定と、接続中のアカウント）。 */
 export async function fetchConnections(): Promise<ConnectionsView> {
   return request<ConnectionsView>(CONNECTIONS_PATH);
 }
 
-/** Client ID を保存する。null で設定ごと消す。 */
+/** Application ID を保存する。null で設定ごと消す。 */
 export async function saveConnectionClientId(id: string, clientId: string | null): Promise<ConnectionsView> {
   return request<ConnectionsView>(connectionPath(id), jsonRequest("PUT", { clientId }));
 }
 
-/** Bot トークンを保存する。保存する前に、サーバーがトークンでアカウントを確かめる。 */
+/** トークンを保存する。保存する前に、サーバーがトークンでアカウントを確かめる。 */
 export async function saveConnectionToken(id: string, token: string): Promise<ConnectionsView> {
   return request<ConnectionsView>(`${connectionPath(id)}/token`, jsonRequest("PUT", { token }));
 }
 
-/** 認可を始める。進行中なら同じコードが返り、接続済みなら flow は null。 */
-export async function authorizeConnection(id: string): Promise<ConnectionAuthorizationView> {
-  return request<ConnectionAuthorizationView>(`${connectionPath(id)}/authorize`, { method: "POST" });
+/** 接続の待ちをやめる（チャットのカード）。 */
+export async function cancelConnectionWait(id: string): Promise<ConnectionsView> {
+  return request<ConnectionsView>(`${connectionPath(id)}/wait`, { method: "DELETE" });
 }
 
-/** 進行中の認可を止める。 */
-export async function cancelConnectionFlow(id: string): Promise<ConnectionsView> {
-  return request<ConnectionsView>(`${connectionPath(id)}/flow`, { method: "DELETE" });
-}
-
-/** 保存されている認可を消す。 */
+/** 保存されているトークンを消す。 */
 export async function disconnectConnection(id: string): Promise<ConnectionsView> {
   return request<ConnectionsView>(connectionPath(id), { method: "DELETE" });
 }

@@ -109,12 +109,12 @@ export const SET_ENV_TOOL = "set_env";
 export const SET_ENV_TOOL_NAME = `${COMPUTER_SERVER_ID}${TOOL_NAME_SEPARATOR}${SET_ENV_TOOL}`;
 
 /**
- * アプリ（GitHub など）に OAuth でサインインするツール名（サーバー id を付けない形）。
- * ユーザーはチャットのカードから認可し、トークンはモデルに渡らない。
+ * アプリ（GitHub など）にトークンで接続するツール名（サーバー id を付けない形）。
+ * ユーザーはチャットのカードからトークンを貼り、トークンはモデルに渡らない。
  */
 export const CONNECT_APP_TOOL = "connect_app";
 
-/** モデルへ渡すときの、アプリにサインインするツールの名前。 */
+/** モデルへ渡すときの、アプリに接続するツールの名前。 */
 export const CONNECT_APP_TOOL_NAME = `${COMPUTER_SERVER_ID}${TOOL_NAME_SEPARATOR}${CONNECT_APP_TOOL}`;
 
 /** 接続済みアプリの API を叩くツール名（サーバー id を付けない形）。 */

@@ -64,7 +64,7 @@ export function ChatView() {
   const handover = handoverActive.value;
   // 環境変数の入力待ち。引き受けとは別で、チャットの入力欄の上に入力欄を出す。
   const envWaiting = envRequestActive.value;
-  // アプリの認証待ち。同じく入力欄の上にカードを出す。
+  // アプリの接続待ち。同じく入力欄の上にカードを出す。
   const connectionWaiting = connectionRequest.value !== null;
   const scrollRef = useRef<HTMLDivElement>(null);
   /** 末尾にいるかどうか。履歴を読んでいる間は引き戻さない。 */
@@ -189,7 +189,7 @@ export function ChatView() {
         </div>
       )}
 
-      {/* アプリの認証も、ふだんの入力欄のすぐ上に出す（送る先がチャットとは違うため別の面にする）。 */}
+      {/* アプリの接続も、ふだんの入力欄のすぐ上に出す（送る先がチャットとは違うため別の面にする）。 */}
       {connectionWaiting && (
         <div class="shrink-0 px-3 pt-2 sm:px-6">
           <div class="mx-auto w-full max-w-3xl">

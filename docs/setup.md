@@ -134,7 +134,7 @@ sudo tailscale serve reset
 Tailscale 経由では、MCP サーバーの OAuth 認可は完了しない。
 コールバックの URL が `http://127.0.0.1:3000` で組み立てられるため、リモートのブラウザではその端末の localhost を指してしまう。
 API キーで繋ぐ MCP サーバーはこの制限を受けない。
-`設定 > 接続` で行うアプリの接続（GitHub の Device Flow、Discord の Bot トークン）はコールバック URL を使わないので、Tailscale 経由でも完了する。
+`設定 > 接続` で行うアプリの接続（GitHub の Personal Access Token、Discord の Bot トークン）はコールバック URL を使わないので、Tailscale 経由でも完了する。
 
 ## 最初の設定
 
@@ -148,20 +148,21 @@ API キーで繋ぐ MCP サーバーはこの制限を受けない。
 
 ## GitHub の接続
 
-GitHub のリポジトリや API を使うときは、`設定 > 接続` でサインインする。
-OAuth App は自分で 1 つ作る。Device Flow を使うため、client secret は要らない。
+GitHub のリポジトリや API を使うときは、`設定 > 接続` で Personal Access Token を保存する。
+トークンは GitHub の画面で発行する。Terasuma 側でアプリを登録する必要はない。
 
-1. GitHub の Settings → Developer settings → OAuth Apps → New OAuth App を開く。
-2. Application name は任意（例: Terasuma）。Homepage URL は `http://127.0.0.1:3000` などでよい。
-3. Authorization callback URL は未使用なので、`http://127.0.0.1:3000/` などでよい。
-4. 作成後、アプリの設定で **Enable Device Flow** を ON にする。
-5. 表示された Client ID を、Terasuma の `設定 > 接続` に貼り付けて保存する。
-6. 「認証する」を押し、表示されたコードを `https://github.com/login/device` で入力して承認する。
+1. `設定 > 接続` の GitHub で「アプリの設定を開く」を押す。
+   `scopes=repo,read:user` と説明が埋まった、トークン発行ページが開く。
+2. 有効期限を選び、**Generate token** を押す。
+3. 表示されたトークンをコピーし、Terasuma の GitHub の欄に貼り付けて保存する。
 
 トークンは `~/.local/share/terasuma/connections/github.json`（0600）に保存される。
 接続すると、コンピュータのコマンドで `GH_TOKEN` と `GITHUB_TOKEN` が使える。
 git は `git -c http.extraHeader="Authorization: Bearer $GH_TOKEN" clone ...` のように使う。
 `gh` コマンドはコンピュータのイメージに入っていない。API はエージェントの `app_request` から叩ける。
+
+有効期限が切れると、`app_request` は 401 を返す。
+そのときは新しいトークンを発行し、同じ欄に貼り直す。
 
 ## Discord の接続
 
@@ -299,6 +300,7 @@ Terasuma にアクセスできる人は、コンピュータの画面と、こ�
 tailnet に共有端末や信頼できない端末が入っているなら、Tailscale の ACL で Serve のポートへのアクセスを絞る。
 
 モデルの API キーは `~/.config/terasuma/config.json` に保存される。
+接続のトークンは `~/.local/share/terasuma/connections/` に 0600 で保存される。
 イメージには含まれない。
 GHCR のイメージは Public なので、誰でも pull できる。
 

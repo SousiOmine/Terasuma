@@ -4,38 +4,36 @@ import { join } from "node:path";
 import { createConnections, type ConnectionsManager } from "../src/server/connections/manager";
 import type { ConnectionProvider } from "../src/server/connections/providers";
 import { createSettingsStore, type SettingsStore } from "../src/server/data/settings";
-import { ConnectionNotFound, ConnectionNotConfigured } from "../src/server/errors";
+import { ConnectionNotFound } from "../src/server/errors";
 import { withTempDir } from "./harness";
 import {
   fakeBotProvider,
   fakeProvider,
-  startFakeDeviceFlowServer,
-  type FakeDeviceFlowServer,
-} from "./fixtures/device-flow-server";
+  startFakeConnectionServer,
+  type FakeConnectionServer,
+} from "./fixtures/connection-server";
 
 /**
- * アプリの接続（Device Flow）。
- * 認可ページを開くブラウザは介在させず、偽の認可サーバーの approve / deny で進める。
+ * アプリの接続（トークン）。
+ * トークンは偽の API サーバーで検証し、待ちは setToken で解く。
  */
 
 type Context = {
   manager: ConnectionsManager;
   settings: SettingsStore;
   dir: string;
-  server: FakeDeviceFlowServer;
+  server: FakeConnectionServer;
 };
 
-/** 偽の認可サーバーと、一時ディレクトリの設定・トークン置き場を用意する。 */
+/** 偽の接続先と、一時ディレクトリの設定・トークン置き場を用意する。 */
 async function withConnections(
   run: (context: Context) => Promise<void>,
-  extraProviders: (server: FakeDeviceFlowServer) => ConnectionProvider[] = () => [],
+  extraProviders: (server: FakeConnectionServer) => ConnectionProvider[] = () => [],
 ): Promise<void> {
-  const server = startFakeDeviceFlowServer();
+  const server = startFakeConnectionServer();
   try {
     await withTempDir("terasuma-connections-", async (dir) => {
       const settings = createSettingsStore(join(dir, "config.json"));
-      settings.setConnectionClientId("github", "client-1");
-
       const manager = createConnections({
         settings,
         dataDir: join(dir, "data"),
@@ -71,73 +69,64 @@ function rejectionOf(promise: Promise<unknown>): Promise<string> {
 }
 
 describe("アプリの接続", () => {
-  test("Client ID が無ければ認可を始められない", async () => {
-    await withConnections(async ({ manager, settings }) => {
-      settings.setConnectionClientId("github", null);
-
-      await expect(manager.start("github")).rejects.toBeInstanceOf(ConnectionNotConfigured);
-    });
-  });
-
-  test("デバイスコードを要求し、承認されるとトークンを保存して待ちを解く", async () => {
+  test("トークンを保存すると、接続済みになり環境変数に載る", async () => {
     await withConnections(async ({ manager, dir, server }) => {
-      const flow = await manager.start("github");
-      expect(flow?.userCode).toBe("ABCD-1234");
-      expect(flow?.verificationUri).toBe(`${server.origin}/device`);
+      const view = await manager.setToken("github", server.accessToken);
 
-      // 要求には Client ID と scope が載る。
-      expect(server.deviceRequests[0]?.get("client_id")).toBe("client-1");
-      expect(server.deviceRequests[0]?.get("scope")).toBe("repo read:user");
-
-      const waiting = manager.wait("github", signal());
-      server.approve();
-
-      expect(await waiting).toContain("@octocat");
-      expect(server.tokenRequests.at(-1)?.get("grant_type")).toBe("urn:ietf:params:oauth:grant-type:device_code");
+      expect(view.providers[0]).toMatchObject({
+        connected: true,
+        account: server.account,
+        clientId: null,
+        needsClientId: false,
+        detail: null,
+      });
 
       // コンピュータへ渡す値と、画面に出すアカウント。
-      expect(manager.env()).toEqual({ GH_TOKEN: "access-1", GITHUB_TOKEN: "access-1" });
-      expect(manager.view().providers[0]).toMatchObject({ account: "octocat", flow: null, detail: null });
+      expect(manager.env()).toEqual({ GH_TOKEN: server.accessToken, GITHUB_TOKEN: server.accessToken });
 
       // トークンは本人だけが読める権限で保存する。
       const tokenPath = join(dir, "data", "connections", "github.json");
       expect(statSync(tokenPath).mode & 0o777).toBe(0o600);
 
-      // 接続済みなら、認可を始め直さない。
-      expect(await manager.start("github")).toBeNull();
+      const connected = await manager.wait("github", signal());
+      expect(connected).toContain(`@${server.account}`);
+      expect(connected).toContain("$GH_TOKEN");
     });
   });
 
-  test("接続済みなら、待たずに使い方を返す", async () => {
-    await withConnections(async ({ manager, server }) => {
-      server.approve();
-      await manager.wait("github", signal());
+  test("受け付けられないトークンは保存しない", async () => {
+    await withConnections(async ({ manager, dir }) => {
+      expect(await rejectionOf(manager.setToken("github", "wrong"))).toMatch(/did not accept the token/);
 
-      const again = await manager.wait("github", signal());
-      expect(again).toContain("is connected");
-      expect(again).toContain("$GH_TOKEN");
-      expect(server.deviceRequests).toHaveLength(1);
+      expect(manager.token("github")).toBeNull();
+      expect(existsSync(join(dir, "data", "connections", "github.json"))).toBe(false);
     });
   });
 
-  test("中止すると、待っているツールは失敗する", async () => {
+  test("トークンが無ければ、保存を待つ", async () => {
     await withConnections(async ({ manager }) => {
-      await manager.start("github");
-
       const waiting = manager.wait("github", signal());
       const rejected = rejectionOf(waiting);
 
-      manager.cancel("github");
+      manager.cancelWait("github");
       expect(await rejected).toMatch(/cancelled/);
+    });
+  });
 
-      expect(manager.view().providers[0]?.flow).toBeNull();
+  test("同じアプリの待ちは、トークン保存でまとめて解ける", async () => {
+    await withConnections(async ({ manager, server }) => {
+      const first = manager.wait("github", signal());
+      const second = manager.wait("github", signal());
+
+      await manager.setToken("github", server.accessToken);
+
+      expect(await first).toContain(`@${server.account}`);
+      expect(await second).toContain(`@${server.account}`);
     });
   });
 
   test("ターンが止まると、待ちは外れる", async () => {
     await withConnections(async ({ manager }) => {
-      await manager.start("github");
-
       const controller = new AbortController();
       const waiting = manager.wait("github", controller.signal);
       const rejected = rejectionOf(waiting);
@@ -147,19 +136,19 @@ describe("アプリの接続", () => {
     });
   });
 
-  test("拒否されると、待ちはその理由で失敗する", async () => {
+  test("接続済みなら、待たずに使い方を返す", async () => {
     await withConnections(async ({ manager, server }) => {
-      server.deny();
+      await manager.setToken("github", server.accessToken);
 
-      const waiting = manager.wait("github", signal());
-      expect(await rejectionOf(waiting)).toMatch(/denied/);
+      const again = await manager.wait("github", signal());
+      expect(again).toContain("is connected");
+      expect(again).toContain("$GH_TOKEN");
     });
   });
 
-  test("切断すると、保存した認可も消える", async () => {
+  test("切断すると、保存したトークンも消える", async () => {
     await withConnections(async ({ manager, dir, server }) => {
-      server.approve();
-      await manager.wait("github", signal());
+      await manager.setToken("github", server.accessToken);
 
       const tokenPath = join(dir, "data", "connections", "github.json");
       expect(existsSync(tokenPath)).toBe(true);
@@ -172,7 +161,7 @@ describe("アプリの接続", () => {
     });
   });
 
-  test("保存されている認可が壊れていたら、理由を出す", async () => {
+  test("保存されているトークンが壊れていたら、理由を出す", async () => {
     await withConnections(async ({ manager, dir }) => {
       const tokenDir = join(dir, "data", "connections");
       mkdirSync(tokenDir, { recursive: true });
@@ -184,46 +173,6 @@ describe("アプリの接続", () => {
     });
   });
 
-  test("Client ID を変えると、進行中の認可は止まる", async () => {
-    await withConnections(async ({ manager, settings, server }) => {
-      await manager.start("github");
-
-      const waiting = manager.wait("github", signal());
-      const rejected = rejectionOf(waiting);
-
-      manager.setClientId("github", "client-2");
-      expect(await rejected).toMatch(/cancelled/);
-
-      expect(settings.read().connections["github"]).toEqual({ clientId: "client-2" });
-      // 止めたので、古い Client ID への問い合わせは残らない。
-      expect(manager.view().providers[0]?.flow).toBeNull();
-      expect(server.deviceRequests).toHaveLength(1);
-    });
-  });
-
-  test("同じ Client ID を保存しても、進行中の認可は続く", async () => {
-    await withConnections(async ({ manager, server }) => {
-      await manager.start("github");
-
-      const waiting = manager.wait("github", signal());
-      manager.setClientId("github", "client-1");
-      server.approve();
-
-      expect(await waiting).toContain("@octocat");
-      expect(server.deviceRequests).toHaveLength(1);
-    });
-  });
-
-  test("同じプロバイダの認可を重ねて始めても、コードは 1 つ", async () => {
-    await withConnections(async ({ manager, server }) => {
-      const [first, second] = await Promise.all([manager.start("github"), manager.start("github")]);
-
-      expect(first?.userCode).toBe("ABCD-1234");
-      expect(second?.userCode).toBe("ABCD-1234");
-      expect(server.deviceRequests).toHaveLength(1);
-    });
-  });
-
   test("知らない接続 id は失敗する", async () => {
     await withConnections(async ({ manager }) => {
       expect(() => manager.provider("unknown")).toThrow(ConnectionNotFound);
@@ -231,60 +180,13 @@ describe("アプリの接続", () => {
   });
 });
 
-describe("Bot トークンの接続", () => {
+describe("Application ID（Discord）", () => {
   /** bot プロバイダ（Discord）を足して走らせる。 */
   function withBotConnections(run: (context: Context) => Promise<void>): Promise<void> {
     return withConnections(run, (server) => [fakeBotProvider(server)]);
   }
 
-  test("保存すると、接続済みになり環境変数に載る", async () => {
-    await withBotConnections(async ({ manager, dir, server }) => {
-      const view = await manager.setToken("discord", server.botToken);
-      const provider = view.providers.find((entry) => entry.id === "discord");
-
-      expect(provider).toMatchObject({
-        kind: "bot",
-        connected: true,
-        account: server.botAccount,
-        clientId: null,
-        flow: null,
-        detail: null,
-      });
-      expect(provider?.permissions).toEqual(["View Channel", "Send Messages"]);
-      expect(manager.token("discord")).toBe(server.botToken);
-      expect(manager.env()).toEqual({ DISCORD_BOT_TOKEN: server.botToken });
-
-      // トークンは本人だけが読める権限で保存する。
-      const tokenPath = join(dir, "data", "connections", "discord.json");
-      expect(statSync(tokenPath).mode & 0o777).toBe(0o600);
-
-      // 接続済みなら、認可を始め直さない。
-      expect(await manager.start("discord")).toBeNull();
-
-      const connected = await manager.wait("discord", signal());
-      expect(connected).toContain(`@${server.botAccount}`);
-      expect(connected).toContain("$DISCORD_BOT_TOKEN");
-    });
-  });
-
-  test("受け付けられないトークンは保存しない", async () => {
-    await withBotConnections(async ({ manager, dir }) => {
-      expect(await rejectionOf(manager.setToken("discord", "wrong"))).toMatch(/did not accept the token/);
-
-      expect(manager.token("discord")).toBeNull();
-      expect(existsSync(join(dir, "data", "connections", "discord.json"))).toBe(false);
-    });
-  });
-
-  test("トークンが無ければ、認可を始めずに設定を促す", async () => {
-    await withBotConnections(async ({ manager }) => {
-      expect(await rejectionOf(manager.wait("discord", signal()))).toMatch(/Settings > Connections/);
-      expect(await rejectionOf(manager.start("discord"))).toContain("Bot トークン");
-      expect(() => manager.cancel("discord")).not.toThrow();
-    });
-  });
-
-  test("Application ID から招待リンクを組み立てる", async () => {
+  test("保存した Application ID から招待リンクを組み立てる", async () => {
     await withBotConnections(async ({ manager, settings, server }) => {
       settings.setConnectionClientId("discord", "app-1");
 
@@ -294,13 +196,19 @@ describe("Bot トークンの接続", () => {
       expected.searchParams.set("scope", "bot");
       expected.searchParams.set("permissions", "68608");
 
+      expect(provider?.needsClientId).toBe(true);
+      expect(provider?.clientId).toBe("app-1");
       expect(provider?.inviteUrl).toBe(expected.toString());
     });
   });
 
-  test("Device Flow のアプリには、トークンを保存できない", async () => {
-    await withBotConnections(async ({ manager }) => {
-      expect(await rejectionOf(manager.setToken("github", "token"))).toMatch(/does not use a pasted token/);
+  test("Application ID を変えても、保存済みのトークンは残る", async () => {
+    await withBotConnections(async ({ manager, server }) => {
+      await manager.setToken("discord", server.botToken);
+      manager.setClientId("discord", "app-2");
+
+      expect(manager.token("discord")).toBe(server.botToken);
+      expect(manager.view().providers.find((entry) => entry.id === "discord")?.clientId).toBe("app-2");
     });
   });
 });

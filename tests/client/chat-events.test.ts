@@ -153,7 +153,7 @@ describe("チャットのイベントの読み替え", () => {
     ).toBeNull();
   });
 
-  test("tool_call 越しの接続の呼び出しは、認証カードを出す", () => {
+  test("tool_call 越しの接続の呼び出しは、接続カードを出す", () => {
     expect(
       interpretEvent({
         type: "tool-call",
@@ -188,7 +188,7 @@ describe("チャットのイベントの読み替え", () => {
       }),
     ).toEqual({ kind: "connection-request-start", callId: "c9", provider: "github", reason: null });
 
-    // アプリ名が無ければ、どの認可か分からないので何もしない。
+    // アプリ名が無ければ、どの接続か分からないので何もしない。
     expect(
       interpretEvent({
         type: "tool-call",

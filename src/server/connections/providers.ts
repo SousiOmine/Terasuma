@@ -1,25 +1,30 @@
 /**
  * アプリの接続に使うプロバイダの定義。
  *
- * 認可の方法は 2 つある。
- * - device: Device Flow（RFC 8628）。GitHub のように、コードを画面に出してブラウザで承認する。
- * - bot: 利用者が発行したトークンを貼る。Discord の bot トークンのように、
- *        OAuth の同意画面では取れない資格情報を使う。
- *
+ * 接続はすべて「利用者が発行したトークンを貼る」方式に統一している。
+ * GitHub は Personal Access Token、Discord は Bot トークンを使う。
  * アプリを足すときは、ここに定義を 1 つ足す（画面と API はこの定義から組み立てる）。
- * 認可のやり取りは device-flow.ts、状態と待ちは manager.ts が受け持つ。
+ * トークンの保存と検証は manager.ts、アカウントの読み取りは account.ts が受け持つ。
  */
 
-/** どのプロバイダにも共通する部分。 */
-type ConnectionProviderBase = {
+/** 接続に共通する定義。 */
+export type ConnectionProvider = {
   /** 設定のキーとツールの引数に使う id。 */
   id: string;
   /** 画面に出す名前。 */
   name: string;
   /** 設定画面に出す説明。 */
   description: string;
-  /** アプリを登録するためのページ。 */
+  /** トークンを発行するページ。 */
   setupUrl: string;
+  /** 画面に出すトークン欄の見出しと説明。 */
+  token: {
+    label: string;
+    description: string;
+    placeholder: string;
+  };
+  /** トークンに付ける権限。画面に出す（GitHub は scope、Discord は API の権限名）。 */
+  permissions: readonly string[];
   /** 接続がコンピュータへ渡す環境変数の名前。 */
   env: readonly string[];
   /** 接続できたときにツールへ返す、API の使い方の例。 */
@@ -37,30 +42,10 @@ type ConnectionProviderBase = {
      */
     authorization?(token: string): string;
   };
-};
-
-/** Device Flow でサインインするアプリ。 */
-export type DeviceFlowProvider = ConnectionProviderBase & {
-  kind: "device";
-  /** デバイスコードを要求する先。 */
-  deviceCodeUrl: string;
-  /** デバイスコードをトークンに交換する先。 */
-  tokenUrl: string;
-  /** 要求する scope。Device Flow の要求にそのまま載せる。 */
-  scopes: readonly string[];
-};
-
-/**
- * 利用者が発行したトークンを貼るアプリ。
- *
- * OAuth ではトークンが取れない API（Discord の bot など）はこちらを使う。
- * トークンは画面からは見えない形で保存し、設定画面では保存済みかどうかだけを返す。
- */
-export type BotTokenProvider = ConnectionProviderBase & {
-  kind: "bot";
-  /** 画面に出す、要求する権限。 */
-  permissions: readonly string[];
-  /** アプリをサーバーへ追加するリンクの材料。 */
+  /**
+   * 招待リンクに使う Application ID を設定するアプリ（Discord）。
+   * 定義すると、設定画面に Application ID 欄と「サーバーに追加」リンクが出る。
+   */
   invite?: {
     authorizeUrl: string;
     scope: string;
@@ -69,25 +54,25 @@ export type BotTokenProvider = ConnectionProviderBase & {
   };
 };
 
-/** 標準で使えるプロバイダ。 */
-export type ConnectionProvider = DeviceFlowProvider | BotTokenProvider;
-
 /**
  * GitHub。
  *
- * 利用者が OAuth App を作り、「Enable Device Flow」を有効にした Client ID を使う。
- * client secret は使わない（Device Flow は公開クライアント向けの流れのため）。
- * scope の repo は私有リポジトリも含む。
+ * Personal Access Token（classic）の `repo` と `read:user` を使う。
+ * トークンの発行ページは、スコープと説明を埋めた URL で開く。
+ * fine-grained token でも動くが、作成の手間が増えるため classic を案内する。
  */
-const GITHUB: DeviceFlowProvider = {
-  kind: "device",
+const GITHUB: ConnectionProvider = {
   id: "github",
   name: "GitHub",
   description: "リポジトリの読み書きと GitHub API",
-  setupUrl: "https://github.com/settings/developers",
-  deviceCodeUrl: "https://github.com/login/device/code",
-  tokenUrl: "https://github.com/login/oauth/access_token",
-  scopes: ["repo", "read:user"],
+  setupUrl: "https://github.com/settings/tokens/new?scopes=repo,read:user&description=Terasuma",
+  token: {
+    label: "Personal Access Token",
+    description:
+      "repo と read:user を付けた Personal Access Token（classic）を貼り付けます。リンクから、スコープを埋めた状態で発行できます。",
+    placeholder: "ghp_...",
+  },
+  permissions: ["repo", "read:user"],
   env: ["GH_TOKEN", "GITHUB_TOKEN"],
   usage:
     'For git over HTTPS, pass -c http.extraHeader="Authorization: Bearer $GH_TOKEN". ' +
@@ -110,14 +95,19 @@ const GITHUB: DeviceFlowProvider = {
  * Developer Portal で発行したトークンを貼る。
  *
  * メッセージ本文を読むには、ポータルの Bot ページで MESSAGE_CONTENT を有効にする。
- * 招待リンクの権限は、チャンネルを見る・メッセージを送る・履歴を読むの 3 つだけにする。
+ * 招待リンクの権限は、チャンネルを見る・メッセージを送る・履歴を読む 3 つだけにする。
  */
-const DISCORD: BotTokenProvider = {
-  kind: "bot",
+const DISCORD: ConnectionProvider = {
   id: "discord",
   name: "Discord",
   description: "ボットとしてメッセージを読み書きする",
   setupUrl: "https://discord.com/developers/applications",
+  token: {
+    label: "Bot トークン",
+    description:
+      "Bot ページの Reset Token で発行したトークンを貼り付けます。保存する前に、そのトークンでアカウントを確かめます。",
+    placeholder: "Bot トークンを貼り付け",
+  },
   permissions: ["View Channel", "Send Messages", "Read Message History"],
   env: ["DISCORD_BOT_TOKEN"],
   usage:

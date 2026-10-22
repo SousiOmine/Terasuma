@@ -10,9 +10,9 @@ import { withTempDir } from "./harness";
 import {
   fakeBotProvider,
   fakeProvider,
-  startFakeDeviceFlowServer,
-  type FakeDeviceFlowServer,
-} from "./fixtures/device-flow-server";
+  startFakeConnectionServer,
+  type FakeConnectionServer,
+} from "./fixtures/connection-server";
 
 /**
  * アプリの接続ツール（computer_connect_app / app_request）。
@@ -24,19 +24,17 @@ type Context = {
   manager: ConnectionsManager;
   settings: SettingsStore;
   dir: string;
-  server: FakeDeviceFlowServer;
+  server: FakeConnectionServer;
 };
 
 async function withTools(
   run: (context: Context) => Promise<void>,
-  extraProviders: (server: FakeDeviceFlowServer) => ConnectionProvider[] = () => [],
+  extraProviders: (server: FakeConnectionServer) => ConnectionProvider[] = () => [],
 ): Promise<void> {
-  const server = startFakeDeviceFlowServer();
+  const server = startFakeConnectionServer();
   try {
     await withTempDir("terasuma-connection-tools-", async (dir) => {
       const settings = createSettingsStore(join(dir, "config.json"));
-      settings.setConnectionClientId("github", "client-1");
-
       const manager = createConnections({
         settings,
         dataDir: join(dir, "data"),
@@ -79,10 +77,9 @@ function rejectionOf(promise: Promise<unknown>): Promise<string> {
   );
 }
 
-/** 偽の認可サーバーを承認して、接続を終わらせる。 */
-async function connect(manager: ConnectionsManager, server: FakeDeviceFlowServer): Promise<void> {
-  server.approve();
-  await manager.wait("github", new AbortController().signal);
+/** 偽の API サーバーのトークンで、GitHub を接続済みにする。 */
+async function connect(manager: ConnectionsManager, server: FakeConnectionServer): Promise<void> {
+  await manager.setToken("github", server.accessToken);
 }
 
 describe("アプリの接続ツール", () => {
@@ -101,8 +98,8 @@ describe("アプリの接続ツール", () => {
     });
   });
 
-  test("computer_connect_app は承認されると接続済みの文を返し、以後は待たない", async () => {
-    await withTools(async ({ tools, server }) => {
+  test("computer_connect_app はトークンが保存されるまで待ち、以後は待たない", async () => {
+    await withTools(async ({ tools, manager, server }) => {
       const context = { abortSignal: new AbortController().signal };
       const waiting = callTool(
         tools,
@@ -111,14 +108,12 @@ describe("アプリの接続ツール", () => {
         context,
       );
 
-      server.approve();
-      expect(await waiting).toContain("@octocat");
+      await manager.setToken("github", server.accessToken);
+      expect(await waiting).toContain(`@${server.account}`);
 
       expect(
         await callTool(tools, "computer_connect_app", { provider: "github", reason: "もう一度" }, context),
       ).toContain("is connected");
-      // 2 回目は認可を始め直さない。
-      expect(server.deviceRequests).toHaveLength(1);
     });
   });
 
@@ -164,14 +159,14 @@ describe("アプリの接続ツール", () => {
     });
   });
 
-  test("保存された認可が拒否されたら、接続し直すよう促す", async () => {
+  test("保存されたトークンが拒否されたら、保存し直すよう促す", async () => {
     await withTools(async ({ tools, manager, settings, dir, server }) => {
       await connect(manager, server);
 
       // 誤ったトークンが保存されている状態を作り、別のマネージャに読ませる。
       writeFileSync(
         join(dir, "data", "connections", "github.json"),
-        JSON.stringify({ accessToken: "wrong", scope: null, account: null, obtainedAt: 0 }),
+        JSON.stringify({ accessToken: "wrong", account: null, obtainedAt: 0 }),
         "utf8",
       );
       const stale = createConnections({ settings, dataDir: join(dir, "data"), providers: [fakeProvider(server)] });
@@ -181,7 +176,7 @@ describe("アプリの接続ツール", () => {
         const error = await rejectionOf(
           callTool(staleTools, "app_request", { provider: "github", method: "GET", path: "/user" }),
         );
-        expect(error).toMatch(/rejected the saved authorization/);
+        expect(error).toMatch(/rejected the saved token/);
       } finally {
         stale.close();
       }
@@ -208,22 +203,6 @@ describe("アプリの接続ツール", () => {
       expect(
         await rejectionOf(callTool(tools, "app_request", { provider: "linear", method: "GET", path: "/user" })),
       ).toMatch(/Unknown app/);
-    });
-  });
-
-  test("Client ID が無ければ、設定を開くよう促す", async () => {
-    await withTools(async ({ tools, settings }) => {
-      settings.setConnectionClientId("github", null);
-
-      const error = await rejectionOf(
-        callTool(
-          tools,
-          "computer_connect_app",
-          { provider: "github", reason: "issue を読むため" },
-          { abortSignal: new AbortController().signal },
-        ),
-      );
-      expect(error).toMatch(/no Client ID is configured/);
     });
   });
 
@@ -280,18 +259,18 @@ describe("アプリの接続ツール", () => {
     );
   });
 
-  test("bot が未接続なら、設定画面での保存を促す", async () => {
+  test("bot もカードからトークンを保存できる", async () => {
     await withTools(
-      async ({ tools }) => {
-        const error = await rejectionOf(
-          callTool(
-            tools,
-            "computer_connect_app",
-            { provider: "discord", reason: "通知を送るため" },
-            { abortSignal: new AbortController().signal },
-          ),
+      async ({ tools, manager, server }) => {
+        const waiting = callTool(
+          tools,
+          "computer_connect_app",
+          { provider: "discord", reason: "通知を送るため" },
+          { abortSignal: new AbortController().signal },
         );
-        expect(error).toMatch(/Settings > Connections/);
+
+        await manager.setToken("discord", server.botToken);
+        expect(await waiting).toContain(`@${server.botAccount}`);
       },
       (server) => [fakeBotProvider(server)],
     );

@@ -105,10 +105,10 @@ export async function readWebSearchForm(req: { json(): Promise<unknown> }): Prom
 }
 
 /**
- * 画面から来た接続の入力を読む。Client ID を消すときは null を送る。
+ * 画面から来た Application ID を読む。null は「設定を消す」。
  * 空の文字列も「消す」として扱う（入力欄を空にしたときの見た目と揃える）。
  */
-export async function readConnectionForm(req: { json(): Promise<unknown> }): Promise<{ clientId: string | null }> {
+export async function readConnectionClientIdForm(req: { json(): Promise<unknown> }): Promise<{ clientId: string | null }> {
   const body = await readJsonBody(req);
   const clientId = readOptionalString(body, "clientId");
   if (clientId === undefined) throw new ValidationError("clientId must be a string or null");
@@ -118,7 +118,7 @@ export async function readConnectionForm(req: { json(): Promise<unknown> }): Pro
 }
 
 /**
- * 画面から来た Bot トークンを読む。空欄は受け付けない（消すときは切断を使う）。
+ * 画面から来たトークンを読む。空欄は受け付けない（消すときは切断を使う）。
  */
 export async function readConnectionTokenForm(req: { json(): Promise<unknown> }): Promise<{ token: string }> {
   const body = await readJsonBody(req);

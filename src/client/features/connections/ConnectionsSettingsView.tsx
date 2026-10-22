@@ -1,47 +1,41 @@
 import { IconExternalLink } from "@tabler/icons-preact";
 import { useEffect, useState } from "preact/hooks";
-import type { ConnectionFlowView, ConnectionProviderView } from "../../../shared/types";
+import type { ConnectionProviderView } from "../../../shared/types";
 import { useDeleteTarget } from "../../hooks/useDeleteTarget";
 import type { MessageKey } from "../../i18n";
 import { t } from "../../i18n";
 import {
-  authorizingConnection,
-  cancelConnectionAuthorization,
   clearConnectionsError,
-  connectionFlow,
   connections,
   connectionsError,
   isLoadingConnections,
   loadConnections,
   removeConnection,
-  saveBotToken,
   saveClientId,
-  savingBotToken,
+  saveConnectionToken,
   savingConnection,
+  savingToken,
   showConnectionsError,
-  startConnectionAuthorization,
 } from "../../state/connections";
 import { Button } from "../../ui/Button";
 import { ConfirmDialog } from "../../ui/ConfirmDialog";
-import { CopyCode } from "../../ui/CopyCode";
 import { Field } from "../../ui/Field";
 import { SettingsSection } from "../../ui/SettingsSection";
 import { StatusBadge } from "../../ui/StatusBadge";
 import { CARD_ACTION_CLASS, CARD_CLASS, INPUT_CLASS } from "../../ui/styles";
 
 /** 接続状態の文言。i18n のキーは文字列リテラルで持つ（未使用キーの検査に載せるため）。 */
-const STATE_LABELS: Record<"connected" | "authorizing" | "disconnected", MessageKey> = {
+const STATE_LABELS: Record<"connected" | "disconnected", MessageKey> = {
   connected: "settings.connections.state.connected",
-  authorizing: "settings.connections.state.authorizing",
   disconnected: "settings.connections.state.disconnected",
 };
 
 /**
  * 設定 > 接続。
  *
- * GitHub は Client ID を保存して、アプリのアカウントでサインインする。
- * Discord は Bot トークンを貼る（OAuth の同意画面ではトークンが取れないため）。
- * どちらも、接続するとコンピュータの環境変数と app_request が使えるようになる。
+ * サービスごとにトークンを発行し、貼り付けて保存する。
+ * GitHub は Personal Access Token、Discord は Bot トークン。
+ * 保存すると、コンピュータの環境変数と app_request が使えるようになる。
  */
 export function ConnectionsSettingsView() {
   const view = connections.value;
@@ -90,17 +84,8 @@ type ConnectionCardProps = {
 };
 
 function ConnectionCard({ provider, onDisconnect }: ConnectionCardProps) {
-  const saving = savingConnection.value === provider.id;
-  const savingToken = savingBotToken.value === provider.id;
-  const authorizing = authorizingConnection.value === provider.id;
-  // 認可のコードはサーバーの一覧にも載るので、画面を開き直しても出せる。
-  const flow = provider.flow ?? (authorizing ? connectionFlow.value : null);
-  const connected = provider.connected;
-  const state: "connected" | "authorizing" | "disconnected" = flow !== null
-    ? "authorizing"
-    : connected
-      ? "connected"
-      : "disconnected";
+  const savingTokenNow = savingToken.value === provider.id;
+  const savingClientId = savingConnection.value === provider.id;
 
   return (
     <div class={CARD_CLASS}>
@@ -108,10 +93,10 @@ function ConnectionCard({ provider, onDisconnect }: ConnectionCardProps) {
         <div class="min-w-0 flex-1">
           <div class="flex flex-wrap items-center gap-2">
             <p class="truncate text-sm font-medium">{provider.name}</p>
-            <StatusBadge tone={state === "connected" ? "success" : state === "authorizing" ? "info" : "neutral"}>
-              {t(STATE_LABELS[state])}
+            <StatusBadge tone={provider.connected ? "success" : "neutral"}>
+              {t(provider.connected ? STATE_LABELS.connected : STATE_LABELS.disconnected)}
             </StatusBadge>
-            {connected && provider.account !== null && (
+            {provider.connected && provider.account !== null && (
               <span class="text-xs text-[var(--app-text-secondary)]">
                 {t("settings.connections.account", { account: `@${provider.account}` })}
               </span>
@@ -127,22 +112,18 @@ function ConnectionCard({ provider, onDisconnect }: ConnectionCardProps) {
           )}
         </div>
 
-        {connected && (
+        {provider.connected && (
           <button type="button" onClick={onDisconnect} class={CARD_ACTION_CLASS}>
             {t("settings.connections.disconnect")}
           </button>
         )}
       </div>
 
-      {provider.kind === "bot" ? (
-        <BotConnectionForm provider={provider} savingToken={savingToken} />
-      ) : flow !== null ? (
-        <DeviceAuthorization provider={provider} flow={flow} />
-      ) : (
-        <DeviceConnectionForm provider={provider} saving={saving} />
-      )}
+      <TokenConnectionForm provider={provider} saving={savingTokenNow} />
 
-      {connected && (
+      {provider.needsClientId && <ApplicationIdForm provider={provider} saving={savingClientId} />}
+
+      {provider.connected && (
         <p class="mt-3 text-[11px] leading-5 text-[var(--app-text-secondary)]">
           {t("settings.connections.env", { names: provider.env.join(", ") })}
         </p>
@@ -151,86 +132,42 @@ function ConnectionCard({ provider, onDisconnect }: ConnectionCardProps) {
   );
 }
 
-/** Device Flow の認可コード。承認が終わるまで、この画面に出す。 */
-function DeviceAuthorization({ provider, flow }: { provider: ConnectionProviderView; flow: ConnectionFlowView }) {
-  const cancel = (): void => {
-    void cancelConnectionAuthorization(provider.id).catch(showConnectionsError);
-  };
-
-  return (
-    <div class="mt-4">
-      <p class="text-xs text-[var(--app-text-secondary)]">{t("settings.connections.code")}</p>
-      <div class="mt-1">
-        <CopyCode code={flow.userCode} />
-      </div>
-      <div class="mt-3 flex flex-wrap items-center gap-3">
-        <a
-          href={flow.verificationUri}
-          target="_blank"
-          rel="noreferrer noopener"
-          class="inline-flex items-center gap-1 text-xs underline underline-offset-2"
-        >
-          <IconExternalLink size={12} stroke={1.6} class="shrink-0" />
-          {t("settings.connections.openAuthorization")}
-        </a>
-        <button
-          type="button"
-          onClick={cancel}
-          class="shrink-0 text-[11px] font-medium text-[var(--app-text-secondary)] underline-offset-2 transition hover:text-[var(--app-text)] hover:underline"
-        >
-          {t("settings.connections.cancelAuthorize")}
-        </button>
-      </div>
-      <p class="mt-2 text-[11px] leading-5 text-[var(--app-text-secondary)]">
-        {t("settings.connections.waiting")}
-      </p>
-    </div>
-  );
-}
-
-/** Device Flow の Client ID 入力と、認可を始めるボタン。 */
-function DeviceConnectionForm({ provider, saving }: { provider: ConnectionProviderView; saving: boolean }) {
-  const [clientId, setClientId] = useState(provider.clientId ?? "");
-
-  // 保存された値が変わったら、入力欄もその値に戻す。
-  useEffect(() => {
-    setClientId(provider.clientId ?? "");
-  }, [provider.clientId]);
+/** トークンの入力と保存。保存する前に、サーバーがトークンでアカウントを確かめる。 */
+function TokenConnectionForm({ provider, saving }: { provider: ConnectionProviderView; saving: boolean }) {
+  const [token, setToken] = useState("");
 
   const save = (): void => {
-    void saveClientId(provider.id, clientId).catch(showConnectionsError);
-  };
+    const trimmed = token.trim();
+    if (trimmed.length === 0) return;
 
-  const authorize = (): void => {
-    void startConnectionAuthorization(provider.id).catch(showConnectionsError);
+    void saveConnectionToken(provider.id, trimmed)
+      .then(() => setToken(""))
+      .catch(showConnectionsError);
   };
 
   return (
-    <form
-      class="mt-3"
-      onSubmit={(event) => {
-        event.preventDefault();
-        save();
-      }}
-    >
-      <Field
-        label={t("settings.connections.clientId.label")}
-        description={t("settings.connections.clientId.description")}
-      >
+    <div class="mt-3">
+      <Field label={provider.token.label} description={provider.token.description}>
         <div class="flex items-center gap-2">
           <input
             class={`${INPUT_CLASS} min-w-0 flex-1`}
-            value={clientId}
-            placeholder={t("settings.connections.clientId.placeholder")}
-            aria-label={t("settings.connections.clientId.label")}
+            type="password"
+            value={token}
+            placeholder={provider.token.placeholder}
+            aria-label={provider.token.label}
             autocomplete="off"
             autocapitalize="off"
             spellcheck={false}
             disabled={saving}
-            onInput={(event) => setClientId(event.currentTarget.value)}
+            onInput={(event) => setToken(event.currentTarget.value)}
+            onKeyDown={(event) => {
+              if (event.key !== "Enter") return;
+              event.preventDefault();
+              save();
+            }}
           />
-          <Button disabled={saving} onClick={save}>
-            {t(saving ? "settings.connections.clientId.saving" : "settings.connections.clientId.save")}
+          <Button variant="primary" disabled={saving || token.trim().length === 0} onClick={save}>
+            {t(saving ? "settings.connections.token.saving" : "settings.connections.token.save")}
           </Button>
         </div>
       </Field>
@@ -245,44 +182,34 @@ function DeviceConnectionForm({ provider, saving }: { provider: ConnectionProvid
           <IconExternalLink size={12} stroke={1.6} class="shrink-0" />
           {t("settings.connections.openSetup")}
         </a>
-        <Button variant="primary" disabled={provider.clientId === null || saving} onClick={authorize}>
-          {t("settings.connections.authorize")}
-        </Button>
+        {provider.connected && (
+          <p class="text-[11px] leading-5 text-[var(--app-text-secondary)]">
+            {t("settings.connections.token.saved")}
+          </p>
+        )}
       </div>
-    </form>
+    </div>
   );
 }
 
 /**
- * Bot トークンの入力。
- *
- * Application ID はサーバーへ追加するリンクに、トークンは API の呼び出しに使う。
- * トークンは保存後に返らないので、入力欄は毎回空から始める。
+ * Application ID の入力（Discord）。
+ * 招待リンクに使うだけで、トークンの保存とは独立している。
  */
-function BotConnectionForm({ provider, savingToken }: { provider: ConnectionProviderView; savingToken: boolean }) {
-  const savingClientId = savingConnection.value === provider.id;
+function ApplicationIdForm({ provider, saving }: { provider: ConnectionProviderView; saving: boolean }) {
   const [clientId, setClientId] = useState(provider.clientId ?? "");
-  const [token, setToken] = useState("");
 
+  // 保存された値が変わったら、入力欄もその値に戻す。
   useEffect(() => {
     setClientId(provider.clientId ?? "");
   }, [provider.clientId]);
 
-  const saveApplicationId = (): void => {
+  const save = (): void => {
     void saveClientId(provider.id, clientId).catch(showConnectionsError);
   };
 
-  const saveToken = (): void => {
-    const trimmed = token.trim();
-    if (trimmed.length === 0) return;
-
-    void saveBotToken(provider.id, trimmed)
-      .then(() => setToken(""))
-      .catch(showConnectionsError);
-  };
-
   return (
-    <div class="mt-3">
+    <div class="mt-3 border-t border-[var(--app-stroke)] pt-3">
       <Field
         label={t("settings.connections.applicationId.label")}
         description={t("settings.connections.applicationId.description")}
@@ -296,48 +223,16 @@ function BotConnectionForm({ provider, savingToken }: { provider: ConnectionProv
             autocomplete="off"
             autocapitalize="off"
             spellcheck={false}
-            disabled={savingClientId}
+            disabled={saving}
             onInput={(event) => setClientId(event.currentTarget.value)}
           />
-          <Button disabled={savingClientId} onClick={saveApplicationId}>
-            {t(savingClientId ? "settings.connections.clientId.saving" : "settings.connections.clientId.save")}
+          <Button disabled={saving} onClick={save}>
+            {t(saving ? "settings.connections.applicationId.saving" : "settings.connections.applicationId.save")}
           </Button>
         </div>
       </Field>
 
-      <Field
-        label={t("settings.connections.botToken.label")}
-        description={t("settings.connections.botToken.description")}
-      >
-        <div class="flex items-center gap-2">
-          <input
-            class={`${INPUT_CLASS} min-w-0 flex-1`}
-            type="password"
-            value={token}
-            placeholder={t("settings.connections.botToken.placeholder")}
-            aria-label={t("settings.connections.botToken.label")}
-            autocomplete="off"
-            autocapitalize="off"
-            spellcheck={false}
-            disabled={savingToken}
-            onInput={(event) => setToken(event.currentTarget.value)}
-          />
-          <Button variant="primary" disabled={savingToken || token.trim().length === 0} onClick={saveToken}>
-            {t(savingToken ? "settings.connections.botToken.saving" : "settings.connections.botToken.save")}
-          </Button>
-        </div>
-      </Field>
-
-      <div class="flex flex-col gap-3 border-t border-[var(--app-stroke)] pt-3 sm:flex-row sm:items-center sm:justify-between">
-        <a
-          href={provider.setupUrl}
-          target="_blank"
-          rel="noreferrer noopener"
-          class="inline-flex items-center gap-1 text-xs text-[var(--app-text-secondary)] underline underline-offset-2"
-        >
-          <IconExternalLink size={12} stroke={1.6} class="shrink-0" />
-          {t("settings.connections.openSetup")}
-        </a>
+      <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
         {provider.inviteUrl !== null ? (
           <a
             href={provider.inviteUrl}
@@ -354,12 +249,6 @@ function BotConnectionForm({ provider, savingToken }: { provider: ConnectionProv
           </span>
         )}
       </div>
-
-      {provider.connected && (
-        <p class="mt-2 text-[11px] leading-5 text-[var(--app-text-secondary)]">
-          {t("settings.connections.botToken.saved")}
-        </p>
-      )}
     </div>
   );
 }

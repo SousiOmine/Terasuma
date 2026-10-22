@@ -201,23 +201,19 @@ export function startServer(options: ServerOptions): StartedServer {
           POST: api.authorizeMcpServer,
           DELETE: api.cancelMcpAuthorization,
         },
-        // アプリの接続（Device Flow）。認可の開始・中止と、Client ID の保存。
+        // アプリの接続。トークンの保存と、保存待ちの中止。
         "/api/connections": {
           GET: api.listConnections,
         },
         "/api/connections/:id": {
-          PUT: api.setConnection,
+          PUT: api.setConnectionClientId,
           DELETE: api.disconnectConnection,
         },
-        // Bot トークンの保存（Discord など、認可の画面では取れないトークン）。
         "/api/connections/:id/token": {
           PUT: api.setConnectionToken,
         },
-        "/api/connections/:id/authorize": {
-          POST: api.authorizeConnection,
-        },
-        "/api/connections/:id/flow": {
-          DELETE: api.cancelConnection,
+        "/api/connections/:id/wait": {
+          DELETE: api.cancelConnectionWait,
         },
         // Web 検索のプロバイダ。保存前の確認は接続先へ 1 回検索を投げる。
         "/api/websearch": {

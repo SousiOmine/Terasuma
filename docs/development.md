@@ -97,28 +97,31 @@ bun run test:live  # 実際のプロバイダに繋ぐ確認（API キーと pod
 
 ## アプリの接続
 
-アプリの接続には 2 種類ある（`server/connections/providers.ts` の `kind`）。
+アプリの接続は、利用者が発行したトークンを貼る方式に統一している（`server/connections/providers.ts`）。
+GitHub は Personal Access Token、Discord は Bot トークンを使う。
+プロバイダの定義は、トークン欄の文言、要求する権限、コンピュータへ渡す環境変数の名前を持つ。
 
-- `device`: Device Flow（RFC 8628）。GitHub のように、コードを画面に出してブラウザで承認する。`config.json` には Client ID だけを置く（client secret は使わない）。
-- `bot`: 利用者が発行したトークンを貼る。Discord の bot のように、OAuth の同意画面では取れない資格情報を使う。`config.json` の Client ID は招待リンクに、トークンは API の呼び出しに使う。
+`config.json` に置くのは、招待リンクに使う Application ID だけ（Discord）。
 
 ```json
 "connections": {
-  "github": { "clientId": "Iv1.0123456789abcdef" },
   "discord": { "clientId": "123456789012345678" }
 }
 ```
 
+`clientId` は Discord の Application ID（OAuth2 の client ID）を指す。
+
 トークンは `config.json` ではなく、データディレクトリの `connections/<id>.json` に保存する（ディレクトリ 0700、ファイル 0600）。
-`bot` のトークンは保存する前に、アカウントを読んで受け付けられるか確かめる（間違ったトークンを黙って保存しない）。
-Device Flow はコールバック URL を使わないので、SSH トンネルでも Tailscale 経由でも認可を完了できる。
-MCP サーバーの redirect 方式（`server/mcp/oauth.ts`）とはここが違う。`bot` もトークンを貼るだけなので、コールバック URL を使わない。
+保存する前に、アカウントを読んで受け付けられるか確かめる（間違ったトークンを黙って保存しない）。
+トークンを貼るだけなので、コールバック URL を使わない。
+SSH トンネルでも Tailscale 経由でも設定できる。
+MCP サーバーの redirect 方式（`server/mcp/oauth.ts`）とはここが違う。
 
 接続が得たトークンは、コンピュータのコマンドへ環境変数として渡す（GitHub は `GH_TOKEN` / `GITHUB_TOKEN`、Discord は `DISCORD_BOT_TOKEN`）。
 同じ名前が `config.json` の `env` にある場合は、接続の値を優先する（接続し直した結果を使うため）。
 モデルは値を直接見ないが、コンテナの中で `echo $DISCORD_BOT_TOKEN` を実行すれば読める（`computer_set_env` と同じ性質）。
 
-エージェントは `computer_connect_app` で認可の完了を待ち、`app_request` で接続済みアプリの API を叩く。
+エージェントは `computer_connect_app` でトークンの保存を待ち、`app_request` で接続済みアプリの API を叩く。
 どちらもツール一覧には載せず、`tool_search` で見つけて `tool_call` で実行する。
 `app_request` の Authorization はプロバイダの `api.authorization` が決める（既定は `Bearer`、Discord は `Bot`）。
 `app_request` のパスは接続先の API の origin に収まるものだけを受け付ける。
@@ -136,7 +139,7 @@ src/
   server/agent        ターン・プロンプト・圧縮・ツール
   server/provider     種別表・呼び出し・カタログ・疎通確認
   server/mcp          MCP の接続と OAuth
-  server/connections  アプリの接続（Device Flow / Bot トークン・トークン保存・ツール）
+  server/connections  アプリの接続（トークン保存・検証・ツール）
   server/computer     podman・画像・引き受け
   server/data         設定と会話の永続化
   client/lib          通信・失敗・待ち

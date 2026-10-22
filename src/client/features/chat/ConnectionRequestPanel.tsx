@@ -1,38 +1,60 @@
 import { IconExternalLink } from "@tabler/icons-preact";
-import { useEffect } from "preact/hooks";
+import { useEffect, useState } from "preact/hooks";
 import { t } from "../../i18n";
 import {
   cancelConnectionRequest,
   connectionRequest,
-  connectionRequestSending,
+  connectionRequestSaving,
   resetConnectionRequest,
-  startConnectionRequestFlow,
+  saveConnectionRequestToken,
 } from "../../state/connection-request";
-import { openSettings } from "../../state/route";
-import { CopyCode } from "../../ui/CopyCode";
+import { connections, isLoadingConnections, loadConnections } from "../../state/connections";
+import { showChatError } from "../../state/failure";
+import { Button } from "../../ui/Button";
+import { Field } from "../../ui/Field";
+import { INPUT_CLASS } from "../../ui/styles";
 
 /**
- * アプリの認証カード。
+ * アプリの接続カード。
  *
  * エージェントが computer_connect_app を呼んだとき、チャットの入力欄の上に出る。
- * コードはユーザーが認可ページへ入力し、終わるまでサーバーがトークンを待つ。
- * トークンはこの画面を通らない（コンピュータの環境変数と、サーバー側の app_request だけが使う）。
+ * ユーザーはここでトークンを貼り付けて保存する。トークンはサーバーへ直接送り、
+ * モデルの文脈には載らない（コンピュータの環境変数と、サーバー側の app_request だけが使う）。
  */
 export function ConnectionRequestPanel() {
   const request = connectionRequest.value;
-  const sending = connectionRequestSending.value;
-  const callId = request?.callId;
+  const saving = connectionRequestSaving.value;
+  const view = connections.value;
+  const [token, setToken] = useState("");
 
-  // 新しいカードが出たら、サーバーに認可のコードを作ってもらう。
+  // 設定画面を開いていなくても、表示名とトークン欄の説明を出せるようにする。
   useEffect(() => {
-    if (callId === undefined) return;
-    void startConnectionRequestFlow();
-  }, [callId]);
+    if (connections.value !== null || isLoadingConnections.value) return;
+    void loadConnections().catch(showChatError);
+  }, []);
+
+  // 新しいカードが出たら、入力欄を空に戻す。
+  useEffect(() => {
+    setToken("");
+  }, [request?.callId]);
 
   if (request === null) return null;
 
-  const app = request.providerName ?? request.provider;
-  const flow = request.flow;
+  const provider = view?.providers.find((entry) => entry.id === request.provider) ?? null;
+  const app = provider?.name ?? request.provider;
+
+  const save = (): void => {
+    const trimmed = token.trim();
+    if (trimmed.length === 0) return;
+
+    void saveConnectionRequestToken(trimmed)
+      .then(() => setToken(""))
+      .catch(showChatError);
+  };
+
+  const cancel = (): void => {
+    void cancelConnectionRequest().catch(showChatError);
+  };
 
   return (
     <section class="rounded-[20px] border border-[var(--app-stroke)] bg-[var(--app-surface-alt)] p-4">
@@ -41,27 +63,7 @@ export function ConnectionRequestPanel() {
         <p class="mt-1 whitespace-pre-wrap text-xs leading-5 text-[var(--app-text-secondary)]">{request.reason}</p>
       )}
 
-      {request.phase === "setup_required" ? (
-        <>
-          <p class="mt-3 text-xs leading-5 text-[var(--app-text-secondary)]">{t("chat.connection.setup")}</p>
-          <div class="mt-3 flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => openSettings("connections")}
-              class="inline-flex items-center justify-center rounded-full bg-[var(--app-accent-fill)] px-4 py-2 text-xs font-medium whitespace-nowrap text-[var(--app-on-accent)] shadow-[var(--app-shadow-2)] transition hover:bg-[var(--app-accent-hover)]"
-            >
-              {t("chat.connection.openSettings")}
-            </button>
-            <button
-              type="button"
-              onClick={resetConnectionRequest}
-              class="shrink-0 text-[11px] font-medium text-[var(--app-text-secondary)] underline-offset-2 transition hover:text-[var(--app-text)] hover:underline"
-            >
-              {t("common.cancel")}
-            </button>
-          </div>
-        </>
-      ) : request.phase === "failed" ? (
+      {request.phase === "failed" ? (
         <>
           <p class="mt-3 text-xs leading-5 text-[var(--app-text-secondary)]">{t("chat.connection.failed")}</p>
           <div class="mt-3 flex justify-end">
@@ -74,29 +76,49 @@ export function ConnectionRequestPanel() {
             </button>
           </div>
         </>
-      ) : flow === null ? (
-        <p class="mt-3 text-xs text-[var(--app-text-secondary)]">{t("chat.connection.starting")}</p>
+      ) : provider === null ? (
+        <p class="mt-3 text-xs text-[var(--app-text-secondary)]">{t("common.loading")}</p>
       ) : (
         <>
-          <p class="mt-3 text-xs text-[var(--app-text-secondary)]">{t("chat.connection.code")}</p>
-          <div class="mt-1">
-            <CopyCode code={flow.userCode} />
-          </div>
+          <Field label={provider.token.label} description={provider.token.description}>
+            <div class="flex items-center gap-2">
+              <input
+                class={`${INPUT_CLASS} min-w-0 flex-1`}
+                type="password"
+                value={token}
+                placeholder={provider.token.placeholder}
+                aria-label={provider.token.label}
+                autocomplete="off"
+                autocapitalize="off"
+                spellcheck={false}
+                disabled={saving}
+                onInput={(event) => setToken(event.currentTarget.value)}
+                onKeyDown={(event) => {
+                  if (event.key !== "Enter") return;
+                  event.preventDefault();
+                  save();
+                }}
+              />
+              <Button variant="primary" disabled={saving || token.trim().length === 0} onClick={save}>
+                {t(saving ? "settings.connections.token.saving" : "settings.connections.token.save")}
+              </Button>
+            </div>
+          </Field>
 
-          <div class="mt-3 flex flex-wrap items-center gap-2">
+          <div class="flex flex-wrap items-center gap-3">
             <a
-              href={flow.verificationUri}
+              href={provider.setupUrl}
               target="_blank"
               rel="noreferrer noopener"
-              class="inline-flex items-center gap-1.5 rounded-full bg-[var(--app-accent-fill)] px-4 py-2 text-xs font-medium whitespace-nowrap text-[var(--app-on-accent)] shadow-[var(--app-shadow-2)] transition hover:bg-[var(--app-accent-hover)]"
+              class="inline-flex items-center gap-1 text-xs text-[var(--app-text-secondary)] underline underline-offset-2"
             >
-              <IconExternalLink size={13} stroke={1.7} class="shrink-0" />
-              {t("chat.connection.open", { app })}
+              <IconExternalLink size={12} stroke={1.6} class="shrink-0" />
+              {t("settings.connections.openSetup")}
             </a>
             <button
               type="button"
-              disabled={sending}
-              onClick={() => void cancelConnectionRequest()}
+              disabled={saving}
+              onClick={cancel}
               class="shrink-0 text-[11px] font-medium text-[var(--app-text-secondary)] underline-offset-2 transition hover:text-[var(--app-text)] hover:underline disabled:opacity-50"
             >
               {t("common.cancel")}

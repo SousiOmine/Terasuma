@@ -48,10 +48,10 @@ export type ProvidersSettings = Record<string, ProviderSettings>;
 export type EnvSettings = Record<string, string>;
 
 /**
- * 接続 1 件の設定。Client ID だけを保存する。
+ * 接続 1 件の設定。Application ID だけを保存する（Discord の招待リンクに使う）。
  *
  * トークンは設定ファイルではなく、データディレクトリの別のファイル（0600）に置く。
- * Client ID は秘密ではないが、利用者ごとに違うので設定として持つ。
+ * Application ID は秘密ではないが、利用者ごとに違うので設定として持つ。
  */
 export type ConnectionSettings = {
   clientId: string;
@@ -607,7 +607,7 @@ function readEnv(source: Record<string, unknown>, path: string): EnvSettings | u
 
 /**
  * アプリの接続の設定を読む。
- * id は接続のプロバイダ名（"github" など）で、値は Client ID だけを持つ。
+ * id は接続のプロバイダ名（"discord" など）で、値は Application ID だけを持つ。
  * どの id が使えるかはサーバーの接続モジュールが決めるので、ここでは形だけを確かめる。
  */
 function readConnections(source: Record<string, unknown>, path: string): ConnectionsSettings | undefined {

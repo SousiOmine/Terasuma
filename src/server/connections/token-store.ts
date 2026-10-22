@@ -13,8 +13,6 @@ import { describeError } from "../../shared/errors";
 /** 保存するトークン。 */
 export type StoredToken = {
   accessToken: string;
-  /** 認可サーバーが返した scope。無ければ null。 */
-  scope: string | null;
   /** 接続中のアカウント。分からなければ null。 */
   account: string | null;
   /** 取得した時刻。epoch ミリ秒。 */
@@ -90,7 +88,6 @@ function isStoredToken(value: unknown): value is StoredToken {
   return (
     typeof record["accessToken"] === "string" &&
     record["accessToken"].length > 0 &&
-    (record["scope"] === null || typeof record["scope"] === "string") &&
     (record["account"] === null || typeof record["account"] === "string") &&
     typeof record["obtainedAt"] === "number" &&
     Number.isFinite(record["obtainedAt"])

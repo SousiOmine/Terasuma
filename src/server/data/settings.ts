@@ -24,7 +24,7 @@ import {
 
 /** 読み出した設定の全体。 */
 export type StoredSettings = ModelSettings & {
-  /** アプリの接続（Client ID）。トークンはここには入らない。 */
+  /** アプリの接続（Application ID）。トークンはここには入らない。 */
   connections: ConnectionsSettings;
   mcpServers: McpServersSettings;
   webSearch: StoredWebSearchSettings;
@@ -54,8 +54,8 @@ export type SettingsStore = {
   /** MCP サーバーを消す。設定が無ければ false を返し、何も書かない。 */
   deleteMcpServer(id: string): boolean;
   /**
-   * アプリの接続に使う Client ID を変える。null で設定ごと消す。
-   * トークンはここではなく接続モジュールが保存する。
+   * アプリの接続に使う Application ID を変える（Discord の招待リンクに使う）。
+   * null で設定ごと消す。トークンはここではなく接続モジュールが保存する。
    */
   setConnectionClientId(id: string, clientId: string | null): void;
   /**

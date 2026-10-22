@@ -7,12 +7,12 @@ import {
 } from "../../src/client/state/connection-request";
 
 /**
- * 認証カードの状態。
+ * 接続カードの状態。
  *
- * 始めた呼び出しの結果でだけ閉じ、失敗はカードに残す（Client ID が無いときの設定への導線を消さない）。
- * サーバーへの要求は画面の effect が行うので、ここでは状態の移り方だけを確かめる。
+ * 始めた呼び出しの結果でだけ閉じ、失敗はカードに残す（もう一度試す導線を消さない）。
+ * サーバーへの保存は画面が行うので、ここでは状態の移り方だけを確かめる。
  */
-describe("認証カードの状態", () => {
+describe("接続カードの状態", () => {
   test("始めた呼び出しの結果でだけ閉じる", () => {
     beginConnectionRequest("c1", "github", "issue を読むため");
 
@@ -20,9 +20,7 @@ describe("認証カードの状態", () => {
       callId: "c1",
       provider: "github",
       reason: "issue を読むため",
-      providerName: null,
-      flow: null,
-      phase: "starting",
+      phase: "waiting",
     });
 
     // 別の呼び出しの結果では、まだカードを閉じない。
@@ -38,17 +36,6 @@ describe("認証カードの状態", () => {
 
     endConnectionRequest("c3", true);
     expect(connectionRequest.value?.phase).toBe("failed");
-  });
-
-  test("Client ID が無いときの案内は、結果が失敗しても残す", () => {
-    beginConnectionRequest("c4", "github", null);
-
-    const request = connectionRequest.value;
-    if (request === null) throw new Error("カードが無い");
-    connectionRequest.value = { ...request, phase: "setup_required" };
-
-    endConnectionRequest("c4", true);
-    expect(connectionRequest.value?.phase).toBe("setup_required");
   });
 
   test("リセットは待ちを残さず、あとから届いた結果でも戻らない", () => {
