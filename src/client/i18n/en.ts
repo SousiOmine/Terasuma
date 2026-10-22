@@ -43,6 +43,12 @@ export const en = {
   "chat.computer.done": "I finished",
   "chat.computer.answer": "Type a reply",
 
+  "chat.env.title": "Set an environment variable",
+  "chat.env.placeholder": "Enter the value",
+  "chat.env.submit": "Set",
+  "chat.env.submitting": "Setting…",
+  "chat.env.waiting": "Waiting for your input",
+
   "composer.placeholder": "Send a message",
   "composer.send": "Send",
   "composer.stop": "Stop",
@@ -81,6 +87,11 @@ export const en = {
     "Apps and settings the agent added are lost. Files stay unless you choose to clear the home folder.",
   "settings.container.resetWipeHome": "Also clear the home folder",
   "settings.container.confirmReset": "Recreate",
+
+  "settings.container.env.title": "Environment variables",
+  "settings.container.env.empty": "Nothing is set yet.",
+  "settings.container.env.deleteTitle": "Delete the environment variable?",
+  "settings.container.env.deleteMessage": "Commands in the computer will no longer see this variable.",
 
   "settings.mcp.title": "MCP servers",
   "settings.mcp.description": "Connections to MCP servers that provide tools.",
@@ -246,6 +257,7 @@ export const en = {
   "error.container_start_failed": "The computer could not be started.",
   "error.container_not_running": "The computer is not running.",
   "error.handover_not_pending": "This conversation is not waiting for you.",
+  "error.env_request_not_pending": "This conversation is not waiting for an environment variable.",
   "error.turn_in_progress": "This conversation is already generating a reply elsewhere.",
   "error.media_not_found": "The file was not found.",
   "error.settings_write_failed": "The settings could not be saved.",

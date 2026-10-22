@@ -17,6 +17,7 @@ async function withContainerServer<T>(
       createContainerManager({
         dataDir: dir,
         containerDir: join(dir, "container-files"),
+        env: () => ({}),
         command: stub.run,
       }),
   });

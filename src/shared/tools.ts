@@ -81,6 +81,15 @@ export const ASK_USER_TOOL = "ask_user";
 /** モデルへ渡すときの、画面を渡すツールの名前。 */
 export const ASK_USER_TOOL_NAME = `${COMPUTER_SERVER_ID}${TOOL_NAME_SEPARATOR}${ASK_USER_TOOL}`;
 
+/**
+ * コンピュータのコマンドで使う秘密（API キーなど）の入力を求めるツール名（サーバー id を付けない形）。
+ * 値はユーザーがチャットで入力し、モデルには渡らない。
+ */
+export const SET_ENV_TOOL = "set_env";
+
+/** モデルへ渡すときの、環境変数の入力を求めるツールの名前。 */
+export const SET_ENV_TOOL_NAME = `${COMPUTER_SERVER_ID}${TOOL_NAME_SEPARATOR}${SET_ENV_TOOL}`;
+
 /** 画像やファイルをチャットへ添付するツール名（サーバー id を付けない形）。 */
 export const ATTACH_TOOL = "attach";
 

@@ -6,6 +6,7 @@ import { readSettingsFile, type FileSettings } from "../src/server/data/settings
 import type { ContainerManager } from "../src/server/computer/container";
 import { createMockEngine, type AgentEngine } from "../src/server/agent/engine";
 import { createFileStore, type FileStore } from "../src/server/computer/files";
+import { createEnvRequests, type EnvRequests } from "../src/server/computer/env";
 import { createHandover, type Handover } from "../src/server/computer/handover";
 import { createImageStore, type ImageStore } from "../src/server/computer/images";
 import type { McpManager } from "../src/server/mcp/manager";
@@ -55,6 +56,8 @@ export type ServerHarnessOptions = {
   webSearch?: WebSearchManager;
   /** 引き受け。省くと本物を作る。 */
   handover?: Handover;
+  /** 環境変数の入力待ち。省くと本物を作る。 */
+  envRequests?: EnvRequests;
   /** models.dev のカタログ。省くとサーバが本物を作る（通信はしない）。 */
   catalog?: Catalog;
   /** プロバイダへの接続確認。 */
@@ -79,6 +82,7 @@ export type ServerHarness = {
   /** エージェントが送ったファイルの置き場（配信のテストで使う）。 */
   files: FileStore;
   handover: Handover;
+  envRequests: EnvRequests;
   request(path: string, init?: RequestInit): Promise<Response>;
   /** 設定ファイルのいまの中身（書き戻されたかを確かめる）。 */
   file(): FileSettings;
@@ -101,6 +105,7 @@ export async function withServer<T>(
   const store = options.store ?? createStore(":memory:");
   const compaction = createCompactionStub(store);
   const handover = options.handover ?? createHandover();
+  const envRequests = options.envRequests ?? createEnvRequests({ settings });
   const images = createImageStore(dir);
   const files = createFileStore(dir);
   const container =
@@ -132,6 +137,7 @@ export async function withServer<T>(
       images,
       files,
       handover,
+      envRequests,
       catalog: options.catalog,
       checkConnection: options.checkConnection,
       listModels: options.listModels,
@@ -154,6 +160,7 @@ export async function withServer<T>(
     images,
     files,
     handover,
+    envRequests,
     request: (path, init) => fetch(new URL(path, started.server.url), init),
     file: () => readSettingsFile(settingsPath),
   };

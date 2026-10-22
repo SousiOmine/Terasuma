@@ -3,6 +3,7 @@ import {
   readSettingsFile,
   toModelSettings,
   writeSettingsFile,
+  type EnvSettings,
   type FileSettings,
   type McpServerSettings,
   type McpServersSettings,
@@ -24,6 +25,8 @@ import {
 export type StoredSettings = ModelSettings & {
   mcpServers: McpServersSettings;
   webSearch: StoredWebSearchSettings;
+  /** コンピュータ（デスクトップコンテナ）のコマンドへ渡す環境変数。 */
+  env: EnvSettings;
 };
 
 export type SettingsStore = {
@@ -56,6 +59,13 @@ export type SettingsStore = {
   deleteWebSearchProvider(id: string): boolean;
   /** 既定の検索プロバイダを変える。null で未設定に戻す。 */
   setDefaultWebSearchProvider(id: string | null): void;
+  /**
+   * コンピュータのコマンドへ渡す環境変数を設定する。同じ名前は上書きする。
+   * 値は画面へ返さない（名前だけを読める）。
+   */
+  setEnv(name: string, value: string): void;
+  /** 環境変数を消す。設定が無ければ false を返し、何も書かない。 */
+  deleteEnv(name: string): boolean;
 };
 
 /** 設定ファイルの内容を、実行時に読む形へ揃える。 */
@@ -67,6 +77,7 @@ function toStoredSettings(file: FileSettings): StoredSettings {
       default: file.webSearch?.default ?? null,
       providers: file.webSearch?.providers ?? {},
     },
+    env: file.env ?? {},
   };
 }
 
@@ -201,6 +212,27 @@ export function createSettingsStore(configPath: string): SettingsStore {
         settings.webSearch = { providers: current.providers, ...(id === null ? {} : { default: id }) };
         return true;
       });
+    },
+
+    setEnv(name, value) {
+      mutate((settings) => {
+        settings.env = { ...settings.env, [name]: value };
+        return true;
+      });
+    },
+
+    deleteEnv(name) {
+      let removed = false;
+      mutate((settings) => {
+        if (settings.env?.[name] === undefined) return false;
+
+        const variables = { ...settings.env };
+        delete variables[name];
+        settings.env = variables;
+        removed = true;
+        return true;
+      });
+      return removed;
     },
   };
 }

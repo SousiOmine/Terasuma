@@ -308,6 +308,7 @@ describe("モデル設定 API", () => {
         modelOptions: {},
         mcpServers: {},
         webSearch: { default: null, providers: {} },
+        env: {},
       });
       expect(harness.file().providers).toBeUndefined();
     });
@@ -404,6 +405,7 @@ describe("モデル設定 API", () => {
         modelOptions: {},
         mcpServers: {},
         webSearch: { default: null, providers: {} },
+        env: {},
       });
       expect(harness.check.requests).toEqual([{ ...DEEPSEEK_CHECK, apiKey: "sk-check" }]);
     });
@@ -586,6 +588,7 @@ describe("モデル設定 API", () => {
           modelOptions: {},
           mcpServers: {},
           webSearch: { default: null, providers: {} },
+          env: {},
         });
       },
       { configPath: (dir) => join(dir, "missing", CONFIG_FILE_NAME) },

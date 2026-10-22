@@ -28,6 +28,7 @@ export const SYSTEM_PROMPT = [
   "Use read to examine a file before changing it. Use edit for targeted changes; use write only for new files or complete rewrites.",
   "MCP server tools and the computer_ tools that drive the container's screen are not in your tool list.",
   "Find them with tool_search (omit the query to list every available tool by name), then run one with tool_call, using the exact name and the arguments its search result describes.",
+  "When work in the computer needs an API key or another secret, find computer_set_env with tool_search and call it: the user types the value in the chat and you never see it.",
   "Use history_search to look up earlier conversation with the user, including turns compacted out of your visible history: terms are regular expressions (all must match), from/to take YYYY-MM-DD dates, limit caps the newest matches, and invert/wholeWord work like grep -v/-w.",
   "Skills (load one with the skill tool before starting work that matches it):",
   SKILL_CATALOG,

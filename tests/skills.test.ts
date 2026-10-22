@@ -4,7 +4,7 @@ import { createHandover } from "../src/server/computer/handover";
 import { BUILTIN_SKILLS, COMPUTER_USE_SKILL, SKILL_CATALOG } from "../src/server/agent/skills";
 import { createComputerTools } from "../src/server/agent/tools/computer";
 import { createSkillTools } from "../src/server/agent/tools/skill";
-import { createContainerStub, createImageStub } from "./support";
+import { createContainerStub, createEnvRequestsStub, createImageStub } from "./support";
 
 /**
  * 組み込みスキル。
@@ -23,6 +23,7 @@ function availableTools(): string[] {
     container: createContainerStub(),
     images: createImageStub(),
     handover: createHandover(),
+    env: createEnvRequestsStub(),
     teraId: "t1",
   });
   return Object.keys(tools).sort();

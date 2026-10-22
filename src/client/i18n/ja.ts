@@ -42,6 +42,12 @@ export const ja: Record<MessageKey, string> = {
   "chat.computer.done": "操作を完了した",
   "chat.computer.answer": "返事を入力",
 
+  "chat.env.title": "環境変数を設定してください",
+  "chat.env.placeholder": "値を入力",
+  "chat.env.submit": "設定する",
+  "chat.env.submitting": "設定しています…",
+  "chat.env.waiting": "入力待ち",
+
   "composer.placeholder": "メッセージを入力",
   "composer.send": "送信",
   "composer.stop": "停止",
@@ -80,6 +86,11 @@ export const ja: Record<MessageKey, string> = {
     "エージェントが入れたアプリと設定は消えます。置いたファイルは、「ホームの中身も消す」を選ばない限り残ります。",
   "settings.container.resetWipeHome": "ホームの中身も消す",
   "settings.container.confirmReset": "作り直す",
+
+  "settings.container.env.title": "環境変数",
+  "settings.container.env.empty": "まだ設定されていません。",
+  "settings.container.env.deleteTitle": "環境変数を削除しますか？",
+  "settings.container.env.deleteMessage": "コンピュータのコマンドから、この変数を使えなくなります。",
 
   "settings.mcp.title": "MCP サーバー",
   "settings.mcp.description": "ツールを提供する MCP サーバーへの接続",
@@ -243,6 +254,7 @@ export const ja: Record<MessageKey, string> = {
   "error.container_start_failed": "コンピュータを起動できませんでした。",
   "error.container_not_running": "コンピュータが動いていません。",
   "error.handover_not_pending": "この会話は操作を待っていません。",
+  "error.env_request_not_pending": "この会話は環境変数の入力を待っていません。",
   "error.turn_in_progress": "この会話はほかで応答を生成しています。",
   "error.media_not_found": "ファイルが見つかりません。",
   "error.settings_write_failed": "設定を保存できませんでした。",

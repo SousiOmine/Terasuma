@@ -3,6 +3,7 @@ import { join } from "node:path";
 import index from "../../client/index.html";
 import type { AppConfig } from "../../config";
 import type { ContainerManager } from "../computer/container";
+import type { EnvRequests } from "../computer/env";
 import type { FileStore } from "../computer/files";
 import type { ImageStore } from "../computer/images";
 import { MAX_REQUEST_BODY_BYTES } from "../computer/uploads";
@@ -43,6 +44,8 @@ export type ServerOptions = {
   files: FileStore;
   /** ユーザーへ画面を渡す待ち。 */
   handover: Handover;
+  /** 環境変数の入力待ち。チャットで入力された値を設定へ書く。 */
+  envRequests: EnvRequests;
   /** 過去の対話の圧縮（古いやり取りの畳み方）。テストで差し替える。 */
   compaction: Compaction;
   /** models.dev のカタログ。テストで差し替える。 */
@@ -86,7 +89,20 @@ const ANY_FREE_PORT = 0;
  * ルートはここでリテラルのパスとして並べる（Bun のルータは文字列リテラルからパラメータ型を作る）。
  */
 export function startServer(options: ServerOptions): StartedServer {
-  const { config, store, engine, compaction, settings, mcp, webSearch, container, images, files, handover } = options;
+  const {
+    config,
+    store,
+    engine,
+    compaction,
+    settings,
+    mcp,
+    webSearch,
+    container,
+    images,
+    files,
+    handover,
+    envRequests,
+  } = options;
   // 各ハンドラの例外は、ここで 1 度だけ応答に変える（ハンドラ側に try/catch を書かない）。
   const api = withErrorHandling(
     createApiHandlers({
@@ -99,6 +115,7 @@ export function startServer(options: ServerOptions): StartedServer {
       images,
       files,
       handover,
+      envRequests,
       compaction,
       catalog: options.catalog ?? createCatalog({ cachePath: join(config.dataDir, CATALOG_FILE_NAME) }),
       checkConnection: options.checkConnection ?? createConnectionChecker(),
@@ -213,6 +230,17 @@ export function startServer(options: ServerOptions): StartedServer {
         // 引き受け（画面を渡している間）の返事。
         "/api/computer/handover": {
           POST: api.answerHandover,
+        },
+        // コンピュータのコマンドへ渡す環境変数。値は返さず、名前だけを扱う。
+        "/api/computer/env": {
+          GET: api.listEnv,
+        },
+        // 待っている環境変数の入力。値はこの経路でだけ受け取り、モデルへは返さない。
+        "/api/computer/env/answer": {
+          POST: api.answerEnv,
+        },
+        "/api/computer/env/:name": {
+          DELETE: api.deleteEnv,
         },
         "/api/computer/vnc": {
           GET: async (req: Request, server: Server<ScreenSocketData>) => {

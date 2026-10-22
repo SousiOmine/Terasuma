@@ -6,6 +6,7 @@ import type {
   CatalogProviderView,
   ChatEvent,
   ChatMessage,
+  ComputerEnvView,
   ContainerStatusView,
   McpAuthorizationView,
   McpServerForm,
@@ -45,6 +46,9 @@ const CONTAINER_PATH = "/api/container";
 
 /** 画面を渡している間の返事。 */
 const HANDOVER_PATH = "/api/computer/handover";
+
+/** コンピュータのコマンドへ渡す環境変数。 */
+const COMPUTER_ENV_PATH = "/api/computer/env";
 
 /** 画面に並べる Tera の一覧。 */
 export async function listTeras(): Promise<readonly Tera[]> {
@@ -275,6 +279,31 @@ export async function answerHandover(
   answer: { kind: "done" } | { kind: "text"; text: string },
 ): Promise<void> {
   await fetchOrThrow(HANDOVER_PATH, jsonRequest("POST", { teraId, ...answer }));
+}
+
+/**
+ * 待っている環境変数の入力。値を送るか、入力をやめるか。
+ * 値はここからサーバへ直接渡り、会話（SSE・履歴）には載らない。
+ */
+export async function answerEnvRequest(
+  teraId: string,
+  answer: { kind: "value"; name: string; value: string } | { kind: "cancel"; name: string },
+): Promise<void> {
+  await fetchOrThrow(`${COMPUTER_ENV_PATH}/answer`, jsonRequest("POST", { teraId, ...answer }));
+}
+
+/** 設定されている環境変数の名前。値は返らない。 */
+export async function fetchComputerEnv(): Promise<readonly string[]> {
+  const body = await request<ComputerEnvView>(COMPUTER_ENV_PATH);
+  return body.variables;
+}
+
+/** 環境変数を消す。残っている名前の一覧が返る。 */
+export async function deleteComputerEnv(name: string): Promise<readonly string[]> {
+  const body = await request<ComputerEnvView>(`${COMPUTER_ENV_PATH}/${encodeURIComponent(name)}`, {
+    method: "DELETE",
+  });
+  return body.variables;
 }
 
 /** コンテナのいまの状態（podman に問い合わせた結果）。 */

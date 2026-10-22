@@ -5,6 +5,7 @@ import type { Store } from "../../data/store";
 import type { AgentEngine } from "../../agent/engine";
 import type { Compaction } from "../../agent/compaction";
 import type { ContainerManager } from "../../computer/container";
+import type { EnvRequests } from "../../computer/env";
 import type { FileStore } from "../../computer/files";
 import type { Handover } from "../../computer/handover";
 import type { ImageStore } from "../../computer/images";
@@ -59,6 +60,8 @@ export type ApiDeps = {
   files: FileStore;
   /** ユーザーへ画面を渡す待ち。チャットからの返事をここへ届ける。 */
   handover: Handover;
+  /** 環境変数の入力待ち。チャットで入力された値を設定へ書き、モデルには値を返さない。 */
+  envRequests: EnvRequests;
   /** 過去の対話の圧縮。ターンの前に走っている分を待ち、ターンの後に次を決める。 */
   compaction: Compaction;
   /** models.dev のカタログ。プロバイダとモデルの一覧はここから取る。 */

@@ -102,7 +102,58 @@ describe("チャットのイベントの読み替え", () => {
     ).toBeNull();
   });
 
-  test("引き受けの結果で、操作できる状態が終わる", () => {
+  test("tool_call 越しの環境変数の呼び出しは、入力欄を出す", () => {
+    expect(
+      interpretEvent({
+        type: "tool-call",
+        id: "a1",
+        part: {
+          type: "tool-call",
+          id: "c5",
+          server: "tool",
+          tool: "call",
+          args: { name: "computer_set_env", args: { name: "GITHUB_TOKEN", description: "リポジトリを読むため" } },
+        },
+      }),
+    ).toEqual({
+      kind: "env-request-start",
+      callId: "c5",
+      name: "GITHUB_TOKEN",
+      description: "リポジトリを読むため",
+    });
+
+    // 説明が無くても、名前があれば入力を出す（何に使うかは画面で補える）。
+    expect(
+      interpretEvent({
+        type: "tool-call",
+        id: "a1",
+        part: {
+          type: "tool-call",
+          id: "c6",
+          server: "tool",
+          tool: "call",
+          args: { name: "computer_set_env", args: { name: "TOKEN" } },
+        },
+      }),
+    ).toEqual({ kind: "env-request-start", callId: "c6", name: "TOKEN", description: null });
+
+    // 変数名が無ければ、何を設定するのか画面に出せないので何もしない。
+    expect(
+      interpretEvent({
+        type: "tool-call",
+        id: "a1",
+        part: {
+          type: "tool-call",
+          id: "c7",
+          server: "tool",
+          tool: "call",
+          args: { name: "computer_set_env", args: {} },
+        },
+      }),
+    ).toBeNull();
+  });
+
+  test("待ちの結果は、どの呼び出しの結果かだけを伝える", () => {
     const part = {
       type: "tool-result" as const,
       id: "c1",
@@ -112,10 +163,19 @@ describe("チャットのイベントの読み替え", () => {
       output: "[computer_ask_user]\ndone",
     };
 
-    expect(interpretEvent({ type: "tool-result", id: "a1", part })).toEqual({ kind: "handover-end", callId: "c1" });
+    // 成功した結果。どちらの待ち（引き受け・環境変数）を終えるかは、chat.ts が id で判定する。
+    expect(interpretEvent({ type: "tool-result", id: "a1", part })).toEqual({
+      kind: "wait-end",
+      callId: "c1",
+      failed: false,
+    });
 
-    // 失敗した呼び出しでは、まだユーザーの操作待ちが続いている。
-    expect(interpretEvent({ type: "tool-result", id: "a1", part: { ...part, failed: true } })).toBeNull();
+    // 取り消された環境変数の入力も、待ちを終える材料として流す。
+    expect(interpretEvent({ type: "tool-result", id: "a1", part: { ...part, failed: true } })).toEqual({
+      kind: "wait-end",
+      callId: "c1",
+      failed: true,
+    });
   });
 
   test("失敗はコードと詳細を運ぶ", () => {

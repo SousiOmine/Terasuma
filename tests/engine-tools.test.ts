@@ -29,6 +29,7 @@ import {
   createCodingStub,
   createComputerStub,
   createContainerStub,
+  createEnvRequestsStub,
   createHistoryStub,
   createImageStub,
   createAttachmentsStub,
@@ -316,7 +317,13 @@ describe("ツール検索（AI SDK 経由）", () => {
     try {
       const events = await run({ toolset: async () => ({}) }, settingsFor(portOf(fake.server)), {
         toolset: async () =>
-          createComputerTools({ container, images: createImageStub(), handover: createHandover(), teraId: "t1" }),
+          createComputerTools({
+            container,
+            images: createImageStub(),
+            handover: createHandover(),
+            env: createEnvRequestsStub(),
+            teraId: "t1",
+          }),
       });
 
       // スキルの本文 → 検索結果 → 実行、の順にモデルへ渡る。
@@ -479,7 +486,13 @@ describe("コンテナのツール（tool_call 経由）", () => {
     try {
       const events = await run({ toolset: async () => ({}) }, settingsFor(portOf(fake.server)), {
         toolset: async () =>
-          createComputerTools({ container, images: createImageStub(), handover: createHandover(), teraId: "t1" }),
+          createComputerTools({
+            container,
+            images: createImageStub(),
+            handover: createHandover(),
+            env: createEnvRequestsStub(),
+            teraId: "t1",
+          }),
       });
 
       // コンテナのツールは事前に渡らず、tool_call からだけ実行できる。
@@ -508,7 +521,13 @@ describe("コンテナのツール（tool_call 経由）", () => {
     try {
       const running = run({ toolset: async () => ({}) }, settingsFor(portOf(fake.server)), {
         toolset: async () =>
-          createComputerTools({ container: createContainerStub(), images: createImageStub(), handover, teraId: "t1" }),
+          createComputerTools({
+            container: createContainerStub(),
+            images: createImageStub(),
+            handover,
+            env: createEnvRequestsStub(),
+            teraId: "t1",
+          }),
       });
 
       // 引き受けが始まるまで待ち、ユーザーの返事を届ける。

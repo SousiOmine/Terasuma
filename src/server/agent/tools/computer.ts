@@ -1,8 +1,10 @@
 import type { ToolSet } from "ai";
 import { tool } from "ai";
 import { z } from "zod";
+import { ENV_NAME_PATTERN, isReservedEnvName } from "../../../shared/env";
 import type { ContainerManager, ShellResult } from "../../computer/container";
 import type { ComputerToolsetProvider } from "../engine";
+import type { EnvRequests } from "../../computer/env";
 import type { Handover } from "../../computer/handover";
 import type { ImageStore } from "../../computer/images";
 
@@ -65,6 +67,8 @@ export type ComputerToolsetOptions = {
   images: ImageStore;
   /** ユーザーへ画面を渡す待ち。 */
   handover: Handover;
+  /** ユーザーから秘密（API キーなど）を受け取る待ち。値はモデルへ渡さない。 */
+  env: EnvRequests;
 };
 
 export type ComputerToolsOptions = ComputerToolsetOptions & {
@@ -73,7 +77,7 @@ export type ComputerToolsOptions = ComputerToolsetOptions & {
 };
 
 export function createComputerTools(options: ComputerToolsOptions): ComputerToolset {
-  const { container, images, handover, teraId } = options;
+  const { container, images, handover, env, teraId } = options;
 
   /** xdotool を 1 回呼ぶ。失敗と打ち切りは例外にして、モデルが理由を読めるようにする。 */
   async function xdotool(args: readonly string[], signal?: AbortSignal): Promise<ShellResult> {
@@ -248,6 +252,34 @@ export function createComputerTools(options: ComputerToolsOptions): ComputerTool
 
         // 何を頼むかは、呼び出しの引数としてそのまま画面へ流れる。
         return handover.wait(teraId, signal);
+      },
+    }),
+
+    computer_set_env: tool({
+      description: [
+        "Ask the user to type a secret (an API key, access token or password) and set it as an environment variable on the computer.",
+        "The user enters the value in the chat: you never see it and it is not part of the conversation.",
+        "Once this returns, the value is available to every command you run in the computer (bash and computer_open).",
+        "Never ask the user to paste a secret into the chat; use this tool instead.",
+      ].join(" "),
+      inputSchema: z.object({
+        name: z
+          .string()
+          .regex(ENV_NAME_PATTERN, "Use letters, digits and underscores, starting with a letter or underscore")
+          .refine((value) => !isReservedEnvName(value), "This name is used by the computer itself; choose another name")
+          .describe("Name of the environment variable, for example GITHUB_TOKEN"),
+        description: z.string().min(1).describe("Why you need it, written for the user to read"),
+      }),
+      execute: async ({ name }: { name: string }, context: ToolContext) => {
+        const signal = context.abortSignal;
+        // 中断を受け取れないと、ユーザーを待ったままターンを片付けられなくなる。
+        if (signal === undefined) {
+          throw new Error("Cannot wait for the user because the turn's abort signal is not available");
+        }
+
+        // 何に使うか（description）は、呼び出しの引数としてそのまま画面へ流れる。
+        // 値はユーザーから直接受け取り、この戻り値にもモデルの文脈にも入れない。
+        return env.wait(teraId, name, signal);
       },
     }),
   };

@@ -6,6 +6,7 @@ import type { FileSettings } from "../src/server/data/settings-schema";
 import type { CommandResult, CommandRunner } from "../src/server/computer/command";
 import type { CodingToolset } from "../src/server/agent/tools/coding";
 import { ContainerError, type ContainerManager } from "../src/server/computer/container";
+import type { EnvRequests } from "../src/server/computer/env";
 import type {
   AttachmentToolsetProvider,
   ComputerToolsetProvider,
@@ -42,6 +43,21 @@ export function createMcpStub(): McpManager {
     cancelAuthorization: () => undefined,
     completeAuthorization: async () => ({ serverId: "stub" }),
     close: async () => undefined,
+  };
+}
+
+/**
+ * 環境変数の入力を待たないテストのための差し替え。
+ * 待ちに入っても何も起きず、返事も受け取らない（チャットの入力欄を使わないテスト用）。
+ */
+export function createEnvRequestsStub(): EnvRequests {
+  return {
+    async wait(_teraId, name) {
+      return `The user set ${name}.`;
+    },
+    answer() {
+      return false;
+    },
   };
 }
 

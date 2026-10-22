@@ -4,6 +4,7 @@ import { locale } from "../i18n";
 import * as api from "../lib/api";
 import { ApiError } from "../lib/http";
 import { interpretEvent } from "./chat-events";
+import { beginEnvRequest, endEnvRequest, resetEnvRequest } from "./env-request";
 import { clearChatError, showChatError } from "./failure";
 import { answerHandover, beginHandover, endHandover, handoverActive } from "./handover";
 import { activeTeraId } from "./session";
@@ -43,6 +44,8 @@ export async function openTera(id: string): Promise<void> {
   liveTurn.value = null;
   isStreaming.value = false;
   isStopping.value = false;
+  // 入力欄は、開いた Tera のターンのものだけを出す（前の Tera の待ちを残さない）。
+  resetEnvRequest();
   clearChatError();
   activeTeraId.value = id;
   isLoadingMessages.value = true;
@@ -101,6 +104,8 @@ export async function sendMessage(rawContent: string, files: readonly File[]): P
       current = null;
       isStreaming.value = false;
       isStopping.value = false;
+      // 結果が届かないまま（停止・切断で）ターンが終わった場合も、入力欄を残さない。
+      resetEnvRequest();
     }
   }
 }
@@ -174,8 +179,14 @@ function applyEvent(event: ChatEvent): void {
     case "handover-start":
       beginHandover(effect.callId, effect.question);
       break;
-    case "handover-end":
-      endHandover(effect.callId);
+    case "env-request-start":
+      beginEnvRequest(effect.callId, effect.name, effect.description);
+      break;
+    case "wait-end":
+      // 画面の引き受けは、成功したときだけ終える（失敗した呼び出しでは待ちが続いている）。
+      if (!effect.failed) endHandover(effect.callId);
+      // 環境変数の入力は、取り消しや失敗でも終える（入力を待ち続けない）。
+      endEnvRequest(effect.callId);
       break;
     case "error":
       showChatError(new ApiError(effect.code, effect.detail));

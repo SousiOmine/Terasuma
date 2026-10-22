@@ -9,6 +9,7 @@ import { createHistoryToolset } from "./server/agent/tools/history";
 import { createWebSearchToolset } from "./server/agent/tools/web";
 import { createWebSearchManager, type WebSearchManager } from "./server/websearch-manager";
 import { createContainerManager, WORKDIR_IN_CONTAINER, type ContainerManager } from "./server/computer/container";
+import { createEnvRequests } from "./server/computer/env";
 import { createFileStore } from "./server/computer/files";
 import { createHandover } from "./server/computer/handover";
 import { createImageStore } from "./server/computer/images";
@@ -66,14 +67,19 @@ export function startApp(config: AppConfig): App {
 
   // デスクトップ用の Containerfile と entry.sh は、リポジトリの container/ に置いてある。
   // src から実行しても dist から実行しても、1 つ上がリポジトリのルートになる。
+  // エージェントがチャットで受け取った環境変数は、コンテナの中のコマンドへ渡す。
   const container = createContainerManager({
     dataDir: config.dataDir,
     containerDir: join(import.meta.dir, "..", "container"),
+    env: () => settings.read().env,
   });
 
   // エージェントがユーザーへ画面を渡すときの待ち（ログインや二段階認証）。
   const handover = createHandover();
-  const computer = createComputerToolset({ container, images, handover });
+  // エージェントが秘密（API キーなど）を必要としたときの、チャットからの入力待ち。
+  // 値はここで設定へ書き、ツールの戻り値（モデルの文脈）には含めない。
+  const envRequests = createEnvRequests({ settings });
+  const computer = createComputerToolset({ container, images, handover, env: envRequests });
 
   // コンテナのファイルとシェルを扱うツール（read / write / edit / bash）。
   // いずれもコンピュータのコンテナの中だけで動き、ホストのファイルには触れない。
@@ -131,6 +137,7 @@ export function startApp(config: AppConfig): App {
     images,
     files,
     handover,
+    envRequests,
   });
   boundPort = server.port ?? null;
 

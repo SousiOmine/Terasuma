@@ -69,6 +69,10 @@ If tool_search finds no computer_ tools, the container is not available on this 
 - computer_wait(seconds) — wait up to 60 seconds, for example while an application starts.
 - computer_ask_user(question) — hand the screen to the user and wait. What the user
   replies, or that the user finished, comes back as the result.
+- computer_set_env(name, description) — ask the user for a secret (an API key, token or
+  password) and set it as an environment variable for commands in this container. The
+  value comes from the user and you never see it. Use this instead of asking the user to
+  paste a secret into the chat.
 
 ## Coordinates
 
@@ -95,6 +99,9 @@ chat_attach with screenshot true or with files.
 
 - Hand the screen over with computer_ask_user for logins, two-factor codes, identity
   checks, or any choice only the user can make.
+- When a command needs a secret, set it with computer_set_env instead of asking for the
+  value in a message. The value is entered in the chat and never reaches you; do not
+  print, copy or guess it afterwards.
 - Write the question for the user to read, in the reply language.
 - Do not take screenshots or type while the user is working on the screen; wait for the
   result.

@@ -20,12 +20,14 @@ function withManager<T>(
     dataDir: string;
     homeDir: string;
   }) => Promise<T>,
+  env: () => Record<string, string> = () => ({}),
 ): Promise<T> {
   const dataDir = mkdtempSync(join(tmpdir(), "terasuma-container-"));
   const stub = createPodmanStub(behaviour);
   const container = createContainerManager({
     dataDir,
     containerDir: join(dataDir, "container-files"),
+    env,
     command: stub.run,
   });
 
@@ -216,6 +218,57 @@ describe("コンテナの中での実行", () => {
     });
   });
 
+  test("設定された環境変数は、動かすコマンドへ --env で渡す", async () => {
+    const variables: Record<string, string> = { GITHUB_TOKEN: "ghp_1", NO_COLOR: "1" };
+
+    await withManager(
+      {},
+      async ({ container, calls }) => {
+        await container.shell("printenv GITHUB_TOKEN", { timeoutMs: 1_000 });
+        await container.exec(["printenv", "GITHUB_TOKEN"], { timeoutMs: 1_000 });
+
+        const [shellCall, execCall] = callsOf(calls, "exec");
+        expect(shellCall).toEqual([
+          "podman",
+          "exec",
+          "--env",
+          "GITHUB_TOKEN=ghp_1",
+          "--env",
+          "NO_COLOR=1",
+          "--workdir",
+          "/home/agent",
+          "terasuma",
+          "bash",
+          "-lc",
+          "printenv GITHUB_TOKEN",
+        ]);
+        expect(execCall).toEqual([
+          "podman",
+          "exec",
+          "--env",
+          "GITHUB_TOKEN=ghp_1",
+          "--env",
+          "NO_COLOR=1",
+          "--workdir",
+          "/home/agent",
+          "terasuma",
+          "printenv",
+          "GITHUB_TOKEN",
+        ]);
+
+        // 設定は呼び出しのたびに読み直す。チャットで設定した値が、次のコマンドから効く。
+        variables.GITHUB_TOKEN = "ghp_2";
+        variables.NEW_TOKEN = "new";
+        await container.exec(["printenv", "NEW_TOKEN"], { timeoutMs: 1_000 });
+
+        const latest = callsOf(calls, "exec").at(-1) ?? [];
+        expect(latest).toContain("GITHUB_TOKEN=ghp_2");
+        expect(latest).toContain("NEW_TOKEN=new");
+      },
+      () => variables,
+    );
+  });
+
   test("動いていないときは、実行せずに理由を返す", async () => {
     await withManager({ running: false }, async ({ container, calls }) => {
       const failure = await container.shell("uname -a", { timeoutMs: 1_000 }).catch((error: unknown) => error);
@@ -244,6 +297,7 @@ describe("コンテナの中での実行", () => {
     const container = createContainerManager({
       dataDir,
       containerDir: join(dataDir, "container-files"),
+      env: () => ({}),
       // 状態の問い合わせは signal を取らない。実行だけが取る。
       command: (cmd, options) => {
         seen.push(options.signal);

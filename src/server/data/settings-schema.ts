@@ -1,4 +1,5 @@
-import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { isEnvName } from "../../shared/env";
 import { describeError } from "../../shared/errors";
 import { isProviderId, mcpServerIdProblem, type McpServerIdProblem } from "../../shared/ids";
 import { isModelId, type ModelId } from "../../shared/model";
@@ -37,6 +38,14 @@ type ModelOptionsSettings = Record<string, ModelOptionSettings>;
 
 /** プロバイダ id → 設定。並び順は設定ファイルに書かれた順のまま保つ。 */
 export type ProvidersSettings = Record<string, ProviderSettings>;
+
+/**
+ * コンピュータ（デスクトップコンテナ）のコマンドへ渡す環境変数。名前 → 値。
+ *
+ * 値はエージェントにも画面にも渡さない。設定画面には名前だけを出す。
+ * 保存先は設定ファイルなので、API キーと同じく平文で置かれる（書き込み時に 0600 にする）。
+ */
+export type EnvSettings = Record<string, string>;
 
 /** この端末で動かす MCP サーバー（stdio）。コマンドを起動して標準入出力で話す。 */
 export type McpStdioServerSettings = {
@@ -105,7 +114,7 @@ const PROVIDER_KEYS = ["apiKey", "baseUrl", "label"] as const;
 /** モデル 1 件に書ける項目。 */
 const MODEL_OPTION_KEYS = ["reasoningEffort"] as const;
 
-const FILE_KEYS = ["model", "providers", "modelOptions", "mcpServers", "webSearch", "port"] as const;
+const FILE_KEYS = ["model", "providers", "modelOptions", "mcpServers", "webSearch", "env", "port"] as const;
 type FileKey = (typeof FILE_KEYS)[number];
 
 /** config.json に書ける設定。書かなかった項目は既定値になる。 */
@@ -115,6 +124,7 @@ export type FileSettings = Partial<{
   modelOptions: ModelOptionsSettings;
   mcpServers: McpServersSettings;
   webSearch: WebSearchSettings;
+  env: EnvSettings;
   port: number;
 }>;
 
@@ -189,6 +199,9 @@ export function readSettingsFile(path: string): FileSettings {
   const webSearch = readWebSearch(source, path);
   if (webSearch !== undefined) settings.webSearch = webSearch;
 
+  const env = readEnv(source, path);
+  if (env !== undefined) settings.env = env;
+
   const port = readNumber(source, "port", path);
   if (port !== undefined) {
     if (!Number.isInteger(port) || port < 1 || port > 65535) {
@@ -203,10 +216,12 @@ export function readSettingsFile(path: string): FileSettings {
 /**
  * 設定ファイルを書き換える。設定画面からの変更と、手で編集した内容の取り込みに使う。
  * 書き込みの途中で落ちても元のファイルが壊れないよう、一時ファイル経由で置き換える。
+ * プロバイダの API キーとコンピュータの環境変数が入るので、他の利用者から読めないよう 0600 にする。
  */
 export function writeSettingsFile(path: string, settings: FileSettings): void {
   const temporary = `${path}.tmp`;
   writeFileSync(temporary, serialize(settings), "utf8");
+  chmodSync(temporary, 0o600);
   renameSync(temporary, path);
 }
 
@@ -218,6 +233,7 @@ function serialize(settings: FileSettings): string {
   if (settings.modelOptions !== undefined) ordered["modelOptions"] = settings.modelOptions;
   if (settings.webSearch !== undefined) ordered["webSearch"] = settings.webSearch;
   if (settings.mcpServers !== undefined) ordered["mcpServers"] = settings.mcpServers;
+  if (settings.env !== undefined) ordered["env"] = settings.env;
   if (settings.port !== undefined) ordered["port"] = settings.port;
   return `${JSON.stringify(ordered, null, 2)}\n`;
 }
@@ -417,7 +433,7 @@ function readStdioServer(source: Record<string, unknown>, where: string): McpStd
     const variables: Record<string, string> = {};
     for (const [name, value] of Object.entries(env)) {
       // 環境変数名として読めない名前は、渡しても効かないまま気づけないのでここで止める。
-      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) {
+      if (!isEnvName(name)) {
         throw new Error(`${where} の env に環境変数名として使えない名前があります: ${JSON.stringify(name)}`);
       }
       if (typeof value !== "string") {
@@ -532,6 +548,39 @@ function readWebSearchDefault(value: unknown, providers: WebSearchProvidersSetti
     throw new Error(`${path} の webSearch.default が指す検索プロバイダ ${id} は設定されていません`);
   }
   return id;
+}
+
+/**
+ * コンピュータのコマンドへ渡す環境変数を読む。
+ *
+ * 名前はシェルが読める形、値は空でない文字列だけを受け付ける。
+ * NUL は podman exec の引数にできず、渡すとコマンドが起動しないため、ここで止める。
+ */
+function readEnv(source: Record<string, unknown>, path: string): EnvSettings | undefined {
+  const value = source["env"];
+  if (value === undefined) return undefined;
+
+  if (!isRecord(value)) {
+    throw new Error(`${path} の env はオブジェクトにしてください`);
+  }
+
+  const variables: EnvSettings = {};
+  for (const [name, entry] of Object.entries(value)) {
+    if (!isEnvName(name)) {
+      throw new Error(`${path} の env に環境変数名として使えない名前があります: ${JSON.stringify(name)}`);
+    }
+    if (typeof entry !== "string") {
+      throw new Error(`${path} の env.${name} は文字列にしてください`);
+    }
+    if (entry.length === 0) {
+      throw new Error(`${path} の env.${name} を空にはできません`);
+    }
+    if (entry.includes("\0")) {
+      throw new Error(`${path} の env.${name} に NUL 文字は使えません`);
+    }
+    variables[name] = entry;
+  }
+  return variables;
 }
 
 /** モデルごとの設定（思考強度など）を読む。 */

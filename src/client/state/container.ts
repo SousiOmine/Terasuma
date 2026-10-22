@@ -25,6 +25,22 @@ export const containerError = failure.error;
 export const showContainerError = failure.show;
 export const clearContainerError = failure.clear;
 
+/**
+ * コンピュータのコマンドへ渡す環境変数の名前。
+ * 値はサーバから返らない（画面にもモデルにも出さない）。まだ読めていないときは null。
+ */
+export const computerEnv = signal<readonly string[] | null>(null);
+
+/** 設定されている環境変数の名前を読み直す。 */
+export async function loadComputerEnv(): Promise<void> {
+  computerEnv.value = await api.fetchComputerEnv();
+}
+
+/** 環境変数を消す。サーバが返した、残っている名前の一覧をそのまま置く。 */
+export async function removeComputerEnv(name: string): Promise<void> {
+  computerEnv.value = await api.deleteComputerEnv(name);
+}
+
 /** いまの状態を読み直す。 */
 export async function loadContainer(): Promise<void> {
   containerStatus.value = await api.fetchContainer();

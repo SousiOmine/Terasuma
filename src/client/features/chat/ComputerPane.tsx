@@ -2,6 +2,7 @@ import { IconSend, IconX } from "@tabler/icons-preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { sendMessage } from "../../state/chat";
 import { containerStatus } from "../../state/container";
+import { envRequestActive } from "../../state/env-request";
 import { chatError, clearChatError } from "../../state/failure";
 import { t } from "../../i18n";
 import { ErrorNotice } from "../../ui/ErrorNotice";
@@ -13,6 +14,7 @@ import {
   handoverActive,
   handoverQuestion,
 } from "../../state/handover";
+import { EnvRequestPanel } from "./EnvRequestPanel";
 
 /**
  * 右ペイン。いまはコンテナの画面を noVNC で映す。
@@ -208,6 +210,13 @@ export function ComputerPane() {
                 />
               </div>
             )}
+          </div>
+        )}
+
+        {/* 狭い画面ではチャットの入力欄に触れないので、環境変数の入力欄もここに出す。 */}
+        {envRequestActive.value && (
+          <div class="mx-3 mt-3 shrink-0 md:hidden">
+            <EnvRequestPanel />
           </div>
         )}
 

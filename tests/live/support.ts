@@ -22,6 +22,7 @@ import {
   WORKDIR_IN_CONTAINER,
   type ContainerManager,
 } from "../../src/server/computer/container";
+import { createEnvRequests } from "../../src/server/computer/env";
 import { createFileStore } from "../../src/server/computer/files";
 import { createEngine } from "../../src/server/agent/engine";
 import { resolveModel } from "../../src/server/provider/routing";
@@ -94,9 +95,14 @@ export async function withLiveServer(run: (harness: LiveHarness) => Promise<void
   const store = createStore(":memory:");
   const images = createImageStore(config.dataDir);
   const files = createFileStore(config.dataDir);
-  const container = createContainerManager({ dataDir: config.dataDir, containerDir: CONTAINER_DIR });
+  const container = createContainerManager({
+    dataDir: config.dataDir,
+    containerDir: CONTAINER_DIR,
+    env: () => settings.read().env,
+  });
   const handover = createHandover();
-  const computer = createComputerToolset({ container, images, handover });
+  const envRequests = createEnvRequests({ settings });
+  const computer = createComputerToolset({ container, images, handover, env: envRequests });
 
   // read / write / edit / bash は、コンピュータのコンテナの中だけで動く（アプリの起動時と同じ）。
   const coding = createCodingToolset({ container, root: WORKDIR_IN_CONTAINER });
@@ -158,6 +164,7 @@ export async function withLiveServer(run: (harness: LiveHarness) => Promise<void
     images,
     files,
     handover,
+    envRequests,
   });
   boundPort = server.port ?? null;
 

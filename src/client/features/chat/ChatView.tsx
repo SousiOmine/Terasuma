@@ -6,6 +6,7 @@ import { locale, t } from "../../i18n";
 import { modelProblem } from "../../state/model";
 import { isLoadingMessages, isStreaming, liveTurn, messages, type LiveTurn } from "../../state/chat";
 import { chatError, clearChatError } from "../../state/failure";
+import { envRequestActive } from "../../state/env-request";
 import { computerPaneOpen, handoverActive, toggleComputerPane } from "../../state/handover";
 import { openSettings } from "../../state/route";
 import { activeTera } from "../../state/session";
@@ -14,6 +15,7 @@ import { Banner } from "../../ui/Banner";
 import { ErrorNotice } from "../../ui/ErrorNotice";
 import { ChatAvatar } from "./ChatAvatar";
 import { Composer } from "./Composer";
+import { EnvRequestPanel } from "./EnvRequestPanel";
 import { AgentMessageBubble, NoticeLine, TypingBubble, UserMessageBubble } from "./MessageBubble";
 
 /**
@@ -48,6 +50,8 @@ export function ChatView() {
   const containerAvailable = containerStatus.value !== null && !containerMissing;
   const paneOpen = computerPaneOpen.value;
   const handover = handoverActive.value;
+  // 環境変数の入力待ち。引き受けとは別で、チャットの入力欄の上に入力欄を出す。
+  const envWaiting = envRequestActive.value;
   const scrollRef = useRef<HTMLDivElement>(null);
   /** 末尾にいるかどうか。履歴を読んでいる間は引き戻さない。 */
   const stickToBottom = useRef(true);
@@ -88,7 +92,13 @@ export function ChatView() {
         <div class="min-w-0 flex-1">
           <h1 class="truncate text-[15px] leading-5 font-semibold tracking-[-0.01em]">{title}</h1>
           <p class="truncate text-[11px] leading-4 text-[var(--app-text-secondary)]">
-            {handover ? t("chat.computer.yourTurn") : streaming ? t("chat.typing") : t("chat.agent.subtitle")}
+            {handover
+              ? t("chat.computer.yourTurn")
+              : envWaiting
+                ? t("chat.env.waiting")
+                : streaming
+                  ? t("chat.typing")
+                  : t("chat.agent.subtitle")}
           </p>
         </div>
         {containerAvailable && (
@@ -127,7 +137,7 @@ export function ChatView() {
         ) : (
           <div class="mx-auto flex w-full max-w-3xl flex-col gap-4 px-4 py-8 sm:px-6">
             {items.map((item) => renderItem(item))}
-            {streaming && !handover && <TypingBubble />}
+            {streaming && !handover && !envWaiting && <TypingBubble />}
             {loading && <p class="text-center text-sm text-[var(--app-text-secondary)]">{t("common.loading")}</p>}
           </div>
         )}
@@ -159,6 +169,15 @@ export function ChatView() {
                 </div>
               }
             />
+          </div>
+        </div>
+      )}
+
+      {/* 環境変数の入力は、ふだんの入力欄のすぐ上に出す（送る先がチャットとは違うため別の面にする）。 */}
+      {envWaiting && (
+        <div class="shrink-0 px-3 pt-2 sm:px-6">
+          <div class="mx-auto w-full max-w-3xl">
+            <EnvRequestPanel />
           </div>
         </div>
       )}

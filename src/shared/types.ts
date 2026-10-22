@@ -188,6 +188,7 @@ export const API_ERROR_CODES = [
   "container_start_failed",
   "container_not_running",
   "handover_not_pending",
+  "env_request_not_pending",
   "turn_in_progress",
   "media_not_found",
   "settings_write_failed",
@@ -413,4 +414,12 @@ export type ContainerStatusView = {
   vncPort: number | null;
   /** 状態を決められなかったときの理由。無ければ null。 */
   detail: string | null;
+};
+
+/**
+ * コンピュータのコマンドへ渡す環境変数。
+ * 値は API キーと同じ秘密なので返さず、名前だけを返す（設定画面の一覧に使う）。
+ */
+export type ComputerEnvView = {
+  variables: readonly string[];
 };

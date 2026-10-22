@@ -297,6 +297,34 @@ describe("mcpServers の検証", () => {
   });
 });
 
+describe("env の検証", () => {
+  const read = (env: unknown) =>
+    withConfigFile(JSON.stringify({ env }), (settingsEnv) => readSettingsFile(loadConfig(settingsEnv).configPath));
+
+  test("コンピュータのコマンドへ渡す環境変数として読む", () => {
+    expect(read({ GITHUB_TOKEN: "ghp_1", NO_COLOR: "1" }).env).toEqual({
+      GITHUB_TOKEN: "ghp_1",
+      NO_COLOR: "1",
+    });
+  });
+
+  test("名前はシェルが読める形に限る", () => {
+    expect(() => read({ "1BAD": "x" })).toThrow(/環境変数名/);
+    expect(() => read({ "A-B": "x" })).toThrow(/環境変数名/);
+  });
+
+  test("値は空でない文字列に限る", () => {
+    expect(() => read({ TOKEN: "" })).toThrow(/空にはできません/);
+    expect(() => read({ TOKEN: 3 })).toThrow(/文字列/);
+    // podman exec の引数にできない NUL は、起動してからではなく読み込みで止める。
+    expect(() => read({ TOKEN: "a\0b" })).toThrow(/NUL/);
+  });
+
+  test("オブジェクトでなければ止める", () => {
+    expect(() => read(["TOKEN"])).toThrow(/オブジェクト/);
+  });
+});
+
 describe("MCP サーバーの入力の検証", () => {
   test("未入力は省き、trim して保存できる形にする", () => {
     expect(

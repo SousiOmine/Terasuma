@@ -118,6 +118,11 @@ export type ContainerManagerOptions = {
   dataDir: string;
   /** Containerfile と entry.sh を置いているディレクトリ。 */
   containerDir: string;
+  /**
+   * コンテナの中のコマンドへ足す環境変数。
+   * エージェントがチャットで受け取った値なので、設定が変わるたびに読み直す（呼び出しのたびに読む）。
+   */
+  env: () => Record<string, string>;
   /** テストで podman の呼び出しを差し替える。 */
   command?: CommandRunner;
 };
@@ -129,6 +134,14 @@ export function createContainerManager(options: ContainerManagerOptions): Contai
 
   /** 直近に読んだ状態と、その時刻。画面の中継のように短い間に何度も聞かれるため。 */
   let cachedStatus: { at: number; view: ContainerStatusView } | null = null;
+
+  /**
+   * podman exec へ渡す --env の並び。設定されている分だけ付ける。
+   * 値はシェルを介さず 1 つの引数として渡すので、空白や記号もそのまま届く。
+   */
+  function envArgs(): string[] {
+    return Object.entries(options.env()).flatMap(([name, value]) => ["--env", `${name}=${value}`]);
+  }
 
   function fail(code: ContainerErrorCode, result: CommandResult): ContainerError {
     return new ContainerError(code, describeFailure(result));
@@ -314,7 +327,7 @@ export function createContainerManager(options: ContainerManagerOptions): Contai
       await requireRunning();
 
       const result = await run(
-        ["podman", "exec", "--workdir", WORKDIR_IN_CONTAINER, CONTAINER_NAME, "bash", "-lc", script],
+        ["podman", "exec", ...envArgs(), "--workdir", WORKDIR_IN_CONTAINER, CONTAINER_NAME, "bash", "-lc", script],
         {
           timeoutMs,
           signal,
@@ -330,10 +343,13 @@ export function createContainerManager(options: ContainerManagerOptions): Contai
     async exec(args, { timeoutMs, signal }) {
       await requireRunning();
 
-      const result = await run(["podman", "exec", "--workdir", WORKDIR_IN_CONTAINER, CONTAINER_NAME, ...args], {
-        timeoutMs,
-        signal,
-      });
+      const result = await run(
+        ["podman", "exec", ...envArgs(), "--workdir", WORKDIR_IN_CONTAINER, CONTAINER_NAME, ...args],
+        {
+          timeoutMs,
+          signal,
+        },
+      );
 
       return toShellResult(result);
     },

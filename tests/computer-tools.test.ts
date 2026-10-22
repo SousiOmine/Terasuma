@@ -6,9 +6,10 @@ import { join } from "node:path";
 import type { ImageRef } from "../src/shared/types";
 import { createComputerToolset, createComputerTools } from "../src/server/agent/tools/computer";
 import { createContainerManager, type ContainerManager, type ShellResult } from "../src/server/computer/container";
+import type { EnvRequests } from "../src/server/computer/env";
 import { createHandover } from "../src/server/computer/handover";
 import { createImageStore, type ImageStore } from "../src/server/computer/images";
-import { createPodmanStub, testPng, type PodmanStubBehaviour } from "./support";
+import { createEnvRequestsStub, createPodmanStub, testPng, type PodmanStubBehaviour } from "./support";
 
 /**
  * computer ツールセットを、podman を差し替えた状態で直接呼ぶ。
@@ -27,6 +28,8 @@ type ToolContext = {
   shellCalls: string[];
   /** shell に渡された中断の signal。 */
   shellSignals: (AbortSignal | undefined)[];
+  /** 環境変数の入力待ちに渡された変数名。 */
+  envWaits: string[];
   images: ImageStore;
   homeDir: string;
 };
@@ -48,6 +51,7 @@ async function withTools<T>(behaviour: ToolBehaviour, run: (context: ToolContext
   const base = createContainerManager({
     dataDir: dir,
     containerDir: join(dir, "container-files"),
+    env: () => ({}),
     command: stub.run,
   });
 
@@ -72,7 +76,17 @@ async function withTools<T>(behaviour: ToolBehaviour, run: (context: ToolContext
   };
 
   const images = createImageStore(dir);
-  const tools = createComputerTools({ container, images, handover: createHandover(), teraId: "t1" });
+  const envWaits: string[] = [];
+  const env: EnvRequests = {
+    async wait(_teraId, name) {
+      envWaits.push(name);
+      return `The user set ${name}.`;
+    },
+    answer() {
+      return false;
+    },
+  };
+  const tools = createComputerTools({ container, images, handover: createHandover(), env, teraId: "t1" });
 
   try {
     return await run({
@@ -81,6 +95,7 @@ async function withTools<T>(behaviour: ToolBehaviour, run: (context: ToolContext
       execSignals,
       shellCalls,
       shellSignals,
+      envWaits,
       images,
       homeDir: join(dir, "container", "home"),
     });
@@ -108,11 +123,17 @@ function toolsetFor(behaviour: ToolBehaviour) {
   const container = createContainerManager({
     dataDir: dir,
     containerDir: join(dir, "container-files"),
+    env: () => ({}),
     command: stub.run,
   });
 
   return {
-    provider: createComputerToolset({ container, images: createImageStore(dir), handover: createHandover() }),
+    provider: createComputerToolset({
+      container,
+      images: createImageStore(dir),
+      handover: createHandover(),
+      env: createEnvRequestsStub(),
+    }),
     dir,
   };
 }
@@ -310,6 +331,50 @@ describe("ターンの中断", () => {
 
       expect(empty.success).toBe(false);
       expect(filled.success).toBe(true);
+    });
+  });
+
+  test("computer_set_env の名前と説明は受け付けられる形に限る", async () => {
+    await withTools({}, async ({ tools }) => {
+      const schema = asSchema(tools["computer_set_env"]?.inputSchema);
+      if (schema.validate === undefined) throw new Error("computer_set_env の検証が無い");
+
+      expect(await schema.validate({ name: "GITHUB_TOKEN", description: "リポジトリを読むため" })).toMatchObject({
+        success: true,
+      });
+      // 空・シェルで読めない名前・小文字始まりでない名前は通さない。
+      expect(await schema.validate({ name: "", description: "x" })).toMatchObject({ success: false });
+      expect(await schema.validate({ name: "1BAD", description: "x" })).toMatchObject({ success: false });
+      expect(await schema.validate({ name: "GITHUB-TOKEN", description: "x" })).toMatchObject({ success: false });
+      // コンピュータ自身が使う名前は、コマンドの動きを壊すのでツールからは設定できない。
+      expect(await schema.validate({ name: "PATH", description: "x" })).toMatchObject({ success: false });
+      // 何に使うかを書けないと、画面に理由を出せない。
+      expect(await schema.validate({ name: "GITHUB_TOKEN", description: "" })).toMatchObject({ success: false });
+    });
+  });
+
+  test("computer_set_env は変数名だけを待ちへ渡し、値は扱わない", async () => {
+    await withTools({}, async ({ tools, envWaits }) => {
+      const controller = new AbortController();
+      const output = await callTool(
+        tools,
+        "computer_set_env",
+        { name: "GITHUB_TOKEN", description: "リポジトリを読むため" },
+        { abortSignal: controller.signal },
+      );
+
+      expect(envWaits).toEqual(["GITHUB_TOKEN"]);
+      expect(output).toBe("The user set GITHUB_TOKEN.");
+      // 説明文は画面へ流れるだけで、ツールの戻り値（モデルの文脈）には現れない。
+      expect(String(output)).not.toContain("リポジトリ");
+    });
+  });
+
+  test("computer_set_env は中断を受け取れないと待たない", async () => {
+    await withTools({}, async ({ tools }) => {
+      await expect(callTool(tools, "computer_set_env", { name: "GITHUB_TOKEN", description: "x" })).rejects.toThrow(
+        /abort signal/,
+      );
     });
   });
 });

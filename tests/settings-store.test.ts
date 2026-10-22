@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { readSettingsFile } from "../src/server/data/settings-schema";
 import { withTempDir } from "./harness";
@@ -16,6 +16,7 @@ describe("設定ストア", () => {
         modelOptions: {},
         mcpServers: {},
         webSearch: { default: null, providers: {} },
+        env: {},
       });
       expect(readSettingsFile(path)).toEqual({ port: 4567, providers: { deepseek: { apiKey: "sk-1" } } });
     });
@@ -94,6 +95,7 @@ describe("設定ストア", () => {
         modelOptions: {},
         mcpServers: {},
         webSearch: { default: null, providers: {} },
+        env: {},
       });
       expect(readSettingsFile(path).providers?.["openai"]).toEqual({ apiKey: "sk-2" });
     });
@@ -207,6 +209,38 @@ describe("設定ストア", () => {
       writeFileSync(path, JSON.stringify({ webSearch: { default: "exa", providers: {} } }), "utf8");
 
       expect(() => readSettingsFile(path)).toThrow(/設定されていません/);
+    });
+  });
+
+  test("コンピュータの環境変数を設定すると、ファイルにも書かれる", async () => {
+    await withTempSettings(null, async (store, path) => {
+      store.setEnv("GITHUB_TOKEN", "ghp_1");
+
+      expect(store.read().env).toEqual({ GITHUB_TOKEN: "ghp_1" });
+      expect(readSettingsFile(path).env).toEqual({ GITHUB_TOKEN: "ghp_1" });
+    });
+  });
+
+  test("環境変数は同じ名前を上書きし、消すとファイルからも消える", async () => {
+    await withTempSettings({ env: { GITHUB_TOKEN: "old", NO_COLOR: "1" } }, async (store, path) => {
+      store.setEnv("GITHUB_TOKEN", "new");
+      expect(store.read().env).toEqual({ GITHUB_TOKEN: "new", NO_COLOR: "1" });
+
+      expect(store.deleteEnv("GITHUB_TOKEN")).toBe(true);
+      expect(store.read().env).toEqual({ NO_COLOR: "1" });
+      expect(readSettingsFile(path).env).toEqual({ NO_COLOR: "1" });
+
+      // 2 度目は設定が無いので、ファイルにも触らない。
+      expect(store.deleteEnv("GITHUB_TOKEN")).toBe(false);
+    });
+  });
+
+  test("設定ファイルは、ほかの利用者から読めない権限で書く", async () => {
+    await withTempSettings(null, async (store, path) => {
+      store.setEnv("GITHUB_TOKEN", "ghp_1");
+
+      // プロバイダの API キーと同じファイルなので、0600 に締める。
+      expect(statSync(path).mode & 0o777).toBe(0o600);
     });
   });
 });
