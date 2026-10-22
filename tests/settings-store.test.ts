@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { readSettingsFile } from "../src/server/data/settings-schema";
+import { withTempDir } from "./harness";
 import { withTempSettings } from "./support";
 
 describe("設定ストア", () => {
@@ -13,6 +15,7 @@ describe("設定ストア", () => {
         providers: { deepseek: { apiKey: "sk-1" } },
         modelOptions: {},
         mcpServers: {},
+        webSearch: { default: null, providers: {} },
       });
       expect(readSettingsFile(path)).toEqual({ port: 4567, providers: { deepseek: { apiKey: "sk-1" } } });
     });
@@ -90,6 +93,7 @@ describe("設定ストア", () => {
         providers: { deepseek: { apiKey: "sk-1" }, openai: { apiKey: "sk-2" } },
         modelOptions: {},
         mcpServers: {},
+        webSearch: { default: null, providers: {} },
       });
       expect(readSettingsFile(path).providers?.["openai"]).toEqual({ apiKey: "sk-2" });
     });
@@ -136,6 +140,73 @@ describe("設定ストア", () => {
 
       expect(() => store.setModel("openai/gpt-5.6-sol")).toThrow(/JSON/);
       expect(readFileSync(path, "utf8")).toBe("{ 壊れている");
+    });
+  });
+
+  test("検索プロバイダを足すとファイルにも書かれ、既定になる", async () => {
+    await withTempSettings({ port: 4567 }, async (store, path) => {
+      store.putWebSearchProvider("exa", { apiKey: "exa-key" });
+
+      expect(store.read().webSearch).toEqual({
+        default: "exa",
+        providers: { exa: { apiKey: "exa-key" } },
+      });
+      expect(readSettingsFile(path).webSearch).toEqual({
+        providers: { exa: { apiKey: "exa-key" } },
+        default: "exa",
+      });
+    });
+  });
+
+  test("検索プロバイダを足しても、既定は明示したときだけ変わる", async () => {
+    await withTempSettings(null, async (store, path) => {
+      store.putWebSearchProvider("exa", { apiKey: "a" });
+      store.putWebSearchProvider("tavily", { apiKey: "b" });
+
+      // 2 つ目を足しても、既定は最初のもののまま。
+      expect(store.read().webSearch.default).toBe("exa");
+
+      store.setDefaultWebSearchProvider("tavily");
+      expect(store.read().webSearch.default).toBe("tavily");
+      expect(readSettingsFile(path).webSearch?.default).toBe("tavily");
+
+      store.putWebSearchProvider("brave", { apiKey: "c" }, true);
+      expect(store.read().webSearch.default).toBe("brave");
+    });
+  });
+
+  test("既定の検索プロバイダを消すと、既定も未設定に戻る", async () => {
+    await withTempSettings(null, async (store, path) => {
+      store.putWebSearchProvider("exa", { apiKey: "a" });
+      store.putWebSearchProvider("tavily", { apiKey: "b" });
+      expect(store.deleteWebSearchProvider("exa")).toBe(true);
+
+      expect(store.read().webSearch).toEqual({
+        default: null,
+        providers: { tavily: { apiKey: "b" } },
+      });
+      expect(readSettingsFile(path).webSearch).toEqual({ providers: { tavily: { apiKey: "b" } } });
+
+      // 2 度目は設定が無いので、ファイルにも触らない。
+      expect(store.deleteWebSearchProvider("exa")).toBe(false);
+    });
+  });
+
+  test("知らない検索プロバイダ id は設定の読み込みで止まる", async () => {
+    await withTempDir("terasuma-settings-", async (dir) => {
+      const path = join(dir, "config.json");
+      writeFileSync(path, JSON.stringify({ webSearch: { providers: { unknown: { apiKey: "x" } } } }), "utf8");
+
+      expect(() => readSettingsFile(path)).toThrow(/使える id/);
+    });
+  });
+
+  test("既定が登録されていない検索プロバイダを指すと止まる", async () => {
+    await withTempDir("terasuma-settings-", async (dir) => {
+      const path = join(dir, "config.json");
+      writeFileSync(path, JSON.stringify({ webSearch: { default: "exa", providers: {} } }), "utf8");
+
+      expect(() => readSettingsFile(path)).toThrow(/設定されていません/);
     });
   });
 });

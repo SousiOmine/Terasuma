@@ -8,7 +8,7 @@ import { signal } from "@preact/signals";
 export type View = "chat" | "settings";
 
 /** 設定画面のカテゴリ。導線から特定のカテゴリを直接開くために signal で持つ。 */
-export type SettingsCategory = "general" | "model" | "container" | "advanced";
+export type SettingsCategory = "general" | "model" | "providers" | "container" | "advanced";
 
 export const view = signal<View>("chat");
 export const settingsCategory = signal<SettingsCategory>("general");

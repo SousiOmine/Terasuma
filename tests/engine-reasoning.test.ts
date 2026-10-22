@@ -9,6 +9,7 @@ import {
   createHistoryStub,
   createImageStub,
   createMcpStub,
+  createWebSearchToolsStub,
 } from "./support";
 
 /**
@@ -91,6 +92,7 @@ async function runEngine(settings: ModelSettings): Promise<string> {
     computer: createComputerStub(),
     attachments: createAttachmentsStub(),
     history: createHistoryStub(),
+    webSearch: createWebSearchToolsStub(),
     coding: createCodingStub(),
     images: createImageStub(),
     catalog: { snapshot: () => null },

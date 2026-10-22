@@ -33,6 +33,12 @@ export const TOOL_SERVER_ID = "tool";
  */
 export const HISTORY_SERVER_ID = "history";
 
+/**
+ * Web 検索とページ取得の内蔵ツールのサーバー id。
+ * プロバイダは設定で選ぶが、モデルへ渡す名前はこの 1 つに統一する。
+ */
+export const WEB_SERVER_ID = "web";
+
 /** ツールを検索するツール名（サーバー id を付けない形）。 */
 export const TOOL_SEARCH_TOOL = "search";
 
@@ -50,6 +56,18 @@ export const HISTORY_SEARCH_TOOL = "search";
 
 /** モデルへ渡すときの、過去の対話履歴を検索するツールの名前。 */
 export const HISTORY_SEARCH_TOOL_NAME = `${HISTORY_SERVER_ID}${TOOL_NAME_SEPARATOR}${HISTORY_SEARCH_TOOL}`;
+
+/** Web を検索するツール名（サーバー id を付けない形）。 */
+export const WEB_SEARCH_TOOL = "search";
+
+/** モデルへ渡すときの、Web を検索するツールの名前。 */
+export const WEB_SEARCH_TOOL_NAME = `${WEB_SERVER_ID}${TOOL_NAME_SEPARATOR}${WEB_SEARCH_TOOL}`;
+
+/** URL の本文を取得するツール名（サーバー id を付けない形）。 */
+export const WEB_FETCH_TOOL = "fetch";
+
+/** モデルへ渡すときの、URL の本文を取得するツールの名前。 */
+export const WEB_FETCH_TOOL_NAME = `${WEB_SERVER_ID}${TOOL_NAME_SEPARATOR}${WEB_FETCH_TOOL}`;
 
 /**
  * スキルを読み込むツール名。

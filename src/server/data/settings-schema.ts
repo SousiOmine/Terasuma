@@ -2,6 +2,7 @@ import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { describeError } from "../../shared/errors";
 import { isProviderId, mcpServerIdProblem, type McpServerIdProblem } from "../../shared/ids";
 import { isModelId, type ModelId } from "../../shared/model";
+import { isWebSearchProviderId, WEB_SEARCH_PROVIDER_IDS } from "../websearch/index";
 
 /**
  * config.json の形と、その読み書き。
@@ -66,8 +67,37 @@ export type McpServerSettings = McpStdioServerSettings | McpHttpServerSettings;
 /** MCP サーバー id → 設定。並び順は設定ファイルに書かれた順のまま保つ。 */
 export type McpServersSettings = Record<string, McpServerSettings>;
 
+/** 検索プロバイダ 1 件の設定。 */
+export type WebSearchProviderSettings = {
+  apiKey: string;
+};
+
+/** 検索プロバイダ id → 設定。並び順は設定ファイルに書かれた順のまま保つ。 */
+export type WebSearchProvidersSettings = Record<string, WebSearchProviderSettings>;
+
+/**
+ * Web 検索の設定。
+ * default は登録済みプロバイダの id。省略した場合は未設定（検索ツールを渡さない）。
+ */
+export type WebSearchSettings = {
+  default?: string;
+  providers: WebSearchProvidersSettings;
+};
+
+/** 実行時に使う Web 検索の設定。未設定を null で表す。 */
+export type StoredWebSearchSettings = {
+  default: string | null;
+  providers: WebSearchProvidersSettings;
+};
+
 /** MCP サーバー 1 件に書ける項目。 */
 const MCP_SERVER_KEYS = ["type", "command", "args", "env", "url"] as const;
+
+/** Web 検索の設定に書ける項目。 */
+const WEB_SEARCH_KEYS = ["default", "providers"] as const;
+
+/** 検索プロバイダ 1 件に書ける項目。 */
+const WEB_SEARCH_PROVIDER_KEYS = ["apiKey"] as const;
 
 /** プロバイダ 1 件に書ける項目。 */
 const PROVIDER_KEYS = ["apiKey", "baseUrl", "label"] as const;
@@ -75,7 +105,7 @@ const PROVIDER_KEYS = ["apiKey", "baseUrl", "label"] as const;
 /** モデル 1 件に書ける項目。 */
 const MODEL_OPTION_KEYS = ["reasoningEffort"] as const;
 
-const FILE_KEYS = ["model", "providers", "modelOptions", "mcpServers", "port"] as const;
+const FILE_KEYS = ["model", "providers", "modelOptions", "mcpServers", "webSearch", "port"] as const;
 type FileKey = (typeof FILE_KEYS)[number];
 
 /** config.json に書ける設定。書かなかった項目は既定値になる。 */
@@ -84,6 +114,7 @@ export type FileSettings = Partial<{
   providers: ProvidersSettings;
   modelOptions: ModelOptionsSettings;
   mcpServers: McpServersSettings;
+  webSearch: WebSearchSettings;
   port: number;
 }>;
 
@@ -155,6 +186,9 @@ export function readSettingsFile(path: string): FileSettings {
   const mcpServers = readMcpServers(source, path);
   if (mcpServers !== undefined) settings.mcpServers = mcpServers;
 
+  const webSearch = readWebSearch(source, path);
+  if (webSearch !== undefined) settings.webSearch = webSearch;
+
   const port = readNumber(source, "port", path);
   if (port !== undefined) {
     if (!Number.isInteger(port) || port < 1 || port > 65535) {
@@ -182,6 +216,7 @@ function serialize(settings: FileSettings): string {
   if (settings.model !== undefined) ordered["model"] = settings.model;
   if (settings.providers !== undefined) ordered["providers"] = settings.providers;
   if (settings.modelOptions !== undefined) ordered["modelOptions"] = settings.modelOptions;
+  if (settings.webSearch !== undefined) ordered["webSearch"] = settings.webSearch;
   if (settings.mcpServers !== undefined) ordered["mcpServers"] = settings.mcpServers;
   if (settings.port !== undefined) ordered["port"] = settings.port;
   return `${JSON.stringify(ordered, null, 2)}\n`;
@@ -409,6 +444,94 @@ function readHttpServer(source: Record<string, unknown>, where: string): McpHttp
   }
 
   return { type: "http", url: normalizeHttpUrl(url, where, "url") };
+}
+
+/** Web 検索の設定を読む。未設定なら undefined。 */
+function readWebSearch(source: Record<string, unknown>, path: string): WebSearchSettings | undefined {
+  const value = source["webSearch"];
+  if (value === undefined) return undefined;
+
+  if (!isRecord(value)) {
+    throw new Error(`${path} の webSearch はオブジェクトにしてください`);
+  }
+
+  assertKnownKeys(value, WEB_SEARCH_KEYS, `${path} の webSearch`);
+  const providers = readWebSearchProviders(value["providers"], path);
+  const defaultId = readWebSearchDefault(value["default"], providers, path);
+
+  return { providers, ...(defaultId === null ? {} : { default: defaultId }) };
+}
+
+/** 検索プロバイダの一覧を読む。id は保存された並び順のまま保つ。 */
+function readWebSearchProviders(value: unknown, path: string): WebSearchProvidersSettings {
+  if (value === undefined) return {};
+  if (!isRecord(value)) {
+    throw new Error(`${path} の webSearch.providers はオブジェクトにしてください`);
+  }
+
+  const providers: WebSearchProvidersSettings = {};
+  for (const [id, entry] of Object.entries(value)) {
+    if (!isWebSearchProviderId(id)) {
+      throw new Error(
+        `${path} の webSearch.providers に使えない id があります: ${JSON.stringify(id)}` +
+          `（使える id: ${WEB_SEARCH_PROVIDER_IDS.join(", ")}）`,
+      );
+    }
+    providers[id] = readWebSearchProviderEntry(id, entry, path);
+  }
+  return providers;
+}
+
+/**
+ * 検索プロバイダ 1 件を読む。
+ * 画面から来た入力を検証するときも、同じ規則をここに任せる。
+ */
+export function readWebSearchProviderEntry(id: string, raw: unknown, path: string): WebSearchProviderSettings {
+  const where = `${path} の webSearch.providers.${id}`;
+  if (!isRecord(raw)) {
+    throw new Error(`${where} はオブジェクトにしてください`);
+  }
+
+  assertKnownKeys(raw, WEB_SEARCH_PROVIDER_KEYS, where);
+  const apiKey = raw["apiKey"];
+  if (typeof apiKey !== "string") {
+    throw new Error(`${where} の apiKey は文字列で指定してください`);
+  }
+
+  return normalizeWebSearchProvider(id, apiKey, where);
+}
+
+/** 検索プロバイダ 1 件の設定を検証し、保存できる形に整える。 */
+export function normalizeWebSearchProvider(id: string, apiKey: string, source: string): WebSearchProviderSettings {
+  if (!isWebSearchProviderId(id)) {
+    throw new Error(
+      `${source} の検索プロバイダ id が不明です: ${JSON.stringify(id)}` +
+        `（使える id: ${WEB_SEARCH_PROVIDER_IDS.join(", ")}）`,
+    );
+  }
+
+  const trimmed = apiKey.trim();
+  if (trimmed.length === 0) {
+    throw new Error(`${source} の apiKey を空にはできません`);
+  }
+  return { apiKey: trimmed };
+}
+
+/** 既定の検索プロバイダを読む。未設定なら null。登録の無い id は起動時に落とす。 */
+function readWebSearchDefault(value: unknown, providers: WebSearchProvidersSettings, path: string): string | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "string") {
+    throw new Error(`${path} の webSearch.default は文字列で指定してください`);
+  }
+
+  const id = value.trim();
+  if (id.length === 0) {
+    throw new Error(`${path} の webSearch.default を空にはできません`);
+  }
+  if (providers[id] === undefined) {
+    throw new Error(`${path} の webSearch.default が指す検索プロバイダ ${id} は設定されていません`);
+  }
+  return id;
 }
 
 /** モデルごとの設定（思考強度など）を読む。 */

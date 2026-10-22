@@ -39,3 +39,17 @@ export class CatalogUnavailableError extends AppError {
     super("catalog_unavailable", 502, message, { cause });
   }
 }
+
+/** 設定に無い検索プロバイダを触ろうとしたときの失敗。 */
+export class WebSearchProviderNotFound extends AppError {
+  constructor(readonly providerId: string) {
+    super("web_search_not_found", 404, `検索プロバイダ ${providerId} は設定されていません`);
+  }
+}
+
+/** 同じ検索プロバイダを二重に追加しようとしたときの失敗。 */
+export class WebSearchProviderExists extends AppError {
+  constructor(readonly providerId: string) {
+    super("web_search_exists", 409, `検索プロバイダ ${providerId} はすでに追加されています`);
+  }
+}

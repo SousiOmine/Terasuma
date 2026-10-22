@@ -100,6 +100,14 @@ export type HistoryToolsetProvider = {
 };
 
 /**
+ * Web 検索とページ取得のツールの供給元。
+ * 既定の検索プロバイダが未設定なら、空のツール一式を返す。
+ */
+export type WebSearchToolsetProvider = {
+  toolset(): ToolSet;
+};
+
+/**
  * LLM 呼び出しのインタフェース。
  * AI SDK に依存する部分はこのインタフェースの内側だけにあるので、実装の差し替え
  * （承認フローの追加、プロファイルごとのエージェント切り替え）はここを実装し直すだけで済む。
@@ -130,6 +138,8 @@ export function createEngine(options: {
   attachments: AttachmentToolsetProvider;
   /** 過去の対話履歴を検索するツール。 */
   history: HistoryToolsetProvider;
+  /** Web 検索とページ取得のツール。 */
+  webSearch: WebSearchToolsetProvider;
   /** コンテナのファイルとシェルのツール。ターンごとに変わらないので、そのまま渡す。 */
   coding: CodingToolset;
   /** 撮った画像の置き場。履歴から画像を読み直してモデルへ渡す。 */
@@ -144,6 +154,7 @@ export function createEngine(options: {
     computer: options.computer,
     attachments: options.attachments,
     history: options.history,
+    webSearch: options.webSearch,
     coding: options.coding,
     images: options.images,
     catalog: options.catalog,
@@ -169,6 +180,8 @@ export type AiSdkEngineOptions = {
   attachments: AttachmentToolsetProvider;
   /** 過去の対話履歴を検索するツール。 */
   history: HistoryToolsetProvider;
+  /** Web 検索とページ取得のツール。 */
+  webSearch: WebSearchToolsetProvider;
   /** コンテナのファイルとシェルのツール。 */
   coding: CodingToolset;
   images: ImageStore;
@@ -177,7 +190,7 @@ export type AiSdkEngineOptions = {
 };
 
 export function createAiSdkEngine(options: AiSdkEngineOptions): AgentEngine {
-  const { settings, mcp, computer, attachments, history, coding, images, catalog } = options;
+  const { settings, mcp, computer, attachments, history, webSearch, coding, images, catalog } = options;
 
   // スキルは組み込みで、ターンによって変わらない。エージェントを作るときに 1 度だけ組む。
   const skillTools = createSkillTools(BUILTIN_SKILLS);
@@ -222,11 +235,15 @@ export function createAiSdkEngine(options: AiSdkEngineOptions): AgentEngine {
       // 過去の履歴を引く先はターンの対象の Tera なので、ここで組む。
       const historyTools = history.toolset({ teraId });
 
+      // Web 検索は既定のプロバイダが設定されているときだけ 2 つのツールになる。
+      const webTools = webSearch.toolset();
+
       const tools = withToolModelOutput(
         {
           ...coding,
           ...attachmentTools,
           ...historyTools,
+          ...webTools,
           ...createDiscoveryTools(registry),
           ...skillTools,
         },

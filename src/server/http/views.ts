@@ -1,6 +1,7 @@
-import type { McpServersSettings, ModelSettings } from "../data/settings-schema";
-import type { McpServersView, ModelSettingsView } from "../../shared/types";
+import type { McpServersSettings, ModelSettings, StoredWebSearchSettings } from "../data/settings-schema";
+import type { McpServersView, ModelSettingsView, WebSearchSettingsView } from "../../shared/types";
 import type { McpManager } from "../mcp/manager";
+import { isWebSearchProviderId, providerInfo, WEB_SEARCH_PROVIDERS } from "../websearch/index";
 
 /**
  * 保存されている設定を、画面へ返す形に整える。
@@ -33,6 +34,33 @@ export function toMcpView(servers: McpServersSettings, mcp: McpManager): McpServ
       status: mcp.status(id),
     })),
   };
+}
+
+/**
+ * Web 検索の設定を、画面に出す形にする。
+ * API キーそのものは返さず、設定済みかどうかだけを返す。
+ */
+export function toWebSearchView(webSearch: StoredWebSearchSettings): WebSearchSettingsView {
+  const providers = Object.entries(webSearch.providers).map(([id, provider]) => {
+    const info = isWebSearchProviderId(id) ? providerInfo(id) : null;
+
+    return {
+      id,
+      name: info?.name ?? id,
+      supportsFetch: info?.supportsFetch ?? false,
+      hasApiKey: provider.apiKey.length > 0,
+      isDefault: webSearch.default === id,
+    };
+  });
+
+  const registered = new Set(Object.keys(webSearch.providers));
+  const available = WEB_SEARCH_PROVIDERS.filter((info) => !registered.has(info.id)).map((info) => ({
+    id: info.id,
+    name: info.name,
+    supportsFetch: info.supportsFetch,
+  }));
+
+  return { defaultId: webSearch.default, providers, available };
 }
 
 /** 認可の結果をブラウザに出す 1 枚のページ。サーバを言語非依存に保つため日英を併記する。 */

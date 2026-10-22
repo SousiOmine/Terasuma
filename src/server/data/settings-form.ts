@@ -1,12 +1,14 @@
 import { mcpServerIdProblem } from "../../shared/ids";
 import { trimOrNull } from "../../shared/strings";
-import type { McpServerForm, ProviderCredentials } from "../../shared/types";
+import type { McpServerForm, ProviderCredentials, WebSearchProviderForm } from "../../shared/types";
 import {
   describeMcpServerIdProblem,
   normalizeProvider,
+  normalizeWebSearchProvider,
   readMcpServerEntry,
   type McpServerSettings,
   type ProviderSettings,
+  type WebSearchProviderSettings,
 } from "./settings-schema";
 
 /**
@@ -71,4 +73,16 @@ export function mcpServerSettingsFromForm(form: McpServerForm, source: string): 
 /** 画面から来た接続情報を、保存できる形に整える（検証まで済ませる）。 */
 export function parseProviderCredentials(form: ProviderCredentials, source: string): ProviderSettings {
   return normalizeProvider(providerSettingsFromForm(form), source);
+}
+
+/**
+ * 画面から来た検索プロバイダの入力を、設定に書ける形へ直す。
+ * id と API キーの規則は、設定ファイルを読むときと同じ 1 箇所に任せる。
+ */
+export function webSearchProviderSettingsFromForm(
+  form: WebSearchProviderForm,
+  source: string,
+): WebSearchProviderSettings {
+  if (form.apiKey === null) throw new Error(`${source} の apiKey を指定してください`);
+  return normalizeWebSearchProvider(form.id, form.apiKey, source);
 }

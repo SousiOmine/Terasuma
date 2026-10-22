@@ -10,9 +10,11 @@ import type {
   AttachmentToolsetProvider,
   ComputerToolsetProvider,
   HistoryToolsetProvider,
+  WebSearchToolsetProvider,
 } from "../src/server/agent/engine";
 import type { ImageStore } from "../src/server/computer/images";
 import type { McpManager } from "../src/server/mcp/manager";
+import type { WebSearchManager } from "../src/server/websearch-manager";
 import { createSettingsStore, type SettingsStore } from "../src/server/data/settings";
 import { createStore, type Store } from "../src/server/data/store";
 import { createCompaction, type Compaction } from "../src/server/agent/compaction";
@@ -100,6 +102,22 @@ export function createAttachmentsStub(): AttachmentToolsetProvider {
 /** 履歴検索のツールを渡さないテストのための差し替え。 */
 export function createHistoryStub(): HistoryToolsetProvider {
   return { toolset: () => ({}) };
+}
+
+/** Web 検索のツールを渡さないテストのための差し替え（エンジン用）。 */
+export function createWebSearchToolsStub(): WebSearchToolsetProvider {
+  return { toolset: () => ({}) };
+}
+
+/**
+ * Web 検索を使わないテストのための差し替え。
+ * 既定のプロバイダを持たず、接続確認は常に成功として返す。
+ */
+export function createWebSearchStub(): WebSearchManager {
+  return {
+    provider: () => null,
+    test: async () => ({ ok: true, detail: null, results: 0 }),
+  };
 }
 
 /** 端末のツールを渡さないテストのための差し替え。 */

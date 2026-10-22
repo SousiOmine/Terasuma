@@ -18,6 +18,9 @@ import type {
   ProviderForm,
   ReasoningView,
   Tera,
+  WebSearchProviderForm,
+  WebSearchSettingsView,
+  WebSearchTestView,
 } from "../../shared/types";
 
 import { ApiError, fetchOrThrow, jsonRequest, request } from "./http";
@@ -33,6 +36,9 @@ const MCP_PATH = "/api/mcp/servers";
 
 /** MCP サーバーを追加する前の接続確認。 */
 const MCP_TEST_PATH = "/api/mcp/test";
+
+/** Web 検索の設定。 */
+const WEB_SEARCH_PATH = "/api/websearch";
 
 /** podman で動かすコンテナ。 */
 const CONTAINER_PATH = "/api/container";
@@ -224,6 +230,40 @@ export async function cancelMcpAuthorization(serverId: string): Promise<McpServe
 
 function mcpServerPath(serverId: string): string {
   return `${MCP_PATH}/${encodeURIComponent(serverId)}`;
+}
+
+/** Web 検索の設定（既定のプロバイダと、登録済みのプロバイダ）。 */
+export async function fetchWebSearch(): Promise<WebSearchSettingsView> {
+  return request<WebSearchSettingsView>(WEB_SEARCH_PATH);
+}
+
+/** 検索プロバイダを追加する。保存した後の全体が返る。 */
+export async function addWebSearchProvider(form: WebSearchProviderForm): Promise<WebSearchSettingsView> {
+  return request<WebSearchSettingsView>(`${WEB_SEARCH_PATH}/providers`, jsonRequest("POST", form));
+}
+
+/** 検索プロバイダの設定を変える。apiKey が null なら保存済みのキーを使う。 */
+export async function updateWebSearchProvider(form: WebSearchProviderForm): Promise<WebSearchSettingsView> {
+  return request<WebSearchSettingsView>(webSearchProviderPath(form.id), jsonRequest("PATCH", form));
+}
+
+/** 検索プロバイダを消す。既定だった場合は既定も未設定に戻る。 */
+export async function deleteWebSearchProvider(providerId: string): Promise<WebSearchSettingsView> {
+  return request<WebSearchSettingsView>(webSearchProviderPath(providerId), { method: "DELETE" });
+}
+
+/** 既定の検索プロバイダを変える。null で未設定に戻す。 */
+export async function setDefaultWebSearchProvider(providerId: string | null): Promise<WebSearchSettingsView> {
+  return request<WebSearchSettingsView>(`${WEB_SEARCH_PATH}/default`, jsonRequest("PUT", { id: providerId }));
+}
+
+/** 保存の前に、入力された API キーで検索できるかを確かめる。設定には何も書かない。 */
+export async function testWebSearchProvider(form: WebSearchProviderForm): Promise<WebSearchTestView> {
+  return request<WebSearchTestView>(`${WEB_SEARCH_PATH}/test`, jsonRequest("POST", form));
+}
+
+function webSearchProviderPath(providerId: string): string {
+  return `${WEB_SEARCH_PATH}/providers/${encodeURIComponent(providerId)}`;
 }
 
 /**

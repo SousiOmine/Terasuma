@@ -10,6 +10,7 @@ import type { Handover } from "../../computer/handover";
 import type { ImageStore } from "../../computer/images";
 import type { McpManager } from "../../mcp/manager";
 import { McpServerNotFound } from "../../mcp/manager";
+import type { WebSearchManager } from "../../websearch-manager";
 import type { Catalog } from "../../provider/catalog";
 import type { ConnectionChecker, ProviderModelLister } from "../../provider/connection";
 import { AppError } from "../../errors";
@@ -48,6 +49,8 @@ export type ApiDeps = {
   settings: SettingsStore;
   /** MCP サーバーとの接続。設定画面からの操作もここを通す。 */
   mcp: McpManager;
+  /** Web 検索の設定と接続確認。設定画面からの操作もここを通す。 */
+  webSearch: WebSearchManager;
   /** podman で動かすコンテナ。設定画面からの起動とリセットもここを通す。 */
   container: ContainerManager;
   /** エージェントが送った画像。画面へ返す。 */

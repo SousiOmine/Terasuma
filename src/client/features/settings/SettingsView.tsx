@@ -6,11 +6,13 @@ import { Segmented } from "../../ui/Segmented";
 import { ContainerSettingsView } from "../container/ContainerSettingsView";
 import { McpSettingsView } from "../mcp/McpSettingsView";
 import { ModelSettingsView } from "../model/ModelSettingsView";
+import { ProviderSettingsView } from "../providers/ProviderSettingsView";
 
 /** 左ペインに並べるカテゴリ。増やすときはここに足す。 */
 const CATEGORIES: readonly { id: SettingsCategory; labelKey: MessageKey }[] = [
   { id: "general", labelKey: "settings.general" },
   { id: "model", labelKey: "settings.model" },
+  { id: "providers", labelKey: "settings.providers" },
   { id: "container", labelKey: "settings.container" },
   { id: "advanced", labelKey: "settings.advanced" },
 ];
@@ -70,6 +72,7 @@ export function SettingsView() {
         <section class="min-h-0 min-w-0 flex-1 overflow-y-auto bg-[var(--app-surface)] px-4 py-6 md:m-3 md:ml-0 md:rounded-[30px] md:border md:border-[var(--app-stroke)] md:px-10 md:py-10 md:shadow-[var(--app-shadow-panel)]">
           {category === "general" && <GeneralSettings />}
           {category === "model" && <ModelSettingsView />}
+          {category === "providers" && <ProviderSettingsView />}
           {category === "container" && <ContainerSettingsView />}
           {category === "advanced" && <McpSettingsView />}
         </section>

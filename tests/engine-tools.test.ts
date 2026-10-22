@@ -32,6 +32,7 @@ import {
   createHistoryStub,
   createImageStub,
   createAttachmentsStub,
+  createWebSearchToolsStub,
   makeStore,
   testPng,
 } from "./support";
@@ -246,6 +247,7 @@ async function run(
     computer,
     attachments,
     history: historyTools,
+    webSearch: createWebSearchToolsStub(),
     coding,
     images,
     catalog: { snapshot: () => catalog },

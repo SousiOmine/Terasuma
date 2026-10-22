@@ -6,6 +6,8 @@ import { createCodingToolset } from "./server/agent/tools/coding";
 import { createComputerToolset } from "./server/agent/tools/computer";
 import { createAttachmentTools } from "./server/agent/tools/attachments";
 import { createHistoryToolset } from "./server/agent/tools/history";
+import { createWebSearchToolset } from "./server/agent/tools/web";
+import { createWebSearchManager, type WebSearchManager } from "./server/websearch-manager";
 import { createContainerManager, WORKDIR_IN_CONTAINER, type ContainerManager } from "./server/computer/container";
 import { createFileStore } from "./server/computer/files";
 import { createHandover } from "./server/computer/handover";
@@ -35,6 +37,8 @@ export type App = {
   compaction: Compaction;
   mcp: McpManager;
   container: ContainerManager;
+  /** Web 検索の設定と接続確認。設定画面からの操作もここを通す。 */
+  webSearch: WebSearchManager;
   /** 接続・予約・DB を畳んでから終わる。 */
   shutdown(): Promise<void>;
 };
@@ -84,11 +88,26 @@ export function startApp(config: AppConfig): App {
   // 過去の対話履歴を検索するツール（history_search）。引く履歴はターンごとに渡す。
   const history = createHistoryToolset({ store });
 
+  // Web 検索とページ取得（web_search / web_fetch）。使うプロバイダは設定の既定で決まる。
+  const webSearchManager = createWebSearchManager({ settings });
+  const webSearch = createWebSearchToolset({ manager: webSearchManager });
+
   // 畳むかどうかは、モデルの文脈長（カタログ）から決める。
   // 起動後にカタログを読んでおくので、設定画面を開かなくても文脈長が分かる。
   // エンジンも、プロバイダの呼び出し方を決めるのにカタログを使う。
   const catalog = createCatalog({ cachePath: join(config.dataDir, CATALOG_FILE_NAME) });
-  const engine = createEngine({ config, settings, mcp, computer, attachments, history, coding, images, catalog });
+  const engine = createEngine({
+    config,
+    settings,
+    mcp,
+    computer,
+    attachments,
+    history,
+    webSearch,
+    coding,
+    images,
+    catalog,
+  });
 
   // 古いやり取りは、3 時間の放置か、文脈長に近づいたときに、背景で要約へ畳む。
   // 失敗は端末に出す（会話は生の履歴のまま続く）。
@@ -107,6 +126,7 @@ export function startApp(config: AppConfig): App {
     catalog,
     settings,
     mcp,
+    webSearch: webSearchManager,
     container,
     images,
     files,
@@ -124,6 +144,7 @@ export function startApp(config: AppConfig): App {
     compaction,
     mcp,
     container,
+    webSearch: webSearchManager,
 
     async shutdown() {
       // 畳まないと、MCP サーバーの接続と SQLite の WAL、圧縮の予約がそのまま残る。

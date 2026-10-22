@@ -182,6 +182,8 @@ export const API_ERROR_CODES = [
   "mcp_server_not_found",
   "mcp_server_exists",
   "mcp_authorization_failed",
+  "web_search_not_found",
+  "web_search_exists",
   "container_build_failed",
   "container_start_failed",
   "container_not_running",
@@ -342,6 +344,50 @@ export type McpServerForm = {
 export type McpAuthorizationView = {
   /** ブラウザで開く認可画面の URL。すでに認可済みなら null。 */
   url: string | null;
+};
+
+/** 設定画面に並べる検索プロバイダ 1 件。API キーそのものは返さない。 */
+export type WebSearchProviderView = {
+  /** exa / tavily / brave / perplexity / tinyfish のいずれか。 */
+  id: string;
+  name: string;
+  /** ページ取得の API を持つかどうか。持たないものは直接取得になる。 */
+  supportsFetch: boolean;
+  hasApiKey: boolean;
+  isDefault: boolean;
+};
+
+/** まだ登録していない検索プロバイダ（追加の候補）。 */
+export type WebSearchAvailableProviderView = {
+  id: string;
+  name: string;
+  supportsFetch: boolean;
+};
+
+/** Web 検索設定の現在の状態。設定を変える API はすべてこの形を返す。 */
+export type WebSearchSettingsView = {
+  /** 既定の検索プロバイダ。未設定なら null。 */
+  defaultId: string | null;
+  providers: WebSearchProviderView[];
+  /** 追加できるプロバイダ。登録済みは含めない。 */
+  available: WebSearchAvailableProviderView[];
+};
+
+/** 検索プロバイダの追加・変更の入力。変更で apiKey が null なら保存済みのキーを使う。 */
+export type WebSearchProviderForm = {
+  id: string;
+  apiKey: string | null;
+};
+
+/**
+ * 追加の前に確かめる接続の結果。
+ * 失敗しても HTTP は 200 で返し、理由を detail に入れる（MCP の確認と同じ扱い）。
+ */
+export type WebSearchTestView = {
+  ok: boolean;
+  detail: string | null;
+  /** 確認のために実行した検索の件数。成功したときの手応えとして出す。 */
+  results: number;
 };
 
 /**

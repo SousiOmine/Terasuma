@@ -5,6 +5,7 @@ import { mediaHandlers } from "./media";
 import { modelHandlers } from "./model";
 import type { ApiDeps } from "./shared";
 import { terasHandlers } from "./teras";
+import { webSearchHandlers } from "./websearch";
 
 /**
  * API のハンドラを 1 つにまとめる。
@@ -15,6 +16,7 @@ export function createApiHandlers(deps: ApiDeps) {
     ...terasHandlers(deps),
     ...modelHandlers(deps),
     ...mcpHandlers(deps),
+    ...webSearchHandlers(deps),
     ...containerHandlers(deps),
     ...computerHandlers(deps),
     ...mediaHandlers(deps),

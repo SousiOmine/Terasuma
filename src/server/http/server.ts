@@ -12,6 +12,7 @@ import { describeError } from "../../shared/errors";
 import { jsonError, withErrorHandling } from "./respond";
 import type { McpManager } from "../mcp/manager";
 import { OAUTH_CALLBACK_PATH } from "../mcp/oauth";
+import type { WebSearchManager } from "../websearch-manager";
 import type { Compaction } from "../agent/compaction";
 import { CATALOG_FILE_NAME, createCatalog, type Catalog } from "../provider/catalog";
 import {
@@ -32,6 +33,8 @@ export type ServerOptions = {
   settings: SettingsStore;
   /** MCP サーバーとの接続。OAuth のコールバックもここを通る。 */
   mcp: McpManager;
+  /** Web 検索の設定と接続確認。設定画面からの操作もここを通る。 */
+  webSearch: WebSearchManager;
   /** podman で動かすコンテナ。設定画面からの操作もここを通る。 */
   container: ContainerManager;
   /** エージェントが送った画像。画面へ返す。 */
@@ -83,7 +86,7 @@ const ANY_FREE_PORT = 0;
  * ルートはここでリテラルのパスとして並べる（Bun のルータは文字列リテラルからパラメータ型を作る）。
  */
 export function startServer(options: ServerOptions): StartedServer {
-  const { config, store, engine, compaction, settings, mcp, container, images, files, handover } = options;
+  const { config, store, engine, compaction, settings, mcp, webSearch, container, images, files, handover } = options;
   // 各ハンドラの例外は、ここで 1 度だけ応答に変える（ハンドラ側に try/catch を書かない）。
   const api = withErrorHandling(
     createApiHandlers({
@@ -91,6 +94,7 @@ export function startServer(options: ServerOptions): StartedServer {
       engine,
       settings,
       mcp,
+      webSearch,
       container,
       images,
       files,
@@ -174,6 +178,23 @@ export function startServer(options: ServerOptions): StartedServer {
         "/api/mcp/servers/:id/authorize": {
           POST: api.authorizeMcpServer,
           DELETE: api.cancelMcpAuthorization,
+        },
+        // Web 検索のプロバイダ。保存前の確認は接続先へ 1 回検索を投げる。
+        "/api/websearch": {
+          GET: api.readWebSearch,
+        },
+        "/api/websearch/test": {
+          POST: api.testWebSearchProvider,
+        },
+        "/api/websearch/providers": {
+          POST: api.addWebSearchProvider,
+        },
+        "/api/websearch/providers/:id": {
+          PATCH: api.updateWebSearchProvider,
+          DELETE: api.removeWebSearchProvider,
+        },
+        "/api/websearch/default": {
+          PUT: api.setDefaultWebSearchProvider,
         },
         "/api/container": {
           GET: api.readContainer,

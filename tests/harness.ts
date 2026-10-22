@@ -9,12 +9,19 @@ import { createFileStore, type FileStore } from "../src/server/computer/files";
 import { createHandover, type Handover } from "../src/server/computer/handover";
 import { createImageStore, type ImageStore } from "../src/server/computer/images";
 import type { McpManager } from "../src/server/mcp/manager";
+import type { WebSearchManager } from "../src/server/websearch-manager";
 import type { Catalog } from "../src/server/provider/catalog";
 import type { ConnectionChecker, ProviderModelLister } from "../src/server/provider/connection";
 import { startServer, type StartedServer } from "../src/server/http/server";
 import { createSettingsStore, type SettingsStore } from "../src/server/data/settings";
 import { createStore, type Store } from "../src/server/data/store";
-import { TEST_SETTINGS, createCompactionStub, createContainerStub, createMcpStub } from "./support";
+import {
+  TEST_SETTINGS,
+  createCompactionStub,
+  createContainerStub,
+  createMcpStub,
+  createWebSearchStub,
+} from "./support";
 
 /**
  * HTTP 越しに確かめるテストの土台。
@@ -44,6 +51,8 @@ export type ServerHarnessOptions = {
   container?: ContainerManager | ((dir: string) => ContainerManager);
   /** MCP 接続。省くと「何も確かめていない」差し替えを使う。 */
   mcp?: McpManager;
+  /** Web 検索。省くと「プロバイダ未設定」の差し替えを使う。 */
+  webSearch?: WebSearchManager;
   /** 引き受け。省くと本物を作る。 */
   handover?: Handover;
   /** models.dev のカタログ。省くとサーバが本物を作る（通信はしない）。 */
@@ -118,6 +127,7 @@ export async function withServer<T>(
       compaction,
       settings,
       mcp: options.mcp ?? createMcpStub(),
+      webSearch: options.webSearch ?? createWebSearchStub(),
       container,
       images,
       files,

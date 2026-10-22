@@ -6,7 +6,7 @@
  * 片方だけを直すと「画面では通るのに保存できない」状態になるため、ここに 1 つだけ置く。
  */
 
-import { CHAT_SERVER_ID, COMPUTER_SERVER_ID, HISTORY_SERVER_ID, TOOL_SERVER_ID } from "./tools";
+import { CHAT_SERVER_ID, COMPUTER_SERVER_ID, HISTORY_SERVER_ID, TOOL_SERVER_ID, WEB_SERVER_ID } from "./tools";
 
 /** id に使える文字。AI へ渡す名前の先頭部分になるため、記号と空白は許さない。 */
 const ID_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
@@ -22,6 +22,7 @@ export const RESERVED_MCP_SERVER_IDS: readonly string[] = [
   CHAT_SERVER_ID,
   TOOL_SERVER_ID,
   HISTORY_SERVER_ID,
+  WEB_SERVER_ID,
 ];
 
 /** MCP サーバー id の受け付けられない理由。使える場合は null。 */

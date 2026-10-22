@@ -15,6 +15,8 @@ import { createCodingToolset } from "../../src/server/agent/tools/coding";
 import { createComputerToolset } from "../../src/server/agent/tools/computer";
 import { createAttachmentTools } from "../../src/server/agent/tools/attachments";
 import { createHistoryToolset } from "../../src/server/agent/tools/history";
+import { createWebSearchToolset } from "../../src/server/agent/tools/web";
+import { createWebSearchManager } from "../../src/server/websearch-manager";
 import {
   createContainerManager,
   WORKDIR_IN_CONTAINER,
@@ -108,6 +110,10 @@ export async function withLiveServer(run: (harness: LiveHarness) => Promise<void
   // 過去の対話履歴は history_search で引く（アプリの起動時と同じ）。
   const history = createHistoryToolset({ store });
 
+  // Web 検索は、設定した既定のプロバイダで動く（アプリの起動時と同じ）。
+  const webSearchManager = createWebSearchManager({ settings });
+  const webSearch = createWebSearchToolset({ manager: webSearchManager });
+
   // OAuth の戻り先は、待ち受けているポートが決まってから決まる（index.ts と同じ）。
   let boundPort: number | null = null;
   const mcp = createMcpManager({
@@ -118,7 +124,18 @@ export async function withLiveServer(run: (harness: LiveHarness) => Promise<void
       boundPort === null ? null : new URL(`http://${config.host}:${boundPort}${OAUTH_CALLBACK_PATH}`),
   });
 
-  const engine = createEngine({ config, settings, mcp, computer, attachments, history, coding, images, catalog });
+  const engine = createEngine({
+    config,
+    settings,
+    mcp,
+    computer,
+    attachments,
+    history,
+    webSearch,
+    coding,
+    images,
+    catalog,
+  });
 
   // 畳むかどうかはモデルの文脈長から決める。
   const compaction = createCompaction({
@@ -136,6 +153,7 @@ export async function withLiveServer(run: (harness: LiveHarness) => Promise<void
     catalog,
     settings,
     mcp,
+    webSearch: webSearchManager,
     container,
     images,
     files,

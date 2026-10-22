@@ -302,7 +302,13 @@ describe("モデル設定 API", () => {
         code: "provider_auth_failed",
         detail: "Invalid API key",
       });
-      expect(harness.settings.read()).toEqual({ model: null, providers: {}, modelOptions: {}, mcpServers: {} });
+      expect(harness.settings.read()).toEqual({
+        model: null,
+        providers: {},
+        modelOptions: {},
+        mcpServers: {},
+        webSearch: { default: null, providers: {} },
+      });
       expect(harness.file().providers).toBeUndefined();
     });
   });
@@ -392,7 +398,13 @@ describe("モデル設定 API", () => {
 
       expect(response.status).toBe(200);
       expect(await response.json()).toEqual({ verified: true, models: ["model-a", "model-b"] });
-      expect(harness.settings.read()).toEqual({ model: null, providers: {}, modelOptions: {}, mcpServers: {} });
+      expect(harness.settings.read()).toEqual({
+        model: null,
+        providers: {},
+        modelOptions: {},
+        mcpServers: {},
+        webSearch: { default: null, providers: {} },
+      });
       expect(harness.check.requests).toEqual([{ ...DEEPSEEK_CHECK, apiKey: "sk-check" }]);
     });
   });
@@ -568,7 +580,13 @@ describe("モデル設定 API", () => {
         expect(body.code).toBe("settings_write_failed");
         expect(body.detail.length).toBeGreaterThan(0);
         // 書き込みに失敗したので、設定は空のまま。
-        expect(harness.settings.read()).toEqual({ model: null, providers: {}, modelOptions: {}, mcpServers: {} });
+        expect(harness.settings.read()).toEqual({
+          model: null,
+          providers: {},
+          modelOptions: {},
+          mcpServers: {},
+          webSearch: { default: null, providers: {} },
+        });
       },
       { configPath: (dir) => join(dir, "missing", CONFIG_FILE_NAME) },
     );

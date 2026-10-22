@@ -2,7 +2,7 @@ import { describeError } from "../../shared/errors";
 import { isProviderId } from "../../shared/ids";
 import { isReplyLanguage, type ReplyLanguage } from "../../shared/language";
 import { isModelId, type ModelId } from "../../shared/model";
-import type { McpServerForm, ProviderCredentials } from "../../shared/types";
+import type { McpServerForm, ProviderCredentials, WebSearchProviderForm } from "../../shared/types";
 import type { UploadFile } from "../computer/uploads";
 import { readUploadedFiles } from "../computer/uploads";
 import { mcpServerSettingsFromForm, parseProviderCredentials } from "../data/settings-form";
@@ -87,6 +87,21 @@ export async function readMcpForm(req: {
   } catch (error) {
     throw new ValidationError(describeError(error));
   }
+}
+
+/**
+ * 画面から来た検索プロバイダの入力を読む。
+ * 変更では apiKey を省ける（null なら保存済みのキーを使う）。
+ */
+export async function readWebSearchForm(req: { json(): Promise<unknown> }): Promise<WebSearchProviderForm> {
+  const body = await readJsonBody(req);
+  const id = readOptionalString(body, "id");
+  const apiKey = readOptionalString(body, "apiKey");
+  if (id === undefined || apiKey === undefined) {
+    throw new ValidationError("id, apiKey must be strings or null");
+  }
+
+  return { id: id?.trim() ?? "", apiKey };
 }
 
 /** リクエストからプロバイダ id を読む。 */
