@@ -1,5 +1,6 @@
 import type { ReplyLanguage } from "../../shared/language";
 import { describeError } from "../../shared/errors";
+import { toolNameFor, UI_TOOL_NAME } from "../../shared/tools";
 import type {
   AttachmentPart,
   ChatAttachment,
@@ -289,7 +290,11 @@ async function* turnEvents(
 function hasVisiblePart(parts: readonly MessagePart[]): boolean {
   return parts.some(
     (part) =>
-      (part.type === "text" && part.text.trim().length > 0) || part.type === "attachment" || part.type === "notice",
+      (part.type === "text" && part.text.trim().length > 0) ||
+      part.type === "attachment" ||
+      part.type === "notice" ||
+      // カードを出しただけのターンも、ユーザーの目には何かが届いている。
+      (part.type === "tool-call" && toolNameFor(part.server, part.tool) === UI_TOOL_NAME),
   );
 }
 

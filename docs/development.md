@@ -59,6 +59,33 @@ bun run test:live  # 実際のプロバイダに繋ぐ確認（API キーと pod
 モデルへ渡らずに保存される（設定画面には名前だけを出す）。値は `podman exec --env` で、コンテナの中で
 動かすコマンドへ渡す。`config.json` は値を含むため、書き込み時に `0600` にする。
 
+## チャットの UI
+
+エージェントは `chat_ui` ツールで、チャットにカード（文章・一覧・表・フローチャート・選択肢・フォーム）を出せる。
+カードは専用の部品として保存せず、ツール呼び出しの引数（UI マークアップ）から画面が描く。
+そのため、メッセージの種類や DB の形は増えていない。
+
+マークアップは JSX に似た独自のタグで、HTML としては実行しない（スクリプト・CSS・イベント属性・URL は受け付けない）。
+使えるタグは次のとおり。
+
+- `<Card title="...">` — ルート。中にブロックを並べる
+- `<Text>` / `<List ordered>` + `<Item>` / `<Table>` + `<Row>` + `<Cell>`
+- `<Flow>` + `<Node id shape>` / `<Edge from to label dashed>` — 位置は画面が決める
+- `<Choice multiple>` + `<Option description>` — 押すとラベルが発言になる
+- `<Form submit>` + `<Field label type required placeholder>`（`select` は `<Option>` を子に持つ）
+
+規則:
+
+- 属性値はダブルクォート。`ordered` / `multiple` / `required` / `dashed` は値なしで書く。
+- テキスト中の `<` `>` `&` は `&lt;` `&gt;` `&amp;` と書く（実体参照はこの 5 つだけ）。
+- `Choice` か `Form` は 1 枚に 1 つまで。
+- 解釈は `shared/ui-markup.ts` が持ち、サーバの検証（ツール）と画面の描画で同じ関数を使う。
+- 押した選択肢は、待ちではなく新しいユーザー発言として送る。応答中は押せない。
+- フローチャートの位置は `client/ui/flow-layout.ts` が決める。DOM を使わないので、テストで重なりを確かめられる。
+- 表のセルや図のノード数には上限がある（`UI_MARKUP_LIMITS`）。マークアップ全体は 20,000 文字まで。
+- ツール呼び出しの引数は履歴に残るので、圧縮の要約に見せるときは 600 文字で切り詰める
+  （`server/agent/compaction-text.ts`）。
+
 ## スキル
 
 エージェントが作ったスキルは、コンピュータのホームの中の `.agents/skills/<name>/SKILL.md` に置く。

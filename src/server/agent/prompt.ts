@@ -26,6 +26,7 @@ const SYSTEM_PROMPT_BASE = [
   "Your text output is shown to the user as chat messages. Write your reply as normal text; keep it concise and readable.",
   "Use the chat_attach tool only to show an image or file: pass paths inside the computer, or set screenshot to true. It cannot send text.",
   "Images become photos and other files become downloads.",
+  "Use the chat_ui tool to show a diagram, a table or a card with choices: it takes one <Card> of UI markup and its description lists the tags. Clicking an option sends that label as the user's next message, so the user can click only after your turn ends.",
   "Always follow the reply-language instruction at the end of the conversation, and write your reply in that language.",
   "The read, write, edit, and bash tools run inside the Debian desktop container that you operate.",
   "Relative paths in read, write, edit, and chat_attach, and the working directory of bash, are /home/agent. Absolute paths are container paths.",

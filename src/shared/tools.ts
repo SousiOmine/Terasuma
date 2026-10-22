@@ -129,6 +129,12 @@ export const ATTACH_TOOL = "attach";
 /** モデルへ渡すときの、添付するツールの名前。 */
 export const ATTACH_TOOL_NAME = `${CHAT_SERVER_ID}${TOOL_NAME_SEPARATOR}${ATTACH_TOOL}`;
 
+/** チャットへ UI（カード）を送るツール名（サーバー id を付けない形）。 */
+export const UI_TOOL = "ui";
+
+/** モデルへ渡すときの、UI を送るツールの名前。 */
+export const UI_TOOL_NAME = `${CHAT_SERVER_ID}${TOOL_NAME_SEPARATOR}${UI_TOOL}`;
+
 /** サーバー id とツール名から、モデルへ渡す名前を組み立てる。 */
 export function toolNameFor(server: string, tool: string): string {
   return server.length === 0 ? tool : `${server}${TOOL_NAME_SEPARATOR}${tool}`;

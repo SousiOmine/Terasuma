@@ -12,6 +12,9 @@ import { userContentForModel } from "./model-content";
 /** 要約に見せるツールの結果 1 件の上限。長い出力で呼び出しが膨らむのを防ぐ。 */
 const TOOL_RESULT_MAX_CHARS = 2_000;
 
+/** 要約に見せるツールの呼び出し 1 件の上限。UI のマークアップなどで呼び出しが膨らむのを防ぐ。 */
+const TOOL_CALL_MAX_CHARS = 600;
+
 /** 要約への指示。会話を続けさせないため、応答ではなく要約だけを書かせる。 */
 export const SUMMARIZATION_SYSTEM_PROMPT = `You are a context summarization assistant. Your task is to read a conversation between a user and an AI assistant, then produce a structured summary following the exact format specified.
 
@@ -82,7 +85,7 @@ export function serializeConversation(messages: readonly ChatMessage[]): string 
 
 /** ツールの呼び出しを、`名前(引数)` の形にする。 */
 function formatCall(part: Extract<MessagePart, { type: "tool-call" }>): string {
-  return `${toolNameFor(part.server, part.tool)}(${formatArgs(part.args)})`;
+  return truncate(`${toolNameFor(part.server, part.tool)}(${formatArgs(part.args)})`, TOOL_CALL_MAX_CHARS);
 }
 
 /** 引数を `key=値` の並びにする。オブジェクトでなければ、そのまま JSON にする。 */

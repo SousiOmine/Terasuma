@@ -28,6 +28,15 @@ export const en = {
   "chat.image.open": "Open {name}",
   "chat.markdown.task": "Task",
 
+  "chat.ui.invalid": "This card could not be displayed",
+  "chat.ui.submit": "Send",
+  "chat.ui.multiple": "Select any number",
+  "chat.ui.awaitingTurn": "You can choose when the reply finishes",
+  "chat.ui.choose": "Choose",
+  "chat.ui.flow": "Flowchart",
+  "chat.ui.yes": "Yes",
+  "chat.ui.no": "No",
+
   "chat.model.unset": "No model is configured. Add a provider in Settings.",
   "chat.model.providerMissing": "The provider for the default model is missing. Choose another model in Settings.",
   "chat.openSettings": "Open Settings",

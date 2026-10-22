@@ -1,6 +1,13 @@
-import { ASK_USER_TOOL_NAME, CONNECT_APP_TOOL_NAME, SET_ENV_TOOL_NAME, TOOL_CALL_TOOL, TOOL_SERVER_ID } from "../../shared/tools";
-import type { AttachmentPart, ChatEvent, ChatMessage, NoticePart, TextPart } from "../../shared/types";
+import {
+  ASK_USER_TOOL_NAME,
+  CONNECT_APP_TOOL_NAME,
+  SET_ENV_TOOL_NAME,
+  TOOL_CALL_TOOL,
+  TOOL_SERVER_ID,
+} from "../../shared/tools";
+import type { AttachmentPart, ChatEvent, ChatMessage, MessagePart, NoticePart, TextPart } from "../../shared/types";
 import type { ClientErrorCode } from "../lib/http";
+import { chatUiPartOf } from "../lib/ui";
 
 /**
  * 1 つのイベントが、画面の状態に何をするか。
@@ -13,6 +20,8 @@ export type ChatEventEffect =
   | { kind: "message"; message: ChatMessage }
   | { kind: "assistant-start"; id: string; createdAt: number }
   | { kind: "assistant-part"; id: string; part: TextPart | AttachmentPart | NoticePart }
+  /** chat_ui の呼び出し。カードを画面に置く。 */
+  | { kind: "chat-ui"; part: Extract<MessagePart, { type: "tool-call" }> }
   | { kind: "handover-start"; callId: string; question: string | null }
   | { kind: "env-request-start"; callId: string; name: string; description: string | null }
   /** アプリの認可が要る。チャットに認証カードを出す。 */
@@ -37,7 +46,10 @@ export function interpretEvent(event: ChatEvent): ChatEventEffect | null {
       // 本文・添付・注記。届いた単位のまま、その場で画面へ足す。
       return { kind: "assistant-part", id: event.id, part: event.part };
     case "tool-call": {
-      // ツールの呼び出しは画面に出さない。ユーザーの入力を待つ呼び出しだけ、その場で入力を出す。
+      // chat_ui は、呼び出しの引数（マークアップ）をそのままカードとして置く。
+      // ほかのツールは画面に出さず、ユーザーの入力を待つ呼び出しだけ入力を出す。
+      if (chatUiPartOf(event.part) !== null) return { kind: "chat-ui", part: event.part };
+
       const ask = toolCallArgs(event.part, ASK_USER_TOOL_NAME);
       if (ask !== null) {
         const question = ask["question"];

@@ -7,6 +7,7 @@ import type { ChatMessage, MessagePart, SentAttachment, TokenUsage } from "../..
 import type { CodingToolset } from "./tools/coding";
 import type { ComputerToolset } from "./tools/computer";
 import type { AttachmentToolset } from "./tools/attachments";
+import { createChatUiTools } from "./tools/ui";
 import type { HistoryToolset } from "./tools/history";
 import type { ImageStore } from "../computer/images";
 import type { ConnectionToolsetProvider } from "../connections/tools";
@@ -210,6 +211,9 @@ export function createAiSdkEngine(options: AiSdkEngineOptions): AgentEngine {
   const library = createSkillLibrary(skills);
   const skillTools = createSkillTools(library);
 
+  // チャットへ UI を送るツール。ターンによらず同じなので、ここで 1 度だけ組む。
+  const chatUiTools = createChatUiTools();
+
   /** 設定とカタログから、今回のモデルを決める。呼び出しのたびに読み直す。 */
   function resolve(): ResolvedModel {
     const resolution = resolveModel(settings.read(), catalog.snapshot());
@@ -267,6 +271,7 @@ export function createAiSdkEngine(options: AiSdkEngineOptions): AgentEngine {
         {
           ...coding,
           ...attachmentTools,
+          ...chatUiTools,
           ...historyTools,
           ...webTools,
           ...createDiscoveryTools(registry),

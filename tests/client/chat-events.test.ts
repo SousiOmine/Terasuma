@@ -229,6 +229,28 @@ describe("チャットのイベントの読み替え", () => {
     });
   });
 
+  test("chat_ui の呼び出しは、カードを置く効果になる", () => {
+    const part = {
+      type: "tool-call" as const,
+      id: "c1",
+      server: "chat",
+      tool: "ui",
+      args: { markup: "<Card><Text>選んでください</Text></Card>" },
+    };
+
+    // 引数（マークアップ）は解釈せず、そのまま渡す。解釈は画面側で 1 度だけ行う。
+    expect(interpretEvent({ type: "tool-call", id: "a1", part })).toEqual({ kind: "chat-ui", part });
+
+    // ほかのツール呼び出しはカードにしない。
+    expect(
+      interpretEvent({
+        type: "tool-call",
+        id: "a1",
+        part: { type: "tool-call", id: "c2", server: "chat", tool: "attach", args: { screenshot: true } },
+      }),
+    ).toBeNull();
+  });
+
   test("失敗はコードと詳細を運ぶ", () => {
     expect(interpretEvent({ type: "error", code: "model_error", detail: "失敗" })).toEqual({
       kind: "error",

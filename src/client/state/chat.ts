@@ -1,5 +1,5 @@
 import { signal } from "@preact/signals";
-import type { AttachmentPart, ChatEvent, ChatMessage, NoticePart, TextPart } from "../../shared/types";
+import type { ChatEvent, ChatMessage, MessagePart } from "../../shared/types";
 import { locale } from "../i18n";
 import * as api from "../lib/api";
 import { ApiError } from "../lib/http";
@@ -20,11 +20,11 @@ import { activeTeraId } from "./session";
 
 export const messages = signal<readonly ChatMessage[]>([]);
 
-/** いま届いているターンの、画面に出す本文・添付・注記。 */
+/** いま届いているターンの、画面に出す本文・添付・注記と、UI のカードの呼び出し。 */
 export type LiveTurn = {
   id: string;
   createdAt: number;
-  parts: readonly (TextPart | AttachmentPart | NoticePart)[];
+  parts: readonly MessagePart[];
 };
 
 export const liveTurn = signal<LiveTurn | null>(null);
@@ -176,6 +176,14 @@ function applyEvent(event: ChatEvent): void {
     case "assistant-part": {
       const live = liveTurn.value;
       if (live === null) throw new Error(`ターンの開始前にメッセージが届きました（${effect.id}）`);
+      liveTurn.value = { ...live, parts: [...live.parts, effect.part] };
+      break;
+    }
+    case "chat-ui": {
+      // カードの材料（ツール呼び出し）は、そのままターンの記録に積む。
+      // 画面はここからマークアップを解釈して描く（保存する形は増やさない）。
+      const live = liveTurn.value;
+      if (live === null) throw new Error(`ターンの開始前に UI が届きました（${effect.part.id}）`);
       liveTurn.value = { ...live, parts: [...live.parts, effect.part] };
       break;
     }

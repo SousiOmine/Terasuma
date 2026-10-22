@@ -1,6 +1,7 @@
 import { IconLayoutSidebarRight, IconMenu2 } from "@tabler/icons-preact";
 import { useEffect, useMemo, useRef } from "preact/hooks";
 import type { AttachmentPart, ChatMessage, MessagePart, NoticePart, TextPart } from "../../../shared/types";
+import type { UiView } from "../../../shared/ui-markup";
 import { containerStatus } from "../../state/container";
 import { locale, t } from "../../i18n";
 import { modelProblem } from "../../state/model";
@@ -14,26 +15,35 @@ import { activeTera } from "../../state/session";
 import { sidebarOpen, toggleSidebar } from "../../state/sidebar";
 import { Banner } from "../../ui/Banner";
 import { ErrorNotice } from "../../ui/ErrorNotice";
+import { chatUiPartOf } from "../../lib/ui";
 import { ChatAvatar } from "./ChatAvatar";
 import { Composer } from "./Composer";
 import { ConnectionRequestPanel } from "./ConnectionRequestPanel";
 import { EnvRequestPanel } from "./EnvRequestPanel";
 import { AgentMessageBubble, NoticeLine, TypingBubble, UserMessageBubble } from "./MessageBubble";
+import { UiCard } from "./UiCard";
 
 /**
  * チャット画面。
  *
- * 会話は、ユーザーの発言と、エージェントの本文・添付だけで組み立てる。
+ * 会話は、ユーザーの発言と、エージェントの本文・添付・カードで組み立てる。
  * 本文は区切りごとに届くので、少しずつ伸びる表示は無い（メッセージは届いた単位で出る）。
  */
 
-/** 画面に出す、本文と添付。注記は別に扱う。 */
-type VisibleMessagePart = TextPart | AttachmentPart;
+/** 本文と添付のまとまり。 */
+type GroupPart = TextPart | AttachmentPart;
+
+/** 画面に出す、UI のカード 1 枚。 */
+type UiDisplayPart = { type: "ui"; callId: string; view: UiView | null; at: number };
+
+/** 画面に出す部品。注記は別に扱う。 */
+type DisplayPart = GroupPart | UiDisplayPart | NoticePart;
 
 type ChatItem =
   | { kind: "date"; key: string; label: string }
   | { kind: "user"; key: string; message: ChatMessage }
-  | { kind: "agent"; key: string; parts: readonly VisibleMessagePart[] }
+  | { kind: "agent"; key: string; parts: readonly GroupPart[] }
+  | { kind: "ui"; key: string; view: UiView | null }
   | { kind: "notice"; key: string; part: NoticePart };
 
 export function ChatView() {
@@ -142,7 +152,7 @@ export function ChatView() {
           <EmptyState />
         ) : (
           <div class="mx-auto flex w-full max-w-3xl flex-col gap-4 px-4 py-8 sm:px-6">
-            {items.map((item) => renderItem(item))}
+            {items.map((item) => renderItem(item, streaming))}
             {streaming && !handover && !envWaiting && <TypingBubble />}
             {loading && <p class="text-center text-sm text-[var(--app-text-secondary)]">{t("common.loading")}</p>}
           </div>
@@ -202,7 +212,7 @@ export function ChatView() {
   );
 }
 
-function renderItem(item: ChatItem) {
+function renderItem(item: ChatItem, streaming: boolean) {
   const tag = localeTag();
 
   switch (item.kind) {
@@ -232,6 +242,15 @@ function renderItem(item: ChatItem) {
         </div>
       );
     }
+    case "ui":
+      return (
+        <div key={item.key} class="flex items-start gap-3">
+          <ChatAvatar size={24} class="mt-0.5" />
+          <div class="min-w-0 flex-1">
+            <UiCard view={item.view} disabled={streaming} />
+          </div>
+        </div>
+      );
     case "notice":
       return <NoticeLine key={item.key} part={item.part} />;
   }
@@ -240,7 +259,7 @@ function renderItem(item: ChatItem) {
 /**
  * 保存された会話と、届いている途中のターンを、画面の並びへ開く。
  *
- * assistant のメッセージは parts の text・attachment・notice を出す。
+ * assistant のメッセージは parts の text・attachment・notice と、chat_ui のカードを出す。
  * 連続する text と attachment は、同じターンの 1 つのまとまりにし、アイコンと時刻は 1 つだけ出す。
  */
 function buildItems(saved: readonly ChatMessage[], live: LiveTurn | null, tag: string): ChatItem[] {
@@ -262,30 +281,49 @@ function buildItems(saved: readonly ChatMessage[], live: LiveTurn | null, tag: s
       continue;
     }
 
-    if (message.parts !== null) pushParts(items, message.id, visibleParts(message.parts), pushDate);
+    if (message.parts !== null) pushParts(items, message.id, displayParts(message.parts, message.createdAt), pushDate);
   }
 
-  if (live !== null) pushParts(items, live.id, live.parts, pushDate);
+  if (live !== null) pushParts(items, live.id, displayParts(live.parts, live.createdAt), pushDate);
 
   return items;
 }
 
-/** 記録のうち、画面に出す部分だけを取り出す。 */
-function visibleParts(parts: readonly MessagePart[]): (VisibleMessagePart | NoticePart)[] {
-  return parts.filter(
-    (part): part is VisibleMessagePart | NoticePart =>
-      (part.type === "text" && part.text.length > 0) || part.type === "attachment" || part.type === "notice",
-  );
+/**
+ * 記録のうち、画面に出す部分だけを取り出す。
+ * chat_ui の呼び出しは、引数のマークアップからカードを作る。
+ */
+function displayParts(parts: readonly MessagePart[], at: number): DisplayPart[] {
+  const display: DisplayPart[] = [];
+
+  for (const part of parts) {
+    switch (part.type) {
+      case "text":
+        if (part.text.length > 0) display.push(part);
+        break;
+      case "attachment":
+      case "notice":
+        display.push(part);
+        break;
+      case "tool-call": {
+        const ui = chatUiPartOf(part);
+        if (ui !== null) display.push({ type: "ui", callId: ui.callId, view: ui.view, at });
+        break;
+      }
+    }
+  }
+
+  return display;
 }
 
-/** 1 つのターンの parts を、本文のまとまりと注記の並びにする。 */
+/** 1 つのターンの parts を、本文のまとまり・カード・注記の並びにする。 */
 function pushParts(
   items: ChatItem[],
   messageId: string,
-  parts: readonly (VisibleMessagePart | NoticePart)[],
+  parts: readonly DisplayPart[],
   pushDate: (at: number) => void,
 ): void {
-  let group: VisibleMessagePart[] = [];
+  let group: GroupPart[] = [];
   let groupIndex = 0;
   let groupDay: string | null = null;
   let noticeIndex = 0;
@@ -305,6 +343,12 @@ function pushParts(
     if (group.length > 0 && day !== groupDay) flush();
 
     pushDate(part.at);
+
+    if (part.type === "ui") {
+      flush();
+      items.push({ kind: "ui", key: `${messageId}-ui-${part.callId}`, view: part.view });
+      continue;
+    }
 
     if (part.type !== "notice") {
       group.push(part);

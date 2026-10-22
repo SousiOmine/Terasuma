@@ -27,6 +27,15 @@ export const ja: Record<MessageKey, string> = {
   "chat.image.open": "{name} を開く",
   "chat.markdown.task": "タスク",
 
+  "chat.ui.invalid": "このカードを表示できませんでした",
+  "chat.ui.submit": "送信",
+  "chat.ui.multiple": "複数選べます",
+  "chat.ui.awaitingTurn": "応答が終わると選べます",
+  "chat.ui.choose": "選択してください",
+  "chat.ui.flow": "フローチャート",
+  "chat.ui.yes": "はい",
+  "chat.ui.no": "いいえ",
+
   "chat.model.unset": "使用するモデルが設定されていません。設定からプロバイダを追加してください。",
   "chat.model.providerMissing": "既定のモデルを使うプロバイダがありません。設定で選び直してください。",
   "chat.openSettings": "設定を開く",
@@ -108,8 +117,7 @@ export const ja: Record<MessageKey, string> = {
   "settings.connections.openSetup": "アプリの設定を開く",
   "settings.connections.authorize": "認証する",
   "settings.connections.invite": "サーバーに追加",
-  "settings.connections.inviteNeedsId":
-    "Application ID を保存すると、サーバーへ追加するリンクが出ます。",
+  "settings.connections.inviteNeedsId": "Application ID を保存すると、サーバーへ追加するリンクが出ます。",
   "settings.connections.code": "認可コード",
   "settings.connections.openAuthorization": "認可ページを開く",
   "settings.connections.cancelAuthorize": "認可をやめる",

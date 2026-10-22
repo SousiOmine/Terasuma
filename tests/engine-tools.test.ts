@@ -284,7 +284,13 @@ describe("ツール検索（AI SDK 経由）", () => {
       const events = await run(provider, settingsFor(portOf(fake.server)));
 
       // 事前に渡るのは内蔵のツールだけ。MCP のツール定義はリクエストに載らない。
-      expect(toolNames(fake.bodies[0]).sort()).toEqual(["skill", "skill_manage", "tool_call", "tool_search"]);
+      expect(toolNames(fake.bodies[0]).sort()).toEqual([
+        "chat_ui",
+        "skill",
+        "skill_manage",
+        "tool_call",
+        "tool_search",
+      ]);
 
       // 検索の結果には、名前・説明・引数スキーマが載る。
       const searched = JSON.stringify(fake.bodies[1]);
@@ -350,7 +356,13 @@ describe("ツール検索（AI SDK 経由）", () => {
 
     try {
       await run({ toolset: async () => ({}) }, settingsFor(portOf(fake.server)));
-      expect(toolNames(fake.bodies[0]).sort()).toEqual(["skill", "skill_manage", "tool_call", "tool_search"]);
+      expect(toolNames(fake.bodies[0]).sort()).toEqual([
+        "chat_ui",
+        "skill",
+        "skill_manage",
+        "tool_call",
+        "tool_search",
+      ]);
     } finally {
       await fake.server.stop(true);
     }
@@ -870,4 +882,47 @@ describe("失敗", () => {
       await server.stop(true);
     }
   }, 20_000);
+});
+
+describe("チャットの UI", () => {
+  test("chat_ui はマークアップを検証し、呼び出しと結果がターンへ流れる", async () => {
+    const markup = '<Card><Text>確認</Text><Choice><Option>a</Option><Option>b</Option></Choice></Card>';
+    const fake = startScriptedProvider([{ tool: "chat_ui", args: JSON.stringify({ markup }) }, { text: "どうぞ" }]);
+
+    try {
+      const events = await run({ toolset: async () => ({}) }, settingsFor(portOf(fake.server)));
+
+      expect(toolNames(fake.bodies[0])).toContain("chat_ui");
+
+      const call = callsOf(events, "chat", "ui")[0];
+      if (call === undefined) throw new Error("chat_ui が呼ばれなかった");
+      expect(call.part.args).toEqual({ markup });
+
+      const result = resultOf(events, call.part.id);
+      expect(result.part.failed).toBe(false);
+      expect(result.part.output).toContain("The card is shown");
+    } finally {
+      await fake.server.stop(true);
+    }
+  });
+
+  test("直せないマークアップは、理由つきの失敗としてモデルへ返る", async () => {
+    const fake = startScriptedProvider([
+      { tool: "chat_ui", args: JSON.stringify({ markup: "<Card><Nope /></Card>" }) },
+      { text: "直します" },
+    ]);
+
+    try {
+      const events = await run({ toolset: async () => ({}) }, settingsFor(portOf(fake.server)));
+
+      const call = callsOf(events, "chat", "ui")[0];
+      if (call === undefined) throw new Error("chat_ui が呼ばれなかった");
+
+      const result = resultOf(events, call.part.id);
+      expect(result.part.failed).toBe(true);
+      expect(result.part.output).toContain("Invalid UI markup");
+    } finally {
+      await fake.server.stop(true);
+    }
+  });
 });

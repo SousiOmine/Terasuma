@@ -830,6 +830,48 @@ describe("チャット API", () => {
     });
   });
 
+  test("UI カードだけのターンも、空の応答として扱わない", async () => {
+    const call = {
+      type: "tool-call",
+      id: "call-ui",
+      server: "chat",
+      tool: "ui",
+      args: { markup: "<Card><Text>選んでください</Text></Card>" },
+    } as const;
+    const result = {
+      type: "tool-result",
+      id: "call-ui",
+      server: "chat",
+      tool: "ui",
+      failed: false,
+      output: "The card is shown in the chat.",
+    } as const;
+
+    const withUi: AgentEngine = {
+      name: "ui",
+      stream: async () => ({
+        events: (async function* () {
+          yield { type: "tool-call", part: call } as const;
+          yield { type: "tool-result", part: result } as const;
+        })(),
+        usage: Promise.resolve(null),
+      }),
+      complete: () => Promise.reject(new Error("テスト用のエンジンでは要約を作れません")),
+    };
+
+    await withServer(withUi, async (harness) => {
+      const events = await harness.send(DEFAULT_TERA_ID, "カードを出して");
+
+      // 本文が無くても、カードを出したターンを「何も書かなかった」と扱わない。
+      expect(events.some((event) => event.type === "error")).toBe(false);
+      expect(events.at(-1)?.type).toBe("assistant-done");
+
+      const messages = await harness.messages(DEFAULT_TERA_ID);
+      expect(messages).toHaveLength(2);
+      expect(messages[1]?.parts?.map((part) => part.type)).toEqual(["tool-call", "tool-result"]);
+    });
+  });
+
   test("途中で購読をやめても、そこまでに書いた本文は保存される", async () => {
     await withServer(createSlowMessageEngine(), async (harness) => {
       const controller = new AbortController();
