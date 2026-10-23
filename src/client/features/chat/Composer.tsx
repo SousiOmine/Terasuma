@@ -7,6 +7,7 @@ import {
   MAX_ATTACHMENTS_TOTAL_BYTES,
 } from "../../../shared/attachments";
 import { isSendKey } from "../../lib/composer-keys";
+import { pastedFiles } from "../../lib/composer-paste";
 import { ApiError } from "../../lib/http";
 import { t } from "../../i18n";
 import { isStopping, isStreaming, sendMessage, stopStreaming } from "../../state/chat";
@@ -27,6 +28,14 @@ export function Composer() {
   const canSend = handoverActive.value ? draft.trim().length > 0 : draft.trim().length > 0 || files.length > 0;
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // 続けて貼り付けても前のファイルを落とさないよう、state とは別に最新の一覧を持つ。
+  // state は次の描画まで古いままなので、続けて届いたイベントはこちらを見て足す。
+  const filesRef = useRef<readonly File[]>([]);
+
+  const replaceFiles = (next: readonly File[]) => {
+    filesRef.current = next;
+    setFiles(next);
+  };
 
   // 入力に合わせて高さを伸ばす。CSS だけでは全ブラウザで揃わないため、実際の高さを測って設定する。
   useEffect(() => {
@@ -39,7 +48,7 @@ export function Composer() {
   const addFiles = (picked: readonly File[]) => {
     if (picked.length === 0) return;
 
-    const next = [...files, ...picked];
+    const next = [...filesRef.current, ...picked];
     if (next.length > MAX_ATTACHMENTS) {
       showChatError(new ApiError("invalid_request", t("composer.attach.tooMany", { max: MAX_ATTACHMENTS })));
       return;
@@ -63,11 +72,26 @@ export function Composer() {
     }
 
     clearChatError();
-    setFiles(next);
+    replaceFiles(next);
+  };
+
+  /**
+   * 貼り付けた画像やファイルを、選んだファイルと同じ扱いで添付に回す。
+   * 本文も一緒に貼り付けたときは、その文字をそのまま入れる（既定の貼り付けを止めない）。
+   */
+  const handlePaste = (event: ClipboardEvent) => {
+    if (!canAttach || event.clipboardData === null) return;
+
+    const pasted = pastedFiles(Array.from(event.clipboardData.files), Array.from(event.clipboardData.items));
+    if (pasted.length === 0) return;
+
+    // ファイルだけの貼り付けでは、入力欄に余計な文字を入れない。
+    if (event.clipboardData.getData("text/plain").length === 0) event.preventDefault();
+    addFiles(pasted);
   };
 
   const removeFile = (index: number) => {
-    setFiles(files.filter((_, current) => current !== index));
+    replaceFiles(filesRef.current.filter((_, current) => current !== index));
   };
 
   const submit = () => {
@@ -82,9 +106,9 @@ export function Composer() {
       return;
     }
 
-    const sending = files;
+    const sending = filesRef.current;
     setDraft("");
-    setFiles([]);
+    replaceFiles([]);
     void sendMessage(content, sending);
   };
 
@@ -149,6 +173,7 @@ export function Composer() {
             enterkeyhint="send"
             class="max-h-40 min-h-9 flex-1 resize-none bg-transparent px-1.5 py-2 text-[15px] leading-6 text-[var(--app-text)] outline-none placeholder:text-[var(--app-text-tertiary)]"
             onInput={(event) => setDraft(event.currentTarget.value)}
+            onPaste={handlePaste}
             onKeyDown={(event) => {
               // Enter で送信し、Shift + Enter は改行のままにする。
               if (!isSendKey(event)) return;
