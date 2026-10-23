@@ -19,24 +19,24 @@ export function UserMessageBubble({ message, time }: { message: ChatMessage; tim
 
   return (
     <div class="flex flex-col items-end gap-1">
-      <div class="max-w-[85%] rounded-[24px] bg-[var(--app-soft)] px-4 py-2.5 text-[15px] leading-[1.7] text-[var(--app-text)]">
+      <div class="max-w-[85%] rounded-[24px] bg-soft px-4 py-2.5 text-[15px] leading-[1.7] text-primary">
         {message.content.length > 0 && <Markdown content={message.content} />}
         {files.length > 0 && (
           <div class={`flex flex-col gap-1.5 ${message.content.length > 0 ? "mt-2" : ""}`}>
             {files.map((file, index) => (
               <span
                 key={`${file.name}-${file.size}-${index}`}
-                class="flex w-64 max-w-full items-center gap-2 rounded-full bg-[var(--app-surface)] px-3 py-1.5 text-xs"
+                class="flex w-64 max-w-full items-center gap-2 rounded-full bg-surface px-3 py-1.5 text-xs"
               >
-                <IconFile size={14} stroke={1.7} class="shrink-0 text-[var(--app-text-secondary)]" />
+                <IconFile size={14} stroke={1.7} class="shrink-0 text-secondary" />
                 <span class="min-w-0 flex-1 truncate">{file.name}</span>
-                <span class="shrink-0 text-[var(--app-text-secondary)] tera-tnum">{formatBytes(file.size)}</span>
+                <span class="shrink-0 text-secondary tera-tnum">{formatBytes(file.size)}</span>
               </span>
             ))}
           </div>
         )}
       </div>
-      <time class="pr-1 text-[11px] text-[var(--app-text-tertiary)] tera-tnum">{time}</time>
+      <time class="pr-1 text-[11px] text-tertiary tera-tnum">{time}</time>
     </div>
   );
 }
@@ -47,7 +47,7 @@ export function AgentMessageBubble({ part }: { part: TextPart | AttachmentPart }
   const files = part.type === "attachment" ? part.attachments.filter((attachment) => attachment.image === null) : [];
 
   return (
-    <div class="flex min-w-0 flex-col gap-2 text-[15px] leading-[1.75] text-[var(--app-text)]">
+    <div class="flex min-w-0 flex-col gap-2 text-[15px] leading-[1.75] text-primary">
       {part.type === "text" && <Markdown content={part.text} />}
       {images.length > 0 && <ImageGrid images={images} />}
       {files.length > 0 && <FileList files={files} />}
@@ -90,7 +90,7 @@ function ImageGrid({ images }: { images: readonly SentAttachment[] }) {
           target="_blank"
           rel="noreferrer"
           title={t("chat.image.open", { name: image.name })}
-          class="block aspect-square overflow-hidden bg-[var(--app-soft)]"
+          class="block aspect-square overflow-hidden bg-soft"
         >
           <img src={image.url} alt={image.name} loading="lazy" class="h-full w-full object-cover" />
         </a>
@@ -109,16 +109,16 @@ function FileList({ files }: { files: readonly SentAttachment[] }) {
           href={file.url}
           download
           title={t("chat.file.download", { name: file.name })}
-          class="flex w-64 max-w-full items-center gap-2 rounded-[16px] bg-[var(--app-surface-alt)] px-3 py-2.5 transition hover:bg-[var(--app-soft)]"
+          class="flex w-64 max-w-full items-center gap-2 rounded-[16px] bg-surface-alt px-3 py-2.5 transition hover:bg-soft"
         >
-          <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--app-surface)] text-[var(--app-text)]">
+          <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface text-primary">
             <IconFile size={16} stroke={1.7} />
           </span>
           <span class="min-w-0 flex-1">
             <span class="block truncate text-xs font-medium">{file.name}</span>
-            <span class="block text-[11px] text-[var(--app-text-secondary)] tera-tnum">{formatBytes(file.size)}</span>
+            <span class="block text-[11px] text-secondary tera-tnum">{formatBytes(file.size)}</span>
           </span>
-          <IconDownload size={14} stroke={1.7} class="shrink-0 text-[var(--app-text-tertiary)]" />
+          <IconDownload size={14} stroke={1.7} class="shrink-0 text-tertiary" />
         </a>
       ))}
     </div>
@@ -129,7 +129,7 @@ function FileList({ files }: { files: readonly SentAttachment[] }) {
 export function NoticeLine({ part }: { part: NoticePart }) {
   return (
     <div class="flex justify-center py-1">
-      <p class="max-w-[85%] text-center text-[11px] leading-relaxed text-[var(--app-text-tertiary)]">{part.text}</p>
+      <p class="max-w-[85%] text-center text-[11px] leading-relaxed text-tertiary">{part.text}</p>
     </div>
   );
 }

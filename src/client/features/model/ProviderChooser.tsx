@@ -49,11 +49,11 @@ export function ProviderChooser({
 
       {error !== null && <ErrorNotice error={error} />}
 
-      <div class="max-h-80 overflow-y-auto rounded-[16px] bg-[var(--app-surface-alt)] p-1.5">
+      <div class="max-h-80 overflow-y-auto rounded-[16px] bg-surface-alt p-1.5">
         {list === null ? (
-          <p class="px-3 py-4 text-center text-xs text-[var(--app-text-secondary)]">{t("common.loading")}</p>
+          <p class="px-3 py-4 text-center text-xs text-secondary">{t("common.loading")}</p>
         ) : visible.length === 0 ? (
-          <p class="px-3 py-4 text-center text-xs text-[var(--app-text-secondary)]">{t("settings.wizard.noMatch")}</p>
+          <p class="px-3 py-4 text-center text-xs text-secondary">{t("settings.wizard.noMatch")}</p>
         ) : (
           <ul class="space-y-0.5">
             {visible.map((entry) => (
@@ -63,12 +63,10 @@ export function ProviderChooser({
                   onClick={() =>
                     entry.kind === "catalog" ? onSelectCatalog(entry.id, entry.name) : onSelectPreset(entry.preset)
                   }
-                  class="flex w-full items-baseline gap-2 rounded-[12px] px-3 py-2 text-left text-sm text-[var(--app-text)] transition hover:bg-[var(--app-soft-strong)]"
+                  class="flex w-full items-baseline gap-2 rounded-[12px] px-3 py-2 text-left text-sm text-primary transition hover:bg-[var(--app-soft-strong)]"
                 >
                   <span class="min-w-0 flex-1 truncate">{entry.name}</span>
-                  {entry.models !== null && (
-                    <span class="shrink-0 text-[11px] text-[var(--app-text-tertiary)]">{entry.models}</span>
-                  )}
+                  {entry.models !== null && <span class="shrink-0 text-[11px] text-tertiary">{entry.models}</span>}
                 </button>
               </li>
             ))}

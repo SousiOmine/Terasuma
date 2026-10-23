@@ -4,11 +4,10 @@ import { t } from "../../i18n";
 import {
   cancelConnectionRequest,
   connectionRequest,
-  connectionRequestSaving,
   resetConnectionRequest,
   saveConnectionRequestToken,
 } from "../../state/connection-request";
-import { connections, isLoadingConnections, loadConnections } from "../../state/connections";
+import { connections, isLoadingConnections, loadConnections, savingToken } from "../../state/connections";
 import { showChatError } from "../../state/failure";
 import { Button } from "../../ui/Button";
 import { Field } from "../../ui/Field";
@@ -23,7 +22,7 @@ import { INPUT_CLASS } from "../../ui/styles";
  */
 export function ConnectionRequestPanel() {
   const request = connectionRequest.value;
-  const saving = connectionRequestSaving.value;
+  const saving = request !== null && savingToken.value === request.provider;
   const view = connections.value;
   const [token, setToken] = useState("");
 
@@ -57,27 +56,27 @@ export function ConnectionRequestPanel() {
   };
 
   return (
-    <section class="rounded-[20px] border border-[var(--app-stroke)] bg-[var(--app-surface-alt)] p-4">
+    <section class="rounded-[20px] border border-stroke bg-surface-alt p-4">
       <p class="text-[13px] font-medium">{t("chat.connection.title", { app })}</p>
       {request.reason !== null && (
-        <p class="mt-1 whitespace-pre-wrap text-xs leading-5 text-[var(--app-text-secondary)]">{request.reason}</p>
+        <p class="mt-1 whitespace-pre-wrap text-xs leading-5 text-secondary">{request.reason}</p>
       )}
 
       {request.phase === "failed" ? (
         <>
-          <p class="mt-3 text-xs leading-5 text-[var(--app-text-secondary)]">{t("chat.connection.failed")}</p>
+          <p class="mt-3 text-xs leading-5 text-secondary">{t("chat.connection.failed")}</p>
           <div class="mt-3 flex justify-end">
             <button
               type="button"
               onClick={resetConnectionRequest}
-              class="shrink-0 text-[11px] font-medium text-[var(--app-text-secondary)] underline-offset-2 transition hover:text-[var(--app-text)] hover:underline"
+              class="shrink-0 text-[11px] font-medium text-secondary underline-offset-2 transition hover:text-primary hover:underline"
             >
               {t("common.cancel")}
             </button>
           </div>
         </>
       ) : provider === null ? (
-        <p class="mt-3 text-xs text-[var(--app-text-secondary)]">{t("common.loading")}</p>
+        <p class="mt-3 text-xs text-secondary">{t("common.loading")}</p>
       ) : (
         <>
           <Field label={provider.token.label} description={provider.token.description}>
@@ -110,7 +109,7 @@ export function ConnectionRequestPanel() {
               href={provider.setupUrl}
               target="_blank"
               rel="noreferrer noopener"
-              class="inline-flex items-center gap-1 text-xs text-[var(--app-text-secondary)] underline underline-offset-2"
+              class="inline-flex items-center gap-1 text-xs text-secondary underline underline-offset-2"
             >
               <IconExternalLink size={12} stroke={1.6} class="shrink-0" />
               {t("settings.connections.openSetup")}
@@ -119,13 +118,13 @@ export function ConnectionRequestPanel() {
               type="button"
               disabled={saving}
               onClick={cancel}
-              class="shrink-0 text-[11px] font-medium text-[var(--app-text-secondary)] underline-offset-2 transition hover:text-[var(--app-text)] hover:underline disabled:opacity-50"
+              class="shrink-0 text-[11px] font-medium text-secondary underline-offset-2 transition hover:text-primary hover:underline disabled:opacity-50"
             >
               {t("common.cancel")}
             </button>
           </div>
 
-          <p class="mt-2 text-[11px] leading-5 text-[var(--app-text-secondary)]">{t("chat.connection.waiting")}</p>
+          <p class="mt-2 text-[11px] leading-5 text-secondary">{t("chat.connection.waiting")}</p>
         </>
       )}
     </section>

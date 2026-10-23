@@ -1,70 +1,33 @@
 import { IconLayoutSidebarRight, IconMenu2 } from "@tabler/icons-preact";
-import { useEffect, useLayoutEffect, useMemo, useRef } from "preact/hooks";
-import { isDisplayPart } from "../../../shared/display-parts";
-import type { AttachmentPart, ChatMessage, MessagePart, NoticePart, TextPart } from "../../../shared/types";
-import type { UiView } from "../../../shared/ui-markup";
-import { containerStatus } from "../../state/container";
-import { locale, t } from "../../i18n";
-import { modelProblem } from "../../state/model";
-import {
-  isLoadingMessages,
-  isLoadingOlderMessages,
-  isStreaming,
-  liveTurn,
-  loadOlderMessages,
-  messages,
-  type LiveTurn,
-} from "../../state/chat";
-import { chatError, clearChatError } from "../../state/failure";
+import { useMemo } from "preact/hooks";
+import { t } from "../../i18n";
+import { isLoadingMessages, isLoadingOlderMessages, isStreaming, liveTurn, messages } from "../../state/chat";
 import { connectionRequest } from "../../state/connection-request";
+import { containerStatus } from "../../state/container";
 import { envRequestActive } from "../../state/env-request";
+import { chatError, clearChatError } from "../../state/failure";
 import { computerPaneOpen, handoverActive, toggleComputerPane } from "../../state/handover";
+import { modelProblem } from "../../state/model";
 import { openSettings } from "../../state/route";
-import { activeTera, activeTeraId } from "../../state/session";
+import { activeTera } from "../../state/session";
 import { sidebarOpen, toggleSidebar } from "../../state/sidebar";
 import { Banner } from "../../ui/Banner";
 import { ErrorNotice } from "../../ui/ErrorNotice";
-import { chatUiPartOf } from "../../lib/ui";
 import { ChatAvatar } from "./ChatAvatar";
 import { Composer } from "./Composer";
 import { ConnectionRequestPanel } from "./ConnectionRequestPanel";
 import { EnvRequestPanel } from "./EnvRequestPanel";
 import { AgentMessageBubble, NoticeLine, TypingBubble, UserMessageBubble } from "./MessageBubble";
+import { buildItems, formatTime, localeTag, type ChatItem } from "./timeline";
 import { UiCard } from "./UiCard";
+import { useOlderPages } from "./useOlderPages";
 
 /**
  * チャット画面。
  *
- * 会話は、ユーザーの発言と、エージェントの本文・添付・カードで組み立てる。
- * 本文は区切りごとに届くので、少しずつ伸びる表示は無い（メッセージは届いた単位で出る）。
+ * 会話の並びは timeline.ts、古いページの読み足しとスクロールは useOlderPages.ts が持つ。
+ * ここは「何をどこに置くか」だけを書く。
  */
-
-/** 本文と添付のまとまり。 */
-type GroupPart = TextPart | AttachmentPart;
-
-/** 画面に出す、UI のカード 1 枚。 */
-type UiDisplayPart = { type: "ui"; callId: string; view: UiView | null; at: number };
-
-/** 画面に出す部品。注記は別に扱う。 */
-type DisplayPart = GroupPart | UiDisplayPart | NoticePart;
-
-type ChatItem =
-  | { kind: "date"; key: string; label: string }
-  | { kind: "user"; key: string; message: ChatMessage }
-  | { kind: "agent"; key: string; parts: readonly GroupPart[] }
-  | { kind: "ui"; key: string; view: UiView | null }
-  | { kind: "notice"; key: string; part: NoticePart };
-
-/** 古いページを足す前に控えた、スクロールの大きさと位置。 */
-type OlderAnchor = {
-  teraId: string;
-  /** 読み込み前の先頭のメッセージ。前が変わらなければ、読めたページは無い。 */
-  firstId: string | null;
-  /** 読み込み前の scrollHeight。 */
-  height: number;
-  /** 読み込み前の scrollTop。 */
-  top: number;
-};
 
 export function ChatView() {
   const tag = localeTag();
@@ -90,100 +53,14 @@ export function ChatView() {
   const envWaiting = envRequestActive.value;
   // アプリの接続待ち。同じく入力欄の上にカードを出す。
   const connectionWaiting = connectionRequest.value !== null;
-  const scrollRef = useRef<HTMLDivElement>(null);
-  /** 末尾にいるかどうか。履歴を読んでいる間は引き戻さない。 */
-  const stickToBottom = useRef(true);
-  /** 古いページを足す前に控えた、スクロールの大きさと位置。 */
-  const olderAnchor = useRef<OlderAnchor | null>(null);
-
-  // Tera を開き直したら、最新（末尾）から見せる。
-  useLayoutEffect(() => {
-    stickToBottom.current = true;
-  }, [activeTeraId.value]);
-
-  // 新しい内容が来たら末尾へ寄せる。
-  // DOM を更新した直後（スクロールイベントより先）に動かし、
-  // 増えた高さを「利用者が上へ動いた」と取り違えないようにする。
-  useLayoutEffect(() => {
-    const node = scrollRef.current;
-    if (node !== null && stickToBottom.current) node.scrollTop = node.scrollHeight;
-  }, [items, streaming]);
-
-  // 古いページを足したら、読んでいた位置を保つ。
-  useLayoutEffect(() => {
-    const anchor = olderAnchor.current;
-    const node = scrollRef.current;
-    if (anchor === null || node === null) return;
-
-    // 履歴の読み直し（Tera の切り替えを含む）が始まったら、控えた位置は捨てる。
-    if (isLoadingMessages.value || anchor.teraId !== activeTeraId.value) {
-      olderAnchor.current = null;
-      return;
-    }
-    // まだ古いページが届いていない。
-    if (isLoadingOlderMessages.value) return;
-    // 先頭が変わっていなければ、読めたページは無い。
-    if ((messages.value[0]?.id ?? null) === anchor.firstId) {
-      olderAnchor.current = null;
-      return;
-    }
-    // 末尾へ追従しているときは、そちらに任せる。
-    if (stickToBottom.current) {
-      olderAnchor.current = null;
-      return;
-    }
-
-    olderAnchor.current = null;
-    node.scrollTop = anchor.top + (node.scrollHeight - anchor.height);
-  }, [messages.value, isLoadingMessages.value, isLoadingOlderMessages.value]);
-
-  // 上端に近づいたら、その前のページを読む。読む前にスクロール位置を控える。
-  const requestOlder = (): void => {
-    const node = scrollRef.current;
-    if (node === null) return;
-
-    const height = node.scrollHeight;
-    const top = node.scrollTop;
-    const firstId = messages.value[0]?.id ?? null;
-    // 画面が埋まっていないときは、読み込み後も末尾（最新）に寄せたままにする。
-    const fill = height <= node.clientHeight + 1;
-    if (!loadOlderMessages()) return;
-
-    if (fill) {
-      stickToBottom.current = true;
-      return;
-    }
-
-    const teraId = activeTeraId.value;
-    if (teraId !== null) olderAnchor.current = { teraId, firstId, height, top };
-  };
-
-  const handleScroll = (): void => {
-    const node = scrollRef.current;
-    if (node === null) return;
-
-    // 最下部の近くにいるときだけ、これから来る内容に追従する。
-    stickToBottom.current = node.scrollHeight - node.scrollTop - node.clientHeight < 40;
-
-    // 上端に近づいたら、前のページを読む。
-    if (node.scrollTop < 32) requestOlder();
-  };
-
-  // 最初のページが画面に満たないときは、スクロールが生まれるまで読む。
-  useEffect(() => {
-    const node = scrollRef.current;
-    if (node === null) return;
-    if (node.scrollHeight > node.clientHeight + 1) return;
-
-    requestOlder();
-  }, [items]);
+  const { scrollRef, handleScroll } = useOlderPages({ items, streaming });
 
   // 見出しは相手（Tera）の名前。いまは既定の 1 体しか居ないので、常に同じ名前になる。
   const title = activeTera.value?.name ?? "";
   const showEmpty = !loading && items.length === 0 && !streaming;
 
   return (
-    <main class="flex min-w-0 flex-1 flex-col bg-[var(--app-surface)] md:m-3 md:overflow-hidden md:rounded-[30px] md:border md:border-[var(--app-stroke)] md:shadow-[var(--app-shadow-panel)]">
+    <main class="flex min-w-0 flex-1 flex-col bg-surface md:m-3 md:overflow-hidden md:rounded-[30px] md:border md:border-stroke md:shadow-[var(--app-shadow-panel)]">
       <header class="flex h-16 shrink-0 items-center gap-3 px-4 sm:px-5">
         {/* 狭い画面ではサイドバーがドロワーになるので、開くボタンをここに置く。 */}
         <button
@@ -192,14 +69,14 @@ export function ChatView() {
           aria-expanded={sidebarOpen.value}
           title={t("chat.menu.open")}
           aria-label={t("chat.menu.open")}
-          class="-ml-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[var(--app-text-secondary)] transition hover:bg-[var(--app-soft)] hover:text-[var(--app-text)] md:hidden"
+          class="-ml-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-secondary transition hover:bg-soft hover:text-primary md:hidden"
         >
           <IconMenu2 size={20} stroke={1.7} />
         </button>
         <ChatAvatar size={32} />
         <div class="min-w-0 flex-1">
           <h1 class="truncate text-[15px] leading-5 font-semibold tracking-[-0.01em]">{title}</h1>
-          <p class="truncate text-[11px] leading-4 text-[var(--app-text-secondary)]">
+          <p class="truncate text-[11px] leading-4 text-secondary">
             {handover
               ? t("chat.computer.yourTurn")
               : connectionWaiting
@@ -219,9 +96,7 @@ export function ChatView() {
             title={t(paneOpen ? "chat.computer.hide" : "chat.computer.show")}
             aria-label={t(paneOpen ? "chat.computer.hide" : "chat.computer.show")}
             class={`flex shrink-0 items-center justify-center rounded-full p-2.5 transition md:p-2 ${
-              paneOpen
-                ? "bg-[var(--app-soft)] text-[var(--app-text)]"
-                : "text-[var(--app-text-secondary)] hover:bg-[var(--app-soft)] hover:text-[var(--app-text)]"
+              paneOpen ? "bg-soft text-primary" : "text-secondary hover:bg-soft hover:text-primary"
             }`}
           >
             <IconLayoutSidebarRight size={17} stroke={1.7} />
@@ -244,18 +119,18 @@ export function ChatView() {
       <div
         ref={scrollRef}
         onScroll={handleScroll}
-        class="min-h-0 flex-1 overflow-y-auto bg-[var(--app-surface)] [overflow-anchor:none]"
+        class="min-h-0 flex-1 overflow-y-auto bg-surface [overflow-anchor:none]"
       >
         {showEmpty ? (
           <EmptyState />
         ) : (
           <div class="mx-auto flex w-full max-w-3xl flex-col gap-4 px-4 py-8 sm:px-6">
             {isLoadingOlderMessages.value && (
-              <p class="text-center text-[11px] text-[var(--app-text-tertiary)]">{t("chat.history.loadingOlder")}</p>
+              <p class="text-center text-[11px] text-tertiary">{t("chat.history.loadingOlder")}</p>
             )}
             {items.map((item) => renderItem(item, streaming))}
             {streaming && !handover && !envWaiting && <TypingBubble />}
-            {loading && <p class="text-center text-sm text-[var(--app-text-secondary)]">{t("common.loading")}</p>}
+            {loading && <p class="text-center text-sm text-secondary">{t("common.loading")}</p>}
           </div>
         )}
       </div>
@@ -271,7 +146,7 @@ export function ChatView() {
                     <button
                       type="button"
                       onClick={() => openSettings("model")}
-                      class="text-xs font-medium text-[var(--app-text)] underline-offset-2 hover:underline"
+                      class="text-xs font-medium text-primary underline-offset-2 hover:underline"
                     >
                       {t("chat.openSettings")}
                     </button>
@@ -320,7 +195,7 @@ function renderItem(item: ChatItem, streaming: boolean) {
     case "date":
       return (
         <div key={item.key} class="flex justify-center py-1.5">
-          <span class="text-[11px] font-medium tracking-[0.06em] text-[var(--app-text-tertiary)]">{item.label}</span>
+          <span class="text-[11px] font-medium tracking-[0.06em] text-tertiary">{item.label}</span>
         </div>
       );
     case "user":
@@ -336,9 +211,7 @@ function renderItem(item: ChatItem, streaming: boolean) {
                 <AgentMessageBubble key={`${item.key}-${index}`} part={part} />
               ))}
             </div>
-            {last !== undefined && (
-              <time class="text-[11px] text-[var(--app-text-tertiary)] tera-tnum">{formatTime(last.at, tag)}</time>
-            )}
+            {last !== undefined && <time class="text-[11px] text-tertiary tera-tnum">{formatTime(last.at, tag)}</time>}
           </div>
         </div>
       );
@@ -357,154 +230,13 @@ function renderItem(item: ChatItem, streaming: boolean) {
   }
 }
 
-/**
- * 保存された会話と、届いている途中のターンを、画面の並びへ開く。
- *
- * assistant のメッセージは parts の text・attachment・notice と、chat_ui のカードを出す。
- * 連続する text と attachment は、同じターンの 1 つのまとまりにし、アイコンと時刻は 1 つだけ出す。
- * 保存済みと受信中を分けて組み立てるときは、startDay に前の並びの最後の日を渡す。
- */
-function buildItems(
-  saved: readonly ChatMessage[],
-  live: LiveTurn | null,
-  tag: string,
-  startDay: string | null = null,
-): { items: ChatItem[]; lastDay: string | null } {
-  const items: ChatItem[] = [];
-  let currentDay: string | null = startDay;
-
-  const pushDate = (at: number): void => {
-    const day = dayKey(at);
-    if (day === currentDay) return;
-
-    currentDay = day;
-    items.push({ kind: "date", key: `date-${day}`, label: formatDate(at, tag) });
-  };
-
-  for (const message of saved) {
-    if (message.role === "user") {
-      pushDate(message.createdAt);
-      items.push({ kind: "user", key: message.id, message });
-      continue;
-    }
-
-    if (message.parts !== null) pushParts(items, message.id, displayParts(message.parts, message.createdAt), pushDate);
-  }
-
-  if (live !== null) pushParts(items, live.id, displayParts(live.parts, live.createdAt), pushDate);
-
-  return { items, lastDay: currentDay };
-}
-
-/**
- * 記録のうち、画面に出す部分だけを取り出す。
- * chat_ui の呼び出しは、引数のマークアップからカードを作る。
- */
-function displayParts(parts: readonly MessagePart[], at: number): DisplayPart[] {
-  const display: DisplayPart[] = [];
-
-  for (const part of parts) {
-    if (!isDisplayPart(part)) continue;
-
-    switch (part.type) {
-      case "text":
-        if (part.text.length > 0) display.push(part);
-        break;
-      case "attachment":
-      case "notice":
-        display.push(part);
-        break;
-      case "tool-call": {
-        const ui = chatUiPartOf(part);
-        if (ui !== null) display.push({ type: "ui", callId: ui.callId, view: ui.view, at });
-        break;
-      }
-      case "tool-result":
-        break;
-    }
-  }
-
-  return display;
-}
-
-/** 1 つのターンの parts を、本文のまとまり・カード・注記の並びにする。 */
-function pushParts(
-  items: ChatItem[],
-  messageId: string,
-  parts: readonly DisplayPart[],
-  pushDate: (at: number) => void,
-): void {
-  let group: GroupPart[] = [];
-  let groupIndex = 0;
-  let groupDay: string | null = null;
-  let noticeIndex = 0;
-
-  const flush = (): void => {
-    if (group.length === 0) return;
-
-    items.push({ kind: "agent", key: `${messageId}-group-${groupIndex}`, parts: group });
-    group = [];
-    groupIndex += 1;
-    groupDay = null;
-  };
-
-  for (const part of parts) {
-    const day = dayKey(part.at);
-    // 日付をまたいだら、別のまとまりにする（日付の区切りが群の中に入らないように）。
-    if (group.length > 0 && day !== groupDay) flush();
-
-    pushDate(part.at);
-
-    if (part.type === "ui") {
-      flush();
-      items.push({ kind: "ui", key: `${messageId}-ui-${part.callId}`, view: part.view });
-      continue;
-    }
-
-    if (part.type !== "notice") {
-      group.push(part);
-      groupDay = day;
-      continue;
-    }
-
-    flush();
-    items.push({ kind: "notice", key: `${messageId}-notice-${noticeIndex}`, part });
-    noticeIndex += 1;
-  }
-
-  flush();
-}
-
-function localeTag(): string {
-  return locale.value === "ja" ? "ja-JP" : "en-US";
-}
-
-/** 日付が変わったかどうかを見るための、その端末の暦での日付。 */
-function dayKey(at: number): string {
-  const date = new Date(at);
-  return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
-}
-
-function formatDate(at: number, tag: string): string {
-  return new Intl.DateTimeFormat(tag, {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-    weekday: "short",
-  }).format(at);
-}
-
-function formatTime(at: number, tag: string): string {
-  return new Intl.DateTimeFormat(tag, { hour: "2-digit", minute: "2-digit" }).format(at);
-}
-
 function EmptyState() {
   return (
     <div class="tera-rise flex h-full flex-col items-center justify-center gap-5 px-6 pb-6 text-center">
       <ChatAvatar size={64} />
       <div class="max-w-sm">
         <h2 class="tera-balance text-[22px] leading-8 font-semibold tracking-[-0.02em]">{t("chat.empty.title")}</h2>
-        <p class="mt-2 text-[13px] leading-6 text-[var(--app-text-secondary)]">{t("chat.empty.description")}</p>
+        <p class="mt-2 text-[13px] leading-6 text-secondary">{t("chat.empty.description")}</p>
       </div>
     </div>
   );

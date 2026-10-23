@@ -12,23 +12,23 @@ export type BadgeTone = "neutral" | "success" | "info" | "warning" | "danger";
 
 const TONES: Record<BadgeTone, { frame: string; dot: string }> = {
   neutral: {
-    frame: "bg-[var(--app-soft)] text-[var(--app-text-secondary)]",
+    frame: "bg-soft text-secondary",
     dot: "bg-[var(--app-text-tertiary)]",
   },
   success: {
-    frame: "bg-[var(--app-soft)] text-[var(--app-text-secondary)]",
+    frame: "bg-soft text-secondary",
     dot: "bg-[var(--app-success)]",
   },
   info: {
-    frame: "bg-[var(--app-soft)] text-[var(--app-text-secondary)]",
+    frame: "bg-soft text-secondary",
     dot: "bg-[var(--app-accent)]",
   },
   warning: {
-    frame: "bg-[var(--app-soft)] text-[var(--app-text-secondary)]",
+    frame: "bg-soft text-secondary",
     dot: "bg-[var(--app-warning)]",
   },
   danger: {
-    frame: "bg-[var(--app-soft)] text-[var(--app-text-secondary)]",
+    frame: "bg-soft text-secondary",
     dot: "bg-[var(--app-danger)]",
   },
 };

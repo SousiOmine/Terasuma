@@ -7,6 +7,7 @@ import {
   clearWebSearchError,
   isLoadingWebSearch,
   loadWebSearchSettings,
+  refreshWebSearchSettings,
   removeWebSearchProvider,
   setDefaultWebSearchProvider,
   showWebSearchError,
@@ -14,6 +15,8 @@ import {
   webSearchSettings,
 } from "../../state/websearch";
 import { Button } from "../../ui/Button";
+import { ResourceList } from "../../ui/ResourceList";
+import { SectionHeader } from "../../ui/SectionHeader";
 import { DeleteAction, EditAction } from "../../ui/CardActions";
 import { ConfirmDialog } from "../../ui/ConfirmDialog";
 import { SettingsError } from "../../ui/SettingsSection";
@@ -42,7 +45,7 @@ export function WebSearchProviderSection() {
     void loadWebSearchSettings().catch(showWebSearchError);
   }, []);
 
-  const reload = () => void loadWebSearchSettings().catch(showWebSearchError);
+  const reload = () => void refreshWebSearchSettings().catch(showWebSearchError);
 
   const makeDefault = async (providerId: string) => {
     setMakingDefault(providerId);
@@ -59,41 +62,35 @@ export function WebSearchProviderSection() {
     <>
       <SettingsError error={error} onDismiss={clearWebSearchError} onRetry={view === null ? reload : undefined} />
 
-      <div class="mt-6 flex flex-col items-start gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
-        <div class="min-w-0">
-          <p class="text-sm font-medium">{t("settings.webSearch")}</p>
-          <p class="mt-0.5 text-xs text-[var(--app-text-secondary)]">{t("settings.webSearch.description")}</p>
-        </div>
-        <Button
-          variant="primary"
-          disabled={view === null || view.available.length === 0}
-          onClick={() => {
-            if (view !== null) setDialog({ kind: "add", available: view.available });
-          }}
-        >
-          <IconPlus size={16} stroke={1.6} class="shrink-0" />
-          {t("settings.webSearch.add")}
-        </Button>
-      </div>
+      <SectionHeader
+        title={t("settings.webSearch")}
+        description={t("settings.webSearch.description")}
+        action={
+          <Button
+            variant="primary"
+            disabled={view === null || view.available.length === 0}
+            onClick={() => {
+              if (view !== null) setDialog({ kind: "add", available: view.available });
+            }}
+          >
+            <IconPlus size={16} stroke={1.6} class="shrink-0" />
+            {t("settings.webSearch.add")}
+          </Button>
+        }
+      />
 
-      <div class="mt-3 space-y-2">
-        {view === null ? (
-          <p class="text-xs text-[var(--app-text-secondary)]">{t("common.loading")}</p>
-        ) : view.providers.length === 0 ? (
-          <p class="text-xs text-[var(--app-text-secondary)]">{t("settings.webSearch.empty")}</p>
-        ) : (
-          view.providers.map((provider) => (
-            <WebSearchProviderCard
-              key={provider.id}
-              provider={provider}
-              makingDefault={makingDefault === provider.id}
-              onMakeDefault={() => void makeDefault(provider.id)}
-              onEdit={() => setDialog({ kind: "edit", provider })}
-              onDelete={() => deleting.open(provider)}
-            />
-          ))
+      <ResourceList data={view === null ? null : view.providers} empty={t("settings.webSearch.empty")}>
+        {(provider) => (
+          <WebSearchProviderCard
+            key={provider.id}
+            provider={provider}
+            makingDefault={makingDefault === provider.id}
+            onMakeDefault={() => void makeDefault(provider.id)}
+            onEdit={() => setDialog({ kind: "edit", provider })}
+            onDelete={() => deleting.open(provider)}
+          />
         )}
-      </div>
+      </ResourceList>
 
       {dialog !== null && <WebSearchProviderDialog mode={dialog} onClose={() => setDialog(null)} />}
 
@@ -141,12 +138,12 @@ function WebSearchProviderCard({
         <div class="flex flex-wrap items-center gap-2">
           <p class="truncate text-sm font-medium">{provider.name}</p>
           {provider.isDefault && (
-            <span class="shrink-0 rounded-full bg-[var(--app-surface)] px-2.5 py-1 text-[11px] font-medium text-[var(--app-text-secondary)]">
+            <span class="shrink-0 rounded-full bg-surface px-2.5 py-1 text-[11px] font-medium text-secondary">
               {t("common.default")}
             </span>
           )}
         </div>
-        <p class="mt-0.5 text-xs text-[var(--app-text-secondary)]">{detail}</p>
+        <p class="mt-0.5 text-xs text-secondary">{detail}</p>
       </div>
 
       <div class="flex shrink-0 flex-wrap items-center gap-1">

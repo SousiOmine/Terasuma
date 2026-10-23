@@ -70,12 +70,12 @@ export function ContainerSettingsView() {
 
   return (
     <SettingsSection title={t("settings.container")} error={error} onDismiss={clearContainerError}>
-      <p class="mt-1 text-xs text-[var(--app-text-secondary)]">{t("settings.container.description")}</p>
+      <p class="mt-1 text-xs text-secondary">{t("settings.container.description")}</p>
 
       <div class={`mt-6 ${CARD_CLASS}`}>
         <div class="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
           <div class="min-w-0">
-            <p class="text-xs text-[var(--app-text-secondary)]">{t("settings.container.state.label")}</p>
+            <p class="text-xs text-secondary">{t("settings.container.state.label")}</p>
             <p class="mt-1 text-sm">{status === null ? t("common.checking") : t(STATE_LABELS[status.state])}</p>
           </div>
 
@@ -99,16 +99,14 @@ export function ContainerSettingsView() {
           )}
         </div>
 
-        {status?.detail != null && (
-          <p class="mt-3 break-words text-xs text-[var(--app-text-secondary)]">{status.detail}</p>
-        )}
+        {status?.detail != null && <p class="mt-3 break-words text-xs text-secondary">{status.detail}</p>}
 
         {status?.state === "podman_missing" && (
-          <p class="mt-3 text-xs text-[var(--app-text-secondary)]">{t("settings.container.podmanMissing")}</p>
+          <p class="mt-3 text-xs text-secondary">{t("settings.container.podmanMissing")}</p>
         )}
 
         {status !== null && status.state !== "running" && status.state !== "podman_missing" && (
-          <p class="mt-3 text-xs text-[var(--app-text-secondary)]">{t("settings.container.firstBuild")}</p>
+          <p class="mt-3 text-xs text-secondary">{t("settings.container.firstBuild")}</p>
         )}
       </div>
 
@@ -117,16 +115,13 @@ export function ContainerSettingsView() {
         <p class="text-sm font-medium">{t("settings.container.env.title")}</p>
 
         {env === null ? (
-          <p class="mt-3 text-xs text-[var(--app-text-secondary)]">{t("common.loading")}</p>
+          <p class="mt-3 text-xs text-secondary">{t("common.loading")}</p>
         ) : env.length === 0 ? (
-          <p class="mt-3 text-xs text-[var(--app-text-secondary)]">{t("settings.container.env.empty")}</p>
+          <p class="mt-3 text-xs text-secondary">{t("settings.container.env.empty")}</p>
         ) : (
           <ul class="mt-3 flex flex-col gap-1">
             {env.map((name) => (
-              <li
-                key={name}
-                class="flex items-center justify-between gap-3 rounded-[12px] bg-[var(--app-surface)] px-3 py-1.5"
-              >
+              <li key={name} class="flex items-center justify-between gap-3 rounded-[12px] bg-surface px-3 py-1.5">
                 <code class="min-w-0 truncate font-mono text-xs">{name}</code>
                 <DeleteAction onClick={() => deleting.open({ id: name })} />
               </li>

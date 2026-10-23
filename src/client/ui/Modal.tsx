@@ -76,20 +76,18 @@ export function Modal({ title, subtitle, size = "sm", onClose, footer, children 
         aria-label={title}
         tabIndex={-1}
         onKeyDown={handleKeyDown}
-        class={`relative flex max-h-[92dvh] w-full flex-col rounded-[28px] border border-[var(--app-stroke)] bg-[var(--app-surface)] shadow-[var(--app-shadow-16)] outline-none sm:max-h-[85vh] ${
+        class={`relative flex max-h-[92dvh] w-full flex-col rounded-[28px] border border-stroke bg-surface shadow-[var(--app-shadow-16)] outline-none sm:max-h-[85vh] ${
           size === "lg" ? "max-w-lg" : "max-w-sm"
         }`}
       >
         <div class="shrink-0 px-5 pt-5 sm:px-6 sm:pt-6">
           <h2 class="text-[17px] font-semibold tracking-[-0.01em]">{title}</h2>
-          {subtitle !== undefined && <p class="mt-1 text-xs leading-5 text-[var(--app-text-secondary)]">{subtitle}</p>}
+          {subtitle !== undefined && <p class="mt-1 text-xs leading-5 text-secondary">{subtitle}</p>}
         </div>
 
         <div class="min-h-0 flex-1 overflow-y-auto px-5 py-4 sm:px-6">{children}</div>
 
-        <div class="flex shrink-0 flex-wrap justify-end gap-2 border-t border-[var(--app-stroke)] px-5 py-4 sm:px-6">
-          {footer}
-        </div>
+        <div class="flex shrink-0 flex-wrap justify-end gap-2 border-t border-stroke px-5 py-4 sm:px-6">{footer}</div>
       </div>
     </div>
   );

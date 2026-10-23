@@ -46,12 +46,10 @@ export function EnvRequestPanel() {
   };
 
   return (
-    <section class="rounded-[20px] border border-[var(--app-stroke)] bg-[var(--app-surface-alt)] p-4">
+    <section class="rounded-[20px] border border-stroke bg-surface-alt p-4">
       <p class="text-[13px] font-medium">{t("chat.env.title")}</p>
-      <p class="mt-1 break-all font-mono text-xs text-[var(--app-text-secondary)]">{name}</p>
-      {description !== null && (
-        <p class="mt-2 whitespace-pre-wrap text-xs leading-5 text-[var(--app-text-secondary)]">{description}</p>
-      )}
+      <p class="mt-1 break-all font-mono text-xs text-secondary">{name}</p>
+      {description !== null && <p class="mt-2 whitespace-pre-wrap text-xs leading-5 text-secondary">{description}</p>}
 
       <form
         class="mt-3 flex items-center gap-2"
@@ -87,7 +85,7 @@ export function EnvRequestPanel() {
           type="button"
           onClick={() => void cancelEnvRequest()}
           disabled={sending}
-          class="shrink-0 text-[11px] font-medium text-[var(--app-text-secondary)] underline-offset-2 transition hover:text-[var(--app-text)] hover:underline disabled:opacity-50"
+          class="shrink-0 text-[11px] font-medium text-secondary underline-offset-2 transition hover:text-primary hover:underline disabled:opacity-50"
         >
           {t("common.cancel")}
         </button>

@@ -129,7 +129,7 @@ export function ComputerPane() {
 
   return (
     <aside class="fixed inset-0 z-30 flex flex-col p-0 md:static md:z-auto md:w-[42%] md:min-w-80 md:shrink-0 md:p-3">
-      <section class="flex min-h-0 flex-1 flex-col overflow-hidden bg-[var(--app-surface)] md:rounded-[30px] md:border md:border-[var(--app-stroke)] md:shadow-[var(--app-shadow-panel)]">
+      <section class="flex min-h-0 flex-1 flex-col overflow-hidden bg-surface md:rounded-[30px] md:border md:border-stroke md:shadow-[var(--app-shadow-panel)]">
         <header class="flex h-16 shrink-0 items-center gap-3 px-4">
           <h2 class="min-w-0 flex-1 truncate text-[15px] font-semibold tracking-[-0.01em]">
             {t("chat.computer.title")}
@@ -144,7 +144,7 @@ export function ComputerPane() {
             onClick={closeComputerPane}
             title={t("chat.computer.hide")}
             aria-label={t("chat.computer.hide")}
-            class="-mr-2 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[var(--app-text-secondary)] transition hover:bg-[var(--app-soft)] hover:text-[var(--app-text)] md:mr-0 md:h-auto md:w-auto md:p-1"
+            class="-mr-2 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-secondary transition hover:bg-soft hover:text-primary md:mr-0 md:h-auto md:w-auto md:p-1"
           >
             <IconX size={16} stroke={1.6} />
           </button>
@@ -152,7 +152,7 @@ export function ComputerPane() {
 
         {active && (
           <div class="mx-3 mt-3 shrink-0 rounded-[16px] bg-[var(--app-accent-soft)] px-4 py-3">
-            <p class="text-xs leading-relaxed whitespace-pre-wrap text-[var(--app-text)]">
+            <p class="text-xs leading-relaxed whitespace-pre-wrap text-primary">
               {question ?? t("chat.computer.yourTurn")}
             </p>
             <button
@@ -171,14 +171,14 @@ export function ComputerPane() {
                 void submitAnswer();
               }}
             >
-              <div class="flex items-center gap-1.5 rounded-full border border-[var(--app-stroke)] bg-[var(--app-surface)] px-2 py-2 shadow-[var(--app-shadow-2)] transition focus-within:border-[var(--app-accent)] focus-within:shadow-[0_0_0_4px_var(--app-ring)]">
+              <div class="flex items-center gap-1.5 rounded-full border border-stroke bg-surface px-2 py-2 shadow-[var(--app-shadow-2)] transition focus-within:border-[var(--app-accent)] focus-within:shadow-[0_0_0_4px_var(--app-ring)]">
                 <input
                   type="text"
                   value={answer}
                   placeholder={t("chat.computer.answer")}
                   aria-label={t("chat.computer.answer")}
                   enterkeyhint="send"
-                  class="min-w-0 flex-1 bg-transparent px-2 py-1 text-[15px] text-[var(--app-text)] outline-none placeholder:text-[var(--app-text-tertiary)]"
+                  class="min-w-0 flex-1 bg-transparent px-2 py-1 text-[15px] text-primary outline-none placeholder:text-tertiary"
                   onInput={(event) => setAnswer(event.currentTarget.value)}
                 />
                 <button
@@ -226,13 +226,13 @@ export function ComputerPane() {
             <div class="relative m-auto h-full w-full md:h-auto md:aspect-[16/10]">
               <div ref={targetRef} class="h-full w-full" />
               {connection !== "connected" && (
-                <p class="absolute inset-0 flex items-center justify-center text-xs text-[var(--app-text-secondary)]">
+                <p class="absolute inset-0 flex items-center justify-center text-xs text-secondary">
                   {t(connection === "connecting" ? "chat.computer.connecting" : "chat.computer.disconnected")}
                 </p>
               )}
             </div>
           ) : (
-            <p class="m-auto text-sm text-[var(--app-text-secondary)]">{t("chat.computer.notRunning")}</p>
+            <p class="m-auto text-sm text-secondary">{t("chat.computer.notRunning")}</p>
           )}
         </div>
       </section>

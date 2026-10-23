@@ -1,5 +1,5 @@
 import { signal } from "@preact/signals";
-import { cancelConnectionWait, saveConnectionToken } from "./connections";
+import { cancelConnectionWait, saveConnectionToken, savingToken } from "./connections";
 
 /**
  * チャットの接続カード。
@@ -27,9 +27,6 @@ export type ConnectionRequest = {
 
 export const connectionRequest = signal<ConnectionRequest | null>(null);
 
-/** トークンの送信中。同じ操作を 2 度送らせない。 */
-export const connectionRequestSaving = signal(false);
-
 /** いまカードを出しているツール呼び出しの id。出していなければ null。 */
 let requestCallId: string | null = null;
 
@@ -37,7 +34,6 @@ let requestCallId: string | null = null;
 export function beginConnectionRequest(callId: string, provider: string, reason: string | null): void {
   requestCallId = callId;
   connectionRequest.value = { callId, provider, reason, phase: "waiting" };
-  connectionRequestSaving.value = false;
 }
 
 /**
@@ -61,26 +57,20 @@ export function endConnectionRequest(callId: string, failed: boolean): void {
 export function resetConnectionRequest(): void {
   requestCallId = null;
   connectionRequest.value = null;
-  connectionRequestSaving.value = false;
 }
 
 /** カードのトークンを保存する。サーバーが確かめてから保存する。 */
 export async function saveConnectionRequestToken(token: string): Promise<void> {
   const request = connectionRequest.value;
-  if (request === null || connectionRequestSaving.value) return;
+  if (request === null || savingToken.value === request.provider) return;
 
-  connectionRequestSaving.value = true;
-  try {
-    await saveConnectionToken(request.provider, token);
-  } finally {
-    connectionRequestSaving.value = false;
-  }
+  await saveConnectionToken(request.provider, token);
 }
 
 /** 接続をやめる。サーバーの待ちも止める。 */
 export async function cancelConnectionRequest(): Promise<void> {
   const request = connectionRequest.value;
-  if (request === null || connectionRequestSaving.value) return;
+  if (request === null || savingToken.value === request.provider) return;
 
   await cancelConnectionWait(request.provider);
   resetConnectionRequest();

@@ -20,8 +20,8 @@ import { INPUT_CLASS } from "../../ui/styles";
 export function UiCard({ view, disabled }: { view: UiView | null; disabled: boolean }) {
   if (view === null) {
     return (
-      <section class="rounded-[20px] border border-[var(--app-stroke)] bg-[var(--app-surface-alt)] p-4">
-        <p class="text-xs leading-5 text-[var(--app-text-secondary)]">{t("chat.ui.invalid")}</p>
+      <section class="rounded-[20px] border border-stroke bg-surface-alt p-4">
+        <p class="text-xs leading-5 text-secondary">{t("chat.ui.invalid")}</p>
       </section>
     );
   }
@@ -29,8 +29,8 @@ export function UiCard({ view, disabled }: { view: UiView | null; disabled: bool
   const awaitingTurn = disabled && interactiveBlock(view) !== null;
 
   return (
-    <section class="rounded-[20px] border border-[var(--app-stroke)] bg-[var(--app-surface-alt)] p-4">
-      {view.title !== null && <h3 class="mb-2 text-[13px] font-medium text-[var(--app-text)]">{view.title}</h3>}
+    <section class="rounded-[20px] border border-stroke bg-surface-alt p-4">
+      {view.title !== null && <h3 class="mb-2 text-[13px] font-medium text-primary">{view.title}</h3>}
 
       <div class="flex flex-col gap-3">
         {view.blocks.map((block, index) => (
@@ -38,9 +38,7 @@ export function UiCard({ view, disabled }: { view: UiView | null; disabled: bool
         ))}
       </div>
 
-      {awaitingTurn && (
-        <p class="mt-3 text-[11px] leading-5 text-[var(--app-text-tertiary)]">{t("chat.ui.awaitingTurn")}</p>
-      )}
+      {awaitingTurn && <p class="mt-3 text-[11px] leading-5 text-tertiary">{t("chat.ui.awaitingTurn")}</p>}
     </section>
   );
 }
@@ -48,7 +46,7 @@ export function UiCard({ view, disabled }: { view: UiView | null; disabled: bool
 function BlockView({ block, disabled }: { block: UiBlock; disabled: boolean }) {
   switch (block.type) {
     case "text":
-      return <p class="whitespace-pre-wrap break-words text-[13px] leading-6 text-[var(--app-text)]">{block.text}</p>;
+      return <p class="whitespace-pre-wrap break-words text-[13px] leading-6 text-primary">{block.text}</p>;
 
     case "list":
       return <ListBlock block={block} />;
@@ -75,9 +73,9 @@ function ListBlock({ block }: { block: Extract<UiBlock, { type: "list" }> }) {
   ));
 
   return block.ordered ? (
-    <ol class="list-decimal pl-5 text-[13px] leading-6 text-[var(--app-text)]">{items}</ol>
+    <ol class="list-decimal pl-5 text-[13px] leading-6 text-primary">{items}</ol>
   ) : (
-    <ul class="list-disc pl-5 text-[13px] leading-6 text-[var(--app-text)]">{items}</ul>
+    <ul class="list-disc pl-5 text-[13px] leading-6 text-primary">{items}</ul>
   );
 }
 
@@ -92,10 +90,7 @@ function TableBlock({ rows }: { rows: readonly (readonly string[])[] }) {
         <thead>
           <tr>
             {header.map((cell, index) => (
-              <th
-                key={index}
-                class="border-b border-[var(--app-stroke)] px-2 py-1.5 font-medium text-[var(--app-text-secondary)]"
-              >
+              <th key={index} class="border-b border-stroke px-2 py-1.5 font-medium text-secondary">
                 {cell}
               </th>
             ))}
@@ -105,10 +100,7 @@ function TableBlock({ rows }: { rows: readonly (readonly string[])[] }) {
           {rows.slice(1).map((row, rowIndex) => (
             <tr key={rowIndex}>
               {row.map((cell, cellIndex) => (
-                <td
-                  key={cellIndex}
-                  class="border-b border-[var(--app-stroke)] px-2 py-1.5 align-top text-[var(--app-text)]"
-                >
+                <td key={cellIndex} class="border-b border-stroke px-2 py-1.5 align-top text-primary">
                   {cell}
                 </td>
               ))}
@@ -123,7 +115,7 @@ function TableBlock({ rows }: { rows: readonly (readonly string[])[] }) {
 const OPTION_CLASS =
   "rounded-[14px] border px-3 py-2 text-left transition disabled:cursor-not-allowed disabled:opacity-50";
 const OPTION_ON_CLASS = "border-[var(--app-accent)] bg-[var(--app-accent-soft)]";
-const OPTION_OFF_CLASS = "border-[var(--app-stroke)] bg-[var(--app-surface)] hover:bg-[var(--app-soft)]";
+const OPTION_OFF_CLASS = "border-stroke bg-surface hover:bg-soft";
 
 /** 押すとラベルを発言として送る選択肢。 */
 function ChoiceBlock({ block, disabled }: { block: UiChoiceBlock; disabled: boolean }) {
@@ -151,7 +143,7 @@ function ChoiceBlock({ block, disabled }: { block: UiChoiceBlock; disabled: bool
 
   return (
     <div class="flex flex-col gap-2">
-      {block.multiple && <p class="text-[11px] text-[var(--app-text-tertiary)]">{t("chat.ui.multiple")}</p>}
+      {block.multiple && <p class="text-[11px] text-tertiary">{t("chat.ui.multiple")}</p>}
 
       <div class="flex flex-col gap-1.5">
         {block.options.map((option, index) => {
@@ -166,11 +158,9 @@ function ChoiceBlock({ block, disabled }: { block: UiChoiceBlock; disabled: bool
               onClick={() => toggle(index)}
               class={`${OPTION_CLASS} ${picked ? OPTION_ON_CLASS : OPTION_OFF_CLASS}`}
             >
-              <span class="block text-[13px] font-medium text-[var(--app-text)]">{option.label}</span>
+              <span class="block text-[13px] font-medium text-primary">{option.label}</span>
               {option.description !== null && (
-                <span class="mt-0.5 block text-[11px] leading-5 text-[var(--app-text-secondary)]">
-                  {option.description}
-                </span>
+                <span class="mt-0.5 block text-[11px] leading-5 text-secondary">{option.description}</span>
               )}
             </button>
           );
@@ -251,7 +241,7 @@ function FieldView({
 
   if (field.type === "checkbox") {
     return (
-      <label class="flex items-center gap-2 text-[13px] text-[var(--app-text)]">
+      <label class="flex items-center gap-2 text-[13px] text-primary">
         <input
           type="checkbox"
           checked={value === true}
@@ -270,7 +260,7 @@ function FieldView({
   if (field.type === "select") {
     return (
       <label class="flex flex-col gap-1">
-        <span class="text-[12px] font-medium text-[var(--app-text)]">
+        <span class="text-[12px] font-medium text-primary">
           {field.label}
           {required}
         </span>
@@ -295,7 +285,7 @@ function FieldView({
 
   return (
     <div class="flex flex-col gap-1">
-      <label for={id} class="text-[12px] font-medium text-[var(--app-text)]">
+      <label for={id} class="text-[12px] font-medium text-primary">
         {field.label}
         {required}
       </label>

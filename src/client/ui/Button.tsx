@@ -5,7 +5,7 @@ export type ButtonVariant = "primary" | "secondary" | "danger";
 const VARIANTS: Record<ButtonVariant, string> = {
   primary:
     "bg-[var(--app-accent-fill)] text-[var(--app-on-accent)] shadow-[var(--app-shadow-2)] hover:bg-[var(--app-accent-hover)]",
-  secondary: "bg-[var(--app-soft)] text-[var(--app-text)] hover:bg-[var(--app-soft-strong)]",
+  secondary: "bg-soft text-primary hover:bg-[var(--app-soft-strong)]",
   danger: "bg-[var(--app-danger-soft)] text-[var(--app-danger)] hover:bg-[var(--app-soft-strong)]",
 };
 

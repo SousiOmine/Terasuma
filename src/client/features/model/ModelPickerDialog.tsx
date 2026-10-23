@@ -1,10 +1,9 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 import { useInFlight } from "../../hooks/useInFlight";
 import { modelId, modelParts, modelProvider } from "../../../shared/model";
-import * as api from "../../lib/api";
 import { toErrorState, type ErrorState } from "../../lib/errors";
 import { t } from "../../i18n";
-import { modelSettings, providerName, providers, saveDefaultModel } from "../../state/model";
+import { listProviderModels, modelSettings, providerName, providers, saveDefaultModel } from "../../state/model";
 import { Button } from "../../ui/Button";
 import { ErrorNotice } from "../../ui/ErrorNotice";
 import { Modal } from "../../ui/Modal";
@@ -41,7 +40,7 @@ export function ModelPickerDialog({ onClose }: ModelPickerDialogProps) {
     setModels(null);
 
     try {
-      const found = await api.listProviderModels(providerId);
+      const found = await listProviderModels(providerId);
       if (requestRef.current !== request) return;
 
       setModels(found);
@@ -101,7 +100,7 @@ export function ModelPickerDialog({ onClose }: ModelPickerDialogProps) {
                 class={`rounded-full px-3 py-1.5 text-xs transition ${
                   active
                     ? "bg-[var(--app-accent-fill)] font-medium text-[var(--app-on-accent)]"
-                    : "text-[var(--app-text-secondary)] hover:bg-[var(--app-soft)] hover:text-[var(--app-text)]"
+                    : "text-secondary hover:bg-soft hover:text-primary"
                 }`}
               >
                 {providerName(provider)}
@@ -125,7 +124,7 @@ export function ModelPickerDialog({ onClose }: ModelPickerDialogProps) {
       )}
 
       {loading ? (
-        <p class="py-6 text-center text-xs text-[var(--app-text-secondary)]">{t("settings.model.loadingModels")}</p>
+        <p class="py-6 text-center text-xs text-secondary">{t("settings.model.loadingModels")}</p>
       ) : (
         models !== null && (
           <ModelList

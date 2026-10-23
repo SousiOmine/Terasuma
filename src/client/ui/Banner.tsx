@@ -9,14 +9,14 @@ export type BannerTone = "info" | "muted";
 
 const TONES: Record<BannerTone, { frame: string; dot: string; button: string }> = {
   info: {
-    frame: "bg-[var(--app-accent-soft)] text-[var(--app-text)]",
+    frame: "bg-[var(--app-accent-soft)] text-primary",
     dot: "bg-[var(--app-accent)]",
-    button: "bg-[var(--app-surface)] text-[var(--app-text)] shadow-[var(--app-shadow-2)] hover:bg-[var(--app-soft)]",
+    button: "bg-surface text-primary shadow-[var(--app-shadow-2)] hover:bg-soft",
   },
   muted: {
-    frame: "bg-[var(--app-surface-alt)] text-[var(--app-text-secondary)]",
+    frame: "bg-surface-alt text-secondary",
     dot: "bg-[var(--app-text-tertiary)]",
-    button: "bg-[var(--app-surface)] text-[var(--app-text-secondary)] hover:bg-[var(--app-soft)]",
+    button: "bg-surface text-secondary hover:bg-soft",
   },
 };
 

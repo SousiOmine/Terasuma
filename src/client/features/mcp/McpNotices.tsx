@@ -9,17 +9,14 @@ import { t } from "../../i18n";
 /** 接続を確かめられたことと、そのときに見えたツール。 */
 export function CheckedNotice({ tools }: { tools: readonly string[] }) {
   return (
-    <div class="rounded-[16px] bg-[var(--app-accent-soft)] px-4 py-3 text-xs text-[var(--app-text)]">
+    <div class="rounded-[16px] bg-[var(--app-accent-soft)] px-4 py-3 text-xs text-primary">
       <p>{t("settings.mcp.form.connected")}</p>
       {tools.length === 0 ? (
-        <p class="mt-0.5 text-[var(--app-text-secondary)]">{t("settings.mcp.noTools")}</p>
+        <p class="mt-0.5 text-secondary">{t("settings.mcp.noTools")}</p>
       ) : (
         <ul class="mt-2 flex flex-wrap gap-1">
           {tools.map((tool) => (
-            <li
-              key={tool}
-              class="rounded-full bg-[var(--app-surface)] px-2.5 py-1 font-mono text-[11px] text-[var(--app-text-secondary)]"
-            >
+            <li key={tool} class="rounded-full bg-surface px-2.5 py-1 font-mono text-[11px] text-secondary">
               {tool}
             </li>
           ))}
@@ -32,13 +29,13 @@ export function CheckedNotice({ tools }: { tools: readonly string[] }) {
 /** 認可を待っている間の案内。ブラウザのタブを閉じてしまっても、ここから開き直せる。 */
 export function AuthorizationNotice({ url }: { url: string }) {
   return (
-    <div class="rounded-[16px] bg-[var(--app-surface-alt)] px-4 py-3 text-xs text-[var(--app-text-secondary)]">
+    <div class="rounded-[16px] bg-surface-alt px-4 py-3 text-xs text-secondary">
       <p>{t("settings.mcp.form.authorize")}</p>
       <a
         href={url}
         target="_blank"
         rel="noreferrer noopener"
-        class="mt-1.5 inline-flex items-center gap-1 text-[var(--app-text)] underline-offset-2 hover:underline"
+        class="mt-1.5 inline-flex items-center gap-1 text-primary underline-offset-2 hover:underline"
       >
         <IconExternalLink size={12} stroke={1.6} class="shrink-0" />
         {t("settings.mcp.openAuthorization")}

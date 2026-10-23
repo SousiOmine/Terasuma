@@ -4,14 +4,21 @@ import { modelId } from "../../../shared/model";
 import { trimOrNull } from "../../../shared/strings";
 import type { EndpointPreset } from "../../../shared/providers";
 import type { ProviderCredentials, ProviderView } from "../../../shared/types";
-import * as api from "../../lib/api";
 import { toErrorState, type ErrorState } from "../../lib/errors";
 import { t } from "../../i18n";
-import { addProvider, modelSettings, providers, updateProvider } from "../../state/model";
+import {
+  addProvider,
+  checkProvider,
+  fetchCatalogModels,
+  modelSettings,
+  providers,
+  updateProvider,
+} from "../../state/model";
 import { Button } from "../../ui/Button";
 import { ErrorNotice } from "../../ui/ErrorNotice";
 import { Field } from "../../ui/Field";
 import { Modal } from "../../ui/Modal";
+import { SecretInput } from "../../ui/SecretInput";
 import { INPUT_CLASS } from "../../ui/styles";
 import { useInFlight } from "../../hooks/useInFlight";
 import { ProviderChooser, presetName } from "./ProviderChooser";
@@ -48,7 +55,6 @@ export function ProviderWizard({ mode, onClose }: ProviderWizardProps) {
   const [apiKey, setApiKey] = useState("");
   const [baseUrl, setBaseUrl] = useState(() => (editing ? (mode.provider.baseUrl ?? "") : ""));
   const [label, setLabel] = useState(() => (editing && isEndpoint(mode.provider) ? mode.provider.name : ""));
-  const [revealKey, setRevealKey] = useState(false);
   const [models, setModels] = useState<readonly string[] | null>(null);
   const [model, setModel] = useState<string | null>(null);
   const [makeDefault, setMakeDefault] = useState(true);
@@ -58,7 +64,7 @@ export function ProviderWizard({ mode, onClose }: ProviderWizardProps) {
   const [error, setError] = useState<ErrorState | null>(null);
 
   const currentDefault = modelSettings.value?.model ?? null;
-  const step: "choose" | "connect" | "model" = target === null ? "choose" : models === null ? "connect" : "model";
+  const step = stepOf(target, models);
 
   // 状態の更新は描画を挟むため、素早く二度押しされると busy が立つ前に 2 回目が走る。
   // 押した瞬間に閉じる門は hooks に置いてある。
@@ -99,7 +105,6 @@ export function ProviderWizard({ mode, onClose }: ProviderWizardProps) {
     setLabel("");
     setApiKey("");
     setBaseUrl("");
-    setRevealKey(false);
     setError(null);
   };
 
@@ -118,8 +123,8 @@ export function ProviderWizard({ mode, onClose }: ProviderWizardProps) {
     setBusy("checking");
     setError(null);
     try {
-      const result = await api.checkProvider({ id: target.id, ...credentials() });
-      const found = target.kind === "catalog" ? await api.fetchCatalogModels(target.id) : result.models;
+      const result = await checkProvider({ id: target.id, ...credentials() });
+      const found = target.kind === "catalog" ? await fetchCatalogModels(target.id) : result.models;
 
       if (found.length === 0) {
         // モデルを選べないと追加できない。接続の段に留めて理由を出す。
@@ -223,21 +228,17 @@ export function ProviderWizard({ mode, onClose }: ProviderWizardProps) {
           )}
 
           <Field label={t("settings.wizard.apiKey.label")} hint={apiKeyHint(editing, target)}>
-            <div class="flex items-center gap-2">
-              <ApiKeyInput value={apiKey} reveal={revealKey} onInput={setApiKey} />
-              <button
-                type="button"
-                onClick={() => setRevealKey(!revealKey)}
-                class="shrink-0 rounded-full px-2.5 py-1 text-xs text-[var(--app-text-secondary)] transition hover:bg-[var(--app-soft)] hover:text-[var(--app-text)]"
-              >
-                {t(revealKey ? "settings.wizard.apiKey.hide" : "settings.wizard.apiKey.show")}
-              </button>
-            </div>
+            <SecretInput
+              value={apiKey}
+              label={t("settings.wizard.apiKey.label")}
+              placeholder={t("settings.wizard.apiKey.placeholder")}
+              showLabel={t("settings.wizard.apiKey.show")}
+              hideLabel={t("settings.wizard.apiKey.hide")}
+              onInput={setApiKey}
+            />
           </Field>
 
-          {target.kind === "catalog" && (
-            <p class="pt-1 text-xs text-[var(--app-text-secondary)]">{t("settings.wizard.catalogHint")}</p>
-          )}
+          {target.kind === "catalog" && <p class="pt-1 text-xs text-secondary">{t("settings.wizard.catalogHint")}</p>}
 
           {error !== null && (
             <div class="pt-2">
@@ -250,7 +251,7 @@ export function ProviderWizard({ mode, onClose }: ProviderWizardProps) {
       {step === "model" && models !== null && (
         <div class="space-y-3">
           {checkNote === "skipped" && (
-            <p class="rounded-[16px] bg-[var(--app-surface-alt)] px-4 py-3 text-xs leading-5 text-[var(--app-text-secondary)]">
+            <p class="rounded-[16px] bg-surface-alt px-4 py-3 text-xs leading-5 text-secondary">
               {t("settings.wizard.checkSkipped")}
             </p>
           )}
@@ -268,9 +269,7 @@ export function ProviderWizard({ mode, onClose }: ProviderWizardProps) {
             <span class="min-w-0">
               {t("settings.wizard.model.setDefault")}
               {currentDefault === null && (
-                <span class="mt-0.5 block text-[var(--app-text-secondary)]">
-                  {t("settings.wizard.model.alwaysDefault")}
-                </span>
+                <span class="mt-0.5 block text-secondary">{t("settings.wizard.model.alwaysDefault")}</span>
               )}
             </span>
           </label>
@@ -307,6 +306,14 @@ type FooterOptions = {
   onSubmit: () => void;
   onBackToConnect: () => void;
 };
+
+/** いまの段階。対象を選んでいなければ choose、接続が確かめられていなければ connect、その先が model。 */
+type WizardStep = "choose" | "connect" | "model";
+
+function stepOf(target: Target | null, models: readonly string[] | null): WizardStep {
+  if (target === null) return "choose";
+  return models === null ? "connect" : "model";
+}
 
 function footerOf(options: FooterOptions) {
   const { editing, step, busy, incomplete, canAdd } = options;
@@ -351,7 +358,7 @@ function StepIndicator({ current }: { current: "choose" | "connect" | "model" })
   const index = ADD_STEPS.findIndex((item) => item.key === `settings.wizard.step.${current}`);
 
   return (
-    <ol class="mb-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-[var(--app-text-secondary)]">
+    <ol class="mb-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-secondary">
       {ADD_STEPS.map((item, position) => (
         <li key={item.key} class="flex items-center gap-2">
           <span class={position <= index ? "font-medium text-[var(--app-accent-ink)]" : undefined}>
@@ -362,20 +369,4 @@ function StepIndicator({ current }: { current: "choose" | "connect" | "model" })
       ))}
     </ol>
   );
-}
-
-/** 表示の切り替えができる API キーの入力欄。 */
-function ApiKeyInput({ value, reveal, onInput }: { value: string; reveal: boolean; onInput: (value: string) => void }) {
-  const common = {
-    value,
-    autocomplete: "off",
-    spellcheck: false,
-    "aria-label": t("settings.wizard.apiKey.label"),
-    placeholder: t("settings.wizard.apiKey.placeholder"),
-    class: `${INPUT_CLASS} flex-1`,
-    onInput: (event: { currentTarget: HTMLInputElement }) => onInput(event.currentTarget.value),
-  };
-
-  // type は文字列で切り替えず、要素ごとに分ける（型が属性ごとの union で定義されているため）。
-  return reveal ? <input type="text" {...common} /> : <input type="password" {...common} />;
 }

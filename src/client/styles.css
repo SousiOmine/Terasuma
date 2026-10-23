@@ -4,6 +4,16 @@
 @theme inline {
   --font-sans: var(--app-font-sans);
   --font-mono: var(--app-font-mono);
+
+  /* 色は styles.css の --app-* を正典にし、Tailwind のユーティリティ名をここで当てる。
+     bg-surface / text-secondary / border-stroke のように書けるので、任意値の [] を増やさない。 */
+  --color-primary: var(--app-text);
+  --color-secondary: var(--app-text-secondary);
+  --color-tertiary: var(--app-text-tertiary);
+  --color-surface: var(--app-surface);
+  --color-surface-alt: var(--app-surface-alt);
+  --color-soft: var(--app-soft);
+  --color-stroke: var(--app-stroke);
 }
 
 /*

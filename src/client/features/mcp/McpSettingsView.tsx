@@ -20,6 +20,8 @@ import {
   startAuthorization,
 } from "../../state/mcp";
 import { Button } from "../../ui/Button";
+import { ResourceList } from "../../ui/ResourceList";
+import { SectionHeader } from "../../ui/SectionHeader";
 import { DeleteAction, EditAction } from "../../ui/CardActions";
 import { ConfirmDialog } from "../../ui/ConfirmDialog";
 import { SettingsSection } from "../../ui/SettingsSection";
@@ -71,36 +73,32 @@ export function McpSettingsView() {
 
   return (
     <SettingsSection title={t("settings.mcp.title")} error={error} onDismiss={clearMcpError}>
-      <div class="mt-6 flex flex-col items-start gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
-        <p class="min-w-0 text-xs text-[var(--app-text-secondary)]">{t("settings.mcp.description")}</p>
-        <Button variant="primary" onClick={() => setDialog({ kind: "add" })}>
-          <IconPlus size={16} stroke={1.6} class="shrink-0" />
-          {t("settings.mcp.add")}
-        </Button>
-      </div>
+      <SectionHeader
+        description={t("settings.mcp.description")}
+        action={
+          <Button variant="primary" onClick={() => setDialog({ kind: "add" })}>
+            <IconPlus size={16} stroke={1.6} class="shrink-0" />
+            {t("settings.mcp.add")}
+          </Button>
+        }
+      />
 
-      <div class="mt-3 space-y-2">
-        {view === null ? (
-          <p class="text-xs text-[var(--app-text-secondary)]">{t("common.loading")}</p>
-        ) : view.servers.length === 0 ? (
-          <p class="text-xs text-[var(--app-text-secondary)]">{t("settings.mcp.empty")}</p>
-        ) : (
-          view.servers.map((server) => (
-            <McpServerCard
-              key={server.id}
-              server={server}
-              checking={checking === server.id}
-              authorizing={authorizing === server.id}
-              authorizationUrl={authorizing === server.id ? authorizationUrl.value : null}
-              onCheck={() => runCheck(server.id)}
-              onAuthorize={(url) => void authorize(server.id, url).catch(showMcpError)}
-              onCancel={() => void cancelAuthorization(server.id).catch(showMcpError)}
-              onEdit={() => setDialog({ kind: "edit", server })}
-              onDelete={() => deleting.open(server)}
-            />
-          ))
+      <ResourceList data={view === null ? null : view.servers} empty={t("settings.mcp.empty")}>
+        {(server) => (
+          <McpServerCard
+            key={server.id}
+            server={server}
+            checking={checking === server.id}
+            authorizing={authorizing === server.id}
+            authorizationUrl={authorizing === server.id ? authorizationUrl.value : null}
+            onCheck={() => runCheck(server.id)}
+            onAuthorize={(url) => void authorize(server.id, url).catch(showMcpError)}
+            onCancel={() => void cancelAuthorization(server.id).catch(showMcpError)}
+            onEdit={() => setDialog({ kind: "edit", server })}
+            onDelete={() => deleting.open(server)}
+          />
         )}
-      </div>
+      </ResourceList>
 
       {dialog !== null && (
         <McpServerDialog
@@ -176,13 +174,11 @@ function McpServerCard({
             </StatusBadge>
           </div>
 
-          <p class="mt-0.5 truncate font-mono text-[11px] text-[var(--app-text-secondary)]">
+          <p class="mt-0.5 truncate font-mono text-[11px] text-secondary">
             {server.type === "stdio" ? [server.command, ...server.args].join(" ") : server.url}
           </p>
 
-          {detail !== null && (
-            <p class="mt-1.5 break-words text-xs leading-5 text-[var(--app-text-secondary)]">{detail}</p>
-          )}
+          {detail !== null && <p class="mt-1.5 break-words text-xs leading-5 text-secondary">{detail}</p>}
 
           {authorizing && authorizationUrl !== null && (
             <a
@@ -198,18 +194,15 @@ function McpServerCard({
 
           {state === "connected" && (
             <details class="mt-2">
-              <summary class="cursor-pointer text-xs text-[var(--app-text-secondary)]">
+              <summary class="cursor-pointer text-xs text-secondary">
                 {t("settings.mcp.tools", { count: tools.length })}
               </summary>
               {tools.length === 0 ? (
-                <p class="mt-1 text-xs text-[var(--app-text-secondary)]">{t("settings.mcp.noTools")}</p>
+                <p class="mt-1 text-xs text-secondary">{t("settings.mcp.noTools")}</p>
               ) : (
                 <ul class="mt-1 flex flex-wrap gap-1">
                   {tools.map((tool) => (
-                    <li
-                      key={tool}
-                      class="rounded-full bg-[var(--app-surface)] px-2.5 py-1 font-mono text-[11px] text-[var(--app-text-secondary)]"
-                    >
+                    <li key={tool} class="rounded-full bg-surface px-2.5 py-1 font-mono text-[11px] text-secondary">
                       {tool}
                     </li>
                   ))}

@@ -1,7 +1,7 @@
-import { signal } from "@preact/signals";
-import type { WebSearchProviderForm, WebSearchSettingsView } from "../../shared/types";
+import type { WebSearchProviderForm, WebSearchTestView } from "../../shared/types";
 import * as api from "../lib/api";
 import { createErrorSignal } from "../lib/errors";
+import { createResource } from "./resource";
 
 /**
  * Web 検索の設定。
@@ -9,8 +9,9 @@ import { createErrorSignal } from "../lib/errors";
  */
 
 /** サーバーから読んだ Web 検索の設定。まだ読めていないときは null。 */
-export const webSearchSettings = signal<WebSearchSettingsView | null>(null);
-export const isLoadingWebSearch = signal(false);
+const settingsResource = createResource(api.fetchWebSearch);
+export const webSearchSettings = settingsResource.data;
+export const isLoadingWebSearch = settingsResource.loading;
 
 /** Web 検索の画面の中だけに出す失敗。 */
 const failure = createErrorSignal();
@@ -18,14 +19,14 @@ export const webSearchError = failure.error;
 export const showWebSearchError = failure.show;
 export const clearWebSearchError = failure.clear;
 
-/** 設定画面を開いたときに読む。 */
-export async function loadWebSearchSettings(): Promise<void> {
-  isLoadingWebSearch.value = true;
-  try {
-    webSearchSettings.value = await api.fetchWebSearch();
-  } finally {
-    isLoadingWebSearch.value = false;
-  }
+/** 設定画面を開いたときに読む（まだ読めていなければ）。 */
+export const loadWebSearchSettings = settingsResource.load;
+/** 設定を読み直す。 */
+export const refreshWebSearchSettings = settingsResource.refresh;
+
+/** 保存する前に、入力されたキーで検索できるか確かめる。設定には書かない。 */
+export async function testWebSearchProvider(form: WebSearchProviderForm): Promise<WebSearchTestView> {
+  return api.testWebSearchProvider(form);
 }
 
 /** 追加する。既定が未設定なら、追加したプロバイダが既定になる。 */

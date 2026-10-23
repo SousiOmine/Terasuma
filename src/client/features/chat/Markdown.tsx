@@ -57,7 +57,7 @@ function renderBlock(block: MarkdownBlock, key: number): ComponentChildren {
 
     case "table":
       return (
-        <div key={key} class="tera-md-table">
+        <div key={key}>
           <table>
             <thead>
               <tr>

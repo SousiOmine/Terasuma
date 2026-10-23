@@ -111,9 +111,9 @@ export function Composer() {
   };
 
   return (
-    <div class="tera-safe-bottom shrink-0 bg-[var(--app-surface)] px-3 pb-3 pt-2 sm:px-6">
+    <div class="tera-safe-bottom shrink-0 bg-surface px-3 pb-3 pt-2 sm:px-6">
       <div class="mx-auto w-full max-w-3xl">
-        <div class="rounded-[26px] border border-[var(--app-stroke)] bg-[var(--app-surface)] shadow-[var(--app-shadow-4)] transition focus-within:border-[var(--app-accent)] focus-within:shadow-[0_0_0_4px_var(--app-ring)]">
+        <div class="rounded-[26px] border border-stroke bg-surface shadow-[var(--app-shadow-4)] transition focus-within:border-[var(--app-accent)] focus-within:shadow-[0_0_0_4px_var(--app-ring)]">
           {files.length > 0 && <ComposerAttachments files={files} onRemove={removeFile} />}
 
           <div class="flex items-end gap-1.5 px-2 py-2">
@@ -136,7 +136,7 @@ export function Composer() {
                 onClick={() => fileInputRef.current?.click()}
                 title={t("composer.attach")}
                 aria-label={t("composer.attach")}
-                class="mb-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[var(--app-text-secondary)] transition hover:bg-[var(--app-soft)] hover:text-[var(--app-text)] md:h-9 md:w-9"
+                class="mb-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-secondary transition hover:bg-soft hover:text-primary md:h-9 md:w-9"
               >
                 <IconPaperclip size={18} stroke={1.7} />
               </button>
@@ -149,7 +149,7 @@ export function Composer() {
               placeholder={t(streaming ? "composer.placeholder.steering" : "composer.placeholder")}
               aria-label={t(streaming ? "composer.placeholder.steering" : "composer.placeholder")}
               enterkeyhint="send"
-              class="max-h-40 min-h-9 flex-1 resize-none bg-transparent px-1.5 py-2 text-[15px] leading-6 text-[var(--app-text)] outline-none placeholder:text-[var(--app-text-tertiary)]"
+              class="max-h-40 min-h-9 flex-1 resize-none bg-transparent px-1.5 py-2 text-[15px] leading-6 text-primary outline-none placeholder:text-tertiary"
               onInput={(event) => setDraft(event.currentTarget.value)}
               onPaste={handlePaste}
               onKeyDown={(event) => {
@@ -168,7 +168,7 @@ export function Composer() {
                 disabled={stopping}
                 title={t(stopping ? "composer.stopping" : "composer.stop")}
                 aria-label={t(stopping ? "composer.stopping" : "composer.stop")}
-                class="mb-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--app-soft)] text-[var(--app-text-secondary)] transition hover:bg-[var(--app-soft-strong)] hover:text-[var(--app-text)] disabled:opacity-50 md:h-9 md:w-9"
+                class="mb-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-soft text-secondary transition hover:bg-[var(--app-soft-strong)] hover:text-primary disabled:opacity-50 md:h-9 md:w-9"
               >
                 <IconPlayerStopFilled size={14} />
               </button>

@@ -5,6 +5,7 @@ import {
   clearSettingsError,
   isLoadingSettings,
   loadModelSettings,
+  refreshModelSettings,
   loadReasoning,
   modelProblem,
   modelReasoning,
@@ -49,7 +50,7 @@ export function ModelSettingsView() {
     void loadReasoning().catch(showSettingsError);
   }, [currentModel]);
 
-  const reload = () => void loadModelSettings().catch(showSettingsError);
+  const reload = () => void refreshModelSettings().catch(showSettingsError);
 
   const changeReasoning = async (effort: string | null) => {
     try {
@@ -74,7 +75,7 @@ export function ModelSettingsView() {
         <div class="flex flex-col items-start gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
           <div class="min-w-0">
             <p class="text-sm font-medium">{t("settings.model.default.label")}</p>
-            <p class="mt-0.5 text-xs text-[var(--app-text-secondary)]">{t("settings.model.default.description")}</p>
+            <p class="mt-0.5 text-xs text-secondary">{t("settings.model.default.description")}</p>
           </div>
           <Button disabled={!hasProviders} onClick={() => setPickerOpen(true)}>
             {t("settings.model.default.change")}
@@ -82,11 +83,9 @@ export function ModelSettingsView() {
         </div>
 
         <p class="mt-3 truncate font-mono text-[13px]">{settings?.model ?? t("settings.model.default.unset")}</p>
-        {problem === "unset" && (
-          <p class="mt-1 text-xs text-[var(--app-text-secondary)]">{t("settings.model.default.unsetHint")}</p>
-        )}
+        {problem === "unset" && <p class="mt-1 text-xs text-secondary">{t("settings.model.default.unsetHint")}</p>}
         {problem === "provider-missing" && (
-          <p class="mt-1 flex items-center gap-1.5 text-xs font-medium text-[var(--app-text)]">
+          <p class="mt-1 flex items-center gap-1.5 text-xs font-medium text-primary">
             <IconAlertTriangle size={14} stroke={1.8} class="shrink-0" />
             {t("settings.model.default.missingProvider")}
           </p>
@@ -102,10 +101,10 @@ export function ModelSettingsView() {
         )}
 
         {reasoning !== null && reasoning.values.length > 0 && (
-          <div class="mt-4 flex flex-col items-start gap-3 border-t border-[var(--app-stroke)] pt-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
+          <div class="mt-4 flex flex-col items-start gap-3 border-t border-stroke pt-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
             <div class="min-w-0">
               <p class="text-sm font-medium">{t("settings.model.reasoning.label")}</p>
-              <p class="mt-0.5 text-xs text-[var(--app-text-secondary)]">{t("settings.model.reasoning.description")}</p>
+              <p class="mt-0.5 text-xs text-secondary">{t("settings.model.reasoning.description")}</p>
             </div>
             <select
               value={reasoning.effort ?? ""}

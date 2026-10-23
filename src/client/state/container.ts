@@ -2,6 +2,7 @@ import { signal } from "@preact/signals";
 import type { ContainerStatusView } from "../../shared/types";
 import * as api from "../lib/api";
 import { createErrorSignal } from "../lib/errors";
+import { createResource } from "./resource";
 
 /**
  * コンテナの状態と操作。
@@ -11,7 +12,9 @@ import { createErrorSignal } from "../lib/errors";
  */
 
 /** サーバから読んだコンテナの状態。まだ読めていないときは null。 */
-export const containerStatus = signal<ContainerStatusView | null>(null);
+const statusResource = createResource(api.fetchContainer);
+export const containerStatus = statusResource.data;
+export const isLoadingContainer = statusResource.loading;
 
 /** 設定画面から実行できる操作。 */
 export type ContainerOperation = "start" | "reset";
@@ -29,22 +32,23 @@ export const clearContainerError = failure.clear;
  * コンピュータのコマンドへ渡す環境変数の名前。
  * 値はサーバから返らない（画面にもモデルにも出さない）。まだ読めていないときは null。
  */
-export const computerEnv = signal<readonly string[] | null>(null);
+const envResource = createResource(api.fetchComputerEnv);
+export const computerEnv = envResource.data;
 
-/** 設定されている環境変数の名前を読み直す。 */
-export async function loadComputerEnv(): Promise<void> {
-  computerEnv.value = await api.fetchComputerEnv();
-}
+/** 設定されている環境変数の名前を読む（まだ読めていなければ）。 */
+export const loadComputerEnv = envResource.load;
+/** 名前の一覧を読み直す。 */
+export const refreshComputerEnv = envResource.refresh;
 
 /** 環境変数を消す。サーバが返した、残っている名前の一覧をそのまま置く。 */
 export async function removeComputerEnv(name: string): Promise<void> {
   computerEnv.value = await api.deleteComputerEnv(name);
 }
 
-/** いまの状態を読み直す。 */
-export async function loadContainer(): Promise<void> {
-  containerStatus.value = await api.fetchContainer();
-}
+/** 状態を読む（まだ読めていなければ）。 */
+export const loadContainer = statusResource.load;
+/** 状態を読み直す（操作の後や、読み込み直しボタン）。 */
+export const refreshContainer = statusResource.refresh;
 
 export async function startContainer(): Promise<void> {
   await run("start", api.startContainer);

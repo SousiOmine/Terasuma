@@ -1,7 +1,7 @@
 import { signal } from "@preact/signals";
-import type { ConnectionsView } from "../../shared/types";
 import * as api from "../lib/api";
 import { createErrorSignal } from "../lib/errors";
+import { createResource } from "./resource";
 
 /**
  * 設定 > 接続 の状態。
@@ -11,8 +11,9 @@ import { createErrorSignal } from "../lib/errors";
  */
 
 /** サーバーから読んだ接続の一覧。まだ読めていないときは null。 */
-export const connections = signal<ConnectionsView | null>(null);
-export const isLoadingConnections = signal(false);
+const connectionsResource = createResource(api.fetchConnections);
+export const connections = connectionsResource.data;
+export const isLoadingConnections = connectionsResource.loading;
 
 /** 設定画面の中だけに出す失敗。 */
 const failure = createErrorSignal();
@@ -26,15 +27,10 @@ export const savingConnection = signal<string | null>(null);
 /** トークンを保存している接続。操作中の表示に使う。 */
 export const savingToken = signal<string | null>(null);
 
-/** 設定画面を開いたときに読む。 */
-export async function loadConnections(): Promise<void> {
-  isLoadingConnections.value = true;
-  try {
-    connections.value = await api.fetchConnections();
-  } finally {
-    isLoadingConnections.value = false;
-  }
-}
+/** 設定画面を開いたときに読む（まだ読めていなければ）。 */
+export const loadConnections = connectionsResource.load;
+/** 一覧を読み直す。 */
+export const refreshConnections = connectionsResource.refresh;
 
 /** Application ID を保存する。空文字は「消す」として null を送る。 */
 export async function saveClientId(id: string, clientId: string): Promise<void> {

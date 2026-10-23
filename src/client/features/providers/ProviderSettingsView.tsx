@@ -12,7 +12,7 @@ import { LlmProviderSection } from "./LlmProviderSection";
 export function ProviderSettingsView() {
   return (
     <SettingsPage title={t("settings.providers")}>
-      <section class="border-b border-[var(--app-stroke)] pb-6">
+      <section class="border-b border-stroke pb-6">
         <LlmProviderSection />
       </section>
       <section>

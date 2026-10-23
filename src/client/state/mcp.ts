@@ -1,12 +1,14 @@
 import { signal } from "@preact/signals";
-import type { McpServerForm, McpServerStatusView, McpServersView } from "../../shared/types";
+import type { McpServerForm, McpServerStatusView, McpTestView } from "../../shared/types";
 import * as api from "../lib/api";
 import { createErrorSignal } from "../lib/errors";
+import { createResource } from "./resource";
 import { pollUntil } from "../lib/polling";
 
 /** サーバーから読んだ MCP サーバーの一覧。まだ読めていないときは null。 */
-export const mcpServers = signal<McpServersView | null>(null);
-export const isLoadingMcp = signal(false);
+const serversResource = createResource(api.fetchMcpServers);
+export const mcpServers = serversResource.data;
+export const isLoadingMcp = serversResource.loading;
 
 /** 詳細設定の中だけに出す失敗。 */
 const failure = createErrorSignal();
@@ -27,14 +29,14 @@ export const AUTHORIZATION_POLL_MS = 2_000;
 /** 認可を待つ上限。待ち続けて画面が固まったように見えるのを避ける。 */
 export const AUTHORIZATION_TIMEOUT_MS = 5 * 60 * 1_000;
 
-/** 設定画面を開いたときに読む。 */
-export async function loadMcpServers(): Promise<void> {
-  isLoadingMcp.value = true;
-  try {
-    mcpServers.value = await api.fetchMcpServers();
-  } finally {
-    isLoadingMcp.value = false;
-  }
+/** 設定画面を開いたときに読む（まだ読めていなければ）。 */
+export const loadMcpServers = serversResource.load;
+/** 一覧を読み直す。 */
+export const refreshMcpServers = serversResource.refresh;
+
+/** 保存する前に、入力された設定で繋がるか確かめる。設定には書かない。 */
+export async function testMcpServer(form: McpServerForm): Promise<McpTestView> {
+  return api.testMcpServer(form);
 }
 
 /** 追加・変更。保存した後の全体が返るので、そのまま状態に置く。 */

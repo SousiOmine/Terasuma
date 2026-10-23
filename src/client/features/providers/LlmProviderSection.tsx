@@ -10,6 +10,7 @@ import {
   isLoadingSettings,
   loadCatalog,
   loadModelSettings,
+  refreshModelSettings,
   modelSettings,
   providerName,
   removeProvider,
@@ -17,6 +18,8 @@ import {
   showSettingsError,
 } from "../../state/model";
 import { Button } from "../../ui/Button";
+import { ResourceList } from "../../ui/ResourceList";
+import { SectionHeader } from "../../ui/SectionHeader";
 import { DeleteAction, EditAction } from "../../ui/CardActions";
 import { ConfirmDialog } from "../../ui/ConfirmDialog";
 import { SettingsError } from "../../ui/SettingsSection";
@@ -50,7 +53,7 @@ export function LlmProviderSection() {
     void loadCatalog().catch(showSettingsError);
   }, []);
 
-  const reload = () => void loadModelSettings().catch(showSettingsError);
+  const reload = () => void refreshModelSettings().catch(showSettingsError);
 
   const defaultProviderId =
     settings?.model === null || settings?.model === undefined ? null : modelProvider(settings.model);
@@ -60,34 +63,32 @@ export function LlmProviderSection() {
     <>
       <SettingsError error={error} onDismiss={clearSettingsError} onRetry={settings === null ? reload : undefined} />
 
-      <div class="mt-6 flex flex-col items-start gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
-        <div class="min-w-0">
-          <p class="text-sm font-medium">{t("settings.providers.llm.label")}</p>
-          <p class="mt-0.5 text-xs text-[var(--app-text-secondary)]">{t("settings.providers.llm.description")}</p>
-        </div>
-        <Button variant="primary" onClick={() => setWizard({ kind: "add" })}>
-          <IconPlus size={16} stroke={1.6} class="shrink-0" />
-          {t("settings.providers.llm.add")}
-        </Button>
-      </div>
+      <SectionHeader
+        title={t("settings.providers.llm.label")}
+        description={t("settings.providers.llm.description")}
+        action={
+          <Button variant="primary" onClick={() => setWizard({ kind: "add" })}>
+            <IconPlus size={16} stroke={1.6} class="shrink-0" />
+            {t("settings.providers.llm.add")}
+          </Button>
+        }
+      />
 
-      <div class="mt-3 space-y-2">
-        {settings === null && loading ? (
-          <p class="text-xs text-[var(--app-text-secondary)]">{t("common.loading")}</p>
-        ) : settings === null || settings.providers.length === 0 ? (
-          <p class="text-xs text-[var(--app-text-secondary)]">{t("settings.providers.llm.empty")}</p>
-        ) : (
-          settings.providers.map((provider) => (
-            <ProviderCard
-              key={provider.id}
-              provider={provider}
-              isDefault={settings.model !== null && modelProvider(settings.model) === provider.id}
-              onEdit={() => setWizard({ kind: "edit", provider })}
-              onDelete={() => deleting.open(provider)}
-            />
-          ))
+      <ResourceList
+        data={settings === null ? null : settings.providers}
+        loading={loading}
+        empty={t("settings.providers.llm.empty")}
+      >
+        {(provider) => (
+          <ProviderCard
+            key={provider.id}
+            provider={provider}
+            isDefault={settings !== null && settings.model !== null && modelProvider(settings.model) === provider.id}
+            onEdit={() => setWizard({ kind: "edit", provider })}
+            onDelete={() => deleting.open(provider)}
+          />
         )}
-      </div>
+      </ResourceList>
 
       {wizard !== null && <ProviderWizard mode={wizard} onClose={() => setWizard(null)} />}
 
@@ -125,12 +126,12 @@ function ProviderCard({ provider, isDefault, onEdit, onDelete }: ProviderCardPro
         <div class="flex items-center gap-2">
           <p class="truncate text-sm font-medium">{providerName(provider)}</p>
           {isDefault && (
-            <span class="shrink-0 rounded-full bg-[var(--app-surface)] px-2.5 py-1 text-[11px] font-medium text-[var(--app-text-secondary)]">
+            <span class="shrink-0 rounded-full bg-surface px-2.5 py-1 text-[11px] font-medium text-secondary">
               {t("common.default")}
             </span>
           )}
         </div>
-        <p class="mt-0.5 truncate text-xs text-[var(--app-text-secondary)]">
+        <p class="mt-0.5 truncate text-xs text-secondary">
           {provider.baseUrl === null ? (
             keyState
           ) : (

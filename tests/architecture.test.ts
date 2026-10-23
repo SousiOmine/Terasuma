@@ -84,6 +84,14 @@ describe("依存の向き", () => {
     expect(offenders).toEqual([]);
   });
 
+  test("ツールはエンジンを知らない（供給元の型は contracts にある）", () => {
+    expectNoImports("src/server/agent/tools", ["src/server/agent/engine"]);
+  });
+
+  test("画面の実装は通信層を直接呼ばない（state を通す）", () => {
+    expectNoImports("src/client/features", ["src/client/lib/api"]);
+  });
+
   test("エージェントは HTTP 層を知らない", () => {
     expectNoImports("src/server/agent", ["src/server/http/"]);
   });

@@ -7,13 +7,13 @@ import type {
 } from "../../../shared/types";
 import { useInFlight } from "../../hooks/useInFlight";
 import { t } from "../../i18n";
-import * as api from "../../lib/api";
 import { type ErrorState, toErrorState } from "../../lib/errors";
-import { addWebSearchProvider, updateWebSearchProvider } from "../../state/websearch";
+import { addWebSearchProvider, testWebSearchProvider, updateWebSearchProvider } from "../../state/websearch";
 import { Button } from "../../ui/Button";
 import { ErrorNotice } from "../../ui/ErrorNotice";
 import { Field } from "../../ui/Field";
 import { Modal } from "../../ui/Modal";
+import { SecretInput } from "../../ui/SecretInput";
 import { INPUT_CLASS } from "../../ui/styles";
 
 /** 新しく追加するか、設定済みのものを変更するか。 */
@@ -41,7 +41,6 @@ export function WebSearchProviderDialog({ mode, onClose }: { mode: WebSearchDial
 
   const [providerId, setProviderId] = useState(editing ? mode.provider.id : (mode.available[0]?.id ?? ""));
   const [apiKey, setApiKey] = useState("");
-  const [revealKey, setRevealKey] = useState(false);
   const [busy, setBusy] = useState<"checking" | "saving" | null>(null);
   const [checked, setChecked] = useState<Checked | null>(null);
   /** 確かめたが検索できなかった理由。 */
@@ -93,7 +92,7 @@ export function WebSearchProviderDialog({ mode, onClose }: { mode: WebSearchDial
       run.current = current;
 
       try {
-        const result = await api.testWebSearchProvider({ id: providerId, apiKey: key });
+        const result = await testWebSearchProvider({ id: providerId, apiKey: key });
         if (run.current !== current) return;
 
         if (result.ok) {
@@ -175,7 +174,7 @@ export function WebSearchProviderDialog({ mode, onClose }: { mode: WebSearchDial
               ))}
             </select>
             {selected !== null && (
-              <p class="mt-1.5 text-xs leading-5 text-[var(--app-text-secondary)]">
+              <p class="mt-1.5 text-xs leading-5 text-secondary">
                 {t(selected.supportsFetch ? "settings.webSearch.form.fetchApi" : "settings.webSearch.form.fetchDirect")}
               </p>
             )}
@@ -187,33 +186,31 @@ export function WebSearchProviderDialog({ mode, onClose }: { mode: WebSearchDial
           description={t("settings.webSearch.form.apiKey.description")}
           hint={editing ? t("settings.webSearch.form.apiKey.keep") : undefined}
         >
-          <div class="flex items-center gap-2">
-            <ApiKeyInput value={apiKey} reveal={revealKey} onInput={(value) => change(setApiKey, value)} />
-            <button
-              type="button"
-              onClick={() => setRevealKey(!revealKey)}
-              class="shrink-0 rounded-full px-2.5 py-1 text-xs text-[var(--app-text-secondary)] transition hover:bg-[var(--app-soft)] hover:text-[var(--app-text)]"
-            >
-              {t(revealKey ? "settings.webSearch.form.apiKey.hide" : "settings.webSearch.form.apiKey.show")}
-            </button>
-          </div>
+          <SecretInput
+            value={apiKey}
+            label={t("settings.webSearch.form.apiKey.label")}
+            placeholder={t("settings.webSearch.form.apiKey.placeholder")}
+            showLabel={t("settings.webSearch.form.apiKey.show")}
+            hideLabel={t("settings.webSearch.form.apiKey.hide")}
+            onInput={(value) => change(setApiKey, value)}
+          />
         </Field>
 
         {!editing && (
           <>
             {checkedNow !== null && (
-              <div class="rounded-[16px] bg-[var(--app-accent-soft)] px-4 py-3 text-xs text-[var(--app-text)]">
+              <div class="rounded-[16px] bg-[var(--app-accent-soft)] px-4 py-3 text-xs text-primary">
                 {t("settings.webSearch.form.checked", { count: checkedNow.results })}
               </div>
             )}
             {failureDetail !== null && (
-              <div class="rounded-[16px] bg-[var(--app-danger-soft)] px-4 py-3 text-xs text-[var(--app-text)]">
+              <div class="rounded-[16px] bg-[var(--app-danger-soft)] px-4 py-3 text-xs text-primary">
                 <p class="font-medium">{t("settings.webSearch.form.failed")}</p>
-                <p class="mt-1 break-words leading-5 text-[var(--app-text-secondary)]">{failureDetail}</p>
+                <p class="mt-1 break-words leading-5 text-secondary">{failureDetail}</p>
               </div>
             )}
             {checkedNow === null && failureDetail === null && (
-              <p class="pt-2 text-xs text-[var(--app-text-secondary)]">{t("settings.webSearch.form.needCheck")}</p>
+              <p class="pt-2 text-xs text-secondary">{t("settings.webSearch.form.needCheck")}</p>
             )}
           </>
         )}
@@ -226,20 +223,4 @@ export function WebSearchProviderDialog({ mode, onClose }: { mode: WebSearchDial
       </div>
     </Modal>
   );
-}
-
-/** 表示の切り替えができる API キーの入力欄。 */
-function ApiKeyInput({ value, reveal, onInput }: { value: string; reveal: boolean; onInput: (value: string) => void }) {
-  const common = {
-    value,
-    autocomplete: "off",
-    spellcheck: false,
-    "aria-label": t("settings.webSearch.form.apiKey.label"),
-    placeholder: t("settings.webSearch.form.apiKey.placeholder"),
-    class: `${INPUT_CLASS} flex-1`,
-    onInput: (event: { currentTarget: HTMLInputElement }) => onInput(event.currentTarget.value),
-  };
-
-  // type は文字列で切り替えず、要素ごとに分ける（型が属性ごとの union で定義されているため）。
-  return reveal ? <input type="text" {...common} /> : <input type="password" {...common} />;
 }

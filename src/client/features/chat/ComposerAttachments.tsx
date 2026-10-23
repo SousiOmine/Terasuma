@@ -42,19 +42,19 @@ function ImageAttachment({ file, onRemove }: { file: File; onRemove: () => void 
 
   return (
     <div class="w-20">
-      <div class="relative h-20 w-20 overflow-hidden rounded-[14px] border border-[var(--app-stroke)] bg-[var(--app-soft)]">
+      <div class="relative h-20 w-20 overflow-hidden rounded-[14px] border border-stroke bg-soft">
         {url !== null && <img src={url} alt={file.name} title={file.name} class="h-full w-full object-cover" />}
         <button
           type="button"
           onClick={onRemove}
           title={removeLabel}
           aria-label={removeLabel}
-          class="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full border border-[var(--app-stroke)] bg-[var(--app-surface)] text-[var(--app-text-secondary)] shadow-[var(--app-shadow-2)] transition hover:bg-[var(--app-soft)] hover:text-[var(--app-text)]"
+          class="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full border border-stroke bg-surface text-secondary shadow-[var(--app-shadow-2)] transition hover:bg-soft hover:text-primary"
         >
           <IconX size={12} stroke={2.2} />
         </button>
       </div>
-      <p class="mt-1 w-full truncate px-0.5 text-[10px] leading-4 text-[var(--app-text-tertiary)]" title={file.name}>
+      <p class="mt-1 w-full truncate px-0.5 text-[10px] leading-4 text-tertiary" title={file.name}>
         {file.name}
       </p>
     </div>
@@ -66,18 +66,18 @@ function FileAttachment({ file, onRemove }: { file: File; onRemove: () => void }
   const removeLabel = t("composer.attach.remove", { name: file.name });
 
   return (
-    <span class="inline-flex max-w-full items-center gap-1.5 rounded-full bg-[var(--app-soft)] py-1.5 pl-2.5 pr-1.5 text-xs">
-      <IconFile size={14} stroke={1.9} class="shrink-0 text-[var(--app-text-secondary)]" />
+    <span class="inline-flex max-w-full items-center gap-1.5 rounded-full bg-soft py-1.5 pl-2.5 pr-1.5 text-xs">
+      <IconFile size={14} stroke={1.9} class="shrink-0 text-secondary" />
       <span class="max-w-[220px] truncate" title={file.name}>
         {file.name}
       </span>
-      <span class="shrink-0 text-[var(--app-text-secondary)]">{formatBytes(file.size)}</span>
+      <span class="shrink-0 text-secondary">{formatBytes(file.size)}</span>
       <button
         type="button"
         onClick={onRemove}
         title={removeLabel}
         aria-label={removeLabel}
-        class="shrink-0 rounded-full p-0.5 text-[var(--app-text-secondary)] transition hover:bg-[var(--app-soft-strong)] hover:text-[var(--app-text)]"
+        class="shrink-0 rounded-full p-0.5 text-secondary transition hover:bg-[var(--app-soft-strong)] hover:text-primary"
       >
         <IconX size={12} stroke={2} />
       </button>

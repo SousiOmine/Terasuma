@@ -41,7 +41,7 @@ export function Sidebar() {
       )}
 
       <aside
-        class={`fixed inset-y-0 left-0 z-50 flex w-64 max-w-[85vw] shrink-0 flex-col rounded-r-[28px] bg-[var(--app-surface)] transition-[transform,visibility] duration-200 md:visible md:static md:z-auto md:w-[248px] md:max-w-none md:translate-x-0 md:rounded-none md:bg-transparent md:pt-2 ${
+        class={`fixed inset-y-0 left-0 z-50 flex w-64 max-w-[85vw] shrink-0 flex-col rounded-r-[28px] bg-surface transition-[transform,visibility] duration-200 md:visible md:static md:z-auto md:w-[248px] md:max-w-none md:translate-x-0 md:rounded-none md:bg-transparent md:pt-2 ${
           open ? "visible translate-x-0 shadow-[var(--app-shadow-16)] md:shadow-none" : "invisible -translate-x-full"
         }`}
       >
@@ -53,7 +53,7 @@ export function Sidebar() {
             onClick={closeSidebar}
             title={t("chat.menu.close")}
             aria-label={t("chat.menu.close")}
-            class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[var(--app-text-secondary)] transition hover:bg-[var(--app-soft)] hover:text-[var(--app-text)] md:hidden"
+            class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-secondary transition hover:bg-soft hover:text-primary md:hidden"
           >
             <IconX size={18} stroke={1.7} />
           </button>
@@ -61,7 +61,7 @@ export function Sidebar() {
 
         <nav class="min-h-0 flex-1 overflow-y-auto px-2.5 py-1">
           {items.length === 0 ? (
-            <p class="px-3 py-3 text-xs text-[var(--app-text-secondary)]">{t("tera.empty")}</p>
+            <p class="px-3 py-3 text-xs text-secondary">{t("tera.empty")}</p>
           ) : (
             <ul class="space-y-1">
               {items.map((tera) => {
@@ -80,7 +80,7 @@ export function Sidebar() {
                       class={`w-full truncate rounded-2xl px-3.5 py-2.5 text-left text-sm transition ${
                         active
                           ? "bg-[var(--app-accent-soft)] font-medium text-[var(--app-accent-ink)]"
-                          : "text-[var(--app-text-secondary)] hover:bg-[var(--app-soft)] hover:text-[var(--app-text)]"
+                          : "text-secondary hover:bg-soft hover:text-primary"
                       }`}
                     >
                       {tera.name}
@@ -107,7 +107,7 @@ function SettingsButton() {
           closeSidebar();
           openSettings();
         }}
-        class="flex w-full items-center gap-2.5 rounded-2xl px-3.5 py-2.5 text-left text-sm text-[var(--app-text-secondary)] transition hover:bg-[var(--app-soft)] hover:text-[var(--app-text)]"
+        class="flex w-full items-center gap-2.5 rounded-2xl px-3.5 py-2.5 text-left text-sm text-secondary transition hover:bg-soft hover:text-primary"
       >
         <IconSettings size={16} stroke={1.6} class="shrink-0" />
         {t("settings.title")}

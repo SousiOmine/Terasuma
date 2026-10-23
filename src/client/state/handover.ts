@@ -1,4 +1,4 @@
-import { signal } from "@preact/signals";
+import { computed, signal } from "@preact/signals";
 import * as api from "../lib/api";
 import { clearChatError, showChatError } from "./failure";
 import { activeTeraId } from "./session";
@@ -17,16 +17,17 @@ import { activeTeraId } from "./session";
 export const computerPaneOpen = signal(false);
 
 /**
- * 画面を操作できるかどうか。
- * ふだんは見るだけで、エージェントから引き受けている間だけ操作できる。
- */
-export const computerViewOnly = signal(true);
-
-/**
  * いまユーザーへ画面を渡しているかどうか。
  * エージェントが computer_ask_user を呼んだ時点で立ち、結果が届くと下りる。
  */
 export const handoverActive = signal(false);
+
+/**
+ * 画面を操作できるかどうか。
+ * ふだんは見るだけで、エージェントから引き受けている間だけ操作できる。
+ * 待ちの有無から決まるので、別に持たずに導く。
+ */
+export const computerViewOnly = computed(() => !handoverActive.value);
 
 /**
  * ユーザーへ見せる頼み。渡していないときは null。
@@ -76,7 +77,6 @@ export function beginHandover(callId: string, question: string | null): void {
   handoverCallId = callId;
   handoverActive.value = true;
   handoverQuestion.value = question;
-  computerViewOnly.value = false;
   openComputerPane();
 }
 
@@ -91,5 +91,4 @@ export function endHandover(callId: string): void {
   handoverCallId = null;
   handoverActive.value = false;
   handoverQuestion.value = null;
-  computerViewOnly.value = true;
 }

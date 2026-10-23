@@ -10,7 +10,7 @@
 
 /** 入力欄の共通の面。文字の大きさだけを用途ごとに足す（同じ強さの class を重ねない）。 */
 const FIELD_BASE =
-  "w-full rounded-[14px] border border-[var(--app-stroke)] bg-[var(--app-surface-alt)] px-3.5 py-2.5 text-[var(--app-text)] outline-none transition placeholder:text-[var(--app-text-tertiary)] focus:border-[var(--app-accent)] focus:bg-[var(--app-surface)] focus:ring-4 focus:ring-[var(--app-ring)]";
+  "w-full rounded-[14px] border border-stroke bg-surface-alt px-3.5 py-2.5 text-primary outline-none transition placeholder:text-tertiary focus:border-[var(--app-accent)] focus:bg-surface focus:ring-4 focus:ring-[var(--app-ring)]";
 
 /** 1 行の入力欄。面を薄く敷き、フォーカス時だけアクセントの輪を出す。 */
 export const INPUT_CLASS = `${FIELD_BASE} text-sm`;
@@ -23,25 +23,20 @@ export const SEARCH_INPUT_CLASS = `${FIELD_BASE} py-2.5 pl-10 pr-4 text-sm`;
 
 /** カードの中の小さな操作（編集・削除・再確認）。狭い画面では指で押せる高さにする。 */
 export const CARD_ACTION_CLASS =
-  "rounded-full px-3 py-2 text-xs font-medium text-[var(--app-text-secondary)] transition hover:bg-[var(--app-soft-strong)] hover:text-[var(--app-text)] md:px-2.5 md:py-1.5";
+  "rounded-full px-3 py-2 text-xs font-medium text-secondary transition hover:bg-[var(--app-soft-strong)] hover:text-primary md:px-2.5 md:py-1.5";
 
 /** 一覧の中に置くカード。設定の面（白）の上に、薄い灰の面で区切る。 */
-export const CARD_CLASS = "rounded-[20px] bg-[var(--app-surface-alt)] p-5";
-
-/** 項目の説明文。 */
-export const DESC_CLASS = "mt-1 text-xs leading-5 text-[var(--app-text-secondary)]";
+export const CARD_CLASS = "rounded-[20px] bg-surface-alt p-5";
 
 /** 選択肢を横に並べる枠（言語、MCP の種類、プロバイダの切り替え）。 */
-export const SEGMENTED_CLASS = "flex gap-1 rounded-full bg-[var(--app-soft)] p-1";
+export const SEGMENTED_CLASS = "flex gap-1 rounded-full bg-soft p-1";
 
 /** 選ばれている選択肢。アクセントで塗り、文字を反転する。 */
 export const SEGMENTED_ON_CLASS =
   "rounded-full bg-[var(--app-accent-fill)] font-medium text-[var(--app-on-accent)] shadow-[var(--app-shadow-2)]";
 
 /** 選ばれていない選択肢。 */
-export const SEGMENTED_OFF_CLASS =
-  "rounded-full text-[var(--app-text-secondary)] hover:bg-[var(--app-surface)] hover:text-[var(--app-text)]";
+export const SEGMENTED_OFF_CLASS = "rounded-full text-secondary hover:bg-surface hover:text-primary";
 
 /** 検索欄の虫眼鏡。 */
-export const SEARCH_ICON_CLASS =
-  "pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--app-text-tertiary)]";
+export const SEARCH_ICON_CLASS = "pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-tertiary";

@@ -50,11 +50,11 @@ export function ConnectionsSettingsView() {
 
   return (
     <SettingsSection title={t("settings.connections")} error={error} onDismiss={clearConnectionsError}>
-      <p class="mt-2 text-xs leading-5 text-[var(--app-text-secondary)]">{t("settings.connections.description")}</p>
+      <p class="mt-2 text-xs leading-5 text-secondary">{t("settings.connections.description")}</p>
 
       <div class="mt-4 space-y-2">
         {view === null ? (
-          <p class="text-xs text-[var(--app-text-secondary)]">{t("common.loading")}</p>
+          <p class="text-xs text-secondary">{t("common.loading")}</p>
         ) : (
           view.providers.map((provider) => (
             <ConnectionCard key={provider.id} provider={provider} onDisconnect={() => disconnecting.open(provider)} />
@@ -97,18 +97,18 @@ function ConnectionCard({ provider, onDisconnect }: ConnectionCardProps) {
               {t(provider.connected ? STATE_LABELS.connected : STATE_LABELS.disconnected)}
             </StatusBadge>
             {provider.connected && provider.account !== null && (
-              <span class="text-xs text-[var(--app-text-secondary)]">
+              <span class="text-xs text-secondary">
                 {t("settings.connections.account", { account: `@${provider.account}` })}
               </span>
             )}
           </div>
 
-          <p class="mt-1 text-xs leading-5 text-[var(--app-text-secondary)]">{provider.description}</p>
-          <p class="mt-1 text-[11px] leading-5 text-[var(--app-text-secondary)]">
+          <p class="mt-1 text-xs leading-5 text-secondary">{provider.description}</p>
+          <p class="mt-1 text-[11px] leading-5 text-secondary">
             {t("settings.connections.permissions", { permissions: provider.permissions.join(", ") })}
           </p>
           {provider.detail !== null && (
-            <p class="mt-1.5 break-words text-xs leading-5 text-[var(--app-text-secondary)]">{provider.detail}</p>
+            <p class="mt-1.5 break-words text-xs leading-5 text-secondary">{provider.detail}</p>
           )}
         </div>
 
@@ -124,7 +124,7 @@ function ConnectionCard({ provider, onDisconnect }: ConnectionCardProps) {
       {provider.needsClientId && <ApplicationIdForm provider={provider} saving={savingClientId} />}
 
       {provider.connected && (
-        <p class="mt-3 text-[11px] leading-5 text-[var(--app-text-secondary)]">
+        <p class="mt-3 text-[11px] leading-5 text-secondary">
           {t("settings.connections.env", { names: provider.env.join(", ") })}
         </p>
       )}
@@ -172,20 +172,18 @@ function TokenConnectionForm({ provider, saving }: { provider: ConnectionProvide
         </div>
       </Field>
 
-      <div class="flex flex-col gap-3 border-t border-[var(--app-stroke)] pt-3 sm:flex-row sm:items-center sm:justify-between">
+      <div class="flex flex-col gap-3 border-t border-stroke pt-3 sm:flex-row sm:items-center sm:justify-between">
         <a
           href={provider.setupUrl}
           target="_blank"
           rel="noreferrer noopener"
-          class="inline-flex items-center gap-1 text-xs text-[var(--app-text-secondary)] underline underline-offset-2"
+          class="inline-flex items-center gap-1 text-xs text-secondary underline underline-offset-2"
         >
           <IconExternalLink size={12} stroke={1.6} class="shrink-0" />
           {t("settings.connections.openSetup")}
         </a>
         {provider.connected && (
-          <p class="text-[11px] leading-5 text-[var(--app-text-secondary)]">
-            {t("settings.connections.token.saved")}
-          </p>
+          <p class="text-[11px] leading-5 text-secondary">{t("settings.connections.token.saved")}</p>
         )}
       </div>
     </div>
@@ -209,7 +207,7 @@ function ApplicationIdForm({ provider, saving }: { provider: ConnectionProviderV
   };
 
   return (
-    <div class="mt-3 border-t border-[var(--app-stroke)] pt-3">
+    <div class="mt-3 border-t border-stroke pt-3">
       <Field
         label={t("settings.connections.applicationId.label")}
         description={t("settings.connections.applicationId.description")}
@@ -238,15 +236,13 @@ function ApplicationIdForm({ provider, saving }: { provider: ConnectionProviderV
             href={provider.inviteUrl}
             target="_blank"
             rel="noreferrer noopener"
-            class="inline-flex items-center justify-center gap-1.5 rounded-full bg-[var(--app-soft)] px-4 py-2 text-xs font-medium whitespace-nowrap text-[var(--app-text)] transition hover:bg-[var(--app-soft-strong)]"
+            class="inline-flex items-center justify-center gap-1.5 rounded-full bg-soft px-4 py-2 text-xs font-medium whitespace-nowrap text-primary transition hover:bg-[var(--app-soft-strong)]"
           >
             <IconExternalLink size={13} stroke={1.7} class="shrink-0" />
             {t("settings.connections.invite")}
           </a>
         ) : (
-          <span class="text-[11px] leading-5 text-[var(--app-text-secondary)]">
-            {t("settings.connections.inviteNeedsId")}
-          </span>
+          <span class="text-[11px] leading-5 text-secondary">{t("settings.connections.inviteNeedsId")}</span>
         )}
       </div>
     </div>

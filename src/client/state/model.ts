@@ -2,21 +2,23 @@ import { computed, signal } from "@preact/signals";
 import { modelProvider, type ModelId } from "../../shared/model";
 import type {
   AddProviderForm,
-  CatalogProviderView,
-  ModelSettingsView,
+  ProviderCheckResult,
   ProviderCredentials,
+  ProviderForm,
   ProviderView,
   ReasoningView,
 } from "../../shared/types";
 import * as api from "../lib/api";
 import { createErrorSignal } from "../lib/errors";
+import { createResource } from "./resource";
 
 /** 既定のモデルが使えない理由。 */
 export type ModelProblem = "unset" | "provider-missing";
 
 /** サーバから読んだモデル設定。まだ読めていないときは null。 */
-export const modelSettings = signal<ModelSettingsView | null>(null);
-export const isLoadingSettings = signal(false);
+const settingsResource = createResource(api.fetchModelSettings);
+export const modelSettings = settingsResource.data;
+export const isLoadingSettings = settingsResource.loading;
 
 /** 設定画面の中だけに出す失敗。チャット側のエラー表示とは分けてある。 */
 const failure = createErrorSignal();
@@ -25,7 +27,9 @@ export const showSettingsError = failure.show;
 export const clearSettingsError = failure.clear;
 
 /** models.dev のカタログ。まだ読めていないときは null。 */
-export const catalogProviders = signal<readonly CatalogProviderView[] | null>(null);
+const catalogResource = createResource(api.fetchCatalog);
+export const catalogProviders = catalogResource.data;
+export const isLoadingCatalog = catalogResource.loading;
 
 /**
  * 既定のモデルの思考強度。
@@ -58,20 +62,15 @@ export function providerName(provider: ProviderView): string {
   return catalogProviders.value?.find((entry) => entry.id === provider.id)?.name ?? provider.name;
 }
 
-/** 設定を読む。失敗は呼び出し側が画面に出す。 */
-export async function loadModelSettings(): Promise<void> {
-  isLoadingSettings.value = true;
-  try {
-    modelSettings.value = await api.fetchModelSettings();
-  } finally {
-    isLoadingSettings.value = false;
-  }
-}
+/** 設定を読む（まだ読めていなければ）。失敗は呼び出し側が画面に出す。 */
+export const loadModelSettings = settingsResource.load;
+/** 設定を読み直す（読み込み直しボタン）。 */
+export const refreshModelSettings = settingsResource.refresh;
 
-/** カタログのプロバイダ一覧を読む。設定画面を開いたときに 1 度だけ読む。 */
-export async function loadCatalog(): Promise<void> {
-  catalogProviders.value = await api.fetchCatalog();
-}
+/** カタログを読む（まだ読めていなければ）。 */
+export const loadCatalog = catalogResource.load;
+/** カタログを読み直す。 */
+export const refreshCatalog = catalogResource.refresh;
 
 /** 既定のモデルの思考強度と、選べる値を読む。 */
 export async function loadReasoning(): Promise<void> {
@@ -92,6 +91,21 @@ export async function saveDefaultModel(model: ModelId): Promise<void> {
  */
 export async function saveReasoning(effort: string | null): Promise<void> {
   modelReasoning.value = await api.saveReasoning(effort);
+}
+
+/** 保存せずに、渡した資格でプロバイダへ繋がるか確かめる。 */
+export async function checkProvider(form: ProviderForm): Promise<ProviderCheckResult> {
+  return api.checkProvider(form);
+}
+
+/** カタログのプロバイダで使えるモデルの一覧。 */
+export async function fetchCatalogModels(providerId: string): Promise<readonly string[]> {
+  return api.fetchCatalogModels(providerId);
+}
+
+/** 設定済みのプロバイダで使えるモデルの一覧。 */
+export async function listProviderModels(providerId: string): Promise<readonly string[]> {
+  return api.listProviderModels(providerId);
 }
 
 export async function addProvider(form: AddProviderForm): Promise<void> {

@@ -32,7 +32,7 @@ export function SettingsView() {
         <button
           type="button"
           onClick={closeSettings}
-          class="flex items-center gap-2 rounded-full px-3 py-2 text-sm text-[var(--app-text-secondary)] transition hover:bg-[var(--app-soft)] hover:text-[var(--app-text)]"
+          class="flex items-center gap-2 rounded-full px-3 py-2 text-sm text-secondary transition hover:bg-soft hover:text-primary"
         >
           <IconArrowLeft size={17} stroke={1.7} class="shrink-0" />
           {t("settings.back")}
@@ -45,9 +45,7 @@ export function SettingsView() {
 
       <div class="flex min-h-0 flex-1 flex-col md:flex-row">
         <nav class="shrink-0 px-3 pb-2 md:w-[248px] md:py-1 md:pb-0">
-          <h1 class="hidden px-3 pb-2 text-xs font-medium text-[var(--app-text-secondary)] md:block">
-            {t("settings.title")}
-          </h1>
+          <h1 class="hidden px-3 pb-2 text-xs font-medium text-secondary md:block">{t("settings.title")}</h1>
           <ul class="flex flex-wrap gap-1 md:flex-col md:gap-1">
             {CATEGORIES.map((item) => {
               const active = category === item.id;
@@ -60,7 +58,7 @@ export function SettingsView() {
                     class={`rounded-2xl px-3.5 py-2.5 text-left text-sm whitespace-nowrap transition md:w-full ${
                       active
                         ? "bg-[var(--app-accent-soft)] font-medium text-[var(--app-accent-ink)]"
-                        : "text-[var(--app-text-secondary)] hover:bg-[var(--app-soft)] hover:text-[var(--app-text)]"
+                        : "text-secondary hover:bg-soft hover:text-primary"
                     }`}
                   >
                     {t(item.labelKey)}
@@ -71,7 +69,7 @@ export function SettingsView() {
           </ul>
         </nav>
 
-        <section class="min-h-0 min-w-0 flex-1 overflow-y-auto bg-[var(--app-surface)] px-4 py-6 md:m-3 md:ml-0 md:rounded-[30px] md:border md:border-[var(--app-stroke)] md:px-10 md:py-10 md:shadow-[var(--app-shadow-panel)]">
+        <section class="min-h-0 min-w-0 flex-1 overflow-y-auto bg-surface px-4 py-6 md:m-3 md:ml-0 md:rounded-[30px] md:border md:border-stroke md:px-10 md:py-10 md:shadow-[var(--app-shadow-panel)]">
           {category === "general" && <GeneralSettings />}
           {category === "model" && <ModelSettingsView />}
           {category === "providers" && <ProviderSettingsView />}
@@ -89,10 +87,10 @@ function GeneralSettings() {
     <div class="mx-auto w-full max-w-2xl">
       <h2 class="text-[20px] leading-7 font-semibold tracking-[-0.02em]">{t("settings.general")}</h2>
 
-      <div class="mt-6 flex flex-col items-start gap-4 border-b border-[var(--app-stroke)] pb-6 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
+      <div class="mt-6 flex flex-col items-start gap-4 border-b border-stroke pb-6 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
         <div class="min-w-0">
           <p class="text-[13px] font-medium">{t("settings.language.label")}</p>
-          <p class="mt-1 text-xs leading-5 text-[var(--app-text-secondary)]">{t("settings.language.description")}</p>
+          <p class="mt-1 text-xs leading-5 text-secondary">{t("settings.language.description")}</p>
         </div>
 
         <div class="w-48 shrink-0">

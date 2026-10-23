@@ -2,9 +2,8 @@ import { useEffect, useRef, useState } from "preact/hooks";
 import type { McpServerForm, McpServerView, McpTestView } from "../../../shared/types";
 import { useInFlight } from "../../hooks/useInFlight";
 import { t } from "../../i18n";
-import * as api from "../../lib/api";
 import { type ErrorState, toErrorState } from "../../lib/errors";
-import { AUTHORIZATION_POLL_MS, AUTHORIZATION_TIMEOUT_MS, saveMcpServer } from "../../state/mcp";
+import { AUTHORIZATION_POLL_MS, AUTHORIZATION_TIMEOUT_MS, saveMcpServer, testMcpServer } from "../../state/mcp";
 import { Button } from "../../ui/Button";
 import { ErrorNotice } from "../../ui/ErrorNotice";
 import { Field } from "../../ui/Field";
@@ -129,7 +128,7 @@ export function McpServerDialog({
   /** 1 回分の接続確認。 */
   async function probe(form: McpServerForm, signature: string, current: number): Promise<void> {
     try {
-      apply(await api.testMcpServer(form), form, signature, current);
+      apply(await testMcpServer(form), form, signature, current);
     } catch (failure) {
       if (run.current !== current) return;
       setError(toErrorState(failure));
@@ -149,7 +148,7 @@ export function McpServerDialog({
       if (run.current !== current) return;
 
       try {
-        const result = await api.testMcpServer(form);
+        const result = await testMcpServer(form);
         if (run.current !== current) return;
         if (result.state !== "authorizing" && result.state !== "authorization_required") {
           apply(result, form, signature, current);
@@ -319,7 +318,7 @@ export function McpServerDialog({
             {checkedNow !== null && <CheckedNotice tools={checkedNow.tools} />}
             {authorizing !== null && <AuthorizationNotice url={authorizing} />}
             {checkedNow === null && authorizing === null && (
-              <p class="pt-2 text-xs text-[var(--app-text-secondary)]">{t("settings.mcp.form.needCheck")}</p>
+              <p class="pt-2 text-xs text-secondary">{t("settings.mcp.form.needCheck")}</p>
             )}
           </>
         )}

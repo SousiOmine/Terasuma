@@ -18,14 +18,12 @@ export function ErrorNotice({ error, action }: ErrorNoticeProps) {
   return (
     <div
       role="alert"
-      class="flex items-start gap-3 rounded-[16px] bg-[var(--app-danger-soft)] px-4 py-3 text-sm text-[var(--app-text)]"
+      class="flex items-start gap-3 rounded-[16px] bg-[var(--app-danger-soft)] px-4 py-3 text-sm text-primary"
     >
       <IconAlertTriangle size={18} stroke={1.8} class="mt-0.5 shrink-0 text-[var(--app-danger)]" />
       <div class="min-w-0 flex-1">
         <p class="font-medium">{t(`error.${error.code}`)}</p>
-        {error.detail !== null && (
-          <p class="mt-1 break-words text-xs leading-5 text-[var(--app-text-secondary)]">{error.detail}</p>
-        )}
+        {error.detail !== null && <p class="mt-1 break-words text-xs leading-5 text-secondary">{error.detail}</p>}
       </div>
       {action}
     </div>
