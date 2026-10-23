@@ -60,10 +60,10 @@ export const en = {
   "chat.env.submitting": "Setting…",
   "chat.env.waiting": "Waiting for your input",
 
-  "chat.connection.title": "Connect {app}",
-  "chat.connection.waiting": "Paste it and save; the task continues from there.",
-  "chat.connection.waitingShort": "Waiting for connection",
-  "chat.connection.failed": "The connection could not be completed. Ask again.",
+  "chat.connector.title": "Connect {app}",
+  "chat.connector.waiting": "Paste it and save; the task continues from there.",
+  "chat.connector.waitingShort": "Waiting for connection",
+  "chat.connector.failed": "The connection could not be completed. Ask again.",
 
   "composer.placeholder": "Send a message",
   "composer.placeholder.steering": "Send to the working agent",
@@ -84,22 +84,22 @@ export const en = {
 
   "settings.advanced": "Advanced",
 
-  "settings.connections": "Connections",
-  "settings.connections.description":
-    "Connect services that your CLI commands and tools use. Create a token and paste it here; the computer and app_request can then use it.",
-  "settings.connections.state.connected": "Connected",
-  "settings.connections.state.disconnected": "Not connected",
-  "settings.connections.account": "Connected as {account}",
-  "settings.connections.permissions": "Required permissions: {permissions}",
-  "settings.connections.token.save": "Save",
-  "settings.connections.token.saving": "Checking…",
-  "settings.connections.token.saved": "The token is saved. Paste a new one only when you want to replace it.",
-  "settings.connections.openSetup": "Open the app settings",
-  "settings.connections.env": "Environment variables for the computer: {names}",
-  "settings.connections.disconnect": "Disconnect",
-  "settings.connections.disconnectTitle": "Disconnect this app?",
-  "settings.connections.disconnectMessage":
-    "The saved connection is removed, and the token is no longer passed to the computer.",
+  "settings.connectors": "Connectors",
+  "settings.connectors.description":
+    "Connectors to the external services your CLI commands and tools use. Save a token or webhook URL; the computer, app_request, and Discord posts can then use it.",
+  "settings.connectors.state.connected": "Connected",
+  "settings.connectors.state.disconnected": "Not connected",
+  "settings.connectors.account": "Connected as {account}",
+  "settings.connectors.permissions": "Required permissions: {permissions}",
+  "settings.connectors.token.save": "Save",
+  "settings.connectors.token.saving": "Checking…",
+  "settings.connectors.token.saved": "The token is saved. Paste a new one only when you want to replace it.",
+  "settings.connectors.openSetup": "Open the app settings",
+  "settings.connectors.env": "Environment variables for the computer: {names}",
+  "settings.connectors.disconnect": "Disconnect",
+  "settings.connectors.disconnectTitle": "Disconnect this connector?",
+  "settings.connectors.disconnectMessage":
+    "The saved connector is removed, and the token is no longer passed to the computer.",
 
   "settings.discord.description":
     "Save the webhook URL of the channel each Tera posts to. The agent posts there with discord_send.",
@@ -300,7 +300,7 @@ export const en = {
   "error.mcp_server_not_found": "This MCP server is not configured.",
   "error.mcp_server_exists": "This MCP server is already added.",
   "error.mcp_authorization_failed": "Authorization for the MCP server could not be started.",
-  "error.connection_not_found": "This connection is not configured.",
+  "error.connector_not_found": "This connector is not configured.",
   "error.web_search_not_found": "This search provider is not configured.",
   "error.web_search_exists": "This search provider is already added.",
   "error.mcp_unreachable": "Could not connect to the MCP server.",

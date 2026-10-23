@@ -68,9 +68,9 @@ export class WebSearchProviderExists extends AppError {
   }
 }
 
-/** 設定に無い接続プロバイダを触ろうとしたときの失敗。 */
-export class ConnectionNotFound extends AppError {
-  constructor(readonly connectionId: string) {
-    super("connection_not_found", 404, `接続 ${connectionId} は設定されていません`);
+/** 設定に無いコネクタを触ろうとしたときの失敗。 */
+export class ConnectorNotFound extends AppError {
+  constructor(readonly connectorId: string) {
+    super("connector_not_found", 404, `コネクタ ${connectorId} は設定されていません`);
   }
 }

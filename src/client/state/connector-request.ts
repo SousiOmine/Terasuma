@@ -1,24 +1,24 @@
 import { computed, signal } from "@preact/signals";
 import { DISCORD_SERVER_ID } from "../../shared/tools";
 import { t } from "../i18n";
-import { cancelConnectionWait, connections, saveConnectionToken, savingToken } from "./connections";
+import { cancelConnectorWait, connectors, saveConnectorToken, savingToken } from "./connectors";
 import { cancelDiscordWait, discord, saveWebhook, savingDiscord, WEBHOOK_PLACEHOLDER } from "./discord";
 
 /**
- * チャットの接続カード。
+ * チャットのコネクタカード。
  *
  * エージェントが computer_connect_app（GitHub）か discord_connect（Discord）を呼んだときに始まり、
  * 値の保存が終わるまで続く。値はサーバーへ直接送り、モデルの文脈には載らない。
  * Discord の送信先は Tera ごとに 1 つなので、カードを出した時点の Tera を覚えておく。
  */
 
-export type ConnectionRequestPhase =
+export type ConnectorRequestPhase =
   /** 値の入力を待っている。 */
   | "waiting"
   /** 接続できなかった。 */
   | "failed";
 
-export type ConnectionRequest = {
+export type ConnectorRequest = {
   /** カードを出したツール呼び出しの id。結果と突き合わせる。 */
   callId: string;
   /** 接続するアプリの id（"github" か "discord"）。 */
@@ -27,50 +27,50 @@ export type ConnectionRequest = {
   reason: string | null;
   /** Discord の webhook を保存する先の Tera。GitHub では null。 */
   teraId: string | null;
-  phase: ConnectionRequestPhase;
+  phase: ConnectorRequestPhase;
 };
 
-export const connectionRequest = signal<ConnectionRequest | null>(null);
+export const connectorRequest = signal<ConnectorRequest | null>(null);
 
 /** いまカードを出しているツール呼び出しの id。出していなければ null。 */
 let requestCallId: string | null = null;
 
 /** カードを出す。 */
-export function beginConnectionRequest(
+export function beginConnectorRequest(
   callId: string,
   provider: string,
   reason: string | null,
   teraId: string | null,
 ): void {
   requestCallId = callId;
-  connectionRequest.value = { callId, provider, reason, teraId, phase: "waiting" };
+  connectorRequest.value = { callId, provider, reason, teraId, phase: "waiting" };
 }
 
 /**
  * 結果が届いたら終える。
  * 成功ではカードを畳み、失敗では残す（もう一度試す導線を消さない）。
  */
-export function endConnectionRequest(callId: string, failed: boolean): void {
+export function endConnectorRequest(callId: string, failed: boolean): void {
   if (requestCallId !== callId) return;
 
   if (!failed) {
-    resetConnectionRequest();
+    resetConnectorRequest();
     return;
   }
 
-  const request = connectionRequest.value;
+  const request = connectorRequest.value;
   if (request === null) return;
-  connectionRequest.value = { ...request, phase: "failed" };
+  connectorRequest.value = { ...request, phase: "failed" };
 }
 
 /** カードを畳む。ターンの終了・Tera の切り替え・閉じるで呼ぶ。 */
-export function resetConnectionRequest(): void {
+export function resetConnectorRequest(): void {
   requestCallId = null;
-  connectionRequest.value = null;
+  connectorRequest.value = null;
 }
 
 /** カードに出す、貼り付け欄の見た目。 */
-export type ConnectionRequestField = {
+export type ConnectorRequestField = {
   label: string;
   description: string;
   placeholder: string;
@@ -79,8 +79,8 @@ export type ConnectionRequestField = {
 };
 
 /** カードの貼り付け欄。アプリが分かるまでは null（読み込み中）。 */
-export const connectionRequestField = computed<ConnectionRequestField | null>(() => {
-  const request = connectionRequest.value;
+export const connectorRequestField = computed<ConnectorRequestField | null>(() => {
+  const request = connectorRequest.value;
   if (request === null) return null;
 
   if (request.provider === DISCORD_SERVER_ID) {
@@ -92,7 +92,7 @@ export const connectionRequestField = computed<ConnectionRequestField | null>(()
     };
   }
 
-  const provider = connections.value?.providers.find((entry) => entry.id === request.provider) ?? null;
+  const provider = connectors.value?.providers.find((entry) => entry.id === request.provider) ?? null;
   if (provider === null) return null;
 
   return {
@@ -104,8 +104,8 @@ export const connectionRequestField = computed<ConnectionRequestField | null>(()
 });
 
 /** いまのカードが、値を保存している最中か。 */
-export const savingConnectionRequest = computed<boolean>(() => {
-  const request = connectionRequest.value;
+export const savingConnectorRequest = computed<boolean>(() => {
+  const request = connectorRequest.value;
   if (request === null) return false;
 
   if (request.provider === DISCORD_SERVER_ID) {
@@ -115,8 +115,8 @@ export const savingConnectionRequest = computed<boolean>(() => {
 });
 
 /** カードの値を保存する。サーバーが確かめてから保存する。 */
-export async function saveConnectionRequest(value: string): Promise<void> {
-  const request = connectionRequest.value;
+export async function saveConnectorRequest(value: string): Promise<void> {
+  const request = connectorRequest.value;
   if (request === null) return;
 
   if (request.provider === DISCORD_SERVER_ID) {
@@ -129,12 +129,12 @@ export async function saveConnectionRequest(value: string): Promise<void> {
   }
 
   if (savingToken.value === request.provider) return;
-  await saveConnectionToken(request.provider, value);
+  await saveConnectorToken(request.provider, value);
 }
 
 /** 接続をやめる。サーバーの待ちも止める。 */
-export async function cancelConnectionRequest(): Promise<void> {
-  const request = connectionRequest.value;
+export async function cancelConnectorRequest(): Promise<void> {
+  const request = connectorRequest.value;
   if (request === null) return;
 
   if (request.provider === DISCORD_SERVER_ID) {
@@ -142,12 +142,12 @@ export async function cancelConnectionRequest(): Promise<void> {
     if (teraId === null || savingDiscord.value === teraId) return;
 
     await cancelDiscordWait(teraId);
-    resetConnectionRequest();
+    resetConnectorRequest();
     return;
   }
 
   if (savingToken.value === request.provider) return;
 
-  await cancelConnectionWait(request.provider);
-  resetConnectionRequest();
+  await cancelConnectorWait(request.provider);
+  resetConnectorRequest();
 }

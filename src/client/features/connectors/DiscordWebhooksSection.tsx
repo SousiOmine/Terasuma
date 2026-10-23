@@ -23,7 +23,7 @@ import { StatusBadge } from "../../ui/StatusBadge";
 import { CARD_ACTION_CLASS, CARD_CLASS, INPUT_CLASS } from "../../ui/styles";
 
 /**
- * 設定 > 接続 の Discord。
+ * 設定 > コネクタ の Discord。
  *
  * 送信先の webhook は Tera ごとに 1 つ。URL は保存するだけで、画面には戻さない。
  * 保存する前に、サーバーが GET で webhook を確かめる（受け付けられない URL は保存しない）。
@@ -105,7 +105,7 @@ function DiscordWebhookCard({ tera, setupUrl, onDisconnect }: DiscordWebhookCard
           <div class="flex flex-wrap items-center gap-2">
             <p class="truncate text-sm font-medium">{tera.teraName}</p>
             <StatusBadge tone={tera.connected ? "success" : "neutral"}>
-              {t(tera.connected ? "settings.connections.state.connected" : "settings.connections.state.disconnected")}
+              {t(tera.connected ? "settings.connectors.state.connected" : "settings.connectors.state.disconnected")}
             </StatusBadge>
             {tera.connected && tera.channelId !== null && (
               <span class="text-xs text-secondary">

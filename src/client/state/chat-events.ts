@@ -35,8 +35,8 @@ export type ChatEventEffect =
   | { kind: "chat-ui"; part: Extract<MessagePart, { type: "tool-call" }> }
   | { kind: "handover-start"; callId: string; question: string | null }
   | { kind: "env-request-start"; callId: string; name: string; description: string | null }
-  /** アプリの接続が要る。チャットに接続カードを出す。 */
-  | { kind: "connection-request-start"; callId: string; provider: string; reason: string | null }
+  /** コネクタが要る。チャットにコネクタのカードを出す。 */
+  | { kind: "connector-request-start"; callId: string; provider: string; reason: string | null }
   /** 新しい Tera を作る呼び出し。成功したら、画面の一覧を読み直す。 */
   | { kind: "tera-create-call"; callId: string }
   /**
@@ -82,7 +82,7 @@ export function interpretEvent(event: ChatEvent): ChatEventEffect | null {
 
         const reason = connect["reason"];
         return {
-          kind: "connection-request-start",
+          kind: "connector-request-start",
           callId: event.part.id,
           provider,
           reason: typeof reason === "string" && reason.trim().length > 0 ? reason : null,
@@ -94,7 +94,7 @@ export function interpretEvent(event: ChatEvent): ChatEventEffect | null {
       if (discord !== null) {
         const reason = discord["reason"];
         return {
-          kind: "connection-request-start",
+          kind: "connector-request-start",
           callId: event.part.id,
           provider: DISCORD_SERVER_ID,
           reason: typeof reason === "string" && reason.trim().length > 0 ? reason : null,

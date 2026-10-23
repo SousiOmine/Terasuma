@@ -1,20 +1,20 @@
 import { IconExternalLink } from "@tabler/icons-preact";
 import { useEffect, useState } from "preact/hooks";
-import type { ConnectionProviderView } from "../../../shared/api/settings";
+import type { ConnectorProviderView } from "../../../shared/api/settings";
 import { useDeleteTarget } from "../../hooks/useDeleteTarget";
 import type { MessageKey } from "../../i18n";
 import { t } from "../../i18n";
 import {
-  clearConnectionsError,
-  connections,
-  connectionsError,
-  isLoadingConnections,
-  loadConnections,
-  removeConnection,
-  saveConnectionToken,
+  clearConnectorsError,
+  connectors,
+  connectorsError,
+  isLoadingConnectors,
+  loadConnectors,
+  removeConnector,
+  saveConnectorToken,
   savingToken,
-  showConnectionsError,
-} from "../../state/connections";
+  showConnectorsError,
+} from "../../state/connectors";
 import { Button } from "../../ui/Button";
 import { ConfirmDialog } from "../../ui/ConfirmDialog";
 import { Field } from "../../ui/Field";
@@ -25,38 +25,38 @@ import { DiscordWebhooksSection } from "./DiscordWebhooksSection";
 
 /** 接続状態の文言。i18n のキーは文字列リテラルで持つ（未使用キーの検査に載せるため）。 */
 const STATE_LABELS: Record<"connected" | "disconnected", MessageKey> = {
-  connected: "settings.connections.state.connected",
-  disconnected: "settings.connections.state.disconnected",
+  connected: "settings.connectors.state.connected",
+  disconnected: "settings.connectors.state.disconnected",
 };
 
 /**
- * 設定 > 接続。
+ * 設定 > コネクタ。
  *
  * サービスごとにトークンを発行し、貼り付けて保存する。
  * 保存すると、コンピュータの環境変数と app_request が使えるようになる。
  * Discord はトークンではなく webhook を使うので、DiscordWebhooksSection が受け持つ。
  */
-export function ConnectionsSettingsView() {
-  const view = connections.value;
-  const error = connectionsError.value;
-  const disconnecting = useDeleteTarget<ConnectionProviderView>();
+export function ConnectorsSettingsView() {
+  const view = connectors.value;
+  const error = connectorsError.value;
+  const disconnecting = useDeleteTarget<ConnectorProviderView>();
 
   useEffect(() => {
     // 設定画面を直接開いた場合に備えて、まだ読めていなければここで読む。
-    if (connections.value !== null || isLoadingConnections.value) return;
-    void loadConnections().catch(showConnectionsError);
+    if (connectors.value !== null || isLoadingConnectors.value) return;
+    void loadConnectors().catch(showConnectorsError);
   }, []);
 
   return (
-    <SettingsSection title={t("settings.connections")} error={error} onDismiss={clearConnectionsError}>
-      <p class="mt-2 text-xs leading-5 text-secondary">{t("settings.connections.description")}</p>
+    <SettingsSection title={t("settings.connectors")} error={error} onDismiss={clearConnectorsError}>
+      <p class="mt-2 text-xs leading-5 text-secondary">{t("settings.connectors.description")}</p>
 
       <div class="mt-4 space-y-2">
         {view === null ? (
           <p class="text-xs text-secondary">{t("common.loading")}</p>
         ) : (
           view.providers.map((provider) => (
-            <ConnectionCard key={provider.id} provider={provider} onDisconnect={() => disconnecting.open(provider)} />
+            <ConnectorCard key={provider.id} provider={provider} onDisconnect={() => disconnecting.open(provider)} />
           ))
         )}
       </div>
@@ -65,13 +65,13 @@ export function ConnectionsSettingsView() {
 
       {disconnecting.target !== null && (
         <ConfirmDialog
-          title={t("settings.connections.disconnectTitle")}
+          title={t("settings.connectors.disconnectTitle")}
           subject={disconnecting.target.name}
-          message={t("settings.connections.disconnectMessage")}
+          message={t("settings.connectors.disconnectMessage")}
           confirmLabel={t("common.delete")}
           cancelLabel={t("common.cancel")}
           danger
-          onConfirm={() => disconnecting.confirm(removeConnection, showConnectionsError)}
+          onConfirm={() => disconnecting.confirm(removeConnector, showConnectorsError)}
           onCancel={disconnecting.close}
         />
       )}
@@ -79,12 +79,12 @@ export function ConnectionsSettingsView() {
   );
 }
 
-type ConnectionCardProps = {
-  provider: ConnectionProviderView;
+type ConnectorCardProps = {
+  provider: ConnectorProviderView;
   onDisconnect: () => void;
 };
 
-function ConnectionCard({ provider, onDisconnect }: ConnectionCardProps) {
+function ConnectorCard({ provider, onDisconnect }: ConnectorCardProps) {
   const savingTokenNow = savingToken.value === provider.id;
 
   return (
@@ -98,14 +98,14 @@ function ConnectionCard({ provider, onDisconnect }: ConnectionCardProps) {
             </StatusBadge>
             {provider.connected && provider.account !== null && (
               <span class="text-xs text-secondary">
-                {t("settings.connections.account", { account: `@${provider.account}` })}
+                {t("settings.connectors.account", { account: `@${provider.account}` })}
               </span>
             )}
           </div>
 
           <p class="mt-1 text-xs leading-5 text-secondary">{provider.description}</p>
           <p class="mt-1 text-[11px] leading-5 text-secondary">
-            {t("settings.connections.permissions", { permissions: provider.permissions.join(", ") })}
+            {t("settings.connectors.permissions", { permissions: provider.permissions.join(", ") })}
           </p>
           {provider.detail !== null && (
             <p class="mt-1.5 break-words text-xs leading-5 text-secondary">{provider.detail}</p>
@@ -114,16 +114,16 @@ function ConnectionCard({ provider, onDisconnect }: ConnectionCardProps) {
 
         {provider.connected && (
           <button type="button" onClick={onDisconnect} class={CARD_ACTION_CLASS}>
-            {t("settings.connections.disconnect")}
+            {t("settings.connectors.disconnect")}
           </button>
         )}
       </div>
 
-      <TokenConnectionForm provider={provider} saving={savingTokenNow} />
+      <TokenConnectorForm provider={provider} saving={savingTokenNow} />
 
       {provider.connected && (
         <p class="mt-3 text-[11px] leading-5 text-secondary">
-          {t("settings.connections.env", { names: provider.env.join(", ") })}
+          {t("settings.connectors.env", { names: provider.env.join(", ") })}
         </p>
       )}
     </div>
@@ -131,16 +131,16 @@ function ConnectionCard({ provider, onDisconnect }: ConnectionCardProps) {
 }
 
 /** トークンの入力と保存。保存する前に、サーバーがトークンでアカウントを確かめる。 */
-function TokenConnectionForm({ provider, saving }: { provider: ConnectionProviderView; saving: boolean }) {
+function TokenConnectorForm({ provider, saving }: { provider: ConnectorProviderView; saving: boolean }) {
   const [token, setToken] = useState("");
 
   const save = (): void => {
     const trimmed = token.trim();
     if (trimmed.length === 0) return;
 
-    void saveConnectionToken(provider.id, trimmed)
+    void saveConnectorToken(provider.id, trimmed)
       .then(() => setToken(""))
-      .catch(showConnectionsError);
+      .catch(showConnectorsError);
   };
 
   return (
@@ -165,7 +165,7 @@ function TokenConnectionForm({ provider, saving }: { provider: ConnectionProvide
             }}
           />
           <Button variant="primary" disabled={saving || token.trim().length === 0} onClick={save}>
-            {t(saving ? "settings.connections.token.saving" : "settings.connections.token.save")}
+            {t(saving ? "settings.connectors.token.saving" : "settings.connectors.token.save")}
           </Button>
         </div>
       </Field>
@@ -178,10 +178,10 @@ function TokenConnectionForm({ provider, saving }: { provider: ConnectionProvide
           class="inline-flex items-center gap-1 text-xs text-secondary underline underline-offset-2"
         >
           <IconExternalLink size={12} stroke={1.6} class="shrink-0" />
-          {t("settings.connections.openSetup")}
+          {t("settings.connectors.openSetup")}
         </a>
         {provider.connected && (
-          <p class="text-[11px] leading-5 text-secondary">{t("settings.connections.token.saved")}</p>
+          <p class="text-[11px] leading-5 text-secondary">{t("settings.connectors.token.saved")}</p>
         )}
       </div>
     </div>

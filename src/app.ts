@@ -19,8 +19,8 @@ import { createImageStore } from "./server/computer/images";
 import { ensureTeraWorkspace } from "./server/computer/workspaces";
 import { createSettingsStore, type SettingsStore } from "./server/data/settings";
 import { createStore, type Store } from "./server/data/store";
-import { createConnections, type ConnectionsManager } from "./server/connections/manager";
-import { createConnectionToolset } from "./server/connections/tools";
+import { createConnectors, type ConnectorsManager } from "./server/connectors/manager";
+import { createConnectorToolset } from "./server/connectors/tools";
 import { createDiscordWebhooks, type DiscordWebhooks } from "./server/discord/manager";
 import { createDiscordToolset } from "./server/discord/tools";
 import { startServer, type StartedServer } from "./server/http/server";
@@ -48,8 +48,8 @@ export type App = {
   catalog: Catalog;
   compaction: Compaction;
   mcp: McpManager;
-  /** アプリの接続（GitHub など）。設定画面とチャットのカードから使う。 */
-  connections: ConnectionsManager;
+  /** コネクタ（GitHub など）。設定画面とチャットのカードから使う。 */
+  connectors: ConnectorsManager;
   /** Discord の webhook（送信先は Tera ごと）。設定画面とチャットのカードから使う。 */
   discord: DiscordWebhooks;
   container: ContainerManager;
@@ -65,7 +65,7 @@ export type AppOverrides = {
   engine?: AgentEngine;
   container?: ContainerManager;
   mcp?: McpManager;
-  connections?: ConnectionsManager;
+  connectors?: ConnectorsManager;
   discord?: DiscordWebhooks;
   webSearch?: WebSearchManager;
   catalog?: Catalog;
@@ -90,9 +90,9 @@ export function startApp(config: AppConfig, overrides: AppOverrides = {}): App {
   // エージェントが作ったスキルは、コンピュータのホームの .agents/skills に置く。
   const skills = createSkillFileStore({ dataDir: config.dataDir });
 
-  // アプリの接続。トークンはデータディレクトリに置き、コンピュータの環境変数にも混ぜる。
-  // 接続が設定した値は、設定ファイルの env より優先する（接続し直した結果を使うため）。
-  const connections = overrides.connections ?? createConnections({ dataDir: config.dataDir });
+  // コネクタ。トークンはデータディレクトリに置き、コンピュータの環境変数にも混ぜる。
+  // コネクタが設定した値は、設定ファイルの env より優先する（接続し直した結果を使うため）。
+  const connectors = overrides.connectors ?? createConnectors({ dataDir: config.dataDir });
 
   // Discord の送信先（webhook URL）は Tera ごとに持つ。URL は秘密なのでデータディレクトリへ 0600 で置く。
   const discord = overrides.discord ?? createDiscordWebhooks({ store, dataDir: config.dataDir });
@@ -118,7 +118,7 @@ export function startApp(config: AppConfig, overrides: AppOverrides = {}): App {
     createContainerManager({
       dataDir: config.dataDir,
       containerDir: join(import.meta.dir, "..", "container"),
-      env: () => ({ ...settings.read().env, ...connections.env() }),
+      env: () => ({ ...settings.read().env, ...connectors.env() }),
     });
 
   // エージェントがユーザーへ画面を渡すときの待ち（ログインや二段階認証）。
@@ -172,7 +172,7 @@ export function startApp(config: AppConfig, overrides: AppOverrides = {}): App {
       attachments,
       history,
       webSearch,
-      connections: createConnectionToolset(connections),
+      connectors: createConnectorToolset(connectors),
       discord: createDiscordToolset({ discord }),
       tera: teraToolset,
       coding,
@@ -199,7 +199,7 @@ export function startApp(config: AppConfig, overrides: AppOverrides = {}): App {
     catalog,
     settings,
     mcp,
-    connections,
+    connectors,
     discord,
     webSearch: webSearchManager,
     container,
@@ -221,7 +221,7 @@ export function startApp(config: AppConfig, overrides: AppOverrides = {}): App {
     catalog,
     compaction,
     mcp,
-    connections,
+    connectors,
     discord,
     container,
     webSearch: webSearchManager,
@@ -229,7 +229,7 @@ export function startApp(config: AppConfig, overrides: AppOverrides = {}): App {
     async shutdown() {
       // 畳まないと、MCP サーバーの接続と SQLite の WAL、圧縮の予約がそのまま残る。
       await server.stop(true);
-      connections.close();
+      connectors.close();
       discord.close();
       await mcp.close();
       compaction.close();

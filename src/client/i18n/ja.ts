@@ -59,10 +59,10 @@ export const ja: Record<MessageKey, string> = {
   "chat.env.submitting": "設定しています…",
   "chat.env.waiting": "入力待ち",
 
-  "chat.connection.title": "{app} の接続が必要です",
-  "chat.connection.waiting": "貼り付けて保存すると、そのまま続きを進めます。",
-  "chat.connection.waitingShort": "接続待ち",
-  "chat.connection.failed": "接続できませんでした。もう一度頼んでください。",
+  "chat.connector.title": "{app} のコネクタが必要です",
+  "chat.connector.waiting": "貼り付けて保存すると、そのまま続きを進めます。",
+  "chat.connector.waitingShort": "接続待ち",
+  "chat.connector.failed": "接続できませんでした。もう一度頼んでください。",
 
   "composer.placeholder": "メッセージを入力",
   "composer.placeholder.steering": "作業中のエージェントへ送る",
@@ -83,22 +83,22 @@ export const ja: Record<MessageKey, string> = {
 
   "settings.advanced": "詳細設定",
 
-  "settings.connections": "接続",
-  "settings.connections.description":
-    "CLI やツールから使うサービスに接続します。トークンを発行して貼り付けると、コンピュータのコマンドと app_request から使えます。",
-  "settings.connections.state.connected": "接続済み",
-  "settings.connections.state.disconnected": "未接続",
-  "settings.connections.account": "{account} として接続中",
-  "settings.connections.permissions": "必要な権限: {permissions}",
-  "settings.connections.token.save": "保存",
-  "settings.connections.token.saving": "確かめています…",
-  "settings.connections.token.saved": "トークンは保存済みです。変更するときだけ、新しいトークンを貼り付けてください。",
-  "settings.connections.openSetup": "アプリの設定を開く",
-  "settings.connections.env": "コンピュータへ渡す環境変数: {names}",
-  "settings.connections.disconnect": "切断",
-  "settings.connections.disconnectTitle": "接続を切断しますか？",
-  "settings.connections.disconnectMessage":
-    "保存されている接続情報を消します。コンピュータの環境変数からもトークンが外れます。",
+  "settings.connectors": "コネクタ",
+  "settings.connectors.description":
+    "CLI やツールから使う外部サービスへのコネクタです。トークンや webhook URL を保存すると、コンピュータのコマンド、app_request、Discord への送信で使えます。",
+  "settings.connectors.state.connected": "接続済み",
+  "settings.connectors.state.disconnected": "未接続",
+  "settings.connectors.account": "{account} として接続中",
+  "settings.connectors.permissions": "必要な権限: {permissions}",
+  "settings.connectors.token.save": "保存",
+  "settings.connectors.token.saving": "確かめています…",
+  "settings.connectors.token.saved": "トークンは保存済みです。変更するときだけ、新しいトークンを貼り付けてください。",
+  "settings.connectors.openSetup": "アプリの設定を開く",
+  "settings.connectors.env": "コンピュータへ渡す環境変数: {names}",
+  "settings.connectors.disconnect": "切断",
+  "settings.connectors.disconnectTitle": "コネクタを切断しますか？",
+  "settings.connectors.disconnectMessage":
+    "保存されているコネクタの情報を消します。コンピュータの環境変数からもトークンが外れます。",
 
   "settings.discord.description":
     "Tera ごとに、メッセージを送るチャンネルの webhook URL を保存します。エージェントは discord_send でそのチャンネルへ投稿します。",
@@ -297,7 +297,7 @@ export const ja: Record<MessageKey, string> = {
   "error.mcp_server_not_found": "この MCP サーバーは設定されていません。",
   "error.mcp_server_exists": "この MCP サーバーはすでに追加されています。",
   "error.mcp_authorization_failed": "MCP サーバーの認可を始められませんでした。",
-  "error.connection_not_found": "この接続は設定されていません。",
+  "error.connector_not_found": "このコネクタは設定されていません。",
   "error.web_search_not_found": "この検索プロバイダは設定されていません。",
   "error.web_search_exists": "この検索プロバイダはすでに追加されています。",
   "error.mcp_unreachable": "MCP サーバーに接続できませんでした。",

@@ -4,7 +4,7 @@ import { locale } from "../i18n";
 import * as api from "../lib/api";
 import { ApiError } from "../lib/http";
 import { interpretEvent } from "./chat-events";
-import { beginConnectionRequest, endConnectionRequest, resetConnectionRequest } from "./connection-request";
+import { beginConnectorRequest, endConnectorRequest, resetConnectorRequest } from "./connector-request";
 import { beginEnvRequest, endEnvRequest, resetEnvRequest } from "./env-request";
 import { clearChatError, showChatError } from "./failure";
 import { answerHandover, beginHandover, endHandover, handoverActive } from "./handover";
@@ -79,7 +79,7 @@ export async function openTera(id: string): Promise<void> {
   isStopping.value = false;
   // 入力欄は、開いた Tera のターンのものだけを出す（前の Tera の待ちを残さない）。
   resetEnvRequest();
-  resetConnectionRequest();
+  resetConnectorRequest();
   teraCreateCalls.clear();
   clearChatError();
   activeTeraId.value = id;
@@ -235,7 +235,7 @@ export async function sendMessage(rawContent: string, files: readonly File[]): P
       isStopping.value = false;
       // 結果が届かないまま（停止・切断で）ターンが終わった場合も、入力欄を残さない。
       resetEnvRequest();
-      resetConnectionRequest();
+      resetConnectorRequest();
     }
     settle();
   }
@@ -332,9 +332,9 @@ function applyEvent(event: ChatEvent): void {
     case "env-request-start":
       beginEnvRequest(effect.callId, effect.name, effect.description);
       break;
-    case "connection-request-start":
+    case "connector-request-start":
       // Discord は Tera ごとの webhook なので、カードを出した時点の Tera を覚えておく。
-      beginConnectionRequest(effect.callId, effect.provider, effect.reason, activeTeraId.value);
+      beginConnectorRequest(effect.callId, effect.provider, effect.reason, activeTeraId.value);
       break;
     case "tera-create-call":
       // 結果が成功で届いたときに、一覧を読み直す。
@@ -346,7 +346,7 @@ function applyEvent(event: ChatEvent): void {
       // 環境変数の入力は、取り消しや失敗でも終える（入力を待ち続けない）。
       endEnvRequest(effect.callId);
       // 認証カードは、成功なら畳み、失敗は理由を残して導線を消さない。
-      endConnectionRequest(effect.callId, effect.failed);
+      endConnectorRequest(effect.callId, effect.failed);
       // 新しい Tera ができたら、サイドバーへ出す（一覧を読み直す）。
       if (teraCreateCalls.delete(effect.callId) && !effect.failed) void refreshTeras().catch(showChatError);
       break;

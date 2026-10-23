@@ -8,7 +8,7 @@ import type { SentWebhookMessage, WebhookMessage } from "./webhook";
 /**
  * Discord の webhook を扱うツール。
  *
- * discord_connect はチャットに接続カードを出し、ユーザーが webhook URL を保存するまで待つ。
+ * discord_connect はチャットにコネクタのカードを出し、ユーザーが webhook URL を保存するまで待つ。
  * discord_send は、その Tera のチャンネルへメッセージを投稿する。
  * どちらもツール一覧には載せず、tool_search で見つけて tool_call で実行する。
  * 送信先はターンの Tera で決まるので、ツール一式はターンごとに組む。

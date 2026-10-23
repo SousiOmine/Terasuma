@@ -1,15 +1,15 @@
 import { join } from "node:path";
-import type { ConnectionsView } from "../../shared/api/settings";
-import { ConnectionNotFound } from "../errors";
+import type { ConnectorsView } from "../../shared/api/settings";
+import { ConnectorNotFound } from "../errors";
 import { verifyAccount } from "./account";
-import { CONNECTION_PROVIDERS, type ConnectionProvider } from "./providers";
+import { CONNECTOR_PROVIDERS, type ConnectorProvider } from "./providers";
 import { createTokenStore, type TokenStore } from "./token-store";
 import { createPendingRegistry } from "../wait/pending";
 
 /**
- * アプリの接続の状態。
+ * コネクタの状態。
  *
- * 接続はトークンを貼るだけなので、待つのは「トークンが保存されるまで」だけ。
+ * コネクタはトークンを貼るだけなので、待つのは「トークンが保存されるまで」だけ。
  * computer_connect_app は wait で待ち、setToken が保存できた時点で待っているツールを解く。
  * ポーリングも有効期限も無い。
  *
@@ -25,22 +25,22 @@ type Waiter = {
   reject(error: unknown): void;
 };
 
-export type ConnectionsManager = {
+export type ConnectorsManager = {
   /** 設定画面に出す現在の状態。 */
-  view(): ConnectionsView;
-  /** id の定義。無ければ ConnectionNotFound。 */
-  provider(id: string): ConnectionProvider;
+  view(): ConnectorsView;
+  /** id の定義。無ければ ConnectorNotFound。 */
+  provider(id: string): ConnectorProvider;
   /** 定義されているプロバイダの id。ツールの案内に使う。 */
   ids(): readonly string[];
   /**
    * トークンを保存する。保存する前にアカウントを読んで、受け付けられないトークンは保存しない。
    * 保存できたら、このアプリの待ちをすべて解く。
    */
-  setToken(id: string, token: string): Promise<ConnectionsView>;
+  setToken(id: string, token: string): Promise<ConnectorsView>;
   /** トークンの保存を待っているツールを、取り消しの理由で失敗させる。 */
   cancelWait(id: string): void;
   /** 保存されているトークンを消す。 */
-  disconnect(id: string): ConnectionsView;
+  disconnect(id: string): ConnectorsView;
   /**
    * ツール用。接続済みなら使い方の文を返し、未接続ならトークンが保存されるまで待つ。
    * ターンが止まったら signal で待ちを外す。
@@ -54,30 +54,30 @@ export type ConnectionsManager = {
   close(): void;
 };
 
-export type ConnectionsOptions = {
+export type ConnectorsOptions = {
   /** トークンを置くディレクトリ。 */
   dataDir: string;
   /** 差し替えたいときだけ渡す（テスト用）。 */
-  providers?: readonly ConnectionProvider[];
+  providers?: readonly ConnectorProvider[];
 };
 
 /** プロバイダごとのトークンの置き場。 */
-const TOKENS_DIR_NAME = "connections";
+const TOKENS_DIR_NAME = "connectors";
 
 /** ターンが終わって、待ちを続けられなくなったときの理由。 */
 const WAIT_ENDED = "The turn ended before the token was saved.";
 
-export function createConnections(options: ConnectionsOptions): ConnectionsManager {
-  const providers = options.providers ?? CONNECTION_PROVIDERS;
+export function createConnectors(options: ConnectorsOptions): ConnectorsManager {
+  const providers = options.providers ?? CONNECTOR_PROVIDERS;
 
   /** トークンの保存を待っているツール（プロバイダ id → 待ち）。同じ id を複数のツールが待てる。 */
   const pending = createPendingRegistry<string, Waiter>({ multiple: true });
   /** プロバイダ id → トークンの置き場。 */
   const stores = new Map<string, TokenStore>();
 
-  function requireProvider(id: string): ConnectionProvider {
+  function requireProvider(id: string): ConnectorProvider {
     const provider = providers.find((entry) => entry.id === id);
-    if (provider === undefined) throw new ConnectionNotFound(id);
+    if (provider === undefined) throw new ConnectorNotFound(id);
     return provider;
   }
 
@@ -91,7 +91,7 @@ export function createConnections(options: ConnectionsOptions): ConnectionsManag
   }
 
   /** ツールへ返す、接続できたときの文。トークンそのものは含めない。 */
-  function connectedText(provider: ConnectionProvider, account: string | null): string {
+  function connectedText(provider: ConnectorProvider, account: string | null): string {
     const who = account === null ? provider.name : `${provider.name} as @${account}`;
     const envName = provider.env[0] ?? "TOKEN";
 
@@ -120,7 +120,7 @@ export function createConnections(options: ConnectionsOptions): ConnectionsManag
     });
   }
 
-  function view(): ConnectionsView {
+  function view(): ConnectorsView {
     return {
       providers: providers.map((provider) => {
         const token = tokenStore(provider.id).read();
@@ -164,12 +164,12 @@ export function createConnections(options: ConnectionsOptions): ConnectionsManag
 
     cancelWait(id) {
       requireProvider(id);
-      rejectWaiters(id, new Error("The user cancelled the connection."));
+      rejectWaiters(id, new Error("The user cancelled the connector setup."));
     },
 
     disconnect(id) {
       requireProvider(id);
-      rejectWaiters(id, new Error("The connection was disconnected."));
+      rejectWaiters(id, new Error("The connector was disconnected."));
       tokenStore(id).clear();
       return view();
     },
@@ -204,7 +204,7 @@ export function createConnections(options: ConnectionsOptions): ConnectionsManag
 
     close() {
       for (const id of [...pending.keys()]) {
-        rejectWaiters(id, new Error("Terasuma is shutting down; the connection was cancelled."));
+        rejectWaiters(id, new Error("Terasuma is shutting down; the connector setup was cancelled."));
       }
     },
   };

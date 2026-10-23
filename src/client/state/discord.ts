@@ -4,7 +4,7 @@ import { createErrorSignal } from "../lib/errors";
 import { createResource } from "./resource";
 
 /**
- * 設定 > 接続 の Discord（Tera ごとの webhook）の状態。
+ * 設定 > コネクタ の Discord（Tera ごとの webhook）の状態。
  *
  * webhook URL は秘密なので、画面には戻さない（webhook の名前とチャンネル ID だけ）。
  * 保存したら一覧を置き換える。チャットのカードの待ちは、サーバーが保存で解く。
@@ -47,7 +47,7 @@ export async function removeWebhook(teraId: string): Promise<void> {
   discord.value = await api.clearDiscordWebhook(teraId);
 }
 
-/** チャットのカードから、接続の待ちをやめる。 */
+/** チャットのカードから、Discord の webhook の待ちをやめる。 */
 export async function cancelDiscordWait(teraId: string): Promise<void> {
   discord.value = await api.cancelDiscordWait(teraId);
 }

@@ -153,7 +153,7 @@ describe("チャットのイベントの読み替え", () => {
     ).toBeNull();
   });
 
-  test("tool_call 越しの接続の呼び出しは、接続カードを出す", () => {
+  test("tool_call 越しのコネクタの呼び出しは、コネクタカードを出す", () => {
     expect(
       interpretEvent({
         type: "tool-call",
@@ -167,7 +167,7 @@ describe("チャットのイベントの読み替え", () => {
         },
       }),
     ).toEqual({
-      kind: "connection-request-start",
+      kind: "connector-request-start",
       callId: "c8",
       provider: "github",
       reason: "issue を読むため",
@@ -186,7 +186,7 @@ describe("チャットのイベントの読み替え", () => {
           args: { name: "computer_connect_app", args: { provider: "github" } },
         },
       }),
-    ).toEqual({ kind: "connection-request-start", callId: "c9", provider: "github", reason: null });
+    ).toEqual({ kind: "connector-request-start", callId: "c9", provider: "github", reason: null });
 
     // アプリ名が無ければ、どの接続か分からないので何もしない。
     expect(
@@ -204,7 +204,7 @@ describe("チャットのイベントの読み替え", () => {
     ).toBeNull();
   });
 
-  test("tool_call 越しの discord_connect は、Discord の接続カードを出す", () => {
+  test("tool_call 越しの discord_connect は、Discord のコネクタカードを出す", () => {
     expect(
       interpretEvent({
         type: "tool-call",
@@ -218,7 +218,7 @@ describe("チャットのイベントの読み替え", () => {
         },
       }),
     ).toEqual({
-      kind: "connection-request-start",
+      kind: "connector-request-start",
       callId: "c11",
       provider: "discord",
       reason: "通知を送るため",
@@ -237,7 +237,7 @@ describe("チャットのイベントの読み替え", () => {
           args: { name: "discord_connect", args: {} },
         },
       }),
-    ).toEqual({ kind: "connection-request-start", callId: "c12", provider: "discord", reason: null });
+    ).toEqual({ kind: "connector-request-start", callId: "c12", provider: "discord", reason: null });
   });
 
   test("待ちの結果は、どの呼び出しの結果かだけを伝える", () => {

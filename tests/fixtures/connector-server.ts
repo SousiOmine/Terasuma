@@ -1,5 +1,5 @@
 import type { Server } from "bun";
-import type { ConnectionProvider } from "../../src/server/connections/providers";
+import type { ConnectorProvider } from "../../src/server/connectors/providers";
 
 /**
  * テストで使う接続先の API サーバー。
@@ -7,7 +7,7 @@ import type { ConnectionProvider } from "../../src/server/connections/providers"
  * GitHub の `/api/*` を真似る。
  * トークンの検証（アカウントの読み取り）と、app_request の応答だけを持つ。
  */
-export type FakeConnectionServer = {
+export type FakeConnectorServer = {
   server: Server<undefined>;
   /** サーバーの origin。プロバイダ定義の URL を組み立てる。 */
   readonly origin: string;
@@ -17,7 +17,7 @@ export type FakeConnectionServer = {
   readonly account: string;
 };
 
-export function startFakeConnectionServer(): FakeConnectionServer {
+export function startFakeConnectorServer(): FakeConnectorServer {
   let origin = "";
   const accessToken = "access-1";
   const account = "octocat";
@@ -52,7 +52,7 @@ export function startFakeConnectionServer(): FakeConnectionServer {
 }
 
 /** テスト用の GitHub プロバイダ。宛先だけを偽サーバーへ向ける。 */
-export function fakeProvider(server: FakeConnectionServer): ConnectionProvider {
+export function fakeProvider(server: FakeConnectorServer): ConnectorProvider {
   return {
     id: "github",
     name: "GitHub",

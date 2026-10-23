@@ -25,7 +25,7 @@ export const API_ERROR_CODES = [
   "mcp_server_not_found",
   "mcp_server_exists",
   "mcp_authorization_failed",
-  "connection_not_found",
+  "connector_not_found",
   "web_search_not_found",
   "web_search_exists",
   "container_build_failed",

@@ -22,8 +22,8 @@ import type { EnvRequests } from "../src/server/computer/env";
 import type { LoadedSkill, Skill, SkillFileStore } from "../src/server/agent/skill-types";
 import type { ImageStore } from "../src/server/computer/images";
 import type { McpManager } from "../src/server/mcp/manager";
-import type { ConnectionToolsetProvider } from "../src/server/connections/tools";
-import type { ConnectionsManager } from "../src/server/connections/manager";
+import type { ConnectorToolsetProvider } from "../src/server/connectors/tools";
+import type { ConnectorsManager } from "../src/server/connectors/manager";
 import type { DiscordToolsetProvider } from "../src/server/discord/tools";
 import type { WebSearchManager } from "../src/server/websearch-manager";
 import { createSettingsStore, type SettingsStore } from "../src/server/data/settings";
@@ -190,8 +190,8 @@ export function createWebSearchToolsStub(): WebSearchToolsetProvider {
   return { toolset: () => ({}) };
 }
 
-/** アプリの接続ツールを渡さないテストのための差し替え（エンジン用）。 */
-export function createConnectionToolsStub(): ConnectionToolsetProvider {
+/** コネクタのツールを渡さないテストのための差し替え（エンジン用）。 */
+export function createConnectorToolsStub(): ConnectorToolsetProvider {
   return { toolset: () => ({}) };
 }
 
@@ -209,12 +209,12 @@ export function createTeraToolsStub(): TeraToolsetProvider {
  * 接続を持たないテストのための差し替え。
  * ツール名を数えるだけの用途（プロバイダを引こうとすると失敗する）。
  */
-export function createConnectionsStub(): ConnectionsManager {
+export function createConnectorsStub(): ConnectorsManager {
   const empty = { providers: [] };
   return {
     view: () => empty,
     provider() {
-      throw new Error("No connection providers in this stub");
+      throw new Error("No connector providers in this stub");
     },
     ids: () => [],
     setToken: async () => empty,

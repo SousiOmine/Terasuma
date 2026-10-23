@@ -10,7 +10,7 @@ import type { AgentEngine } from "../agent/engine";
 import type { Handover } from "../computer/handover";
 import { describeError } from "../../shared/errors";
 import { jsonError, withErrorHandling } from "./respond";
-import type { ConnectionsManager } from "../connections/manager";
+import type { ConnectorsManager } from "../connectors/manager";
 import type { DiscordWebhooks } from "../discord/manager";
 import type { McpManager } from "../mcp/manager";
 import type { WebSearchManager } from "../websearch-manager";
@@ -37,8 +37,8 @@ export type ServerOptions = {
   settings: SettingsStore;
   /** MCP サーバーとの接続。OAuth のコールバックもここを通る。 */
   mcp: McpManager;
-  /** アプリの接続（トークン）。設定画面とチャットのカードからの操作もここを通る。 */
-  connections: ConnectionsManager;
+  /** コネクタ（トークン）。設定画面とチャットのカードからの操作もここを通る。 */
+  connectors: ConnectorsManager;
   /** Discord の webhook（送信先は Tera ごと）。設定画面とチャットのカードからの操作もここを通る。 */
   discord: DiscordWebhooks;
   /** Web 検索の設定と接続確認。設定画面からの操作もここを通る。 */
@@ -90,7 +90,7 @@ export function startServer(options: ServerOptions): StartedServer {
     compaction,
     settings,
     mcp,
-    connections,
+    connectors,
     discord,
     webSearch,
     container,
@@ -106,7 +106,7 @@ export function startServer(options: ServerOptions): StartedServer {
       engine,
       settings,
       mcp,
-      connections,
+      connectors,
       discord,
       webSearch,
       container,

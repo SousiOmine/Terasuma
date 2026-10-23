@@ -82,18 +82,18 @@ export function createRoutes(api: WithErrorHandling<ApiHandlers>, screen: Screen
       POST: api.authorizeMcpServer,
       DELETE: api.cancelMcpAuthorization,
     },
-    // アプリの接続。トークンの保存と、保存待ちの中止。
-    "/api/connections": {
-      GET: api.listConnections,
+    // コネクタ。トークンの保存と、保存待ちの中止。
+    "/api/connectors": {
+      GET: api.listConnectors,
     },
-    "/api/connections/:id": {
-      DELETE: api.disconnectConnection,
+    "/api/connectors/:id": {
+      DELETE: api.disconnectConnector,
     },
-    "/api/connections/:id/token": {
-      PUT: api.setConnectionToken,
+    "/api/connectors/:id/token": {
+      PUT: api.setConnectorToken,
     },
-    "/api/connections/:id/wait": {
-      DELETE: api.cancelConnectionWait,
+    "/api/connectors/:id/wait": {
+      DELETE: api.cancelConnectorWait,
     },
     // Discord の webhook（Tera ごとに 1 つ）。保存する前に、その URL の webhook を確かめる。
     "/api/discord": {

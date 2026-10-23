@@ -2,29 +2,29 @@ import { describe, expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ToolSet } from "ai";
-import { createConnections, type ConnectionsManager } from "../src/server/connections/manager";
-import { createConnectionTools } from "../src/server/connections/tools";
+import { createConnectors, type ConnectorsManager } from "../src/server/connectors/manager";
+import { createConnectorTools } from "../src/server/connectors/tools";
 import { withTempDir } from "./harness";
-import { fakeProvider, startFakeConnectionServer, type FakeConnectionServer } from "./fixtures/connection-server";
+import { fakeProvider, startFakeConnectorServer, type FakeConnectorServer } from "./fixtures/connector-server";
 
 /**
- * アプリの接続ツール（computer_connect_app / app_request）。
+ * コネクタのツール（computer_connect_app / app_request）。
  * モデルを介さずにツールをそのまま呼び、戻り値と失敗の文を確かめる。
  */
 
 type Context = {
   tools: ToolSet;
-  manager: ConnectionsManager;
+  manager: ConnectorsManager;
   dir: string;
-  server: FakeConnectionServer;
+  server: FakeConnectorServer;
 };
 
 async function withTools(run: (context: Context) => Promise<void>): Promise<void> {
-  const server = startFakeConnectionServer();
+  const server = startFakeConnectorServer();
   try {
-    await withTempDir("terasuma-connection-tools-", async (dir) => {
-      const manager = createConnections({ dataDir: join(dir, "data"), providers: [fakeProvider(server)] });
-      const tools = createConnectionTools({ connections: manager });
+    await withTempDir("terasuma-connector-tools-", async (dir) => {
+      const manager = createConnectors({ dataDir: join(dir, "data"), providers: [fakeProvider(server)] });
+      const tools = createConnectorTools({ connectors: manager });
 
       try {
         await run({ tools, manager, dir, server });
@@ -62,11 +62,11 @@ function rejectionOf(promise: Promise<unknown>): Promise<string> {
 }
 
 /** 偽の API サーバーのトークンで、GitHub を接続済みにする。 */
-async function connect(manager: ConnectionsManager, server: FakeConnectionServer): Promise<void> {
+async function connect(manager: ConnectorsManager, server: FakeConnectorServer): Promise<void> {
   await manager.setToken("github", server.accessToken);
 }
 
-describe("アプリの接続ツール", () => {
+describe("コネクタのツール", () => {
   test("ツール名は computer_connect_app と app_request", async () => {
     await withTools(async ({ tools }) => {
       expect(Object.keys(tools)).toEqual(["computer_connect_app", "app_request"]);
@@ -149,12 +149,12 @@ describe("アプリの接続ツール", () => {
 
       // 誤ったトークンが保存されている状態を作り、別のマネージャに読ませる。
       writeFileSync(
-        join(dir, "data", "connections", "github.json"),
+        join(dir, "data", "connectors", "github.json"),
         JSON.stringify({ accessToken: "wrong", account: null, obtainedAt: 0 }),
         "utf8",
       );
-      const stale = createConnections({ dataDir: join(dir, "data"), providers: [fakeProvider(server)] });
-      const staleTools = createConnectionTools({ connections: stale });
+      const stale = createConnectors({ dataDir: join(dir, "data"), providers: [fakeProvider(server)] });
+      const staleTools = createConnectorTools({ connectors: stale });
 
       try {
         const error = await rejectionOf(
@@ -193,7 +193,7 @@ describe("アプリの接続ツール", () => {
     });
   });
 
-  test("ターンが止まると、接続の待ちも終わる", async () => {
+  test("ターンが止まると、コネクタの待ちも終わる", async () => {
     await withTools(async ({ tools }) => {
       const controller = new AbortController();
       const waiting = callTool(

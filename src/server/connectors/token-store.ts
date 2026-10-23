@@ -2,7 +2,7 @@ import { rmSync } from "node:fs";
 import { readPrivateJson, writePrivateJson } from "../data/secret-file";
 
 /**
- * 接続したアプリのトークンを 1 ファイルに保存する。
+ * コネクタのトークンを 1 ファイルに保存する。
  *
  * トークンは秘密なので、ディレクトリを 0700、ファイルを 0600 にする。
  * 読めないファイルは「接続が壊れている」として理由を返し、コンピュータのコマンドは止めない
@@ -48,7 +48,7 @@ export function createTokenStore(path: string): TokenStore {
       return cached;
     }
     if (!isStoredToken(content.value)) {
-      cached = { kind: "unreadable", detail: `${path} の内容が接続の記録として読めません` };
+      cached = { kind: "unreadable", detail: `${path} の内容がコネクタの記録として読めません` };
       return cached;
     }
 

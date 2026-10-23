@@ -5,23 +5,23 @@ import { describeError } from "../../shared/errors";
 import { truncateText } from "../../shared/text";
 import { sendRequest } from "../http/client";
 import { APP_REQUEST_TOOL_NAME, CONNECT_APP_TOOL_NAME } from "../../shared/tools";
-import { ConnectionNotFound } from "../errors";
-import type { ConnectionsManager } from "./manager";
+import { ConnectorNotFound } from "../errors";
+import type { ConnectorsManager } from "./manager";
 
 /**
- * アプリの接続を扱うツール。
+ * コネクタを扱うツール。
  *
- * computer_connect_app はチャットに接続カードを出し、ユーザーがトークンを保存するまで待つ。
+ * computer_connect_app はチャットにコネクタのカードを出し、ユーザーがトークンを保存するまで待つ。
  * app_request は接続済みのトークンで API を叩く（トークンはモデルに渡さない）。
  * どちらもツール一覧には載せず、tool_search で見つけて tool_call で実行する。
  */
 
 /** モデルへ渡すツール。キーは "computer_connect_app" と "app_request"。 */
-export type ConnectionToolset = ToolSet;
+export type ConnectorToolset = ToolSet;
 
 /** ツールの供給元。 */
-export type ConnectionToolsetProvider = {
-  toolset(): ConnectionToolset;
+export type ConnectorToolsetProvider = {
+  toolset(): ConnectorToolset;
 };
 
 /** API 1 回の待ち時間。応答しないサーバーでターンを止めない。 */
@@ -40,17 +40,17 @@ type AppRequestInput = {
   body?: unknown;
 };
 
-export function createConnectionToolset(connections: ConnectionsManager): ConnectionToolsetProvider {
+export function createConnectorToolset(connectors: ConnectorsManager): ConnectorToolsetProvider {
   return {
     toolset() {
-      return createConnectionTools({ connections });
+      return createConnectorTools({ connectors });
     },
   };
 }
 
-export function createConnectionTools(options: { connections: ConnectionsManager }): ConnectionToolset {
-  const { connections } = options;
-  const appIds = connections.ids();
+export function createConnectorTools(options: { connectors: ConnectorsManager }): ConnectorToolset {
+  const { connectors } = options;
+  const appIds = connectors.ids();
   const appList = appIds.join(", ");
   const firstApp = appIds[0] ?? "github";
 
@@ -73,9 +73,9 @@ export function createConnectionTools(options: { connections: ConnectionsManager
         }
 
         try {
-          return await connections.wait(provider, signal);
+          return await connectors.wait(provider, signal);
         } catch (error) {
-          if (error instanceof ConnectionNotFound) {
+          if (error instanceof ConnectorNotFound) {
             throw new Error(`Unknown app "${provider}". Use one of: ${appList}.`, { cause: error });
           }
           throw error;
@@ -97,8 +97,8 @@ export function createConnectionTools(options: { connections: ConnectionsManager
         body: z.unknown().optional().describe("JSON body for POST, PATCH or PUT"),
       }),
       execute: async ({ provider, method, path, body }: AppRequestInput, context: ToolContext) => {
-        const definition = providerOf(connections, provider, appList);
-        const token = connections.token(provider);
+        const definition = providerOf(connectors, provider, appList);
+        const token = connectors.token(provider);
         if (token === null) {
           throw new Error(
             `${definition.name} is not connected. Call ${CONNECT_APP_TOOL_NAME} and let the user paste a token first.`,
@@ -152,11 +152,11 @@ export function createConnectionTools(options: { connections: ConnectionsManager
 }
 
 /** 知らない id は、モデルが読める英語の理由にする。 */
-function providerOf(connections: ConnectionsManager, id: string, appList: string) {
+function providerOf(connectors: ConnectorsManager, id: string, appList: string) {
   try {
-    return connections.provider(id);
+    return connectors.provider(id);
   } catch (error) {
-    if (error instanceof ConnectionNotFound) {
+    if (error instanceof ConnectorNotFound) {
       throw new Error(`Unknown app "${id}". Use one of: ${appList}.`, { cause: error });
     }
     throw error;

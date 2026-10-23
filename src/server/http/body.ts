@@ -148,7 +148,7 @@ export async function readDiscordWebhookForm(req: JsonRequest): Promise<{ url: s
 /**
  * 画面から来たトークンを読む。空欄は受け付けない（消すときは切断を使う）。
  */
-export async function readConnectionTokenForm(req: JsonRequest): Promise<{ token: string }> {
+export async function readConnectorTokenForm(req: JsonRequest): Promise<{ token: string }> {
   const body = await readJsonBody(req);
   const token = readOptionalString(body, "token");
   if (token === undefined) throw new ValidationError("token must be a string");

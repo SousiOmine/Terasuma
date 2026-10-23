@@ -134,7 +134,7 @@ sudo tailscale serve reset
 Tailscale 経由では、MCP サーバーの OAuth 認可は完了しない。
 コールバックの URL が `http://127.0.0.1:3000` で組み立てられるため、リモートのブラウザではその端末の localhost を指してしまう。
 API キーで繋ぐ MCP サーバーはこの制限を受けない。
-`設定 > 接続` で行うアプリの接続（GitHub の Personal Access Token、Discord の webhook URL）はコールバック URL を使わないので、Tailscale 経由でも完了する。
+`設定 > コネクタ` で行うコネクタの設定（GitHub の Personal Access Token、Discord の webhook URL）はコールバック URL を使わないので、Tailscale 経由でも完了する。
 
 ## 最初の設定
 
@@ -146,17 +146,17 @@ API キーで繋ぐ MCP サーバーはこの制限を受けない。
 以降は build 済みのイメージを使い回す。
 イメージには、エージェントがそのまま使える `git`、`tmux`、`pi`（pi-coding-agent）が入っている。
 
-## GitHub の接続
+## GitHub のコネクタ
 
-GitHub のリポジトリや API を使うときは、`設定 > 接続` で Personal Access Token を保存する。
+GitHub のリポジトリや API を使うときは、`設定 > コネクタ` で Personal Access Token を保存する。
 トークンは GitHub の画面で発行する。Terasuma 側でアプリを登録する必要はない。
 
-1. `設定 > 接続` の GitHub で「アプリの設定を開く」を押す。
+1. `設定 > コネクタ` の GitHub で「アプリの設定を開く」を押す。
    `scopes=repo,read:user` と説明が埋まった、トークン発行ページが開く。
 2. 有効期限を選び、**Generate token** を押す。
 3. 表示されたトークンをコピーし、Terasuma の GitHub の欄に貼り付けて保存する。
 
-トークンは `~/.local/share/terasuma/connections/github.json`（0600）に保存される。
+トークンは `~/.local/share/terasuma/connectors/github.json`（0600）に保存される。
 接続すると、コンピュータのコマンドで `GH_TOKEN` と `GITHUB_TOKEN` が使える。
 git は `git -c http.extraHeader="Authorization: Bearer $GH_TOKEN" clone ...` のように使う。
 `gh` コマンドはコンピュータのイメージに入っていない。API はエージェントの `app_request` から叩ける。
@@ -166,20 +166,20 @@ git は `git -c http.extraHeader="Authorization: Bearer $GH_TOKEN" clone ...` �
 
 ## Discord への送信
 
-Discord へ通知を送るときは、チャンネルの **webhook URL** を `設定 > 接続` の Discord に保存する。
+Discord へ通知を送るときは、チャンネルの **webhook URL** を `設定 > コネクタ` の Discord に保存する。
 送信先は Tera ごとに 1 つ。エージェントは `discord_send` でそのチャンネルへ投稿する。
 webhook は投稿だけができるので、メッセージの読み取り・編集・リアクションはできない。
 
 1. Discord で送信先のチャンネルを開き、`チャンネルの編集 > 連携サービス > ウェブフック` を選ぶ。
 2. **新しいウェブフック** を作り、**ウェブフック URL をコピー** を押す。
-3. Terasuma の `設定 > 接続` を開き、Discord の送信先にしたい Tera の欄へ URL を貼り付けて保存する。
+3. Terasuma の `設定 > コネクタ` を開き、Discord の送信先にしたい Tera の欄へ URL を貼り付けて保存する。
 
 保存する前に、Terasuma がその URL の webhook を読んで確かめる（webhook の名前とチャンネル ID が画面に出る）。
 URL は `~/.local/share/terasuma/discord/<teraId>.json`（0600）に保存される。
 エージェントは URL を直接見ない（`discord_send` が Terasuma の側で使う）。
 
-エージェントに接続を頼むこともできる。未接続のまま `discord_send` を呼ぶと `discord_connect` の案内が返り、
-チャットに接続カードが出る。カードに URL を貼っても同じ場所へ保存される。
+エージェントにコネクタの設定を頼むこともできる。未接続のまま `discord_send` を呼ぶと `discord_connect` の案内が返り、
+チャットにコネクタのカードが出る。カードに URL を貼っても同じ場所へ保存される。
 
 webhook はメンションを通知しない（`@everyone` などを本文に書いても、そのままの文字で届く）。
 短時間に送りすぎると Discord が 429 を返す。そのときは、結果に出る秒数だけ待ってから送り直す。
@@ -196,13 +196,13 @@ Quadlet は、ホストで直接動かすときと同じパスをコンテナに
 | `~/.local/share/terasuma/terasuma.db` | 会話の履歴 |
 | `~/.local/share/terasuma/images/` | ツールが撮った画像 |
 | `~/.local/share/terasuma/models-dev.json` | モデルカタログのキャッシュ |
-| `~/.local/share/terasuma/connections/` | アプリの接続のトークン（`github.json`、0600。バックアップに含める） |
+| `~/.local/share/terasuma/connectors/` | コネクタのトークン（`github.json`、0600。バックアップに含める） |
 | `~/.local/share/terasuma/discord/` | Tera ごとの Discord の webhook URL（`<teraId>.json`、0600。バックアップに含める） |
 | `~/.local/share/terasuma/container/home/` | コンピュータのホーム（エージェントの read / write / edit / bash の場所。チャットで添付したファイルは `uploads/` に置かれる） |
 | `~/.local/share/terasuma/container/home/.agents/skills/` | エージェントが作成したスキル。コンテナの中では `/home/agent/.agents/skills/` |
 
 バックアップを取るときは、`~/.config/terasuma` と `~/.local/share/terasuma` をまとめてコピーすればよい。
-接続のトークンと webhook の URL（`connections/` と `discord/`）もこの中に入るので、バックアップの扱いには注意する。
+コネクタのトークンと webhook の URL（`connectors/` と `discord/`）もこの中に入るので、バックアップの扱いには注意する。
 
 ```sh
 tar czf terasuma-backup.tgz -C "$HOME" .config/terasuma .local/share/terasuma
@@ -300,7 +300,7 @@ Terasuma にアクセスできる人は、コンピュータの画面と、こ�
 tailnet に共有端末や信頼できない端末が入っているなら、Tailscale の ACL で Serve のポートへのアクセスを絞る。
 
 モデルの API キーは `~/.config/terasuma/config.json` に保存される。
-接続のトークンは `~/.local/share/terasuma/connections/` に 0600 で保存される。
+コネクタのトークンは `~/.local/share/terasuma/connectors/` に 0600 で保存される。
 イメージには含まれない。
 GHCR のイメージは Public なので、誰でも pull できる。
 

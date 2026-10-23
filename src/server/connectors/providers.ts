@@ -1,17 +1,17 @@
 /**
- * アプリの接続に使うプロバイダの定義。
+ * コネクタに使うプロバイダの定義。
  *
- * 接続はすべて「利用者が発行したトークンを貼る」方式に統一している。
+ * コネクタはすべて「利用者が発行したトークンを貼る」方式に統一している。
  * GitHub は Personal Access Token を使う。
- * アプリを足すときは、ここに定義を 1 つ足す（画面と API はこの定義から組み立てる）。
+ * コネクタを足すときは、ここに定義を 1 つ足す（画面と API はこの定義から組み立てる）。
  * トークンの保存と検証は manager.ts、アカウントの読み取りは account.ts が受け持つ。
  *
  * Discord はここには無い。送信先の webhook URL を Tera ごとに保存する別の仕組みで、
  * server/discord が受け持つ（webhook は投稿だけができ、読み取りはできないため）。
  */
 
-/** 接続に共通する定義。 */
-export type ConnectionProvider = {
+/** コネクタに共通する定義。 */
+export type ConnectorProvider = {
   /** 設定のキーとツールの引数に使う id。 */
   id: string;
   /** 画面に出す名前。 */
@@ -28,7 +28,7 @@ export type ConnectionProvider = {
   };
   /** トークンに付ける権限。画面に出す（GitHub は scope）。 */
   permissions: readonly string[];
-  /** 接続がコンピュータへ渡す環境変数の名前。 */
+  /** コネクタがコンピュータへ渡す環境変数の名前。 */
   env: readonly string[];
   /** 接続できたときにツールへ返す、API の使い方の例。 */
   usage: string;
@@ -49,7 +49,7 @@ export type ConnectionProvider = {
  * トークンの発行ページは、スコープと説明を埋めた URL で開く。
  * fine-grained token でも動くが、作成の手間が増えるため classic を案内する。
  */
-const GITHUB: ConnectionProvider = {
+const GITHUB: ConnectorProvider = {
   id: "github",
   name: "GitHub",
   description: "リポジトリの読み書きと GitHub API",
@@ -76,4 +76,4 @@ const GITHUB: ConnectionProvider = {
 };
 
 /** 標準で使えるプロバイダ。並び順が設定画面の並び順になる。 */
-export const CONNECTION_PROVIDERS: readonly ConnectionProvider[] = [GITHUB];
+export const CONNECTOR_PROVIDERS: readonly ConnectorProvider[] = [GITHUB];

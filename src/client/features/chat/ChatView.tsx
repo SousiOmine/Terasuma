@@ -2,7 +2,7 @@ import { IconLayoutSidebarRight, IconMenu2 } from "@tabler/icons-preact";
 import { useMemo } from "preact/hooks";
 import { t } from "../../i18n";
 import { isLoadingMessages, isLoadingOlderMessages, isStreaming, liveTurn, messages } from "../../state/chat";
-import { connectionRequest } from "../../state/connection-request";
+import { connectorRequest } from "../../state/connector-request";
 import { containerStatus } from "../../state/container";
 import { envRequestActive } from "../../state/env-request";
 import { chatError, clearChatError } from "../../state/failure";
@@ -15,7 +15,7 @@ import { Banner } from "../../ui/Banner";
 import { ErrorNotice } from "../../ui/ErrorNotice";
 import { ChatAvatar } from "./ChatAvatar";
 import { Composer } from "./Composer";
-import { ConnectionRequestPanel } from "./ConnectionRequestPanel";
+import { ConnectorRequestPanel } from "./ConnectorRequestPanel";
 import { EnvRequestPanel } from "./EnvRequestPanel";
 import { AgentMessageBubble, NoticeLine, TypingBubble, UserMessageBubble } from "./MessageBubble";
 import { buildItems, formatTime, localeTag, type ChatItem } from "./timeline";
@@ -51,8 +51,8 @@ export function ChatView() {
   const handover = handoverActive.value;
   // 環境変数の入力待ち。引き受けとは別で、チャットの入力欄の上に入力欄を出す。
   const envWaiting = envRequestActive.value;
-  // アプリの接続待ち。同じく入力欄の上にカードを出す。
-  const connectionWaiting = connectionRequest.value !== null;
+  // コネクタの設定待ち。同じく入力欄の上にカードを出す。
+  const connectorWaiting = connectorRequest.value !== null;
   const { scrollRef, contentRef, handleScroll } = useOlderPages({ items, streaming });
 
   // 見出しは相手（Tera）の名前。いまは既定の 1 体しか居ないので、常に同じ名前になる。
@@ -79,8 +79,8 @@ export function ChatView() {
           <p class="truncate text-[11px] leading-4 text-secondary">
             {handover
               ? t("chat.computer.yourTurn")
-              : connectionWaiting
-                ? t("chat.connection.waitingShort")
+              : connectorWaiting
+                ? t("chat.connector.waitingShort")
                 : envWaiting
                   ? t("chat.env.waiting")
                   : streaming
@@ -165,11 +165,11 @@ export function ChatView() {
         </div>
       )}
 
-      {/* アプリの接続も、ふだんの入力欄のすぐ上に出す（送る先がチャットとは違うため別の面にする）。 */}
-      {connectionWaiting && (
+      {/* コネクタの設定も、ふだんの入力欄のすぐ上に出す（送る先がチャットとは違うため別の面にする）。 */}
+      {connectorWaiting && (
         <div class="shrink-0 px-3 pt-2 sm:px-6">
           <div class="mx-auto w-full max-w-3xl">
-            <ConnectionRequestPanel />
+            <ConnectorRequestPanel />
           </div>
         </div>
       )}

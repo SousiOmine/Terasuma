@@ -7,7 +7,7 @@ import type {
   AddProviderForm,
   CatalogProviderView,
   ComputerEnvView,
-  ConnectionsView,
+  ConnectorsView,
   ContainerStatusView,
   McpAuthorizationView,
   McpServerForm,
@@ -35,8 +35,8 @@ const MCP_PATH = "/api/mcp/servers";
 /** MCP サーバーを追加する前の接続確認。 */
 const MCP_TEST_PATH = "/api/mcp/test";
 
-/** アプリの接続（トークン）。 */
-const CONNECTIONS_PATH = "/api/connections";
+/** コネクタ（トークン）。 */
+const CONNECTORS_PATH = "/api/connectors";
 
 /** Discord の webhook（Tera ごと）。 */
 const DISCORD_PATH = "/api/discord";
@@ -273,28 +273,28 @@ function mcpServerPath(serverId: string): string {
   return `${MCP_PATH}/${encodeURIComponent(serverId)}`;
 }
 
-/** アプリの接続の一覧（接続中のアカウント）。 */
-export async function fetchConnections(): Promise<ConnectionsView> {
-  return request<ConnectionsView>(CONNECTIONS_PATH);
+/** コネクタの一覧（接続中のアカウント）。 */
+export async function fetchConnectors(): Promise<ConnectorsView> {
+  return request<ConnectorsView>(CONNECTORS_PATH);
 }
 
 /** トークンを保存する。保存する前に、サーバーがトークンでアカウントを確かめる。 */
-export async function saveConnectionToken(id: string, token: string): Promise<ConnectionsView> {
-  return request<ConnectionsView>(`${connectionPath(id)}/token`, jsonRequest("PUT", { token }));
+export async function saveConnectorToken(id: string, token: string): Promise<ConnectorsView> {
+  return request<ConnectorsView>(`${connectorPath(id)}/token`, jsonRequest("PUT", { token }));
 }
 
-/** 接続の待ちをやめる（チャットのカード）。 */
-export async function cancelConnectionWait(id: string): Promise<ConnectionsView> {
-  return request<ConnectionsView>(`${connectionPath(id)}/wait`, { method: "DELETE" });
+/** コネクタの待ちをやめる（チャットのカード）。 */
+export async function cancelConnectorWait(id: string): Promise<ConnectorsView> {
+  return request<ConnectorsView>(`${connectorPath(id)}/wait`, { method: "DELETE" });
 }
 
 /** 保存されているトークンを消す。 */
-export async function disconnectConnection(id: string): Promise<ConnectionsView> {
-  return request<ConnectionsView>(connectionPath(id), { method: "DELETE" });
+export async function disconnectConnector(id: string): Promise<ConnectorsView> {
+  return request<ConnectorsView>(connectorPath(id), { method: "DELETE" });
 }
 
-function connectionPath(id: string): string {
-  return `${CONNECTIONS_PATH}/${encodeURIComponent(id)}`;
+function connectorPath(id: string): string {
+  return `${CONNECTORS_PATH}/${encodeURIComponent(id)}`;
 }
 
 /** Discord の webhook（Tera ごとの状態）。 */
@@ -312,7 +312,7 @@ export async function clearDiscordWebhook(teraId: string): Promise<DiscordWebhoo
   return request<DiscordWebhooksView>(discordPath(teraId), { method: "DELETE" });
 }
 
-/** 接続の待ちをやめる（チャットのカード）。 */
+/** Discord の webhook の待ちをやめる（チャットのカード）。 */
 export async function cancelDiscordWait(teraId: string): Promise<DiscordWebhooksView> {
   return request<DiscordWebhooksView>(`${discordPath(teraId)}/wait`, { method: "DELETE" });
 }

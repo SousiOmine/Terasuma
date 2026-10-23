@@ -12,12 +12,12 @@ import {
   skillCatalogText,
 } from "../src/server/agent/skills";
 import { createComputerTools } from "../src/server/agent/tools/computer";
-import { createConnectionTools } from "../src/server/connections/tools";
+import { createConnectorTools } from "../src/server/connectors/tools";
 import { createSkillTools } from "../src/server/agent/tools/skill";
 import { createSkillManageTools, type SkillChange } from "../src/server/agent/tools/skill-manage";
 import type { SkillFileStore, SkillLibrary } from "../src/server/agent/skill-types";
 import {
-  createConnectionsStub,
+  createConnectorsStub,
   createContainerStub,
   createEnvRequestsStub,
   createImageStub,
@@ -44,10 +44,10 @@ function availableTools(): string[] {
     env: createEnvRequestsStub(),
     teraId: "t1",
   });
-  // 接続のツールも computer_connect_app という名前で同じ名前空間に並ぶ。
-  const connections = createConnectionTools({ connections: createConnectionsStub() });
+  // コネクタのツールも computer_connect_app という名前で同じ名前空間に並ぶ。
+  const connectors = createConnectorTools({ connectors: createConnectorsStub() });
 
-  return [...Object.keys(computer), ...Object.keys(connections)].filter((name) => name.startsWith("computer_")).sort();
+  return [...Object.keys(computer), ...Object.keys(connectors)].filter((name) => name.startsWith("computer_")).sort();
 }
 
 /** ツールの実行関数を取り出す。 */

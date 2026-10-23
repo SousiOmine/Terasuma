@@ -222,20 +222,20 @@ system プロンプトは `applied` だけを読む。書いただけでは変�
 `tera_create` で作った Tera には、名前・役割・行動方針から組み立てた本文が、同じく両方に入る。
 `identity` ツールは `tool_search` を挟まず、モデルへ常に渡す。長さは 4,000 文字まで。
 
-## アプリの接続
+## コネクタ
 
-アプリの接続は、利用者が発行したトークンを貼る方式にしている（`server/connections/providers.ts`）。
+コネクタは、利用者が発行したトークンを貼る方式にしている（`server/connectors/providers.ts`）。
 GitHub は Personal Access Token を使う。
 プロバイダの定義は、トークン欄の文言、要求する権限、コンピュータへ渡す環境変数の名前を持つ。
 
-トークンは `config.json` ではなく、データディレクトリの `connections/<id>.json` に保存する（ディレクトリ 0700、ファイル 0600）。
+トークンは `config.json` ではなく、データディレクトリの `connectors/<id>.json` に保存する（ディレクトリ 0700、ファイル 0600）。
 保存する前に、アカウントを読んで受け付けられるか確かめる（間違ったトークンを黙って保存しない）。
 トークンを貼るだけなので、コールバック URL を使わない。
 SSH トンネルでも Tailscale 経由でも設定できる。
 MCP サーバーの redirect 方式（`server/mcp/oauth.ts`）とはここが違う。
 
-接続が得たトークンは、コンピュータのコマンドへ環境変数として渡す（GitHub は `GH_TOKEN` / `GITHUB_TOKEN`）。
-同じ名前が `config.json` の `env` にある場合は、接続の値を優先する（接続し直した結果を使うため）。
+コネクタが得たトークンは、コンピュータのコマンドへ環境変数として渡す（GitHub は `GH_TOKEN` / `GITHUB_TOKEN`）。
+同じ名前が `config.json` の `env` にある場合は、コネクタの値を優先する（接続し直した結果を使うため）。
 モデルは値を直接見ないが、コンテナの中で `echo $GH_TOKEN` を実行すれば読める（`computer_set_env` と同じ性質）。
 
 エージェントは `computer_connect_app` でトークンの保存を待ち、`app_request` で接続済みアプリの API を叩く。
@@ -244,7 +244,7 @@ MCP サーバーの redirect 方式（`server/mcp/oauth.ts`）とはここが違
 
 ## Discord の webhook
 
-Discord はトークンの接続ではなく、Tera ごとの **webhook URL** で送る（`server/discord/`）。
+Discord はトークンではなく、Tera ごとの **webhook URL** で送る（`server/discord/`）。
 送信先は 1 つのチャンネルで、投稿だけができる。読み取り・編集・リアクションは無い。
 
 - 保存先: `~/.local/share/terasuma/discord/<teraId>.json`（ディレクトリ 0700、ファイル 0600）
@@ -270,7 +270,7 @@ src/
   server/agent        ターン・プロンプト・圧縮・ツール（engine/ に分かれる）
   server/provider     種別表・呼び出し・カタログ・疎通確認
   server/mcp          MCP の接続（connection / transport / tools）と OAuth
-  server/connections  アプリの接続（トークン保存・検証・ツール）
+  server/connectors  コネクタ（トークン保存・検証・ツール）
   server/discord      Discord の webhook（Tera ごとの保存・検証・送信・ツール）
   server/computer     podman・画像・引き受け・契約値・Tera ごとの作業フォルダ
   server/data         設定と会話の永続化（store/ と settings/ に分かれる）

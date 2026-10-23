@@ -1,5 +1,5 @@
 import { computerHandlers } from "./computer";
-import { connectionHandlers } from "./connections";
+import { connectorHandlers } from "./connectors";
 import { containerHandlers } from "./container";
 import { discordHandlers } from "./discord";
 import { mcpHandlers } from "./mcp";
@@ -20,7 +20,7 @@ export const HANDLER_MODULES = {
   teras: terasHandlers,
   model: modelHandlers,
   mcp: mcpHandlers,
-  connections: connectionHandlers,
+  connectors: connectorHandlers,
   discord: discordHandlers,
   webSearch: webSearchHandlers,
   container: containerHandlers,
@@ -35,7 +35,7 @@ export function createApiHandlers(deps: ApiDeps) {
     ...HANDLER_MODULES.teras(deps),
     ...HANDLER_MODULES.model(deps),
     ...HANDLER_MODULES.mcp(deps),
-    ...HANDLER_MODULES.connections(deps),
+    ...HANDLER_MODULES.connectors(deps),
     ...HANDLER_MODULES.discord(deps),
     ...HANDLER_MODULES.webSearch(deps),
     ...HANDLER_MODULES.container(deps),

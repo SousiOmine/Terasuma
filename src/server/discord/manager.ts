@@ -201,7 +201,7 @@ export function createDiscordWebhooks(options: DiscordWebhooksOptions): DiscordW
     },
 
     cancelWait(teraId) {
-      rejectWaiters(teraId, new Error("The user cancelled the Discord connection."));
+      rejectWaiters(teraId, new Error("The user cancelled the Discord webhook request."));
     },
 
     async send(teraId, message, signal) {
@@ -223,7 +223,7 @@ export function createDiscordWebhooks(options: DiscordWebhooksOptions): DiscordW
 
     close() {
       for (const teraId of [...pending.keys()]) {
-        rejectWaiters(teraId, new Error("Terasuma is shutting down; the Discord connection was cancelled."));
+        rejectWaiters(teraId, new Error("Terasuma is shutting down; the Discord webhook request was cancelled."));
       }
     },
   };

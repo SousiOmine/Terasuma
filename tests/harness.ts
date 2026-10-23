@@ -17,7 +17,7 @@ import type { ConnectionChecker, ProviderModelLister } from "../src/server/provi
 import { startServer, type StartedServer } from "../src/server/http/server";
 import { createSettingsStore, type SettingsStore } from "../src/server/data/settings";
 import { createStore, type Store } from "../src/server/data/store";
-import { createConnections, type ConnectionsManager } from "../src/server/connections/manager";
+import { createConnectors, type ConnectorsManager } from "../src/server/connectors/manager";
 import { createDiscordWebhooks, type DiscordWebhooks } from "../src/server/discord/manager";
 import {
   TEST_SETTINGS,
@@ -55,8 +55,8 @@ export type ServerHarnessOptions = {
   container?: ContainerManager | ((dir: string) => ContainerManager);
   /** MCP 接続。省くと「何も確かめていない」差し替えを使う。 */
   mcp?: McpManager;
-  /** アプリの接続。省くと本物を作る（宛先は本物の GitHub のまま）。 */
-  connections?: ConnectionsManager | ((context: { settings: SettingsStore; dir: string }) => ConnectionsManager);
+  /** コネクタ。省くと本物を作る（宛先は本物の GitHub のまま）。 */
+  connectors?: ConnectorsManager | ((context: { settings: SettingsStore; dir: string }) => ConnectorsManager);
   /** Discord の webhook。省くと本物を作る（通信は本物の fetch のまま）。 */
   discord?: DiscordWebhooks | ((context: { store: Store; dir: string }) => DiscordWebhooks);
   /** Web 検索。省くと「プロバイダ未設定」の差し替えを使う。 */
@@ -119,10 +119,10 @@ export async function withServer<T>(
   const files = createFileStore(dir);
   const container =
     typeof options.container === "function" ? options.container(dir) : (options.container ?? createContainerStub());
-  const connections =
-    typeof options.connections === "function"
-      ? options.connections({ settings, dir })
-      : (options.connections ?? createConnections({ dataDir: dir }));
+  const connectors =
+    typeof options.connectors === "function"
+      ? options.connectors({ settings, dir })
+      : (options.connectors ?? createConnectors({ dataDir: dir }));
 
   const discord =
     typeof options.discord === "function"
@@ -150,7 +150,7 @@ export async function withServer<T>(
       compaction,
       settings,
       mcp: options.mcp ?? createMcpStub(),
-      connections,
+      connectors,
       discord,
       webSearch: options.webSearch ?? createWebSearchStub(),
       container,
@@ -190,7 +190,7 @@ export async function withServer<T>(
     return await run(harness);
   } finally {
     compaction.close();
-    connections.close();
+    connectors.close();
     discord.close();
     await started.server.stop(true);
     store.close();

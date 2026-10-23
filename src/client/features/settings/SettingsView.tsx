@@ -4,7 +4,7 @@ import { LOCALES, locale, setLocale, t } from "../../i18n";
 import { closeSettings, setSettingsCategory, settingsCategory, type SettingsCategory } from "../../state/route";
 import { Segmented } from "../../ui/Segmented";
 import { ContainerSettingsView } from "../container/ContainerSettingsView";
-import { ConnectionsSettingsView } from "../connections/ConnectionsSettingsView";
+import { ConnectorsSettingsView } from "../connectors/ConnectorsSettingsView";
 import { McpSettingsView } from "../mcp/McpSettingsView";
 import { ModelSettingsView } from "../model/ModelSettingsView";
 import { ProviderSettingsView } from "../providers/ProviderSettingsView";
@@ -14,7 +14,7 @@ const CATEGORIES: readonly { id: SettingsCategory; labelKey: MessageKey }[] = [
   { id: "general", labelKey: "settings.general" },
   { id: "model", labelKey: "settings.model" },
   { id: "providers", labelKey: "settings.providers" },
-  { id: "connections", labelKey: "settings.connections" },
+  { id: "connectors", labelKey: "settings.connectors" },
   { id: "container", labelKey: "settings.container" },
   { id: "advanced", labelKey: "settings.advanced" },
 ];
@@ -77,7 +77,7 @@ export function SettingsView() {
             {category === "general" && <GeneralSettings />}
             {category === "model" && <ModelSettingsView />}
             {category === "providers" && <ProviderSettingsView />}
-            {category === "connections" && <ConnectionsSettingsView />}
+            {category === "connectors" && <ConnectorsSettingsView />}
             {category === "container" && <ContainerSettingsView />}
             {category === "advanced" && <McpSettingsView />}
           </div>

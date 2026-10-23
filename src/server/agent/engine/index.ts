@@ -1,6 +1,6 @@
 import type { AppConfig } from "../../../config";
 import type { ModelSettings } from "../../data/settings";
-import type { ConnectionToolsetProvider } from "../../connections/tools";
+import type { ConnectorToolsetProvider } from "../../connectors/tools";
 import type { DiscordToolsetProvider } from "../../discord/tools";
 import type { ImageStore } from "../../computer/images";
 import type { CatalogSnapshot } from "../../provider/catalog";
@@ -114,8 +114,8 @@ export function createEngine(options: {
   history: HistoryToolsetProvider;
   /** Web 検索とページ取得のツール。 */
   webSearch: WebSearchToolsetProvider;
-  /** アプリの接続（トークン）のツール。 */
-  connections: ConnectionToolsetProvider;
+  /** コネクタ（トークン）のツール。 */
+  connectors: ConnectorToolsetProvider;
   /** Discord の webhook（送信先は Tera ごと）のツール。 */
   discord: DiscordToolsetProvider;
   /** 新しい Tera を作るツール。作る先（作業フォルダの親）はアプリが決める。 */
@@ -139,7 +139,7 @@ export function createEngine(options: {
     attachments: options.attachments,
     history: options.history,
     webSearch: options.webSearch,
-    connections: options.connections,
+    connectors: options.connectors,
     discord: options.discord,
     tera: options.tera,
     coding: options.coding,
