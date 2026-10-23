@@ -18,11 +18,19 @@ done
 openbox &
 OPENBOX_PID=$!
 
+# Chromium のプロファイルロックも、コンテナを作り直すと前のコンテナのホスト名と PID を
+# 指したまま残る。そのままだと「Unlock Profile」のダイアログが出てブラウザが起動しない。
+# ホームはコンテナの外に置いてあるので、Xvfb のロックと同じく起動前に消す。
+rm -f /home/agent/.config/chromium/Singleton*
+
 # ブラウザを画面つきで起動する。エージェントは画面（撮った画像と座標）から操作する。
 # 最初の起動に付いてくる案内は出さない（画面を操作する側の邪魔になる）。
+# コンテナの停止は SIGTERM で、Chromium は前回の終了をクラッシュとみなして
+# 「Restore pages?」を出す。これも画面の邪魔になるので出さない。
 chromium \
   --no-first-run \
   --no-default-browser-check \
+  --hide-crash-restore-bubble \
   --window-size=1280,800 \
   --window-position=0,0 \
   about:blank &
