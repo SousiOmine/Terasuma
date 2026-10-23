@@ -250,19 +250,44 @@ describe("チャットのイベントの読み替え", () => {
       output: "[computer_ask_user]\ndone",
     };
 
-    // 成功した結果。どちらの待ち（引き受け・環境変数）を終えるかは、chat.ts が id で判定する。
+    // 成功した結果。待ちを終えるかどうかは、chat.ts が id で判定する。
     expect(interpretEvent({ type: "tool-result", id: "a1", part })).toEqual({
-      kind: "wait-end",
+      kind: "tool-result",
       callId: "c1",
       failed: false,
     });
 
     // 取り消された環境変数の入力も、待ちを終える材料として流す。
     expect(interpretEvent({ type: "tool-result", id: "a1", part: { ...part, failed: true } })).toEqual({
-      kind: "wait-end",
+      kind: "tool-result",
       callId: "c1",
       failed: true,
     });
+  });
+
+  test("tool_call 越しの tera_create は、一覧を読み直すきっかけになる", () => {
+    expect(
+      interpretEvent({
+        type: "tool-call",
+        id: "a1",
+        part: {
+          type: "tool-call",
+          id: "c13",
+          server: "tool",
+          tool: "call",
+          args: { name: "tera_create", args: { id: "researcher", name: "調べる係" } },
+        },
+      }),
+    ).toEqual({ kind: "tera-create-call", callId: "c13" });
+
+    // ほかのツールの呼び出しでは、一覧を読み直さない。
+    expect(
+      interpretEvent({
+        type: "tool-call",
+        id: "a1",
+        part: { type: "tool-call", id: "c14", server: "tool", tool: "call", args: { name: "computer_screenshot" } },
+      }),
+    ).toBeNull();
   });
 
   test("chat_ui の呼び出しは、カードを置く効果になる", () => {

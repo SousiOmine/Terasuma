@@ -16,7 +16,7 @@ import type {
 
 /**
  * 既定の Tera。起動時に 1 体だけ用意する。
- * 増やす導線はまだ無いので、会話の持ち主は当面この 1 つになる。
+ * ほかの Tera は、エージェントが tera_create ツールから作る。
  */
 export const DEFAULT_TERA_ID = "default";
 export const DEFAULT_TERA_NAME = "Tera";
@@ -80,15 +80,33 @@ export type TeraIdentity = {
   applied: string;
 };
 
+/** 新しく作る Tera。 */
+export type NewTera = {
+  /** 作業フォルダの名前にもなる。 */
+  id: string;
+  /** 画面に出す名前。 */
+  name: string;
+  /** system プロンプトに載せる identity。content と applied の両方に入る。 */
+  identity: string;
+};
+
 /** Tera の一覧と、起動時の用意。 */
 export type TeraDirectory = {
   listTeras(): Tera[];
   getTera(id: string): Tera | null;
+  /** 表示名で 1 体探す。無ければ null。同じ名前を 2 体作らせないために使う。 */
+  findTeraByName(name: string): Tera | null;
   /**
    * 無ければ作る。既にあれば名前も作成日時も変えない（起動のたびに呼ばれる）。
    * identity も無ければ既定の役割で作り、既にあれば変えない。
    */
   ensureTera(id: string, name: string): Tera;
+  /**
+   * 新しい Tera を作る。同じ id が既にあれば失敗する（ensureTera と違い、冪等ではない）。
+   * identity は content と applied の両方に入れる（最初のターンから system プロンプトに載せる）。
+   * 同じ名前が既にあれば失敗する（画面の一覧で区別できなくなるため）。
+   */
+  createTera(input: NewTera): Tera;
 };
 
 /** 履歴を 1 ページ読んだ結果。画面へ返す前に、表示に使う部品だけへ絞る。 */

@@ -15,6 +15,7 @@ import type {
   CodingToolsetProvider,
   ComputerToolsetProvider,
   HistoryToolsetProvider,
+  TeraToolsetProvider,
   WebSearchToolsetProvider,
 } from "../src/server/agent/contracts";
 import type { EnvRequests } from "../src/server/computer/env";
@@ -196,6 +197,11 @@ export function createConnectionToolsStub(): ConnectionToolsetProvider {
 
 /** Discord のツールを渡さないテストのための差し替え（エンジン用）。 */
 export function createDiscordToolsStub(): DiscordToolsetProvider {
+  return { toolset: () => ({}) };
+}
+
+/** 新しい Tera を作るツールを渡さないテストのための差し替え（エンジン用）。 */
+export function createTeraToolsStub(): TeraToolsetProvider {
   return { toolset: () => ({}) };
 }
 

@@ -91,6 +91,61 @@ describe("store", () => {
     expect(store.readIdentity(DEFAULT_TERA_ID).content).toBe(DEFAULT_TERA_IDENTITY);
   });
 
+  test("findTeraByName は表示名で探し、無ければ null", () => {
+    const store = makeStore();
+    store.ensureTera("second", "調べる係");
+
+    expect(store.findTeraByName("調べる係")?.id).toBe("second");
+    expect(store.findTeraByName("Tera")?.id).toBe(DEFAULT_TERA_ID);
+    expect(store.findTeraByName("いない")).toBeNull();
+  });
+
+  test("createTera は、Tera と system プロンプト用の identity を作る", () => {
+    const store = makeStore();
+    const identity = '# Role\n\nYou are "調べる係". 調べる。';
+    const created = store.createTera({ id: "researcher", name: "調べる係", identity });
+
+    expect(created.id).toBe("researcher");
+    expect(created.name).toBe("調べる係");
+    expect(store.listTeras().map((tera) => tera.id)).toContain("researcher");
+    // 新しい Tera は、書いた版と system プロンプト用の版が同じところから始まる。
+    expect(store.readIdentity("researcher")).toEqual({ content: identity, applied: identity });
+  });
+
+  test("createTera は同じ id と同じ名前を断り、何も残さない", () => {
+    const store = makeStore();
+    store.createTera({ id: "researcher", name: "調べる係", identity: "# Role\n調べる" });
+
+    expect(() => store.createTera({ id: "researcher", name: "別の名前", identity: "# Role\n別" })).toThrow("同じ id");
+    expect(() => store.createTera({ id: "writer", name: "調べる係", identity: "# Role\n別" })).toThrow("同じ名前");
+
+    expect(store.getTera("writer")).toBeNull();
+    expect(store.findTeraByName("別の名前")).toBeNull();
+  });
+
+  test("作成した Tera は、開き直しても identity ごと残る", () => {
+    const path = join(tmpdir(), `terasuma-store-${crypto.randomUUID()}.db`);
+
+    try {
+      const first = createStore(path);
+      first.createTera({ id: "researcher", name: "調べる係", identity: "# Role\n残る役割" });
+      first.close();
+
+      const second = createStore(path);
+      try {
+        expect(second.getTera("researcher")?.name).toBe("調べる係");
+        expect(second.readIdentity("researcher")).toEqual({
+          content: "# Role\n残る役割",
+          applied: "# Role\n残る役割",
+        });
+      } finally {
+        second.close();
+      }
+    } finally {
+      removeDatabase(path);
+    }
+  });
+
   test("appendMessage は連番を振り、Tera の更新時刻を進める", () => {
     const store = makeStore();
     const before = store.getTera(DEFAULT_TERA_ID);

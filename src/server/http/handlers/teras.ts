@@ -27,7 +27,7 @@ export function terasHandlers(
   const turns = createTurns(deps);
 
   return {
-    /** 画面に並べる Tera の一覧。いまは既定の 1 体だけ。 */
+    /** 画面に並べる Tera の一覧。既定の Tera と、エージェントが作った Tera。 */
     listTeras(): Response {
       return json({ teras: store.listTeras() });
     },

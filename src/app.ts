@@ -8,6 +8,7 @@ import { createCodingToolset } from "./server/agent/tools/coding";
 import { createComputerToolset } from "./server/agent/tools/computer";
 import { createAttachmentTools } from "./server/agent/tools/attachments";
 import { createHistoryToolset } from "./server/agent/tools/history";
+import { createTeraToolset } from "./server/agent/tools/tera";
 import { createWebSearchToolset } from "./server/agent/tools/web";
 import { createWebSearchManager, type WebSearchManager } from "./server/websearch-manager";
 import { createContainerManager, type ContainerManager } from "./server/computer/container";
@@ -77,7 +78,7 @@ export function startApp(config: AppConfig, overrides: AppOverrides = {}): App {
   const settings = createSettingsStore(config.configPath);
 
   // Tera ごとの作業フォルダは、コンテナのホームの中に置く（/home/agent/teras/<tera id>）。
-  // 起動時に既知の Tera の分を作っておく（ターンの開始時にも作るので、リセットで消えても戻る）。
+  // 起動時に既知の Tera の分を作っておく（作成時とターンの開始時にも作るので、リセットで消えても戻る）。
   for (const tera of store.listTeras()) ensureTeraWorkspace(config.dataDir, tera.id);
 
   // ツールが返した画像は、データディレクトリにファイルとして置く（会話には参照だけが残る）。
@@ -150,6 +151,9 @@ export function startApp(config: AppConfig, overrides: AppOverrides = {}): App {
   // 過去の対話履歴を検索するツール（history_search）。引く履歴はターンごとに渡す。
   const history = createHistoryToolset({ store });
 
+  // 新しい Tera を作るツール（tera_create）。作業フォルダは、Tera ごとの作業場と同じ親に作る。
+  const teraToolset = createTeraToolset({ store, dataDir: config.dataDir });
+
   // Web 検索とページ取得（web_search / web_fetch）。使うプロバイダは設定の既定で決まる。
   const webSearchManager = overrides.webSearch ?? createWebSearchManager({ settings });
   const webSearch = createWebSearchToolset({ manager: webSearchManager });
@@ -170,6 +174,7 @@ export function startApp(config: AppConfig, overrides: AppOverrides = {}): App {
       webSearch,
       connections: createConnectionToolset(connections),
       discord: createDiscordToolset({ discord }),
+      tera: teraToolset,
       coding,
       images,
       catalog,

@@ -7,6 +7,7 @@ import { z } from "zod";
 import type { ModelSettings } from "../src/server/data/settings";
 import { createCodingToolset } from "../src/server/agent/tools/coding";
 import { createComputerTools } from "../src/server/agent/tools/computer";
+import { createTeraToolset } from "../src/server/agent/tools/tera";
 import type { ContainerManager } from "../src/server/computer/container";
 import { createAiSdkEngine } from "../src/server/agent/engine/sdk";
 import type { EngineEvent, SettingsReader } from "../src/server/agent/engine";
@@ -32,6 +33,7 @@ import {
   createComputerStub,
   createConnectionToolsStub,
   createDiscordToolsStub,
+  createTeraToolsStub,
   createContainerStub,
   createEnvRequestsStub,
   createHistoryStub,
@@ -259,6 +261,7 @@ async function run(
     webSearch: createWebSearchToolsStub(),
     connections: createConnectionToolsStub(),
     discord: createDiscordToolsStub(),
+    tera: createTeraToolsStub(),
     coding,
     images,
     catalog: { snapshot: () => catalog },
@@ -356,6 +359,64 @@ describe("ツール検索（AI SDK 経由）", () => {
       expect(callsOf(events, "tool", "call")).toHaveLength(1);
     } finally {
       await fake.server.stop(true);
+    }
+  });
+
+  test("tera_create は tool_search で見つかり、tool_call を経て Tera を作る", async () => {
+    const fake = startScriptedProvider([
+      { tool: "tool_search", args: JSON.stringify({ query: "tera create" }) },
+      {
+        tool: "tool_call",
+        args: JSON.stringify({
+          name: "tera_create",
+          args: { id: "researcher", name: "調べる係", role: "技術記事を調べる。", policy: "出典を示す。" },
+        }),
+      },
+      { text: "作りました" },
+    ]);
+    const dir = mkdtempSync(join(tmpdir(), "terasuma-engine-tera-"));
+    const store = makeStore();
+
+    try {
+      const stream = await createAiSdkEngine({
+        settings: { read: () => settingsFor(portOf(fake.server)) },
+        mcp: { toolset: async () => ({}) },
+        computer: createComputerStub(),
+        attachments: createAttachmentsStub(),
+        history: createHistoryStub(),
+        webSearch: createWebSearchToolsStub(),
+        connections: createConnectionToolsStub(),
+        discord: createDiscordToolsStub(),
+        tera: createTeraToolset({ store, dataDir: dir }),
+        coding: createCodingStub(),
+        images: createImageStub(),
+        catalog: { snapshot: () => null },
+        skills: createSkillFileStoreStub(),
+        identity: createIdentityStoreStub(),
+      }).stream({
+        context: { summary: null, messages: history() },
+        signal: new AbortController().signal,
+        teraId: "t1",
+        replyLanguage: "ja",
+        attach: () => undefined,
+        takeSteering: () => [],
+      });
+
+      const events: EngineEvent[] = [];
+      for await (const event of stream.events) events.push(event);
+
+      // 検索の結果には、名前と引数スキーマが載る。
+      const searched = JSON.stringify(fake.bodies[1]);
+      expect(searched).toContain("tera_create");
+      expect(searched).toContain("Arguments (JSON Schema)");
+
+      // tool_call 越しに実行され、Tera とその identity ができる。
+      expect(callsOf(events, "tool", "call")).toHaveLength(1);
+      expect(store.getTera("researcher")?.name).toBe("調べる係");
+      expect(store.readIdentity("researcher").applied).toContain("技術記事を調べる。");
+    } finally {
+      await fake.server.stop(true);
+      rmSync(dir, { recursive: true, force: true });
     }
   });
 
@@ -983,6 +1044,7 @@ describe("途中で届いた発言", () => {
         webSearch: createWebSearchToolsStub(),
         connections: createConnectionToolsStub(),
         discord: createDiscordToolsStub(),
+        tera: createTeraToolsStub(),
         coding: createCodingStub(),
         images: createImageStub(),
         catalog: { snapshot: () => null },

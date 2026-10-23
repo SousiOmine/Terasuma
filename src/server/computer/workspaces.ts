@@ -23,14 +23,19 @@ export const TERAS_DIR_IN_CONTAINER = posix.join(WORKDIR_IN_CONTAINER, TERAS_DIR
 
 /**
  * Tera の id を、フォルダ名としてそのまま使えるかどうかの規則。
- * 形は shared/ids.ts の ID_PATTERN と同じだが、Tera の id は画面からは作らないので、
- * パスを組み立てるこの場所で 1 つだけ持つ。Tera を作る導線を足すときは、ここで先に検証する。
+ * 形は shared/ids.ts の ID_PATTERN と同じだが、Tera の id はパスを組み立てるこの場所で決める。
+ * 作る導線（tera_create ツール）も、行を書く前にここで確かめる。
  */
 const TERA_ID_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
 
+/** Tera の id を、フォルダ名としてそのまま使えるかどうか。 */
+export function isTeraId(value: string): boolean {
+  return TERA_ID_PATTERN.test(value);
+}
+
 /** フォルダ名に使えない id は、黙って別名にせず止める。 */
 function assertTeraId(teraId: string): void {
-  if (!TERA_ID_PATTERN.test(teraId)) {
+  if (!isTeraId(teraId)) {
     throw new Error(`Tera id "${teraId}" cannot be used as a workspace folder name`);
   }
 }
@@ -52,7 +57,7 @@ export function teraWorkspaceDir(dataDir: string, teraId: string): string {
  *
  * podman exec の --workdir は、無いフォルダを指定すると失敗する。bash を使う前に
  * 必ず通す（何度呼んでも同じ結果になる）。コンテナが止まっていても作れるよう、
- * ホスト側のパスを直接作る。
+ * ホスト側のパスを直接作る。Tera の作成時にも、行列を書く前にここを通す。
  */
 export function ensureTeraWorkspace(dataDir: string, teraId: string): string {
   mkdirSync(teraWorkspaceDir(dataDir, teraId), { recursive: true });

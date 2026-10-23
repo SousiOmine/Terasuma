@@ -8,7 +8,7 @@ import { beginConnectionRequest, endConnectionRequest, resetConnectionRequest } 
 import { beginEnvRequest, endEnvRequest, resetEnvRequest } from "./env-request";
 import { clearChatError, showChatError } from "./failure";
 import { answerHandover, beginHandover, endHandover, handoverActive } from "./handover";
-import { activeTeraId } from "./session";
+import { activeTeraId, refreshTeras } from "./session";
 
 /**
  * チャットの状態と、1 ターンの送信。
@@ -63,6 +63,12 @@ type CurrentTurn = {
 };
 let current: CurrentTurn | null = null;
 
+/**
+ * 新しい Tera を作る呼び出しの id（まだ結果が届いていないもの）。
+ * 成功した結果が届いたら、サイドバーの一覧を読み直す。
+ */
+const teraCreateCalls = new Set<string>();
+
 export async function openTera(id: string): Promise<void> {
   // 表示中のターンは捨てて、新しい Tera の履歴を読む。
   // サーバ側のターンは、接続が切れた時点でそれまでの内容を保存して終わる。
@@ -74,6 +80,7 @@ export async function openTera(id: string): Promise<void> {
   // 入力欄は、開いた Tera のターンのものだけを出す（前の Tera の待ちを残さない）。
   resetEnvRequest();
   resetConnectionRequest();
+  teraCreateCalls.clear();
   clearChatError();
   activeTeraId.value = id;
   isLoadingMessages.value = true;
@@ -329,14 +336,21 @@ function applyEvent(event: ChatEvent): void {
       // Discord は Tera ごとの webhook なので、カードを出した時点の Tera を覚えておく。
       beginConnectionRequest(effect.callId, effect.provider, effect.reason, activeTeraId.value);
       break;
-    case "wait-end":
+    case "tera-create-call":
+      // 結果が成功で届いたときに、一覧を読み直す。
+      teraCreateCalls.add(effect.callId);
+      break;
+    case "tool-result": {
       // 画面の引き受けは、成功したときだけ終える（失敗した呼び出しでは待ちが続いている）。
       if (!effect.failed) endHandover(effect.callId);
       // 環境変数の入力は、取り消しや失敗でも終える（入力を待ち続けない）。
       endEnvRequest(effect.callId);
       // 認証カードは、成功なら畳み、失敗は理由を残して導線を消さない。
       endConnectionRequest(effect.callId, effect.failed);
+      // 新しい Tera ができたら、サイドバーへ出す（一覧を読み直す）。
+      if (teraCreateCalls.delete(effect.callId) && !effect.failed) void refreshTeras().catch(showChatError);
       break;
+    }
     case "error":
       showChatError(new ApiError(effect.code, effect.detail));
       break;

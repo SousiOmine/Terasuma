@@ -11,6 +11,7 @@ import type {
   CodingToolsetProvider,
   ComputerToolsetProvider,
   HistoryToolsetProvider,
+  TeraToolsetProvider,
   ToolsetProvider,
   WebSearchToolsetProvider,
 } from "../contracts";
@@ -117,6 +118,8 @@ export function createEngine(options: {
   connections: ConnectionToolsetProvider;
   /** Discord の webhook（送信先は Tera ごと）のツール。 */
   discord: DiscordToolsetProvider;
+  /** 新しい Tera を作るツール。作る先（作業フォルダの親）はアプリが決める。 */
+  tera: TeraToolsetProvider;
   /** コンテナのファイルとシェルのツール。相対パスと bash の cwd が Tera ごとに違うので、ターンごとに組む。 */
   coding: CodingToolsetProvider;
   /** 撮った画像の置き場。履歴から画像を読み直してモデルへ渡す。 */
@@ -138,6 +141,7 @@ export function createEngine(options: {
     webSearch: options.webSearch,
     connections: options.connections,
     discord: options.discord,
+    tera: options.tera,
     coding: options.coding,
     images: options.images,
     catalog: options.catalog,

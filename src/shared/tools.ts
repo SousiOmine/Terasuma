@@ -99,6 +99,18 @@ export const SKILL_MANAGE_TOOL_NAME = `${SKILL_SERVER_ID}${TOOL_NAME_SEPARATOR}$
  */
 export const IDENTITY_TOOL = "identity";
 
+/**
+ * 新しい Tera を作る内蔵ツールのサーバー id。
+ * ツール名は "tera_create" になるので、MCP サーバーの id としては予約する。
+ */
+export const TERA_SERVER_ID = "tera";
+
+/** 新しい Tera を作るツール名（サーバー id を付けない形）。 */
+export const TERA_CREATE_TOOL = "create";
+
+/** モデルへ渡すときの、新しい Tera を作るツールの名前。 */
+export const TERA_CREATE_TOOL_NAME = `${TERA_SERVER_ID}${TOOL_NAME_SEPARATOR}${TERA_CREATE_TOOL}`;
+
 /** 画面をユーザーへ渡すツール名（サーバー id を付けない形）。 */
 export const ASK_USER_TOOL = "ask_user";
 

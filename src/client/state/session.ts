@@ -7,7 +7,7 @@ import * as api from "../lib/api";
  * チャットと引き受けの両方が参照するので、どちらからも独立したモジュールに置く。
  */
 
-/** 画面に並べる Tera。いまは既定の 1 体だけ。 */
+/** 画面に並べる Tera。既定の Tera と、エージェントが作った Tera。 */
 export const teras = signal<readonly Tera[]>([]);
 export const activeTeraId = signal<string | null>(null);
 

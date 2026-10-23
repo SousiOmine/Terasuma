@@ -17,10 +17,18 @@ export function prepareQueries(db: Database) {
   const selectTeras = db.query<TeraRow, []>(
     "SELECT id, name, created_at, updated_at FROM teras ORDER BY updated_at DESC, created_at DESC",
   );
+  const selectTeraByName = db.query<TeraRow, [string]>(
+    "SELECT id, name, created_at, updated_at FROM teras WHERE name = ?",
+  );
   const insertTera = db.query<unknown, [string, string, number, number]>(
     `INSERT INTO teras (id, name, created_at, updated_at)
      VALUES (?, ?, ?, ?)
      ON CONFLICT (id) DO NOTHING`,
+  );
+  // createTera 用。同じ id があれば黙って通さず、制約違反で失敗させる。
+  const insertTeraNew = db.query<unknown, [string, string, number, number]>(
+    `INSERT INTO teras (id, name, created_at, updated_at)
+     VALUES (?, ?, ?, ?)`,
   );
   const touchTera = db.query<unknown, [number, string]>("UPDATE teras SET updated_at = ? WHERE id = ?");
 
@@ -104,6 +112,10 @@ export function prepareQueries(db: Database) {
     `INSERT INTO tera_identity (tera_id, content, applied) VALUES (?, ?, ?)
      ON CONFLICT (tera_id) DO NOTHING`,
   );
+  // createTera 用。新しい Tera に、最初から system プロンプトへ載せる版を入れる。
+  const insertIdentity = db.query<unknown, [string, string, string]>(
+    `INSERT INTO tera_identity (tera_id, content, applied) VALUES (?, ?, ?)`,
+  );
   // 変わる行が無ければ changes は 0 になる（同じ内容での切り替えを「変化なし」と呼べる）。
   const switchIdentity = db.query<unknown, [string]>(
     "UPDATE tera_identity SET applied = content WHERE tera_id = ? AND content <> applied",
@@ -112,7 +124,9 @@ export function prepareQueries(db: Database) {
   return {
     selectTera,
     selectTeras,
+    selectTeraByName,
     insertTera,
+    insertTeraNew,
     touchTera,
     selectMessagePage,
     selectMessagesSince,
@@ -124,6 +138,7 @@ export function prepareQueries(db: Database) {
     selectIdentity,
     upsertIdentity,
     insertIdentityIfMissing,
+    insertIdentity,
     switchIdentity,
   };
 }

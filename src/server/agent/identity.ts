@@ -31,3 +31,23 @@ export function normalizeIdentity(content: string): string {
   }
   return text;
 }
+
+/**
+ * 新しい Tera の identity を、名前・役割・行動方針から組み立てる。
+ *
+ * この本文は作成時に content と applied の両方へ書く。identity ツールの書き換え
+ * （次の圧縮まで system プロンプトに載らない）と違い、新しい Tera の最初のターンから効く。
+ * 名前を入れておくと、その Tera は自分が何と呼ばれているかを知れる。
+ */
+export function composeTeraIdentity(input: { name: string; role: string; policy: string }): string {
+  const text = ["# Role", "", `You are "${input.name}". ${input.role}`, "", "# How you work", "", input.policy].join(
+    "\n",
+  );
+
+  if (text.length > MAX_IDENTITY_CHARS) {
+    throw new Error(
+      `The role and policy of a new Tera must be at most ${MAX_IDENTITY_CHARS} characters together (got ${text.length}). Shorten them and try again.`,
+    );
+  }
+  return text;
+}

@@ -7,6 +7,7 @@ import {
   COMPUTER_USE_SKILL,
   DISCORD_SKILL,
   SKILL_CREATE_SKILL,
+  TERA_CREATE_SKILL,
   createSkillLibrary,
   skillCatalogText,
 } from "../src/server/agent/skills";
@@ -46,9 +47,7 @@ function availableTools(): string[] {
   // 接続のツールも computer_connect_app という名前で同じ名前空間に並ぶ。
   const connections = createConnectionTools({ connections: createConnectionsStub() });
 
-  return [...Object.keys(computer), ...Object.keys(connections)]
-    .filter((name) => name.startsWith("computer_"))
-    .sort();
+  return [...Object.keys(computer), ...Object.keys(connections)].filter((name) => name.startsWith("computer_")).sort();
 }
 
 /** ツールの実行関数を取り出す。 */
@@ -69,7 +68,7 @@ function skillManageTools(initial: readonly { name: string; description: string;
 }
 
 describe("スキルのカタログ", () => {
-  test("computer-use と skill-create と discord が説明つきで載る", () => {
+  test("computer-use と skill-create と discord と tera-create が説明つきで載る", () => {
     const catalog = skillCatalogText(BUILTIN_SKILLS);
 
     expect(catalog).toContain("- computer-use: ");
@@ -78,7 +77,14 @@ describe("スキルのカタログ", () => {
     expect(catalog).toContain(SKILL_CREATE_SKILL.description);
     expect(catalog).toContain("- discord: ");
     expect(catalog).toContain(DISCORD_SKILL.description);
-    expect(BUILTIN_SKILLS.map((skill) => skill.name)).toEqual(["computer-use", "skill-create", "discord"]);
+    expect(catalog).toContain("- tera-create: ");
+    expect(catalog).toContain(TERA_CREATE_SKILL.description);
+    expect(BUILTIN_SKILLS.map((skill) => skill.name)).toEqual([
+      "computer-use",
+      "skill-create",
+      "discord",
+      "tera-create",
+    ]);
   });
 });
 
@@ -130,7 +136,7 @@ describe("skill ツール", () => {
 
     await expect(
       definition.execute({ name: "nope" } as never, { toolCallId: "call-1", messages: [] } as never),
-    ).rejects.toThrow('Unknown skill "nope". Available skills: computer-use, skill-create, discord');
+    ).rejects.toThrow('Unknown skill "nope". Available skills: computer-use, skill-create, discord, tera-create');
   });
 
   test("名前は空を許さない", async () => {
@@ -312,5 +318,25 @@ describe("discord の本文", () => {
     expect(content).toContain("Mentions do not notify");
     expect(content).toContain("can only post");
     expect(content).toContain("bot token");
+  });
+});
+
+describe("tera-create の本文", () => {
+  test("聞き方と、ツールの見つけ方と、渡す値を書いている", () => {
+    const content = TERA_CREATE_SKILL.content;
+
+    // ユーザーにはフォームで聞き、ツールは検索してから実行する。
+    expect(content).toContain("chat_ui");
+    expect(content).toContain("<Form");
+    expect(content).toContain("tool_search");
+    expect(content).toContain("tool_call");
+    expect(content).toContain("tera_create");
+
+    // 渡す値と、作られたあとの置き場所。
+    expect(content).toContain("id:");
+    expect(content).toContain("role");
+    expect(content).toContain("policy");
+    expect(content).toContain("/home/agent/teras");
+    expect(content).toContain("sidebar");
   });
 });

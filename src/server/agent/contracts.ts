@@ -5,6 +5,7 @@ import type { AttachmentToolset } from "./tools/attachments";
 import type { CodingToolset } from "./tools/coding";
 import type { ComputerToolset } from "./tools/computer";
 import type { HistoryToolset } from "./tools/history";
+import type { TeraToolset } from "./tools/tera";
 
 /**
  * エンジンがツール一式を受け取るための型。
@@ -31,6 +32,11 @@ export type ComputerToolsetProvider = {
  */
 export type CodingToolsetProvider = {
   toolset(input: { teraId: string }): CodingToolset;
+};
+
+/** 新しい Tera を作るツールの供給元。 */
+export type TeraToolsetProvider = {
+  toolset(): TeraToolset;
 };
 
 /**

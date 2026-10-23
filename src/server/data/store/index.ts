@@ -1,5 +1,5 @@
 import { Database } from "bun:sqlite";
-import type { ChatMessage } from "../../../shared/api/message";
+import type { ChatMessage, Tera } from "../../../shared/api/message";
 import { migrateSchema } from "./migrations";
 import { prepareQueries } from "./queries";
 import { toMessage, toTera } from "./rows";
@@ -10,6 +10,7 @@ import {
   DEFAULT_TERA_NAME,
   type AppendMessageInput,
   type CreateStoreOptions,
+  type NewTera,
   type Store,
 } from "./types";
 
@@ -29,6 +30,7 @@ export type {
   MessageLog,
   MessagePageQuery,
   MessagePageResult,
+  NewTera,
   PendingStats,
   Store,
   TeraDirectory,
@@ -86,6 +88,26 @@ export function createStore(dbPath: string, options: CreateStoreOptions = {}): S
     };
   });
 
+  // Tera の行と identity は、どちらも入るか、どちらも入らないか。
+  // 行列だけが残ると、役割の無い Tera が画面に出てしまう。
+  const create = db.transaction((input: NewTera): Tera => {
+    if (q.selectTera.get(input.id) !== null) {
+      throw new Error(`同じ id の Tera が既にあります: ${input.id}`);
+    }
+    if (q.selectTeraByName.get(input.name) !== null) {
+      throw new Error(`同じ名前の Tera が既にあります: ${input.name}`);
+    }
+
+    const at = now();
+    q.insertTeraNew.run(input.id, input.name, at, at);
+    // 新しい Tera は、書いた版と system プロンプト用の版が同じところから始まる。
+    q.insertIdentity.run(input.id, input.identity, input.identity);
+
+    const row = q.selectTera.get(input.id);
+    if (row === null) throw new Error(`Tera を作成できなかった: ${input.id}`);
+    return toTera(row);
+  });
+
   const store: Store = {
     listTeras() {
       return q.selectTeras.all().map(toTera);
@@ -93,6 +115,11 @@ export function createStore(dbPath: string, options: CreateStoreOptions = {}): S
 
     getTera(id) {
       const row = q.selectTera.get(id);
+      return row === null ? null : toTera(row);
+    },
+
+    findTeraByName(name) {
+      const row = q.selectTeraByName.get(name);
       return row === null ? null : toTera(row);
     },
 
@@ -105,6 +132,10 @@ export function createStore(dbPath: string, options: CreateStoreOptions = {}): S
       const row = q.selectTera.get(id);
       if (row === null) throw new Error(`Tera を作成できなかった: ${id}`);
       return toTera(row);
+    },
+
+    createTera(input) {
+      return create(input);
     },
 
     listMessagesPage(teraId, page) {

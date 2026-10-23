@@ -5,6 +5,7 @@ import {
   DISCORD_CONNECT_TOOL_NAME,
   DISCORD_SERVER_ID,
   SET_ENV_TOOL_NAME,
+  TERA_CREATE_TOOL_NAME,
   TOOL_CALL_TOOL,
   TOOL_SERVER_ID,
 } from "../../shared/tools";
@@ -36,11 +37,14 @@ export type ChatEventEffect =
   | { kind: "env-request-start"; callId: string; name: string; description: string | null }
   /** アプリの接続が要る。チャットに接続カードを出す。 */
   | { kind: "connection-request-start"; callId: string; provider: string; reason: string | null }
+  /** 新しい Tera を作る呼び出し。成功したら、画面の一覧を読み直す。 */
+  | { kind: "tera-create-call"; callId: string }
   /**
-   * ユーザーの入力を待っていた呼び出しの結果が届いた。
-   * どちらの待ち（画面の引き受け・環境変数）を終えるかは、id で判定する。
+   * ツール呼び出しの結果が届いた。
+   * ユーザーの入力を待っていた呼び出し（画面の引き受け・環境変数）を終えるかどうかと、
+   * 新しい Tera を作ったかどうかを、id で判定する。
    */
-  | { kind: "wait-end"; callId: string; failed: boolean }
+  | { kind: "tool-result"; callId: string; failed: boolean }
   | { kind: "error"; code: ClientErrorCode; detail: string | null };
 
 /** イベントを、画面に必要な効果へ読み替える。表示に関係しないものは null。 */
@@ -97,6 +101,11 @@ export function interpretEvent(event: ChatEvent): ChatEventEffect | null {
         };
       }
 
+      // 新しい Tera を作る呼び出し。作成できたら、一覧を読み直す（結果の側で判定する）。
+      if (toolCallArgs(event.part, TERA_CREATE_TOOL_NAME) !== null) {
+        return { kind: "tera-create-call", callId: event.part.id };
+      }
+
       const env = toolCallArgs(event.part, SET_ENV_TOOL_NAME);
       const name = env?.["name"];
       // 名前が無いと何を設定するのか画面に出せないので、その場合は何もしない。
@@ -112,7 +121,7 @@ export function interpretEvent(event: ChatEvent): ChatEventEffect | null {
     }
     case "tool-result":
       // こちらも画面には出さない。どの呼び出しの結果かは id で分かるので、待ちを終える材料にする。
-      return { kind: "wait-end", callId: event.part.id, failed: event.part.failed };
+      return { kind: "tool-result", callId: event.part.id, failed: event.part.failed };
     case "error":
       return { kind: "error", code: event.code, detail: event.detail };
   }
@@ -120,7 +129,8 @@ export function interpretEvent(event: ChatEvent): ChatEventEffect | null {
 
 /**
  * tool_call 越しに呼ばれた、指定したツールの引数。そのツールの呼び出しでなければ null。
- * computer_ask_user と computer_set_env は事前ロードされていないので、tool_call 越しに呼ばれる。
+ * 事前にツール一覧へ載せないツール（computer_ask_user、computer_set_env、
+ * computer_connect_app、discord_connect、tera_create）は、tool_call 越しに呼ばれる。
  */
 function toolCallArgs(
   part: { server: string; tool: string; args: unknown },
