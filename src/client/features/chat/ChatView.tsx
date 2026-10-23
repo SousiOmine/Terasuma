@@ -1,17 +1,26 @@
 import { IconLayoutSidebarRight, IconMenu2 } from "@tabler/icons-preact";
-import { useEffect, useMemo, useRef } from "preact/hooks";
+import { useEffect, useLayoutEffect, useMemo, useRef } from "preact/hooks";
+import { isDisplayPart } from "../../../shared/display-parts";
 import type { AttachmentPart, ChatMessage, MessagePart, NoticePart, TextPart } from "../../../shared/types";
 import type { UiView } from "../../../shared/ui-markup";
 import { containerStatus } from "../../state/container";
 import { locale, t } from "../../i18n";
 import { modelProblem } from "../../state/model";
-import { isLoadingMessages, isStreaming, liveTurn, messages, type LiveTurn } from "../../state/chat";
+import {
+  isLoadingMessages,
+  isLoadingOlderMessages,
+  isStreaming,
+  liveTurn,
+  loadOlderMessages,
+  messages,
+  type LiveTurn,
+} from "../../state/chat";
 import { chatError, clearChatError } from "../../state/failure";
 import { connectionRequest } from "../../state/connection-request";
 import { envRequestActive } from "../../state/env-request";
 import { computerPaneOpen, handoverActive, toggleComputerPane } from "../../state/handover";
 import { openSettings } from "../../state/route";
-import { activeTera } from "../../state/session";
+import { activeTera, activeTeraId } from "../../state/session";
 import { sidebarOpen, toggleSidebar } from "../../state/sidebar";
 import { Banner } from "../../ui/Banner";
 import { ErrorNotice } from "../../ui/ErrorNotice";
@@ -46,12 +55,27 @@ type ChatItem =
   | { kind: "ui"; key: string; view: UiView | null }
   | { kind: "notice"; key: string; part: NoticePart };
 
+/** 古いページを足す前に控えた、スクロールの大きさと位置。 */
+type OlderAnchor = {
+  teraId: string;
+  /** 読み込み前の先頭のメッセージ。前が変わらなければ、読めたページは無い。 */
+  firstId: string | null;
+  /** 読み込み前の scrollHeight。 */
+  height: number;
+  /** 読み込み前の scrollTop。 */
+  top: number;
+};
+
 export function ChatView() {
-  const items = useMemo(
-    () => buildItems(messages.value, liveTurn.value, localeTag()),
-    // locale を変えると日付の書き方も変わる。
-    [messages.value, liveTurn.value, locale.value],
+  const tag = localeTag();
+  // 保存済みの履歴と、届いている途中のターンを別々に組み立てる。
+  // ターンが伸びても、保存済みの履歴を毎回組み直さない。
+  const saved = useMemo(() => buildItems(messages.value, null, tag), [messages.value, tag]);
+  const live = useMemo(
+    () => buildItems([], liveTurn.value, tag, saved.lastDay).items,
+    [liveTurn.value, saved.lastDay, tag],
   );
+  const items = useMemo(() => [...saved.items, ...live], [saved, live]);
   const streaming = isStreaming.value;
   const loading = isLoadingMessages.value;
   const error = chatError.value;
@@ -69,12 +93,70 @@ export function ChatView() {
   const scrollRef = useRef<HTMLDivElement>(null);
   /** 末尾にいるかどうか。履歴を読んでいる間は引き戻さない。 */
   const stickToBottom = useRef(true);
+  /** 古いページを足す前に控えた、スクロールの大きさと位置。 */
+  const olderAnchor = useRef<OlderAnchor | null>(null);
 
-  // 新しい内容が来たら末尾へ寄せる。メッセージは届いた単位で増えるので、数を見れば足りる。
-  useEffect(() => {
+  // Tera を開き直したら、最新（末尾）から見せる。
+  useLayoutEffect(() => {
+    stickToBottom.current = true;
+  }, [activeTeraId.value]);
+
+  // 新しい内容が来たら末尾へ寄せる。
+  // DOM を更新した直後（スクロールイベントより先）に動かし、
+  // 増えた高さを「利用者が上へ動いた」と取り違えないようにする。
+  useLayoutEffect(() => {
     const node = scrollRef.current;
     if (node !== null && stickToBottom.current) node.scrollTop = node.scrollHeight;
-  }, [items.length, streaming]);
+  }, [items, streaming]);
+
+  // 古いページを足したら、読んでいた位置を保つ。
+  useLayoutEffect(() => {
+    const anchor = olderAnchor.current;
+    const node = scrollRef.current;
+    if (anchor === null || node === null) return;
+
+    // 履歴の読み直し（Tera の切り替えを含む）が始まったら、控えた位置は捨てる。
+    if (isLoadingMessages.value || anchor.teraId !== activeTeraId.value) {
+      olderAnchor.current = null;
+      return;
+    }
+    // まだ古いページが届いていない。
+    if (isLoadingOlderMessages.value) return;
+    // 先頭が変わっていなければ、読めたページは無い。
+    if ((messages.value[0]?.id ?? null) === anchor.firstId) {
+      olderAnchor.current = null;
+      return;
+    }
+    // 末尾へ追従しているときは、そちらに任せる。
+    if (stickToBottom.current) {
+      olderAnchor.current = null;
+      return;
+    }
+
+    olderAnchor.current = null;
+    node.scrollTop = anchor.top + (node.scrollHeight - anchor.height);
+  }, [messages.value, isLoadingMessages.value, isLoadingOlderMessages.value]);
+
+  // 上端に近づいたら、その前のページを読む。読む前にスクロール位置を控える。
+  const requestOlder = (): void => {
+    const node = scrollRef.current;
+    if (node === null) return;
+
+    const height = node.scrollHeight;
+    const top = node.scrollTop;
+    const firstId = messages.value[0]?.id ?? null;
+    // 画面が埋まっていないときは、読み込み後も末尾（最新）に寄せたままにする。
+    const fill = height <= node.clientHeight + 1;
+    if (!loadOlderMessages()) return;
+
+    if (fill) {
+      stickToBottom.current = true;
+      return;
+    }
+
+    const teraId = activeTeraId.value;
+    if (teraId !== null) olderAnchor.current = { teraId, firstId, height, top };
+  };
 
   const handleScroll = (): void => {
     const node = scrollRef.current;
@@ -82,7 +164,19 @@ export function ChatView() {
 
     // 最下部の近くにいるときだけ、これから来る内容に追従する。
     stickToBottom.current = node.scrollHeight - node.scrollTop - node.clientHeight < 40;
+
+    // 上端に近づいたら、前のページを読む。
+    if (node.scrollTop < 32) requestOlder();
   };
+
+  // 最初のページが画面に満たないときは、スクロールが生まれるまで読む。
+  useEffect(() => {
+    const node = scrollRef.current;
+    if (node === null) return;
+    if (node.scrollHeight > node.clientHeight + 1) return;
+
+    requestOlder();
+  }, [items]);
 
   // 見出しは相手（Tera）の名前。いまは既定の 1 体しか居ないので、常に同じ名前になる。
   const title = activeTera.value?.name ?? "";
@@ -147,11 +241,18 @@ export function ChatView() {
         </Banner>
       )}
 
-      <div ref={scrollRef} onScroll={handleScroll} class="min-h-0 flex-1 overflow-y-auto bg-[var(--app-surface)]">
+      <div
+        ref={scrollRef}
+        onScroll={handleScroll}
+        class="min-h-0 flex-1 overflow-y-auto bg-[var(--app-surface)] [overflow-anchor:none]"
+      >
         {showEmpty ? (
           <EmptyState />
         ) : (
           <div class="mx-auto flex w-full max-w-3xl flex-col gap-4 px-4 py-8 sm:px-6">
+            {isLoadingOlderMessages.value && (
+              <p class="text-center text-[11px] text-[var(--app-text-tertiary)]">{t("chat.history.loadingOlder")}</p>
+            )}
             {items.map((item) => renderItem(item, streaming))}
             {streaming && !handover && !envWaiting && <TypingBubble />}
             {loading && <p class="text-center text-sm text-[var(--app-text-secondary)]">{t("common.loading")}</p>}
@@ -261,17 +362,23 @@ function renderItem(item: ChatItem, streaming: boolean) {
  *
  * assistant のメッセージは parts の text・attachment・notice と、chat_ui のカードを出す。
  * 連続する text と attachment は、同じターンの 1 つのまとまりにし、アイコンと時刻は 1 つだけ出す。
+ * 保存済みと受信中を分けて組み立てるときは、startDay に前の並びの最後の日を渡す。
  */
-function buildItems(saved: readonly ChatMessage[], live: LiveTurn | null, tag: string): ChatItem[] {
+function buildItems(
+  saved: readonly ChatMessage[],
+  live: LiveTurn | null,
+  tag: string,
+  startDay: string | null = null,
+): { items: ChatItem[]; lastDay: string | null } {
   const items: ChatItem[] = [];
-  let currentDay: string | null = null;
+  let currentDay: string | null = startDay;
 
   const pushDate = (at: number): void => {
     const day = dayKey(at);
     if (day === currentDay) return;
 
     currentDay = day;
-    items.push({ kind: "date", key: `date-${day}-${items.length}`, label: formatDate(at, tag) });
+    items.push({ kind: "date", key: `date-${day}`, label: formatDate(at, tag) });
   };
 
   for (const message of saved) {
@@ -286,7 +393,7 @@ function buildItems(saved: readonly ChatMessage[], live: LiveTurn | null, tag: s
 
   if (live !== null) pushParts(items, live.id, displayParts(live.parts, live.createdAt), pushDate);
 
-  return items;
+  return { items, lastDay: currentDay };
 }
 
 /**
@@ -297,6 +404,8 @@ function displayParts(parts: readonly MessagePart[], at: number): DisplayPart[] 
   const display: DisplayPart[] = [];
 
   for (const part of parts) {
+    if (!isDisplayPart(part)) continue;
+
     switch (part.type) {
       case "text":
         if (part.text.length > 0) display.push(part);
@@ -310,6 +419,8 @@ function displayParts(parts: readonly MessagePart[], at: number): DisplayPart[] 
         if (ui !== null) display.push({ type: "ui", callId: ui.callId, view: ui.view, at });
         break;
       }
+      case "tool-result":
+        break;
     }
   }
 

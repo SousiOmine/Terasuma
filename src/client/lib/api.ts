@@ -14,6 +14,7 @@ import type {
   McpServersView,
   McpServerStatusView,
   McpTestView,
+  MessagePage,
   ModelSettingsView,
   ProviderCheckResult,
   ProviderCredentials,
@@ -60,10 +61,17 @@ export async function listTeras(): Promise<readonly Tera[]> {
   return body.teras;
 }
 
-/** その Tera の履歴（古い順）。 */
-export async function listMessages(teraId: string): Promise<readonly ChatMessage[]> {
-  const body = await request<{ messages: ChatMessage[] }>(messagesPath(teraId));
-  return body.messages;
+/**
+ * その Tera の履歴を 1 ページ読む（古い順）。
+ * before は「この seq より前」を表し、null なら最新から読む。
+ */
+export async function listMessages(
+  teraId: string,
+  page: { limit: number; before: number | null },
+): Promise<MessagePage> {
+  const query = new URLSearchParams({ limit: String(page.limit) });
+  if (page.before !== null) query.set("before", String(page.before));
+  return request<MessagePage>(`${messagesPath(teraId)}?${query}`);
 }
 
 /**

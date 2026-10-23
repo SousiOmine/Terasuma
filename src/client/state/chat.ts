@@ -32,6 +32,22 @@ export const isStreaming = signal(false);
 /** 停止を頼んで、ターンが止まるのを待っている。 */
 export const isStopping = signal(false);
 export const isLoadingMessages = signal(false);
+/** さらに古いメッセージが残っているか。 */
+export const hasOlderMessages = signal(false);
+/** 古いメッセージを読んでいる最中か。 */
+export const isLoadingOlderMessages = signal(false);
+
+/** 1 回に読む履歴の件数。初回も、上端で古い履歴を足すときも同じ。 */
+const MESSAGES_PAGE_SIZE = 20;
+
+/** 読み込んだ中で最も古い seq。次に古いページを読むときの before。 */
+let oldestSeq: number | null = null;
+
+/**
+ * 履歴を読み直すたびに進める番号。
+ * 読んでいる間に Tera を切り替えたら、古い応答を捨てる。
+ */
+let messagesGeneration = 0;
 
 /** いま繋いでいるターン。切り替えや停止で、古いターンの後始末が新しい状態を壊さないようにする。 */
 type CurrentTurn = {
@@ -56,15 +72,73 @@ export async function openTera(id: string): Promise<void> {
   clearChatError();
   activeTeraId.value = id;
   isLoadingMessages.value = true;
+  isLoadingOlderMessages.value = false;
+  hasOlderMessages.value = false;
+  oldestSeq = null;
+
+  const generation = ++messagesGeneration;
   try {
-    messages.value = await api.listMessages(id);
+    const page = await api.listMessages(id, { limit: MESSAGES_PAGE_SIZE, before: null });
+    // 読んでいる間に別の Tera を開いたら、この応答は捨てる。
+    if (generation !== messagesGeneration) return;
+
+    messages.value = page.messages;
+    oldestSeq = page.messages[0]?.seq ?? null;
+    hasOlderMessages.value = page.hasMore;
   } catch (error) {
+    if (generation !== messagesGeneration) return;
+
     // 履歴を読めない Tera を開いたとき、前の履歴を残したままにすると
     // 見出しと本文が食い違う。空にして、理由を画面に出す。
     messages.value = [];
     showChatError(error);
   } finally {
-    isLoadingMessages.value = false;
+    if (generation === messagesGeneration) isLoadingMessages.value = false;
+  }
+}
+
+/**
+ * さらに古いメッセージを 1 ページ読む。
+ * 読み始めたかどうかを返す（画面は読む前にスクロール位置を控え、位置を保つ）。
+ */
+export function loadOlderMessages(): boolean {
+  const teraId = activeTeraId.value;
+  const before = oldestSeq;
+  if (
+    teraId === null ||
+    before === null ||
+    !hasOlderMessages.value ||
+    isLoadingOlderMessages.value ||
+    isLoadingMessages.value
+  ) {
+    return false;
+  }
+
+  isLoadingOlderMessages.value = true;
+  void readOlderPage(teraId, before, messagesGeneration);
+  return true;
+}
+
+/** 古いページを読み、いまの履歴の先頭へ足す。 */
+async function readOlderPage(teraId: string, before: number, generation: number): Promise<void> {
+  try {
+    const page = await api.listMessages(teraId, { limit: MESSAGES_PAGE_SIZE, before });
+    if (generation !== messagesGeneration) return;
+
+    const oldest = page.messages[0];
+    // 空のページを返す相手を読み続けない（hasMore と食い違っていても、古い側はもう無い）。
+    if (oldest === undefined) {
+      hasOlderMessages.value = false;
+      return;
+    }
+
+    messages.value = [...page.messages, ...messages.value];
+    oldestSeq = oldest.seq;
+    hasOlderMessages.value = page.hasMore;
+  } catch (error) {
+    if (generation === messagesGeneration) showChatError(error);
+  } finally {
+    if (generation === messagesGeneration) isLoadingOlderMessages.value = false;
   }
 }
 

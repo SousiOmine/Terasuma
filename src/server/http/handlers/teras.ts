@@ -1,11 +1,18 @@
 import { resolveModel } from "../../provider/routing";
 import { saveUploads } from "../../computer/uploads";
+import { toMessageView } from "../../agent/message-view";
 import { createTurns } from "../../agent/turns";
 import { ValidationError } from "../../errors";
 import { readSteerForm, readTurnForm } from "../body";
 import { json, jsonError, noContent } from "../respond";
 import { createSseResponse } from "../sse";
 import { type ApiDeps, type ApiRequest, requireTera } from "./shared";
+
+/** 履歴を 1 回に返す上限。画面はこれより小さい 20 件ずつ読む。 */
+const MAX_MESSAGE_PAGE = 100;
+
+/** 履歴の読み出し。ページの指定は問い合わせから読む。 */
+type MessagesRequest = ApiRequest<{ id: string }> & { url: string };
 
 /**
  * Tera（会話の持ち主）と、その 1 本の履歴。
@@ -23,9 +30,21 @@ export function terasHandlers(deps: ApiDeps) {
       return json({ teras: store.listTeras() });
     },
 
-    listMessages(req: ApiRequest<{ id: string }>): Response {
+    /**
+     * 履歴を 1 ページ返す。
+     * limit は必須、before は「この seq より前」を表す（省略すると最新から）。
+     * 画面に使わないツールの記録は落とし、件数だけでなく 1 件あたりの重さも抑える。
+     */
+    listMessages(req: MessagesRequest): Response {
       requireTera(store, req.params.id);
-      return json({ messages: store.listMessages(req.params.id) });
+
+      const params = new URL(req.url).searchParams;
+      const page = store.listMessagesPage(req.params.id, {
+        limit: readPageLimit(params),
+        before: readPageBefore(params),
+      });
+
+      return json({ messages: page.messages.map(toMessageView), hasMore: page.hasMore });
     },
 
     /**
@@ -103,4 +122,28 @@ export function terasHandlers(deps: ApiDeps) {
 /** ターンが動いていないときの応答。 */
 function noTurnError(): Response {
   return jsonError(409, "turn_not_running", "この Tera は応答を生成していません");
+}
+
+/** 1 ページの件数。省略は受け付けない（読む量を呼ぶ側に決めさせる）。 */
+function readPageLimit(params: URLSearchParams): number {
+  const raw = params.get("limit");
+  if (raw === null) throw new ValidationError("limit を指定してください");
+
+  const limit = Number(raw);
+  if (!Number.isInteger(limit) || limit < 1 || limit > MAX_MESSAGE_PAGE) {
+    throw new ValidationError(`limit は 1 から ${MAX_MESSAGE_PAGE} の整数で指定してください`);
+  }
+  return limit;
+}
+
+/** この seq より前を読む。省略すると最新から。 */
+function readPageBefore(params: URLSearchParams): number | null {
+  const raw = params.get("before");
+  if (raw === null) return null;
+
+  const before = Number(raw);
+  if (!Number.isInteger(before) || before < 1) {
+    throw new ValidationError("before は 1 以上の整数で指定してください");
+  }
+  return before;
 }

@@ -4,6 +4,7 @@ import { CHAT_SERVER_ID } from "../../shared/tools";
 import type {
   ChatAttachment,
   ChatMessage,
+  MessagePage,
   MessagePart,
   MessageRole,
   SentAttachment,
@@ -40,6 +41,14 @@ export type AppendMessageInput = {
   usage?: TokenUsage | null;
 };
 
+/** 履歴を読むページ。before は「この seq より前」を表し、null なら最新から読む。 */
+export type MessagePageQuery = {
+  /** 返す件数の上限。 */
+  limit: number;
+  /** この seq より前だけを読む。null なら最新から。 */
+  before: number | null;
+};
+
 /**
  * Tera の過去のやり取りを畳んだ要約（Compaction）。
  * 会話が長くなっても、モデルへ渡す文脈を有界に保つ。
@@ -60,7 +69,11 @@ export type Store = {
   getTera(id: string): Tera | null;
   /** 無ければ作る。既にあれば名前も作成日時も変えない（起動のたびに呼ばれる）。 */
   ensureTera(id: string, name: string): Tera;
-  listMessages(teraId: string): ChatMessage[];
+  /**
+   * 履歴を新しい側から 1 ページ読む（返す並びは古い順）。
+   * limit は件数の上限、before は「この seq より前」を表す。
+   */
+  listMessagesPage(teraId: string, page: MessagePageQuery): MessagePage;
   /** seq より後のメッセージ（古い順）。まだ畳んでいない生の履歴を取り出す。 */
   listMessagesSince(teraId: string, seq: number): ChatMessage[];
   /**
@@ -207,9 +220,13 @@ export function createStore(dbPath: string, options: CreateStoreOptions = {}): S
   );
   const touchTera = db.query<unknown, [number, string]>("UPDATE teras SET updated_at = ? WHERE id = ?");
 
-  const selectMessages = db.query<MessageRow, [string]>(
+  // 新しい側から limit + 1 件読み、1 件余ったら「さらに古い発言がある」と分かる。
+  const selectMessagePage = db.query<MessageRow, [string, number | null, number | null, number]>(
     `SELECT id, tera_id, seq, role, content, attachments, parts, created_at, input_tokens, output_tokens, cached_input_tokens
-     FROM messages WHERE tera_id = ? ORDER BY seq ASC`,
+     FROM messages
+     WHERE tera_id = ? AND (? IS NULL OR seq < ?)
+     ORDER BY seq DESC
+     LIMIT ?`,
   );
   const selectMessagesSince = db.query<MessageRow, [string, number]>(
     `SELECT id, tera_id, seq, role, content, attachments, parts, created_at, input_tokens, output_tokens, cached_input_tokens
@@ -317,8 +334,12 @@ export function createStore(dbPath: string, options: CreateStoreOptions = {}): S
       return toTera(row);
     },
 
-    listMessages(teraId) {
-      return selectMessages.all(teraId).map(toMessage);
+    listMessagesPage(teraId, page) {
+      const rows = selectMessagePage.all(teraId, page.before, page.before, page.limit + 1);
+      const hasMore = rows.length > page.limit;
+      const pageRows = hasMore ? rows.slice(0, page.limit) : rows;
+
+      return { messages: pageRows.reverse().map(toMessage), hasMore };
     },
 
     listMessagesSince(teraId, seq) {

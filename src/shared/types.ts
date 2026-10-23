@@ -140,11 +140,23 @@ export type ChatMessage = {
    *
    * text・attachment・notice は画面に出す。ツールの呼び出しと結果は内部の記録で、
    * 画面には出さずモデルへ渡す履歴にだけ使う。
+   * 画面へ渡すときは、表示に使う部分だけに絞る（server/agent/message-view.ts）。
    */
   parts: MessagePart[] | null;
   /** epoch ミリ秒 */
   createdAt: number;
   usage: TokenUsage | null;
+};
+
+/**
+ * 履歴を 1 ページずつ読むときの応答。
+ * limit は新しい側から数えた件数、hasMore はそのページより古い発言が残っているか。
+ */
+export type MessagePage = {
+  /** 古い順。 */
+  messages: ChatMessage[];
+  /** このページより古いメッセージが残っているか。 */
+  hasMore: boolean;
 };
 
 /**

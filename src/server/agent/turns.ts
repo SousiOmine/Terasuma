@@ -14,6 +14,7 @@ import type {
 } from "../../shared/types";
 import type { Compaction } from "./compaction";
 import type { AgentEngine } from "./engine";
+import { toMessageView } from "./message-view";
 import type { TeraContext } from "./prompt";
 import type { Store } from "../data/store";
 
@@ -199,7 +200,7 @@ async function* turnEvents(
       content,
       attachments,
     });
-    yield { type: "user-message", message: userMessage };
+    yield { type: "user-message", message: toMessageView(userMessage) };
   }
 
   const assistantId = crypto.randomUUID();
@@ -351,7 +352,7 @@ async function* turnEvents(
   }
 
   if (failure === null) {
-    if (finalMessage !== null) yield { type: "assistant-done", message: finalMessage };
+    if (finalMessage !== null) yield { type: "assistant-done", message: toMessageView(finalMessage) };
     return true;
   }
 

@@ -83,8 +83,9 @@ test(
       // モデルは結果を読んでから本文を書く。ここまで来ていれば、1 ターンの中で往復できている。
       expect(visibleText(events).length, "ツールを使った後の本文が空だった").toBeGreaterThan(0);
 
-      // 呼び出しと結果は、本文と同じメッセージの一部として残る。
-      const parts = (await harness.messages(DEFAULT_TERA_ID))[1]?.parts ?? [];
+      // 呼び出しと結果は、本文と同じメッセージの一部として保存される（画面へは本文だけを返す）。
+      const stored = harness.store.listMessagesPage(DEFAULT_TERA_ID, { limit: 2, before: null });
+      const parts = stored.messages[1]?.parts ?? [];
       const savedCall = parts.findIndex((part) => part.type === "tool-call" && part.id === call.part.id);
       const savedResult = parts.findIndex((part) => part.type === "tool-result" && part.id === call.part.id);
       expect(savedCall, "呼び出しが保存されていない").toBeGreaterThanOrEqual(0);

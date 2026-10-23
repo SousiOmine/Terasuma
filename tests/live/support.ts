@@ -41,7 +41,14 @@ import { createStore, type Store } from "../../src/server/data/store";
 import type { ReplyLanguage } from "../../src/shared/language";
 import { decodeChatEvents } from "../../src/shared/sse";
 import { TOOL_CALL_TOOL_NAME } from "../../src/shared/tools";
-import type { ChatEvent, ChatMessage, MessagePart, SentAttachment, TokenUsage } from "../../src/shared/types";
+import type {
+  ChatEvent,
+  ChatMessage,
+  MessagePage,
+  MessagePart,
+  SentAttachment,
+  TokenUsage,
+} from "../../src/shared/types";
 
 /** Containerfile と entry.sh の置き場。src から見たときと同じ場所を指す。 */
 const CONTAINER_DIR = join(import.meta.dir, "..", "..", "container");
@@ -199,8 +206,22 @@ export async function withLiveServer(run: (harness: LiveHarness) => Promise<void
         return decoded.events;
       },
       async messages(teraId) {
-        const response = await fetch(new URL(`/api/teras/${teraId}/messages`, base));
-        return ((await response.json()) as { messages: ChatMessage[] }).messages;
+        const messages: ChatMessage[] = [];
+        let before: number | null = null;
+
+        for (;;) {
+          const query = new URLSearchParams({ limit: "100" });
+          if (before !== null) query.set("before", String(before));
+
+          const response = await fetch(new URL(`/api/teras/${teraId}/messages?${query}`, base));
+          const page = (await response.json()) as MessagePage;
+          messages.unshift(...page.messages);
+          if (!page.hasMore) return messages;
+
+          const oldest = page.messages[0];
+          if (oldest === undefined) throw new Error("hasMore なのにメッセージが空です");
+          before = oldest.seq;
+        }
       },
     });
   } finally {

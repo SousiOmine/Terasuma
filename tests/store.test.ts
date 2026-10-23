@@ -3,12 +3,29 @@ import { Database } from "bun:sqlite";
 import { rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createStore, DEFAULT_TERA_ID } from "../src/server/data/store";
+import { createStore, DEFAULT_TERA_ID, type Store } from "../src/server/data/store";
+import type { ChatMessage } from "../src/shared/types";
 import { makeStore } from "./support";
 
 /** 一時ファイルの DB を片付ける。WAL と共有メモリのファイルも残さない。 */
 function removeDatabase(path: string): void {
   for (const suffix of ["", "-wal", "-shm"]) rmSync(`${path}${suffix}`, { force: true });
+}
+
+/** ページをたどって、その Tera の履歴を全部読む。 */
+function allMessages(store: Store, teraId: string): ChatMessage[] {
+  const messages: ChatMessage[] = [];
+  let before: number | null = null;
+
+  for (;;) {
+    const page = store.listMessagesPage(teraId, { limit: 100, before });
+    messages.unshift(...page.messages);
+    if (!page.hasMore) return messages;
+
+    const oldest = page.messages[0];
+    if (oldest === undefined) throw new Error("hasMore なのにメッセージが空です");
+    before = oldest.seq;
+  }
 }
 
 describe("store", () => {
@@ -63,18 +80,18 @@ describe("store", () => {
     expect(message.content).toBe("画面に出す本文");
     expect(message.attachments).toEqual([attachment]);
 
-    const [saved] = store.listMessages(DEFAULT_TERA_ID);
+    const [saved] = allMessages(store, DEFAULT_TERA_ID);
     expect(saved).toEqual(message);
   });
 
-  test("listMessages は seq 昇順で返す", () => {
+  test("listMessagesPage でページをたどると seq 昇順で返す", () => {
     const store = makeStore();
     store.appendMessage({ id: "m1", teraId: DEFAULT_TERA_ID, role: "user", content: "1" });
     store.appendMessage({ id: "m2", teraId: DEFAULT_TERA_ID, role: "assistant", content: "2" });
     store.appendMessage({ id: "m3", teraId: DEFAULT_TERA_ID, role: "user", content: "3" });
 
-    expect(store.listMessages(DEFAULT_TERA_ID).map((message) => message.content)).toEqual(["1", "2", "3"]);
-    expect(store.listMessages(DEFAULT_TERA_ID).map((message) => message.seq)).toEqual([1, 2, 3]);
+    expect(allMessages(store, DEFAULT_TERA_ID).map((message) => message.content)).toEqual(["1", "2", "3"]);
+    expect(allMessages(store, DEFAULT_TERA_ID).map((message) => message.seq)).toEqual([1, 2, 3]);
   });
 
   test("usage を保存して読み戻せる", () => {
@@ -87,7 +104,7 @@ describe("store", () => {
       usage: { inputTokens: 10, outputTokens: 20, cachedInputTokens: 5 },
     });
 
-    expect(store.listMessages(DEFAULT_TERA_ID)[0]?.usage).toEqual({
+    expect(allMessages(store, DEFAULT_TERA_ID)[0]?.usage).toEqual({
       inputTokens: 10,
       outputTokens: 20,
       cachedInputTokens: 5,
@@ -110,7 +127,7 @@ describe("store", () => {
       ],
     });
 
-    const [user, assistant] = store.listMessages(DEFAULT_TERA_ID);
+    const [user, assistant] = allMessages(store, DEFAULT_TERA_ID);
     expect(user?.parts).toBeNull();
     expect(assistant?.parts).toEqual([
       { type: "text", text: "調べます。", at: 1 },
@@ -124,7 +141,7 @@ describe("store", () => {
     const store = makeStore();
     store.appendMessage({ id: "m1", teraId: DEFAULT_TERA_ID, role: "user", content: "本文" });
 
-    expect(store.listMessages(DEFAULT_TERA_ID)[0]?.usage).toBeNull();
+    expect(allMessages(store, DEFAULT_TERA_ID)[0]?.usage).toBeNull();
   });
 
   test("存在しない Tera は null", () => {
@@ -140,8 +157,8 @@ describe("store", () => {
     store.appendMessage({ id: "m1", teraId: DEFAULT_TERA_ID, role: "user", content: "既定へ" });
     store.appendMessage({ id: "m2", teraId: "second", role: "user", content: "2 体目へ" });
 
-    expect(store.listMessages(DEFAULT_TERA_ID).map((message) => message.content)).toEqual(["既定へ"]);
-    expect(store.listMessages("second").map((message) => message.content)).toEqual(["2 体目へ"]);
+    expect(allMessages(store, DEFAULT_TERA_ID).map((message) => message.content)).toEqual(["既定へ"]);
+    expect(allMessages(store, "second").map((message) => message.content)).toEqual(["2 体目へ"]);
   });
 
   test("listTeras は更新の新しい順に並ぶ", () => {
@@ -167,7 +184,7 @@ describe("store", () => {
         const again = second.getTera(DEFAULT_TERA_ID);
         expect(again?.name).toBe("Tera");
         expect(again?.createdAt).toBe(created?.createdAt);
-        expect(second.listMessages(DEFAULT_TERA_ID).map((message) => message.content)).toEqual(["残る本文"]);
+        expect(allMessages(second, DEFAULT_TERA_ID).map((message) => message.content)).toEqual(["残る本文"]);
       } finally {
         second.close();
       }
@@ -201,7 +218,7 @@ describe("store", () => {
 
       const store = createStore(path);
       try {
-        const [message] = store.listMessages(DEFAULT_TERA_ID);
+        const [message] = allMessages(store, DEFAULT_TERA_ID);
         expect(message?.content).toBe("古い本文");
         expect(message?.attachments).toBeNull();
       } finally {
@@ -251,7 +268,7 @@ describe("store", () => {
 
       const store = createStore(path);
       try {
-        const [user, plain, tool] = store.listMessages(DEFAULT_TERA_ID);
+        const [user, plain, tool] = allMessages(store, DEFAULT_TERA_ID);
 
         // ユーザーの発言はそのまま。
         expect(user?.content).toBe("質問");
@@ -324,7 +341,7 @@ describe("store", () => {
 
       const store = createStore(path);
       try {
-        const [assistant] = store.listMessages(DEFAULT_TERA_ID);
+        const [assistant] = allMessages(store, DEFAULT_TERA_ID);
         expect(assistant?.content).toBe("");
         expect(assistant?.parts).toEqual([
           { type: "text", text: "調べます。", at: 3 },
@@ -370,7 +387,7 @@ describe("store", () => {
       try {
         // 会話の持ち主が変わるので、古い会話は引き継がない。
         expect(store.listTeras().map((tera) => tera.id)).toEqual([DEFAULT_TERA_ID]);
-        expect(store.listMessages(DEFAULT_TERA_ID)).toEqual([]);
+        expect(allMessages(store, DEFAULT_TERA_ID)).toEqual([]);
 
         // 作り替えたあとは、これまでどおり書き込める（連番も 1 から）。
         const appended = store.appendMessage({
@@ -388,6 +405,70 @@ describe("store", () => {
     }
   });
 });
+
+describe("listMessagesPage", () => {
+  function seed(store: Store): void {
+    for (let index = 1; index <= 5; index += 1) {
+      store.appendMessage({ id: `m${index}`, teraId: DEFAULT_TERA_ID, role: "user", content: String(index) });
+    }
+  }
+
+  test("最新のページを古い順で返し、古い側の有無を返す", () => {
+    const store = makeStore();
+    seed(store);
+
+    const page = store.listMessagesPage(DEFAULT_TERA_ID, { limit: 2, before: null });
+    expect(page.messages.map((message) => message.content)).toEqual(["4", "5"]);
+    expect(page.hasMore).toBe(true);
+  });
+
+  test("before で、その seq より前のページを読める", () => {
+    const store = makeStore();
+    seed(store);
+
+    const page = store.listMessagesPage(DEFAULT_TERA_ID, { limit: 2, before: 4 });
+    expect(page.messages.map((message) => message.content)).toEqual(["2", "3"]);
+    expect(page.hasMore).toBe(true);
+
+    const oldest = store.listMessagesPage(DEFAULT_TERA_ID, { limit: 2, before: 2 });
+    expect(oldest.messages.map((message) => message.content)).toEqual(["1"]);
+    expect(oldest.hasMore).toBe(false);
+
+    const after = store.listMessagesPage(DEFAULT_TERA_ID, { limit: 2, before: 1 });
+    expect(after.messages).toEqual([]);
+    expect(after.hasMore).toBe(false);
+  });
+
+  test("limit が履歴より多ければ、全件を返して hasMore は false", () => {
+    const store = makeStore();
+    seed(store);
+
+    const page = store.listMessagesPage(DEFAULT_TERA_ID, { limit: 10, before: null });
+    expect(page.messages.map((message) => message.content)).toEqual(["1", "2", "3", "4", "5"]);
+    expect(page.hasMore).toBe(false);
+  });
+
+  test("履歴が無ければ、空で hasMore は false", () => {
+    const store = makeStore();
+
+    expect(store.listMessagesPage(DEFAULT_TERA_ID, { limit: 20, before: null })).toEqual({
+      messages: [],
+      hasMore: false,
+    });
+  });
+
+  test("別の Tera のメッセージは混ざらない", () => {
+    const store = makeStore();
+    store.ensureTera("second", "2 体目");
+    store.appendMessage({ id: "m1", teraId: DEFAULT_TERA_ID, role: "user", content: "既定" });
+    store.appendMessage({ id: "m2", teraId: "second", role: "user", content: "2 体目" });
+
+    const page = store.listMessagesPage("second", { limit: 20, before: null });
+    expect(page.messages.map((message) => message.content)).toEqual(["2 体目"]);
+    expect(page.hasMore).toBe(false);
+  });
+});
+
 describe("過去のやり取りの要約", () => {
   test("まだ畳んでいなければ、要約は空で、すべてが畳んでいない", () => {
     const store = makeStore();

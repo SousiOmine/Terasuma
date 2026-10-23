@@ -90,7 +90,9 @@ test(
         `  画面: ${join(harness.dataDir, "images", `${image.sha256}.png`)}（${image.width}x${image.height}）`,
       );
 
-      const parts = (await harness.messages(DEFAULT_TERA_ID))[1]?.parts ?? [];
+      // 画面へは結果を返さないので、保存された記録から参照を確かめる。
+      const stored = harness.store.listMessagesPage(DEFAULT_TERA_ID, { limit: 2, before: null });
+      const parts = stored.messages[1]?.parts ?? [];
       const saved = parts.find(
         (part): part is Extract<MessagePart, { type: "tool-result" }> =>
           part.type === "tool-result" && part.id === shot.part.id,

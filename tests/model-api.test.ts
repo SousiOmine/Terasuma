@@ -770,8 +770,8 @@ describe("チャットとモデル設定の関係", () => {
       const listed = (await teras.json()) as { teras: { id: string }[] };
       expect(listed.teras.map((tera) => tera.id)).toEqual([DEFAULT_TERA_ID]);
 
-      const messages = await harness.request(`/api/teras/${DEFAULT_TERA_ID}/messages`);
-      expect(await messages.json()).toEqual({ messages: [] });
+      const messages = await harness.request(`/api/teras/${DEFAULT_TERA_ID}/messages?limit=20`);
+      expect(await messages.json()).toEqual({ messages: [], hasMore: false });
     });
   });
 

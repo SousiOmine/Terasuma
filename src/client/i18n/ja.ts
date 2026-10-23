@@ -24,6 +24,7 @@ export const ja: Record<MessageKey, string> = {
   "chat.file.download": "{name} をダウンロード",
   "chat.image.open": "{name} を開く",
   "chat.markdown.task": "タスク",
+  "chat.history.loadingOlder": "以前のメッセージを読み込んでいます…",
 
   "chat.ui.invalid": "このカードを表示できませんでした",
   "chat.ui.submit": "送信",

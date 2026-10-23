@@ -14,6 +14,7 @@ import type {
   AttachmentPart,
   ChatEvent,
   ChatMessage,
+  MessagePage,
   SentAttachment,
   TextPart,
   Tera,
@@ -120,8 +121,22 @@ async function withServer<T>(
           return ((await response.json()) as { teras: Tera[] }).teras;
         },
         async messages(teraId) {
-          const response = await request(`/api/teras/${teraId}/messages`);
-          return ((await response.json()) as { messages: ChatMessage[] }).messages;
+          const messages: ChatMessage[] = [];
+          let before: number | null = null;
+
+          for (;;) {
+            const query = new URLSearchParams({ limit: "100" });
+            if (before !== null) query.set("before", String(before));
+
+            const response = await request(`/api/teras/${teraId}/messages?${query}`);
+            const page = (await response.json()) as MessagePage;
+            messages.unshift(...page.messages);
+            if (!page.hasMore) return messages;
+
+            const oldest = page.messages[0];
+            if (oldest === undefined) throw new Error("hasMore なのにメッセージが空です");
+            before = oldest.seq;
+          }
         },
       };
 
@@ -523,14 +538,24 @@ describe("チャット API", () => {
 
       const done = assistantDone(events);
       const parts = done.parts ?? [];
-      expect(parts.map((part) => part.type)).toEqual(["text", "tool-call", "tool-result", "text"]);
+      // 画面へ流す assistant-done は、表示に使う部分だけ。
+      expect(parts.map((part) => part.type)).toEqual(["text", "text"]);
       expect(parts.filter((part) => part.type === "text").map((part) => part.text)).toEqual([
         "調べます。",
         "分かりました。",
       ]);
       expect(done.content).toBe("");
 
-      // 読み直しても同じ並びで戻る。
+      // 保存した記録には、ツールの呼び出しと結果も並びのまま残る。
+      const saved = harness.store.listMessagesPage(DEFAULT_TERA_ID, { limit: 2, before: null });
+      expect(saved.messages[1]?.parts?.map((part) => part.type)).toEqual([
+        "text",
+        "tool-call",
+        "tool-result",
+        "text",
+      ]);
+
+      // 読み直しても、画面へは表示用の部分だけが戻る。
       const messages = await harness.messages(DEFAULT_TERA_ID);
       expect(messages[1]?.parts).toEqual(done.parts);
     });
@@ -1075,9 +1100,13 @@ describe("チャット API", () => {
       expect(events.some((event) => event.type === "error")).toBe(false);
       expect(events.at(-1)?.type).toBe("assistant-done");
 
+      // 画面へはカードの材料だけを返し、結果は保存側に残す。
       const messages = await harness.messages(DEFAULT_TERA_ID);
       expect(messages).toHaveLength(2);
-      expect(messages[1]?.parts?.map((part) => part.type)).toEqual(["tool-call", "tool-result"]);
+      expect(messages[1]?.parts?.map((part) => part.type)).toEqual(["tool-call"]);
+
+      const saved = harness.store.listMessagesPage(DEFAULT_TERA_ID, { limit: 2, before: null });
+      expect(saved.messages[1]?.parts?.map((part) => part.type)).toEqual(["tool-call", "tool-result"]);
     });
   });
 

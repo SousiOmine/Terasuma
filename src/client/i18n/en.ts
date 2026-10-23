@@ -25,6 +25,7 @@ export const en = {
   "chat.file.download": "Download {name}",
   "chat.image.open": "Open {name}",
   "chat.markdown.task": "Task",
+  "chat.history.loadingOlder": "Loading earlier messages…",
 
   "chat.ui.invalid": "This card could not be displayed",
   "chat.ui.submit": "Send",
