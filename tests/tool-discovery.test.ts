@@ -99,6 +99,21 @@ describe("ツールのレジストリ", () => {
     expect(match?.text).not.toContain("Arguments");
   });
 
+  test("引数の説明でも見つかる", async () => {
+    const registry = await registryOf();
+
+    expect(registry.search("返す文字", 10).map((match) => match.name)).toEqual(["local_echo"]);
+  });
+
+  test("説明が無いツールは、そのことを示す", async () => {
+    const registry = await createToolRegistry({
+      bare: tool({ description: "", inputSchema: z.object({}), execute: async () => "ok" }),
+    });
+    const [match] = registry.search("bare", 10);
+
+    expect(match?.text).toContain("(no description)");
+  });
+
   test("名前で実行でき、戻り値はそのまま返る", async () => {
     const registry = await registryOf();
     const output = await registry.call("local_echo", { text: "hi" }, { toolCallId: "call-1" });

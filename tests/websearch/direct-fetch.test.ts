@@ -144,3 +144,67 @@ describe("ページの直接取得", () => {
     expect(error.code).toBe("unavailable");
   });
 });
+
+describe("取得先の制限", () => {
+  test("localhost は取得しない", async () => {
+    const error = await rejection(fetchDirect(respondingFetch(htmlResponse("x")), { url: "http://localhost:3000/" }));
+
+    expect(error.code).toBe("invalid");
+    expect(error.message).toContain("Local and private");
+  });
+
+  test("プライベートアドレスは取得しない", async () => {
+    for (const url of ["http://127.0.0.1/", "http://10.0.0.1/", "http://192.168.1.1/", "http://169.254.169.254/"]) {
+      const error = await rejection(fetchDirect(respondingFetch(htmlResponse("x")), { url }));
+      expect(error.code).toBe("invalid");
+    }
+  });
+
+  test("リダイレクトの飛び先も同じ規則で確かめる", async () => {
+    const error = await rejection(
+      fetchDirect(
+        async () => new Response(null, { status: 302, headers: { Location: "http://127.0.0.1:3000/api/mcp/servers" } }),
+        { url: "https://example.com/start" },
+      ),
+    );
+
+    expect(error.code).toBe("invalid");
+    expect(error.message).toContain("Local and private");
+  });
+
+  test("リダイレクトは手動で追い、上限を超えたら止める", async () => {
+    let calls = 0;
+    const error = await rejection(
+      fetchDirect(
+        async () => {
+          calls += 1;
+          return new Response(null, { status: 302, headers: { Location: `https://example.com/next-${calls}` } });
+        },
+        { url: "https://example.com/start" },
+      ),
+    );
+
+    expect(error.code).toBe("unavailable");
+    expect(error.message).toContain("redirected more than");
+    expect(calls).toBe(6);
+  });
+
+  test("公開された飛び先は追う", async () => {
+    let calls = 0;
+    const response = await fetchDirect(
+      async (_url, init) => {
+        calls += 1;
+        expect(init.redirect).toBe("manual");
+        if (calls === 1) {
+          return new Response(null, { status: 302, headers: { Location: "https://example.com/final" } });
+        }
+        return htmlResponse("<html><head><title>Final</title></head><body><p>Done</p></body></html>");
+      },
+      { url: "https://example.com/start" },
+    );
+
+    expect(response.url).toBe("https://example.com/final");
+    expect(response.text).toBe("Done");
+    expect(calls).toBe(2);
+  });
+});

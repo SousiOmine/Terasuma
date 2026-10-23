@@ -7,6 +7,7 @@ import { z } from "zod";
 import { CONFIG_FILE_NAME } from "../src/config";
 import type { McpServerSettings, McpServersSettings } from "../src/server/data/settings";
 import { McpServerNotFound, createMcpManager, type McpManager } from "../src/server/mcp/manager";
+import { MAX_MCP_RESULT_CHARS } from "../src/server/mcp/tools";
 import { createImageStore, type ImageStore } from "../src/server/computer/images";
 import { createSettingsStore } from "../src/server/data/settings";
 import type { ImageRef } from "../src/shared/api/message";
@@ -41,9 +42,26 @@ function createTestServer(name: string): McpServer {
   return server;
 }
 
+/** 上限を超えるテキストを返すツールを持つサーバー。 */
+function createHugeServer(): McpServer {
+  const server = new McpServer({ name: "terasuma-test-huge", version: "1.0.0" });
+
+  server.registerTool("huge", { description: "巨大な結果", inputSchema: z.object({}) }, () => ({
+    content: [{ type: "text" as const, text: "x".repeat(MAX_MCP_RESULT_CHARS + 10_000) }],
+  }));
+
+  return server;
+}
+
 /** テスト用の MCP サーバーの fetch ハンドラ。認可で守るサーバーに載せるときにも使う。 */
 function mcpHandler(name: string) {
   const handler = createMcpHandler(() => createTestServer(name));
+  return (request: Request) => handler.fetch(request);
+}
+
+/** 上限を超える結果を返すサーバーの fetch ハンドラ。 */
+function hugeHandler() {
+  const handler = createMcpHandler(() => createHugeServer());
   return (request: Request) => handler.fetch(request);
 }
 
@@ -327,6 +345,26 @@ describe("保存する前の接続の確認", () => {
       });
     } finally {
       await as.server.stop(true);
+    }
+  });
+});
+
+describe("ツールの結果の大きさ", () => {
+  test("上限を超えた結果は切り、切ったことを示す", async () => {
+    const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: hugeHandler() });
+
+    try {
+      await withManager({ huge: { type: "http", url: `http://127.0.0.1:${server.port}/mcp` } }, async (manager) => {
+        const tools = await manager.toolset();
+        const huge = tools["huge_huge"];
+        if (huge?.execute === undefined) throw new Error("huge が無い");
+
+        const output = (await huge.execute({}, {} as never)) as { text: string };
+        expect(output.text.length).toBeLessThan(MAX_MCP_RESULT_CHARS + 200);
+        expect(output.text).toContain("[... 10000 more characters truncated]");
+      });
+    } finally {
+      await server.stop(true);
     }
   });
 });

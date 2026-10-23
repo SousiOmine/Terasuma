@@ -18,7 +18,7 @@ export function createDiscoveryTools(registry: ToolRegistry): ToolSet {
   return {
     [TOOL_SEARCH_TOOL_NAME]: tool({
       description: [
-        "Find tools that are not in your tool list (MCP server tools and the computer_ tools) and return their names, descriptions and argument schemas.",
+        "Find tools that are not in your tool list (MCP server tools, the computer_ tools, app_request, and the Discord tools) and return their names, descriptions and argument schemas.",
         "Omitting the query lists every available tool by name.",
         'A query that matches nothing answers with `No tools match "<query>"` followed by that listing, so a miss still shows what exists.',
         "Run a match with tool_call.",

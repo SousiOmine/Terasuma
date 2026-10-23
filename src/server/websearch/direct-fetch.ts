@@ -18,26 +18,53 @@ const DIRECT_TIMEOUT_MS = 20_000;
 const USER_AGENT = "Terasuma/0.1";
 const ACCEPT = "text/html,application/xhtml+xml,text/plain;q=0.9,application/json;q=0.8,*/*;q=0.5";
 
+/** リダイレクトを追う上限。 */
+const MAX_REDIRECTS = 5;
+
 /** URL を取得して、読める本文にする。 */
 export async function fetchDirect(fetchImpl: FetchLike, request: FetchRequest): Promise<FetchResponse> {
-  const url = httpUrl(request.url);
+  let url = httpUrl(request.url);
   const signal = combineSignal(request.signal, DIRECT_TIMEOUT_MS);
 
   let response: Response;
-  try {
-    response = await fetchImpl(url, {
-      method: "GET",
-      headers: { Accept: ACCEPT, "User-Agent": USER_AGENT },
-      redirect: "follow",
-      signal,
-    });
-  } catch (error) {
-    if (error instanceof Error && (error.name === "AbortError" || error.name === "TimeoutError")) {
-      throw new WebSearchError("unavailable", `The page did not respond in time (${url})`, { cause: error });
+  let redirects = 0;
+  for (;;) {
+    try {
+      response = await fetchImpl(url, {
+        method: "GET",
+        headers: { Accept: ACCEPT, "User-Agent": USER_AGENT },
+        // リダイレクトは自分で追う。飛び先も httpUrl で確かめるため。
+        redirect: "manual",
+        signal,
+      });
+    } catch (error) {
+      if (error instanceof Error && (error.name === "AbortError" || error.name === "TimeoutError")) {
+        throw new WebSearchError("unavailable", `The page did not respond in time (${url})`, { cause: error });
+      }
+      throw new WebSearchError("unavailable", `The page could not be fetched: ${describeError(error)}`, {
+        cause: error,
+      });
     }
-    throw new WebSearchError("unavailable", `The page could not be fetched: ${describeError(error)}`, {
-      cause: error,
-    });
+
+    if (!isRedirect(response.status)) break;
+
+    const location = response.headers.get("location");
+    if (location === null) {
+      throw new WebSearchError("unavailable", `The page redirected without a Location header (${url})`);
+    }
+
+    redirects += 1;
+    if (redirects > MAX_REDIRECTS) {
+      throw new WebSearchError("unavailable", `The page redirected more than ${MAX_REDIRECTS} times (${url})`);
+    }
+
+    let next: URL;
+    try {
+      next = new URL(location, url);
+    } catch (error) {
+      throw new WebSearchError("invalid", `The redirect target is not a valid URL: ${location}`, { cause: error });
+    }
+    url = httpUrl(next.toString());
   }
 
   if (!response.ok) {
@@ -54,7 +81,8 @@ export async function fetchDirect(fetchImpl: FetchLike, request: FetchRequest): 
   }
 
   const body = await readBody(response, url);
-  const finalUrl = response.url.length > 0 ? response.url : url;
+  // リダイレクトは自分で追っているので、最後に取得した URL が最終的な取得先になる。
+  const finalUrl = url;
 
   if (contentType.includes("text/html") || contentType.includes("application/xhtml+xml")) {
     return { url: finalUrl, title: pageTitle(body), text: htmlToText(body) };
@@ -79,7 +107,45 @@ function httpUrl(value: string): string {
   if (url.protocol !== "http:" && url.protocol !== "https:") {
     throw new WebSearchError("invalid", `Only http and https URLs can be fetched (got ${url.protocol})`);
   }
+  if (isPrivateHost(url.hostname)) {
+    throw new WebSearchError(
+      "invalid",
+      `Local and private addresses cannot be fetched (${url.hostname}). Use a public URL.`,
+    );
+  }
   return url.toString();
+}
+
+/** リダイレクトとして追う応答かどうか。 */
+function isRedirect(status: number): boolean {
+  return status === 301 || status === 302 || status === 303 || status === 307 || status === 308;
+}
+
+/**
+ * この端末や同じネットワークの中を指すアドレスかどうか。
+ * SSRF と、Terasuma 自身の API（localhost で認証なし）をエージェントに読ませないための線引き。
+ * DNS の解決結果までは見ないので、名前が後から private な IP を指す場合までは塞げない。
+ */
+function isPrivateHost(hostname: string): boolean {
+  const host = hostname.toLowerCase().replace(/\.$/, "");
+
+  if (host === "localhost" || host.endsWith(".localhost")) return true;
+  if (host === "0.0.0.0" || host === "[::1]" || host === "[::]") return true;
+  if (host.startsWith("[fc") || host.startsWith("[fd") || host.startsWith("[fe80")) return true;
+
+  const ipv4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
+  if (ipv4 === null) return false;
+
+  const first = Number(ipv4[1]);
+  const second = Number(ipv4[2]);
+  return (
+    first === 0 ||
+    first === 10 ||
+    first === 127 ||
+    (first === 172 && second >= 16 && second <= 31) ||
+    (first === 192 && second === 168) ||
+    (first === 169 && second === 254)
+  );
 }
 
 /** 本文として読める種類かどうか。Content-Type が無い応答も、本文をそのまま返す。 */

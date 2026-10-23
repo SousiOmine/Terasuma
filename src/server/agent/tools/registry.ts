@@ -77,9 +77,14 @@ export async function createToolRegistry(tools: ToolSet): Promise<ToolRegistry> 
     const json = await schema.jsonSchema;
     const validate = schema.validate;
 
+    // 検索は名前・説明・引数の説明から当てる。引数の description には、
+    // 何をするツールかを判断する手がかりが入っていることが多い。
+    // 名前の区切りも空白に開いておき、"computer screenshot" のような語の並びで当たるようにする。
+    const searchText = `${name}\n${name.split("_").join(" ")}\n${description}\n${schemaDescriptions(json)}`;
+
     entries.set(name, {
       name,
-      haystack: `${name}\n${description}`.toLowerCase(),
+      haystack: searchText.toLowerCase(),
       text: entryText(name, description, json),
       validate: validate === undefined ? null : (value) => validate(value),
       execute: executableOf(definition),
@@ -155,7 +160,9 @@ function clampLimit(limit: number): number {
 
 /** 検索結果の 1 件分の本文。引数があるときだけ JSON Schema を添える。 */
 function entryText(name: string, description: string, schema: unknown): string {
-  const lines = [`- ${name}`, `  ${truncateText(description, MAX_DESCRIPTION_CHARS, "marked")}`];
+  const summary =
+    description.trim().length === 0 ? "(no description)" : truncateText(description, MAX_DESCRIPTION_CHARS, "marked");
+  const lines = [`- ${name}`, `  ${summary}`];
   const args = schemaText(schema);
   if (args !== null) lines.push(args);
   return lines.join("\n");
@@ -228,4 +235,26 @@ function executableOf(definition: ToolSet[string]): ((input: never, options: nev
 /** 検証の失敗から、モデルが読める 1 文を取り出す。 */
 function describeValidation(error: unknown): string {
   return messageOf(error) ?? String(error);
+}
+
+/**
+ * 引数スキーマの中の説明を、検索用に集める。
+ * JSON Schema の properties / items / anyOf などを再帰的にたどり、description だけを拾う。
+ */
+function schemaDescriptions(schema: unknown): string {
+  const parts: string[] = [];
+  collectDescriptions(schema, parts);
+  return parts.join("\n");
+}
+
+function collectDescriptions(value: unknown, into: string[]): void {
+  if (typeof value !== "object" || value === null) return;
+  if (Array.isArray(value)) {
+    for (const item of value) collectDescriptions(item, into);
+    return;
+  }
+
+  const record = value as Record<string, unknown>;
+  if (typeof record.description === "string") into.push(record.description);
+  for (const child of Object.values(record)) collectDescriptions(child, into);
 }

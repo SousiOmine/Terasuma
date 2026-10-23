@@ -668,7 +668,7 @@ describe("作業場", () => {
       // 相対パスの基準は、このターンの Tera（t1）の作業フォルダ。
       const prompt = JSON.stringify(fake.bodies[0]);
       expect(prompt).toContain("Your workspace is /home/agent/teras/t1.");
-      expect(prompt).toContain("Other Teras' workspaces are the sibling folders under /home/agent/teras");
+      expect(prompt).toContain("Other Teras' workspaces are sibling folders under /home/agent/teras");
     } finally {
       await fake.server.stop(true);
     }

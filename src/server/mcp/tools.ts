@@ -1,12 +1,19 @@
 import type { CallToolResult } from "@modelcontextprotocol/client";
 import { jsonSchema, tool, type JSONSchema7, type ToolSet } from "ai";
 import { describeError } from "../../shared/errors";
+import { truncateText } from "../../shared/text";
 import { toolNameFor } from "../../shared/tools";
 import type { ImageRef } from "../../shared/api/message";
 import type { ImageToolOutput } from "../agent/tool-output";
 import type { ImageStore } from "../computer/images";
 import type { McpServerSettings } from "../data/settings";
 import type { ServerConnection } from "./connection";
+
+/**
+ * MCP の結果としてモデルへ渡す本文の上限（文字数）。
+ * サーバーが巨大な出力を返しても、それがそのまま文脈を飲み込まないようにする。
+ */
+export const MAX_MCP_RESULT_CHARS = 50_000;
 
 /**
  * MCP サーバーが公開しているツールを、モデルへ渡す形に変換する。
@@ -68,7 +75,10 @@ function callToolOutput(result: CallToolResult, images: ImageStore): ImageToolOu
   }
 
   if (texts.length > 0) {
-    return { text: texts.join("\n"), ...(refs.length === 0 ? {} : { images: refs }) };
+    return {
+      text: truncateText(texts.join("\n"), MAX_MCP_RESULT_CHARS, "brackets"),
+      ...(refs.length === 0 ? {} : { images: refs }),
+    };
   }
 
   if (refs.length > 0) {
