@@ -96,13 +96,28 @@ export function createComputerTools(options: ComputerToolsOptions): ComputerTool
       description: [
         "Take a screenshot of the computer desktop and return it as an image.",
         "The screen size is fixed, so coordinates read from the image can be used as they are.",
-        "The mouse pointer is not drawn in the image.",
+        "The mouse pointer is drawn in the image, so you can see where it is and what is under it.",
       ].join(" "),
       inputSchema: z.object({}),
       execute: async () => {
         const png = await container.screenshot();
         const image = images.save(png, "image/png");
         return { text: `The screen is ${image.width}x${image.height} pixels.`, images: [image] };
+      },
+    }),
+
+    computer_move: tool({
+      description: [
+        "Move the mouse pointer to the given screen coordinates without clicking.",
+        "Take a screenshot afterwards to check what is under the pointer and its hover state.",
+      ].join(" "),
+      inputSchema: z.object({
+        x: z.number().int().min(0).describe("X coordinate in pixels"),
+        y: z.number().int().min(0).describe("Y coordinate in pixels"),
+      }),
+      execute: async ({ x, y }: { x: number; y: number }, context: ToolContext) => {
+        await xdotool(["mousemove", String(x), String(y)], context.abortSignal);
+        return `moved the pointer to ${x},${y}`;
       },
     }),
 

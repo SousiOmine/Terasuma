@@ -52,7 +52,9 @@ If tool_search finds no computer_ tools, the container is not available on this 
 ## The tools
 
 - computer_screenshot() — capture the screen and return it as an image. The result says
-  the screen size.
+  the screen size, and the mouse pointer is drawn in it.
+- computer_move(x, y) — move the pointer without clicking. Take a screenshot afterwards
+  to check the target and its hover state.
 - computer_click(x, y, button?, count?) — click at screen coordinates. button is left,
   right or middle (default left); count is 1-3 (default 1).
 - computer_scroll(x, y, direction, amount?) — wheel at coordinates. direction is up,
@@ -81,14 +83,18 @@ If tool_search finds no computer_ tools, the container is not available on this 
 ## Coordinates
 
 The screen size is fixed, so coordinates read off the screenshot can be used as they are.
-The origin is the top-left corner. The mouse pointer is not drawn in the screenshot.
+The origin is the top-left corner. The mouse pointer is drawn in the screenshot: its
+position shows where the last move or click landed, and its shape (an arrow, an I-beam, a
+hand) shows what is under it.
 
 ## Standard workflow
 
 1. computer_windows — see what is open and which window has the focus
 2. computer_screenshot — look at the screen
-3. One action at a time: computer_click / computer_type / computer_key / computer_scroll
-4. Screenshot again and check the result. Never assume a click worked because the call did
+3. When a target is small or you are unsure, computer_move to it and screenshot again:
+   the pointer must sit on the target, and the hover state shows whether it is clickable.
+4. One action at a time: computer_click / computer_type / computer_key / computer_scroll
+5. Screenshot again and check the result. Never assume a click worked because the call did
    not fail: it can land on the wrong element, and typing goes to whichever window holds
    the focus.
 

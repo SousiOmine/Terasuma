@@ -451,13 +451,18 @@ function fileFailure(action: "read" | "write", path: string, result: CommandResu
 /**
  * 画面を PNG で撮る。画像は文字列にせず、バイト列のまま受け取る。
  * DISPLAY はイメージの ENV で入っているので、ここでは渡さなくてよい。
+ *
+ * X のカーソルは root ウィンドウの画素に含まれない（X サーバーが別に描く）ので、
+ * import で撮るとカーソルの無い画像になる。エージェントはポインタの位置も形も
+ * 確かめられなくなるため、XFixes でカーソルを重ねる scrot を使う。
  */
 async function captureScreen(signal?: AbortSignal): Promise<Uint8Array> {
   const timeout = AbortSignal.timeout(SCREENSHOT_TIMEOUT_MS);
   const abort = signal === undefined ? timeout : AbortSignal.any([signal, timeout]);
 
   const proc = Bun.spawn({
-    cmd: ["podman", "exec", CONTAINER_NAME, "import", "-window", "root", "png:-"],
+    // scrot は既存のファイルを避けて別名に書くので、/dev/stdout へ出すには --overwrite が要る。
+    cmd: ["podman", "exec", CONTAINER_NAME, "scrot", "--pointer", "--overwrite", "--silent", "/dev/stdout"],
     stdin: "ignore",
     stdout: "pipe",
     stderr: "pipe",

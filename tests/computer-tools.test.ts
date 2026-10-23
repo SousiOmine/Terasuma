@@ -214,6 +214,13 @@ describe("画面の操作", () => {
     });
   });
 
+  test("ポインタはクリックせずに動かせる", async () => {
+    await withTools({}, async ({ tools, execCalls }) => {
+      expect(await callTool(tools, "computer_move", { x: 640, y: 480 })).toBe("moved the pointer to 640,480");
+      expect(execCalls).toEqual([["xdotool", "mousemove", "640", "480"]]);
+    });
+  });
+
   test("ホイールは向きごとの番号で回す", async () => {
     await withTools({}, async ({ tools, execCalls }) => {
       await callTool(tools, "computer_scroll", { x: 10, y: 20, direction: "down" });
