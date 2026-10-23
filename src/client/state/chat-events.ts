@@ -1,3 +1,4 @@
+import { recordOf } from "../../shared/guards";
 import {
   ASK_USER_TOOL_NAME,
   CONNECT_APP_TOOL_NAME,
@@ -109,10 +110,4 @@ function toolCallArgs(
   const outer = recordOf(part.args);
   if (outer?.["name"] !== name) return null;
   return recordOf(outer["args"]) ?? {};
-}
-
-/** オブジェクトとして読める値だけを取り出す。 */
-function recordOf(value: unknown): Record<string, unknown> | null {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
-  return value as Record<string, unknown>;
 }

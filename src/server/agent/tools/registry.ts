@@ -1,4 +1,6 @@
 import { asSchema, type ToolSet } from "ai";
+import { messageOf } from "../../../shared/errors";
+import { truncateText } from "../../../shared/text";
 import { splitToolName } from "../../../shared/tools";
 
 /**
@@ -153,7 +155,7 @@ function clampLimit(limit: number): number {
 
 /** 検索結果の 1 件分の本文。引数があるときだけ JSON Schema を添える。 */
 function entryText(name: string, description: string, schema: unknown): string {
-  const lines = [`- ${name}`, `  ${truncate(description, MAX_DESCRIPTION_CHARS)}`];
+  const lines = [`- ${name}`, `  ${truncateText(description, MAX_DESCRIPTION_CHARS, "marked")}`];
   const args = schemaText(schema);
   if (args !== null) lines.push(args);
   return lines.join("\n");
@@ -179,11 +181,6 @@ function schemaText(schema: unknown): string | null {
   }
 
   return ["  Arguments (JSON Schema):", `  ${text}`].join("\n");
-}
-
-/** 文字列を上限までに切る。切ったことが分かるように印を付ける。 */
-function truncate(text: string, limit: number): string {
-  return text.length <= limit ? text : `${text.slice(0, limit)}… (truncated)`;
 }
 
 /**
@@ -230,9 +227,5 @@ function executableOf(definition: ToolSet[string]): ((input: never, options: nev
 
 /** 検証の失敗から、モデルが読める 1 文を取り出す。 */
 function describeValidation(error: unknown): string {
-  if (typeof error === "object" && error !== null) {
-    const message = (error as { message?: unknown }).message;
-    if (typeof message === "string") return message;
-  }
-  return String(error);
+  return messageOf(error) ?? String(error);
 }

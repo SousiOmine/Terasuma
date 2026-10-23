@@ -1,6 +1,7 @@
 import type { ModelMessage } from "ai";
 import type { ReplyLanguage } from "../../shared/language";
 import type { ChatMessage, ImageRef, MessagePart } from "../../shared/types";
+import { formatLocalDate } from "../../shared/text";
 import { toolNameFor } from "../../shared/tools";
 import type { ImageReader } from "../computer/images";
 import { userContentForModel } from "./model-content";
@@ -190,12 +191,9 @@ const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Frida
  * プロンプトキャッシュの当たる先頭はそのまま保たれる。
  */
 export function turnTail(language: ReplyLanguage, now: number): string {
-  const date = new Date(now);
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  const weekday = WEEKDAYS[date.getDay()] ?? "";
+  const weekday = WEEKDAYS[new Date(now).getDay()] ?? "";
 
-  return `${replyLanguageInstruction(language)}\nToday is ${date.getFullYear()}-${month}-${day} (${weekday}).`;
+  return `${replyLanguageInstruction(language)}\nToday is ${formatLocalDate(now)} (${weekday}).`;
 }
 
 /** 結果の直後に user メッセージとして渡す画像。どの呼び出しの画像かを本文で示す。 */

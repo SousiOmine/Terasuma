@@ -1,3 +1,4 @@
+import { isRecord } from "../../shared/guards";
 import { randomUUID } from "node:crypto";
 import {
   existsSync,
@@ -479,11 +480,6 @@ function skillsDirProblem(skillsDir: string): string | null {
 function isMissing(error: unknown): boolean {
   const code = (error as NodeJS.ErrnoException | null)?.code;
   return code === "ENOENT" || code === "ENOTDIR";
-}
-
-/** オブジェクトとして読める値かどうか。配列は含めない。 */
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 /** 一覧に載せる説明を 1 行にする。 */

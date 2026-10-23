@@ -9,7 +9,7 @@ import {
   effortValues,
   parseCatalog,
 } from "../src/server/provider/catalog";
-import type { FetchLike } from "../src/server/provider/connection";
+import type { FetchLike } from "../src/server/http/client";
 
 /** models.dev の応答の形（この実装が読む部分だけ）。 */
 function fixture() {

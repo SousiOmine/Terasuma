@@ -1,3 +1,4 @@
+import { isRecord } from "./guards";
 import { API_ERROR_CODES } from "./types";
 import type {
   ChatAttachment,
@@ -16,10 +17,6 @@ import type {
  * 壊れた値がそのまま画面やモデルへ流れると、原因の分かりにくい不具合になる。
  * 境界（外から来た値）だけを、ここで確かめる。
  */
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 function isString(value: unknown): value is string {
   return typeof value === "string";

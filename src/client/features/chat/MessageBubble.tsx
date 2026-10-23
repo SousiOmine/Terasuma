@@ -1,5 +1,5 @@
 import { IconDownload, IconFile } from "@tabler/icons-preact";
-import { formatBytes } from "../../../shared/attachments";
+import { formatBytes } from "../../../shared/text";
 import type { AttachmentPart, ChatMessage, NoticePart, SentAttachment, TextPart } from "../../../shared/types";
 import { t } from "../../i18n";
 import { ChatAvatar } from "./ChatAvatar";

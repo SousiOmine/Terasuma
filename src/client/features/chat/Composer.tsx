@@ -1,11 +1,7 @@
 import { IconPaperclip, IconPlayerStopFilled, IconSend } from "@tabler/icons-preact";
 import { useEffect, useRef, useState } from "preact/hooks";
-import {
-  formatBytes,
-  MAX_ATTACHMENTS,
-  MAX_ATTACHMENT_BYTES,
-  MAX_ATTACHMENTS_TOTAL_BYTES,
-} from "../../../shared/attachments";
+import { MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS_TOTAL_BYTES } from "../../../shared/attachments";
+import { formatBytes } from "../../../shared/text";
 import { isSendKey } from "../../lib/composer-keys";
 import { pastedFiles } from "../../lib/composer-paste";
 import { ApiError } from "../../lib/http";

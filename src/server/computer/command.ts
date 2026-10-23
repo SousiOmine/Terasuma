@@ -25,7 +25,25 @@ export type CommandResult = {
  */
 export type CommandRunner = (cmd: readonly string[], options: RunCommandOptions) => Promise<CommandResult>;
 
+/** バイト列を返す実行の結果。画面の撮影のように、文字列へ直せない出力に使う。 */
+export type CommandBytesResult = {
+  code: number;
+  stdout: Uint8Array;
+  stderr: string;
+  timedOut: boolean;
+  /** 出力の上限を超えて切られたかどうか。 */
+  truncated: boolean;
+};
+
+/**
+ * バイト列を返す実行。テストでは podman などの呼び出しを、この型を満たす別の関数に
+ * 差し替えて確かめる。文字列の結果では中身が壊れるもの（PNG など）だけがこちらを使う。
+ */
+export type CommandByteRunner = (cmd: readonly string[], options: RunCommandOptions) => Promise<CommandBytesResult>;
+
 export type RunCommandOptions = {
+  /** 残すバイト数の上限。バイト列を返す実行だけが使う。省くと 32MB。 */
+  maxOutputBytes?: number;
   timeoutMs: number;
   /** 実行するディレクトリ。省くとこのプロセスの作業ディレクトリ。 */
   cwd?: string;
@@ -47,6 +65,9 @@ export type RunCommandOptions = {
  * 上限を決めずに読むと、暴走したコマンドの出力でこちらのメモリが埋まる。
  */
 const OUTPUT_LIMIT = 20_000;
+
+/** バイト列で受け取る出力の上限。画面の PNG には十分で、暴走した出力でメモリを埋めない大きさ。 */
+const OUTPUT_BYTE_LIMIT = 32 * 1024 * 1024;
 
 export async function runCommand(cmd: readonly string[], options: RunCommandOptions): Promise<CommandResult> {
   const timeout = AbortSignal.timeout(options.timeoutMs);
@@ -99,6 +120,84 @@ export async function runCommand(cmd: readonly string[], options: RunCommandOpti
     // どちらも結果として返し、呼び出し側が理由をモデルへ見せられるようにする。
     return { code: -1, stdout: "", stderr: describeError(error), truncated: false, timedOut: timeout.aborted };
   }
+}
+
+/** 出力をバイト列のまま受け取る。上限を超えた分は読み捨て、切ったことを結果に書く。 */
+export async function runCommandBytes(cmd: readonly string[], options: RunCommandOptions): Promise<CommandBytesResult> {
+  const timeout = AbortSignal.timeout(options.timeoutMs);
+  const abort = options.signal === undefined ? timeout : AbortSignal.any([options.signal, timeout]);
+
+  try {
+    const proc = Bun.spawn({
+      cmd: [...cmd],
+      stdin: "ignore",
+      stdout: "pipe",
+      stderr: "pipe",
+      signal: abort,
+      ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
+    });
+
+    const [stdout, stderr, code] = await Promise.all([
+      readBytesLimited(proc.stdout, options.maxOutputBytes ?? OUTPUT_BYTE_LIMIT),
+      new Response(proc.stderr).text(),
+      proc.exited,
+    ]);
+
+    return {
+      code,
+      stdout: stdout.bytes,
+      stderr: stderr.slice(0, OUTPUT_LIMIT),
+      timedOut: timeout.aborted,
+      truncated: stdout.truncated,
+    };
+  } catch (error) {
+    return {
+      code: -1,
+      stdout: new Uint8Array(),
+      stderr: describeError(error),
+      timedOut: timeout.aborted,
+      truncated: false,
+    };
+  }
+}
+
+/**
+ * バイト列を上限まで読み、超えた分は捨てる。
+ * 超えたあともストリームは読み切る（子プロセスが詰まらないように）。
+ */
+async function readBytesLimited(
+  stream: ReadableStream<Uint8Array>,
+  limit: number,
+): Promise<{ bytes: Uint8Array; truncated: boolean }> {
+  const reader = stream.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  let truncated = false;
+
+  for (;;) {
+    const chunk = await reader.read();
+    if (chunk.done) break;
+
+    const value = chunk.value;
+    if (total + value.byteLength > limit) {
+      const keep = limit - total;
+      if (keep > 0) chunks.push(value.subarray(0, keep));
+      total = limit;
+      truncated = true;
+      continue;
+    }
+
+    chunks.push(value);
+    total += value.byteLength;
+  }
+
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return { bytes, truncated };
 }
 
 /**

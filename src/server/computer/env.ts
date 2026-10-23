@@ -2,6 +2,7 @@ import { isEnvName, isReservedEnvName } from "../../shared/env";
 import { describeError } from "../../shared/errors";
 import type { SettingsStore } from "../data/settings";
 import { SettingsWriteError } from "../errors";
+import { createPendingRegistry } from "../wait/pending";
 
 /**
  * エージェントが秘密（API キーなど）を必要としたときの、チャットからの入力待ち。
@@ -89,7 +90,7 @@ type Pending = {
 
 export function createEnvRequests(options: { settings: SettingsStore }): EnvRequests {
   /** Tera の id → いま入力を待っている変数と、待ちを終わらせる口。 */
-  const waiting = new Map<string, Pending>();
+  const pending = createPendingRegistry<string, Pending>();
 
   return {
     wait(teraId, name, signal) {
@@ -110,58 +111,53 @@ export function createEnvRequests(options: { settings: SettingsStore }): EnvRequ
       if (signal.aborted) return Promise.reject(new Error(WAIT_ENDED));
 
       return new Promise<string>((resolve, reject) => {
-        const finish = (): void => {
-          waiting.delete(teraId);
-          signal.removeEventListener("abort", onAbort);
-        };
+        const entry = pending.register(
+          teraId,
+          {
+            name,
 
-        const onAbort = (): void => {
-          finish();
-          reject(new Error(WAIT_ENDED));
-        };
+            accept(value) {
+              try {
+                options.settings.setEnv(name, value);
+              } catch (error) {
+                // モデルへは「保存できなかった」と伝え、HTTP へも同じ理由を返す。
+                const failure = new SettingsWriteError(
+                  `環境変数 ${name} を保存できませんでした: ${describeError(error)}`,
+                  error,
+                );
+                reject(failure);
+                throw failure;
+              }
+              resolve(envSetResultText(name));
+            },
+
+            cancel() {
+              reject(new Error(envCancelledText(name)));
+            },
+          },
+          signal,
+          () => reject(new Error(WAIT_ENDED)),
+        );
 
         // 同じ Tera で二重に待つことはない（ターンは 1 つずつ進む）。
-        waiting.set(teraId, {
-          name,
-
-          accept(value) {
-            finish();
-            try {
-              options.settings.setEnv(name, value);
-            } catch (error) {
-              // モデルへは「保存できなかった」と伝え、HTTP へも同じ理由を返す。
-              const failure = new SettingsWriteError(
-                `環境変数 ${name} を保存できませんでした: ${describeError(error)}`,
-                error,
-              );
-              reject(failure);
-              throw failure;
-            }
-            resolve(envSetResultText(name));
-          },
-
-          cancel() {
-            finish();
-            reject(new Error(envCancelledText(name)));
-          },
-        });
-
-        signal.addEventListener("abort", onAbort, { once: true });
+        if (entry === null) reject(new Error(WAIT_ENDED));
       });
     },
 
     answer(teraId, answer) {
-      const pending = waiting.get(teraId);
+      const entry = pending.first(teraId);
       // 名前が違う返事は、遅れて届いた別の呼び出しのもの。受け取らない。
-      if (pending === undefined || pending.name !== answer.name) return false;
+      if (entry === null || entry.pending.name !== answer.name) return false;
 
       // 受け付けられない値では待ちを消費しない（入力欄はそのままで、入れ直せる）。
       const value = answer.kind === "value" ? normalizeEnvValue(answer.value) : null;
 
       // 待ちを外してから保存する（返事が 2 度届いても、2 度保存しない）。
-      waiting.delete(teraId);
-      if (value === null) pending.cancel();
-      else pending.accept(value);
+      const [taken] = pending.takeAll(teraId);
+      if (taken === undefined) return false;
+
+      if (value === null) taken.pending.cancel();
+      else taken.pending.accept(value);
       return true;
     },
   };

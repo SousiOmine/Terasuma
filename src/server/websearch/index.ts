@@ -1,14 +1,15 @@
 /**
  * 検索ライブラリの公開 API。
  *
- * ここから外へ出すものだけを並べる。Terasuma 固有の設定や HTTP には触れないので、
- * このディレクトリごと別のリポジトリへ移しても動く。
+ * ここから外へ出すものだけを並べる。Terasuma の設定には触れない。
+ * 通信の共通部分（タイムアウト・失敗本文の解析）は server/http/client.ts に置き、
+ * 検索プロバイダごとの URL・本文・応答の読み方だけをこのディレクトリに持つ。
  */
 
 export { DEFAULT_FETCH_CHARS, DEFAULT_SEARCH_LIMIT, MAX_FETCH_CHARS, MAX_SEARCH_LIMIT } from "./constants";
 export { WebSearchError, type WebSearchErrorCode } from "./errors";
 export { decodeEntities, htmlToText, pageTitle } from "./html";
-export { errorMessage, truncateText } from "./text";
+export { truncateText } from "./text";
 export {
   createSearchProvider,
   isWebSearchProviderId,

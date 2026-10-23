@@ -1,6 +1,6 @@
 import { IconFile, IconX } from "@tabler/icons-preact";
 import { useEffect, useState } from "preact/hooks";
-import { formatBytes } from "../../../shared/attachments";
+import { formatBytes } from "../../../shared/text";
 import { t } from "../../i18n";
 
 /**

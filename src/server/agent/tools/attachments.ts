@@ -2,12 +2,9 @@ import { posix } from "node:path";
 import type { ToolSet } from "ai";
 import { tool } from "ai";
 import { z } from "zod";
-import {
-  MAX_ATTACHMENTS,
-  MAX_ATTACHMENT_BYTES,
-  MAX_ATTACHMENTS_TOTAL_BYTES,
-  formatBytes,
-} from "../../../shared/attachments";
+import { MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS_TOTAL_BYTES } from "../../../shared/attachments";
+import { throwIfAborted } from "../../../shared/async";
+import { formatBytes } from "../../../shared/text";
 import { ATTACH_TOOL_NAME } from "../../../shared/tools";
 import type { SentAttachment } from "../../../shared/types";
 import type { ImageStore } from "../../computer/images";
@@ -134,8 +131,4 @@ export function createAttachmentTools(
       },
     }),
   };
-}
-
-function throwIfAborted(signal: AbortSignal | undefined): void {
-  if (signal?.aborted === true) throw new Error("Operation aborted because the turn stopped");
 }

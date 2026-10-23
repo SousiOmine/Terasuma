@@ -1,4 +1,4 @@
-import { formatBytes } from "../../shared/attachments";
+import { formatBytes } from "../../shared/text";
 import type { ChatAttachment, ChatMessage } from "../../shared/types";
 
 /**

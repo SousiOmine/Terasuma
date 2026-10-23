@@ -8,8 +8,8 @@
 import { MAX_DIRECT_FETCH_BYTES, MAX_DIRECT_FETCH_CHARS } from "./constants";
 import { WebSearchError } from "./errors";
 import { htmlToText, pageTitle } from "./html";
-import { combineSignal } from "./http";
-import { errorMessage } from "./text";
+import { combineSignal } from "../http/client";
+import { describeError } from "../../shared/errors";
 import type { FetchLike, FetchRequest, FetchResponse } from "./types";
 
 /** 直接取得の打ち切り。 */
@@ -35,7 +35,7 @@ export async function fetchDirect(fetchImpl: FetchLike, request: FetchRequest): 
     if (error instanceof Error && (error.name === "AbortError" || error.name === "TimeoutError")) {
       throw new WebSearchError("unavailable", `The page did not respond in time (${url})`, { cause: error });
     }
-    throw new WebSearchError("unavailable", `The page could not be fetched: ${errorMessage(error)}`, {
+    throw new WebSearchError("unavailable", `The page could not be fetched: ${describeError(error)}`, {
       cause: error,
     });
   }

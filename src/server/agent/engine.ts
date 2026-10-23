@@ -20,7 +20,7 @@ import { type ResolvedModel, resolveModel } from "../provider/routing";
 import { imagesMessage, buildSystemPrompt, toModelMessages, type PendingImages, type TeraContext } from "./prompt";
 import { userContentForModel } from "./model-content";
 import { readStoredImages, readToolOutput, toolResultOutput } from "./tool-output";
-import { describeError } from "../../shared/errors";
+import { describeError, messageOf } from "../../shared/errors";
 import { splitToolName } from "../../shared/tools";
 import { createDiscoveryTools } from "./tools/discovery";
 import { createToolRegistry } from "./tools/registry";
@@ -551,11 +551,7 @@ function withToolModelOutput(
  * 取り出せない形は null を返し、通常の本文の組み立てに任せる。
  */
 function toolErrorMessage(value: unknown): string | null {
-  if (value instanceof Error) return value.message;
-  if (typeof value !== "object" || value === null) return null;
-
-  const message = (value as { message?: unknown }).message;
-  return typeof message === "string" ? message : null;
+  return messageOf(value);
 }
 
 function normalizeUsage(raw: LanguageModelUsage): TokenUsage | null {

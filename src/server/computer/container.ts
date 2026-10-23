@@ -2,9 +2,9 @@ import { mkdirSync, rmSync } from "node:fs";
 import { createServer } from "node:net";
 import { join, posix } from "node:path";
 import type { ContainerStatusView } from "../../shared/types";
-import { describeError } from "../../shared/errors";
 import { AppError } from "../errors";
-import { runCommand, type CommandResult, type CommandRunner } from "./command";
+import { runCommand, runCommandBytes, type CommandByteRunner, type CommandResult, type CommandRunner } from "./command";
+import { podmanExec } from "./podman";
 
 /**
  * podman で動かす Debian コンテナの面倒を見る。
@@ -59,6 +59,8 @@ const RUN_TIMEOUT_MS = 60_000;
 const REMOVE_TIMEOUT_MS = 60_000;
 /** 画面の撮影に許す時間。podman が返らないままターンが終わらなくなるのを防ぐ。 */
 const SCREENSHOT_TIMEOUT_MS = 15_000;
+/** 画面の PNG として受け取る上限。1280x800 の PNG には十分な大きさ。 */
+const SCREENSHOT_MAX_BYTES = 16 * 1024 * 1024;
 /** ファイルの読み書きに許す時間。 */
 const FILE_TIMEOUT_MS = 60_000;
 /**
@@ -136,23 +138,18 @@ export type ContainerManagerOptions = {
   env: () => Record<string, string>;
   /** テストで podman の呼び出しを差し替える。 */
   command?: CommandRunner;
+  /** テストで、バイト列を返す呼び出し（画面の撮影）を差し替える。 */
+  commandBytes?: CommandByteRunner;
 };
 
 export function createContainerManager(options: ContainerManagerOptions): ContainerManager {
   const run: CommandRunner = options.command ?? runCommand;
+  const runBytes: CommandByteRunner = options.commandBytes ?? runCommandBytes;
   const homeDir = join(options.dataDir, HOME_DIR_NAME);
   const containerfilePath = join(options.containerDir, "desktop.Containerfile");
 
   /** 直近に読んだ状態と、その時刻。画面の中継のように短い間に何度も聞かれるため。 */
   let cachedStatus: { at: number; view: ContainerStatusView } | null = null;
-
-  /**
-   * podman exec へ渡す --env の並び。設定されている分だけ付ける。
-   * 値はシェルを介さず 1 つの引数として渡すので、空白や記号もそのまま届く。
-   */
-  function envArgs(): string[] {
-    return Object.entries(options.env()).flatMap(([name, value]) => ["--env", `${name}=${value}`]);
-  }
 
   function fail(code: ContainerErrorCode, result: CommandResult): ContainerError {
     return new ContainerError(code, describeFailure(result));
@@ -338,7 +335,12 @@ export function createContainerManager(options: ContainerManagerOptions): Contai
       await requireRunning();
 
       const result = await run(
-        ["podman", "exec", ...envArgs(), "--workdir", WORKDIR_IN_CONTAINER, CONTAINER_NAME, "bash", "-lc", script],
+        podmanExec({
+          container: CONTAINER_NAME,
+          workdir: WORKDIR_IN_CONTAINER,
+          env: options.env(),
+          command: ["bash", "-lc", script],
+        }),
         {
           timeoutMs,
           signal,
@@ -355,7 +357,12 @@ export function createContainerManager(options: ContainerManagerOptions): Contai
       await requireRunning();
 
       const result = await run(
-        ["podman", "exec", ...envArgs(), "--workdir", WORKDIR_IN_CONTAINER, CONTAINER_NAME, ...args],
+        podmanExec({
+          container: CONTAINER_NAME,
+          workdir: WORKDIR_IN_CONTAINER,
+          env: options.env(),
+          command: args,
+        }),
         {
           timeoutMs,
           signal,
@@ -370,7 +377,11 @@ export function createContainerManager(options: ContainerManagerOptions): Contai
 
       // バイナリを文字列へ潰さないよう、base64 で受け取ってからバイト列に戻す。
       const result = await run(
-        ["podman", "exec", "--workdir", WORKDIR_IN_CONTAINER, CONTAINER_NAME, "base64", "--wrap=0", "--", path],
+        podmanExec({
+          container: CONTAINER_NAME,
+          workdir: WORKDIR_IN_CONTAINER,
+          command: ["base64", "--wrap=0", "--", path],
+        }),
         { timeoutMs: FILE_TIMEOUT_MS, signal, maxOutputChars: FILE_MAX_BASE64_CHARS },
       );
 
@@ -393,19 +404,12 @@ export function createContainerManager(options: ContainerManagerOptions): Contai
       // 親ディレクトリを作ってから、標準入力から書き込む。
       // パスはシェルの文字列へ埋めず、$1 として渡す。
       const result = await run(
-        [
-          "podman",
-          "exec",
-          "--interactive",
-          "--workdir",
-          WORKDIR_IN_CONTAINER,
-          CONTAINER_NAME,
-          "sh",
-          "-c",
-          'mkdir -p -- "$(dirname -- "$1")" && base64 --decode > "$1"',
-          "sh",
-          path,
-        ],
+        podmanExec({
+          container: CONTAINER_NAME,
+          workdir: WORKDIR_IN_CONTAINER,
+          interactive: true,
+          command: ["sh", "-c", 'mkdir -p -- "$(dirname -- "$1")" && base64 --decode > "$1"', "sh", path],
+        }),
         {
           timeoutMs: FILE_TIMEOUT_MS,
           signal,
@@ -419,7 +423,7 @@ export function createContainerManager(options: ContainerManagerOptions): Contai
 
     async screenshot(signal) {
       await requireRunning();
-      return captureScreen(signal);
+      return captureScreen(runBytes, signal);
     },
   };
 }
@@ -456,48 +460,37 @@ function fileFailure(action: "read" | "write", path: string, result: CommandResu
  * import で撮るとカーソルの無い画像になる。エージェントはポインタの位置も形も
  * 確かめられなくなるため、XFixes でカーソルを重ねる scrot を使う。
  */
-async function captureScreen(signal?: AbortSignal): Promise<Uint8Array> {
-  const timeout = AbortSignal.timeout(SCREENSHOT_TIMEOUT_MS);
-  const abort = signal === undefined ? timeout : AbortSignal.any([signal, timeout]);
+async function captureScreen(runBytes: CommandByteRunner, signal?: AbortSignal): Promise<Uint8Array> {
+  const result = await runBytes(
+    podmanExec({
+      container: CONTAINER_NAME,
+      workdir: WORKDIR_IN_CONTAINER,
+      // scrot は既存のファイルを避けて別名に書くので、/dev/stdout へ出すには --overwrite が要る。
+      command: ["scrot", "--pointer", "--overwrite", "--silent", "/dev/stdout"],
+    }),
+    { timeoutMs: SCREENSHOT_TIMEOUT_MS, signal, maxOutputBytes: SCREENSHOT_MAX_BYTES },
+  );
 
-  const proc = Bun.spawn({
-    // scrot は既存のファイルを避けて別名に書くので、/dev/stdout へ出すには --overwrite が要る。
-    cmd: ["podman", "exec", CONTAINER_NAME, "scrot", "--pointer", "--overwrite", "--silent", "/dev/stdout"],
-    stdin: "ignore",
-    stdout: "pipe",
-    stderr: "pipe",
-    signal: abort,
-  });
-
-  try {
-    const [data, stderr, code] = await Promise.all([
-      new Response(proc.stdout).arrayBuffer(),
-      new Response(proc.stderr).text(),
-      proc.exited,
-    ]);
-
-    if (code !== 0) {
-      throw new ContainerError(
-        "container_not_running",
-        stderr.trim() || `Could not take a screenshot (podman exec exit code ${code})`,
-      );
-    }
-    if (data.byteLength === 0) {
-      throw new ContainerError("container_not_running", "The screenshot was empty");
-    }
-
-    return new Uint8Array(data);
-  } catch (error) {
-    if (error instanceof ContainerError) throw error;
-
-    // 打ち切り（時間切れ、またはターンの停止）でもここへ来る。
+  if (result.timedOut) {
     throw new ContainerError(
       "container_not_running",
-      timeout.aborted
-        ? `Taking a screenshot took more than ${SCREENSHOT_TIMEOUT_MS / 1000} seconds`
-        : `Could not take a screenshot: ${describeError(error)}`,
+      `Taking a screenshot took more than ${SCREENSHOT_TIMEOUT_MS / 1000} seconds`,
     );
   }
+  if (result.code !== 0) {
+    throw new ContainerError(
+      "container_not_running",
+      result.stderr.trim() || `Could not take a screenshot (podman exec exit code ${result.code})`,
+    );
+  }
+  if (result.stdout.byteLength === 0) {
+    throw new ContainerError("container_not_running", "The screenshot was empty");
+  }
+  if (result.truncated) {
+    throw new Error(`The screenshot is larger than ${SCREENSHOT_MAX_BYTES / (1024 * 1024)}MB`);
+  }
+
+  return result.stdout;
 }
 
 /** publish に使う空きポートを 1 つ選ぶ。実際に使われた値は podman から読み直す。 */

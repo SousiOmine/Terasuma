@@ -1,6 +1,5 @@
-import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
 import { auth } from "@modelcontextprotocol/client";
+import { readPrivateJson, writePrivateJson } from "../data/secret-file";
 import type {
   OAuthClientInformationContext,
   OAuthClientMetadata,
@@ -46,12 +45,17 @@ export function createFileOAuthStorage(path: string): OAuthStorage {
 
   function load(): Record<string, string> {
     if (cache !== null) return cache;
-    if (!existsSync(path)) {
+
+    const content = readPrivateJson(path);
+    if (content.kind === "missing") {
       cache = {};
       return cache;
     }
+    if (content.kind === "unreadable") {
+      throw new Error(`${path} を JSON として解釈できません: ${content.detail}`);
+    }
 
-    const raw: unknown = JSON.parse(readFileSync(path, "utf8"));
+    const raw = content.value;
     if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
       throw new Error(`${path} の内容は JSON のオブジェクトにしてください`);
     }
@@ -60,13 +64,7 @@ export function createFileOAuthStorage(path: string): OAuthStorage {
   }
 
   function flush(data: Record<string, string>): void {
-    mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
-
-    const temporary = `${path}.tmp`;
-    writeFileSync(temporary, `${JSON.stringify(data, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
-    renameSync(temporary, path);
-    chmodSync(path, 0o600);
-
+    writePrivateJson(path, data, { createDirectory: true });
     cache = data;
   }
 

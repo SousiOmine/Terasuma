@@ -1,6 +1,5 @@
-import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
-import { describeError } from "../../shared/errors";
+import { rmSync } from "node:fs";
+import { readPrivateJson, writePrivateJson } from "../data/secret-file";
 
 /**
  * 接続したアプリのトークンを 1 ファイルに保存する。
@@ -39,21 +38,21 @@ export function createTokenStore(path: string): TokenStore {
   function load(): StoredTokenState {
     if (cached !== null) return cached;
 
-    if (!existsSync(path)) {
+    const content = readPrivateJson(path);
+    if (content.kind === "missing") {
       cached = { kind: "none" };
       return cached;
     }
-
-    try {
-      const raw: unknown = JSON.parse(readFileSync(path, "utf8"));
-      if (!isStoredToken(raw)) {
-        cached = { kind: "unreadable", detail: `${path} の内容が接続の記録として読めません` };
-        return cached;
-      }
-      cached = { kind: "token", token: raw };
-    } catch (error) {
-      cached = { kind: "unreadable", detail: describeError(error) };
+    if (content.kind === "unreadable") {
+      cached = { kind: "unreadable", detail: content.detail };
+      return cached;
     }
+    if (!isStoredToken(content.value)) {
+      cached = { kind: "unreadable", detail: `${path} の内容が接続の記録として読めません` };
+      return cached;
+    }
+
+    cached = { kind: "token", token: content.value };
     return cached;
   }
 
@@ -63,13 +62,7 @@ export function createTokenStore(path: string): TokenStore {
     },
 
     save(token) {
-      mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
-
-      const temporary = `${path}.tmp`;
-      writeFileSync(temporary, `${JSON.stringify(token, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
-      renameSync(temporary, path);
-      chmodSync(path, 0o600);
-
+      writePrivateJson(path, token, { createDirectory: true });
       cached = { kind: "token", token };
     },
 

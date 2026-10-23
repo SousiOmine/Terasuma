@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { WebSearchError } from "../../src/server/websearch/errors";
-import { combineSignal, requestJson } from "../../src/server/websearch/http";
+import { combineSignal } from "../../src/server/http/client";
+import { requestJson } from "../../src/server/websearch/http";
 import type { FetchLike } from "../../src/server/websearch/types";
 
 /**

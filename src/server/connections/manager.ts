@@ -5,6 +5,7 @@ import { ConnectionNotFound } from "../errors";
 import { verifyAccount } from "./account";
 import { CONNECTION_PROVIDERS, type ConnectionProvider } from "./providers";
 import { createTokenStore, type TokenStore } from "./token-store";
+import { createPendingRegistry } from "../wait/pending";
 
 /**
  * アプリの接続の状態。
@@ -65,12 +66,15 @@ export type ConnectionsOptions = {
 /** プロバイダごとのトークンの置き場。 */
 const TOKENS_DIR_NAME = "connections";
 
+/** ターンが終わって、待ちを続けられなくなったときの理由。 */
+const WAIT_ENDED = "The turn ended before the token was saved.";
+
 export function createConnections(options: ConnectionsOptions): ConnectionsManager {
   const { settings } = options;
   const providers = options.providers ?? CONNECTION_PROVIDERS;
 
-  /** トークンの保存を待っているツール（プロバイダ id → 待ち）。 */
-  const waiters = new Map<string, Set<Waiter>>();
+  /** トークンの保存を待っているツール（プロバイダ id → 待ち）。同じ id を複数のツールが待てる。 */
+  const pending = createPendingRegistry<string, Waiter>({ multiple: true });
   /** プロバイダ id → トークンの置き場。 */
   const stores = new Map<string, TokenStore>();
 
@@ -108,58 +112,19 @@ export function createConnections(options: ConnectionsOptions): ConnectionsManag
 
   /** 待っているツールを、成功の文で解く。 */
   function resolveWaiters(id: string, text: string): void {
-    const pending = waiters.get(id);
-    if (pending === undefined) return;
-
-    waiters.delete(id);
-    for (const waiter of pending) waiter.resolve(text);
+    for (const entry of pending.takeAll(id)) entry.pending.resolve(text);
   }
 
   /** 待っているツールを、理由を付けて失敗させる。 */
   function rejectWaiters(id: string, error: unknown): void {
-    const pending = waiters.get(id);
-    if (pending === undefined) return;
-
-    waiters.delete(id);
-    for (const waiter of pending) waiter.reject(error);
-  }
-
-  /** 待ち 1 つを外す（ターンの中断）。 */
-  function removeWaiter(id: string, waiter: Waiter): void {
-    const pending = waiters.get(id);
-    if (pending === undefined) return;
-
-    pending.delete(waiter);
-    if (pending.size === 0) waiters.delete(id);
+    for (const entry of pending.takeAll(id)) entry.pending.reject(error);
   }
 
   /** トークンが保存されるまで待つ。ターンの中断で待ちを外す。 */
   function waitForToken(id: string, signal: AbortSignal): Promise<string> {
     return new Promise<string>((resolve, reject) => {
-      const waiter: Waiter = {
-        resolve(text) {
-          signal.removeEventListener("abort", onAbort);
-          resolve(text);
-        },
-        reject(error) {
-          signal.removeEventListener("abort", onAbort);
-          reject(error);
-        },
-      };
-      const onAbort = (): void => {
-        removeWaiter(id, waiter);
-        reject(new Error("The turn ended before the token was saved."));
-      };
-
-      if (signal.aborted) {
-        onAbort();
-        return;
-      }
-
-      const pending = waiters.get(id) ?? new Set<Waiter>();
-      pending.add(waiter);
-      waiters.set(id, pending);
-      signal.addEventListener("abort", onAbort, { once: true });
+      const entry = pending.register(id, { resolve, reject }, signal, () => reject(new Error(WAIT_ENDED)));
+      if (entry === null) reject(new Error(WAIT_ENDED));
     });
   }
 
@@ -236,9 +201,7 @@ export function createConnections(options: ConnectionsOptions): ConnectionsManag
 
       const saved = tokenStore(id).read();
       if (saved.kind === "unreadable") {
-        throw new Error(
-          `The saved ${provider.name} token could not be read (${saved.detail}). Save the token again.`,
-        );
+        throw new Error(`The saved ${provider.name} token could not be read (${saved.detail}). Save the token again.`);
       }
       if (saved.kind === "token") return connectedText(provider, saved.token.account);
 
@@ -262,7 +225,7 @@ export function createConnections(options: ConnectionsOptions): ConnectionsManag
     },
 
     close() {
-      for (const id of [...waiters.keys()]) {
+      for (const id of [...pending.keys()]) {
         rejectWaiters(id, new Error("Terasuma is shutting down; the connection was cancelled."));
       }
     },

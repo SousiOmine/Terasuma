@@ -8,7 +8,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { modelParts, type ModelId } from "../../shared/model";
-import type { FetchLike } from "./connection";
+import { sendRequest, type FetchLike } from "../http/client";
 import { catalogRoute } from "./kinds";
 import { describeError } from "../../shared/errors";
 
@@ -164,15 +164,20 @@ export function createCatalog(options: {
   }
 
   async function fetchCatalog(): Promise<CatalogSnapshot> {
-    const abort = AbortSignal.timeout(CATALOG_TIMEOUT_MS);
+    const outcome = await sendRequest(
+      fetchImpl,
+      MODELS_DEV_URL,
+      { headers: { Accept: "application/json" } },
+      { timeoutMs: CATALOG_TIMEOUT_MS },
+    );
 
-    let response: Response;
-    try {
-      response = await fetchImpl(MODELS_DEV_URL, { headers: { Accept: "application/json" }, signal: abort });
-    } catch (error) {
-      throw new Error(`${MODELS_DEV_URL} からカタログを取得できません: ${describeError(error)}`, { cause: error });
+    if (outcome.kind === "network") {
+      throw new Error(`${MODELS_DEV_URL} からカタログを取得できません: ${describeError(outcome.error)}`, {
+        cause: outcome.error,
+      });
     }
 
+    const response = outcome.response;
     if (!response.ok) {
       throw new Error(`${MODELS_DEV_URL} からカタログを取得できません: HTTP ${response.status}`);
     }

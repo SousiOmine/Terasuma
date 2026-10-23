@@ -16,10 +16,3 @@ export const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
 
 /** 1 メッセージの合計の上限。 */
 export const MAX_ATTACHMENTS_TOTAL_BYTES = 50 * 1024 * 1024;
-
-/** 画面とエラー本文に出す、読みやすい大きさ。 */
-export function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}

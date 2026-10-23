@@ -1,3 +1,5 @@
+import { createPendingRegistry } from "../wait/pending";
+
 /**
  * エージェントからユーザーへ画面を渡す（引き受け）。
  *
@@ -18,6 +20,9 @@ export type HandoverAnswer =
 /** 「操作を完了した」ときの戻り値。 */
 export const HANDOVER_DONE = "The user finished working on the computer.";
 
+/** ターンが終わって、待ちを続けられなくなったときの理由。 */
+const HANDOVER_ENDED = "The turn ended before the screen was handed over";
+
 export type Handover = {
   /**
    * ユーザーに渡して待つ。返事か「操作を完了した」で解決する。
@@ -30,7 +35,7 @@ export type Handover = {
 
 export function createHandover(): Handover {
   /** Tera の id → 待ちを終わらせる関数。 */
-  const waiting = new Map<string, (answer: HandoverAnswer) => void>();
+  const pending = createPendingRegistry<string, (answer: HandoverAnswer) => void>();
 
   return {
     wait(teraId, signal) {
@@ -38,32 +43,27 @@ export function createHandover(): Handover {
         // すでに止まったターンから呼ばれることがある（停止と ask_user が競合した場合）。
         // ここで断らないと、誰も返事をしない待ちが残り、ターンが片付かない。
         if (signal.aborted) {
-          reject(new Error("The turn ended before the screen was handed over"));
+          reject(new Error(HANDOVER_ENDED));
           return;
         }
 
-        const settle = (answer: HandoverAnswer): void => {
-          waiting.delete(teraId);
-          signal.removeEventListener("abort", onAbort);
-          resolve(answer.kind === "done" ? HANDOVER_DONE : answer.text);
-        };
-
-        const onAbort = (): void => {
-          waiting.delete(teraId);
-          reject(new Error("The turn ended before the screen was handed over"));
-        };
+        const entry = pending.register(
+          teraId,
+          (answer) => resolve(answer.kind === "done" ? HANDOVER_DONE : answer.text),
+          signal,
+          () => reject(new Error(HANDOVER_ENDED)),
+        );
 
         // 同じ Tera で二重に待つことはない（ターンは 1 つずつ進む）。
-        waiting.set(teraId, settle);
-        signal.addEventListener("abort", onAbort, { once: true });
+        if (entry === null) reject(new Error(HANDOVER_ENDED));
       });
     },
 
     answer(teraId, answer) {
-      const settle = waiting.get(teraId);
-      if (settle === undefined) return false;
+      const entries = pending.takeAll(teraId);
+      if (entries.length === 0) return false;
 
-      settle(answer);
+      for (const entry of entries) entry.pending(answer);
       return true;
     },
   };

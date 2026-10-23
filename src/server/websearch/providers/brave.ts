@@ -8,7 +8,8 @@
 import { SEARCH_TIMEOUT_MS } from "../constants";
 import { requestJson } from "../http";
 import type { ProviderAdapter } from "../types";
-import { numberLimit, recordOf, snippetOf, stringOf, stringOrNull } from "./helpers";
+import { recordOf } from "../../../shared/guards";
+import { numberLimit, snippetOf, stringOf, stringOrNull } from "./helpers";
 
 const SEARCH_URL = "https://api.search.brave.com/res/v1/web/search";
 

@@ -1,3 +1,5 @@
+import { recordOf } from "../../../shared/guards";
+import { formatLocalDate, truncateText } from "../../../shared/text";
 import type { ToolSet } from "ai";
 import { tool } from "ai";
 import { z } from "zod";
@@ -279,18 +281,13 @@ function calledToolName(part: Extract<MessagePart, { type: "tool-call" }>): stri
   return toolNameFor(part.server, part.tool);
 }
 
-function recordOf(value: unknown): Record<string, unknown> | null {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
-  return value as Record<string, unknown>;
-}
-
 function isTextPart(part: MessagePart): part is Extract<MessagePart, { type: "text" }> {
   return part.type === "text";
 }
 
 /** 1 件分。見出し（時刻と役割）と本文。 */
 function formatMessage(message: ChatMessage): string {
-  return `[${stamp(message.createdAt)}] ${message.role}\n${truncate(bodyOf(message))}`;
+  return `[${formatLocalDate(message.createdAt, { time: true })}] ${message.role}\n${truncateText(bodyOf(message), MAX_TEXT_CHARS, "parens")}`;
 }
 
 /** 画面に出る本文と、添付名・ツール名の注記。 */
@@ -323,20 +320,6 @@ function bodyOf(message: ChatMessage): string {
 function nameList(names: readonly string[]): string {
   if (names.length <= MAX_ATTACHMENT_NAMES) return names.join(", ");
   return `${names.slice(0, MAX_ATTACHMENT_NAMES).join(", ")} (+${names.length - MAX_ATTACHMENT_NAMES} more)`;
-}
-
-/** 本文を上限までに切る。切ったことは本文に残す（全文だと思って読ませない）。 */
-function truncate(text: string): string {
-  if (text.length <= MAX_TEXT_CHARS) return text;
-  return `${text.slice(0, MAX_TEXT_CHARS)}\n… (${text.length - MAX_TEXT_CHARS} more characters)`;
-}
-
-/** ローカル時刻の "YYYY-MM-DD HH:mm"。 */
-function stamp(at: number): string {
-  const date = new Date(at);
-  const pad = (value: number): string => String(value).padStart(2, "0");
-  const day = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
-  return `${day} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
 /** 件数を、受け付ける範囲に収める。 */

@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ContainerError, createContainerManager } from "../src/server/computer/container";
-import { createPodmanStub, type PodmanStubBehaviour } from "./support";
+import { createPodmanStub, testPng, type PodmanStubBehaviour } from "./support";
 
 /**
  * podman を差し替えて、コンテナ操作がどのコマンドを並べるかを確かめる。
@@ -29,6 +29,7 @@ function withManager<T>(
     containerDir: join(dataDir, "container-files"),
     env,
     command: stub.run,
+    commandBytes: stub.runBytes,
   });
 
   return run({
@@ -374,5 +375,24 @@ describe("コンテナの中での実行", () => {
         await expect(container.readFile("/home/agent/missing.txt")).rejects.toThrow("No such file or directory");
       },
     );
+  });
+});
+
+describe("画面の撮影", () => {
+  test("PNG のバイト列をそのまま返す", async () => {
+    const png = testPng(1280, 800);
+    await withManager({ screenshot: png }, async ({ container, calls }) => {
+      expect(await container.screenshot()).toEqual(png);
+
+      const exec = calls.at(-1) ?? [];
+      expect(exec).toContain("scrot");
+      expect(exec).toContain("--pointer");
+    });
+  });
+
+  test("撮れなければ、コンテナの失敗として理由を返す", async () => {
+    await withManager({ fail: "screenshot" }, async ({ container }) => {
+      await expect(container.screenshot()).rejects.toBeInstanceOf(ContainerError);
+    });
   });
 });

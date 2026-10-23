@@ -3,7 +3,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CONFIG_FILE_NAME } from "../src/config";
 import type { FileSettings } from "../src/server/data/settings-schema";
-import type { CommandResult, CommandRunner } from "../src/server/computer/command";
+import type {
+  CommandBytesResult,
+  CommandByteRunner,
+  CommandResult,
+  CommandRunner,
+} from "../src/server/computer/command";
 import type { CodingToolset } from "../src/server/agent/tools/coding";
 import { ContainerError, type ContainerManager } from "../src/server/computer/container";
 import type { EnvRequests } from "../src/server/computer/env";
@@ -255,8 +260,10 @@ export type PodmanStubBehaviour = {
   running?: boolean;
   /** `podman port` が返す行。動いているときの既定は "127.0.0.1:45678"。 */
   port?: string;
-  /** build / run / start / rm のどれかを失敗させる。 */
-  fail?: "build" | "run" | "start" | "rm";
+  /** build / run / start / rm / screenshot のどれかを失敗させる。 */
+  fail?: "build" | "run" | "start" | "rm" | "screenshot";
+  /** 画面の撮影が返す PNG。省くと 2x2 の PNG。 */
+  screenshot?: Uint8Array;
   /** `podman exec` の結果。 */
   exec?: { code: number; stdout: string; stderr: string; truncated?: boolean; timedOut?: boolean };
 };
@@ -268,6 +275,8 @@ export type PodmanStubBehaviour = {
  */
 export function createPodmanStub(initial: PodmanStubBehaviour = {}): {
   run: CommandRunner;
+  /** 画面の撮影のように、バイト列を返す呼び出し。 */
+  runBytes: CommandByteRunner;
   calls: string[][];
   /** 各呼び出しに渡された標準入力。 */
   inputs: (string | Uint8Array | undefined)[];
@@ -351,7 +360,27 @@ export function createPodmanStub(initial: PodmanStubBehaviour = {}): {
     }
   };
 
-  return { run, calls, inputs };
+  const runBytes: CommandByteRunner = async (cmd) => {
+    calls.push([...cmd]);
+
+    const bytes = (value: Partial<CommandBytesResult> = {}): CommandBytesResult => ({
+      code: 0,
+      stdout: new Uint8Array(),
+      stderr: "",
+      timedOut: false,
+      truncated: false,
+      ...value,
+    });
+
+    const [command, sub] = cmd;
+    if (command !== "podman") return bytes({ code: 127, stderr: `unknown command: ${command}` });
+    if (sub !== "exec") return bytes({ code: 125, stderr: `unhandled: ${cmd.join(" ")}` });
+    if (initial.fail === "screenshot") return bytes({ code: 1, stderr: "scrot: failed" });
+
+    return bytes({ stdout: initial.screenshot ?? testPng(2, 2) });
+  };
+
+  return { run, runBytes, calls, inputs };
 }
 
 /** 一時ディレクトリに本物の設定ファイルを作り、そこを指すストアを渡す。 */

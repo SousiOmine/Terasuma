@@ -11,6 +11,7 @@
 import type { ApiErrorCode, ProviderCheckResult } from "../../shared/types";
 import { describeError } from "../../shared/errors";
 import { AppError } from "../errors";
+import { readErrorDetail, sendRequest, type FetchLike } from "../http/client";
 
 /** 接続確認で返す失敗の種類。ルート側でそのまま API のコードになる。 */
 export type ProviderErrorCode = Extract<
@@ -24,14 +25,6 @@ export class ProviderRequestError extends AppError {
     super(code, code === "provider_auth_failed" ? 400 : 502, message);
   }
 }
-
-/**
- * プロバイダへ投げる fetch の形。ここで使う引数だけに絞ってあるので、テストでは素の関数を渡せる。
- */
-export type FetchLike = (
-  input: string,
-  init: { headers: Record<string, string>; signal: AbortSignal },
-) => Promise<Response>;
 
 /** 応答が返らないまま待ち続けないための上限。 */
 export const CONNECTION_TIMEOUT_MS = 20_000;
@@ -115,34 +108,42 @@ async function probeModels(fetchImpl: FetchLike, request: ProviderRequest): Prom
     else headers["Authorization"] = `Bearer ${request.apiKey}`;
   }
 
-  const timeout = AbortSignal.timeout(CONNECTION_TIMEOUT_MS);
-  const abort = request.signal === undefined ? timeout : AbortSignal.any([request.signal, timeout]);
+  const outcome = await sendRequest(
+    fetchImpl,
+    target.url,
+    { headers },
+    {
+      timeoutMs: CONNECTION_TIMEOUT_MS,
+      ...(request.signal === undefined ? {} : { signal: request.signal }),
+    },
+  );
 
-  let response: Response;
-  try {
-    response = await fetchImpl(target.url, { headers, signal: abort });
-  } catch (error) {
-    if (timeout.aborted) {
+  if (outcome.kind === "network") {
+    if (outcome.timedOut) {
       throw new ProviderRequestError(
         "provider_unreachable",
         `${target.url} から ${CONNECTION_TIMEOUT_MS / 1000} 秒以内に応答がありません`,
       );
     }
-    throw new ProviderRequestError("provider_unreachable", `${target.url} に接続できません: ${describeError(error)}`);
+    throw new ProviderRequestError(
+      "provider_unreachable",
+      `${target.url} に接続できません: ${describeError(outcome.error)}`,
+    );
   }
 
+  const response = outcome.response;
   if (!response.ok) {
     if (response.status === 401 || response.status === 403) {
-      const detail = await readFailureDetail(response);
-      throw new ProviderRequestError("provider_auth_failed", detail ?? `HTTP ${response.status}`);
+      const detail = await readErrorDetail(response, 200);
+      throw new ProviderRequestError("provider_auth_failed", detail.length === 0 ? `HTTP ${response.status}` : detail);
     }
     // 一覧を公開していないだけかもしれない。確認できなかったものとして扱う。
     if (UNSUPPORTED_STATUSES.has(response.status)) return { status: "unsupported" };
 
-    const detail = await readFailureDetail(response);
+    const detail = await readErrorDetail(response, 200);
     throw new ProviderRequestError(
       "provider_unreachable",
-      `HTTP ${response.status}${detail === null ? "" : `: ${detail}`}`,
+      `HTTP ${response.status}${detail.length === 0 ? "" : `: ${detail}`}`,
     );
   }
 
@@ -214,41 +215,4 @@ function readModelId(item: unknown): string | null {
 
   const id = (item as { id?: unknown }).id;
   return typeof id === "string" ? id.trim() : null;
-}
-
-/** プロバイダが返すエラーの本文から、画面に出せる 1 行を取り出す。 */
-async function readFailureDetail(response: Response): Promise<string | null> {
-  let text: string;
-  try {
-    text = await response.text();
-  } catch {
-    return null;
-  }
-
-  if (text.trim().length === 0) return null;
-
-  try {
-    const body: unknown = JSON.parse(text);
-    const message = readErrorMessage(body);
-    if (message !== null) return message;
-  } catch {
-    // JSON でない本文は、そのまま短く添える。
-  }
-
-  const oneLine = text.replace(/\s+/g, " ").trim();
-  return oneLine.length > 200 ? `${oneLine.slice(0, 200)}…` : oneLine;
-}
-
-function readErrorMessage(body: unknown): string | null {
-  if (typeof body !== "object" || body === null) return null;
-
-  const error = (body as { error?: unknown }).error;
-  if (typeof error === "string") return error;
-  if (typeof error === "object" && error !== null) {
-    const message = (error as { message?: unknown }).message;
-    if (typeof message === "string") return message;
-  }
-
-  const message = (body as { message?: unknown }).message;
-  return typeof message === "string" ? message : null;
 }

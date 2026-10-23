@@ -1,6 +1,8 @@
 import { posix } from "node:path";
 import type { ToolSet } from "ai";
 import { tool } from "ai";
+import { throwIfAborted } from "../../../shared/async";
+import { formatBytes } from "../../../shared/text";
 import { z } from "zod";
 import type { ShellResult } from "../../computer/container";
 
@@ -50,11 +52,9 @@ const BASH_MAX_TIMEOUT_SECONDS = 600;
 /** bash の出力を、表示用に詰める前まで受け取る上限（文字数）。 */
 const BASH_RAW_OUTPUT_CHARS = 1_000_000;
 
-/** バイト数を、pi と同じ形（B / KB / MB）で表す。 */
+/** モデルへ見せるバイト数（pi と同じ、空白を詰めた形）。 */
 function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes}B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
+  return formatBytes(bytes, { space: false });
 }
 
 const BOM = "\uFEFF";
@@ -181,10 +181,6 @@ export function resolveToolPath(input: string, root: string): string {
 
   const expanded = path === "~" ? root : path.startsWith("~/") ? posix.join(root, path.slice(2)) : path;
   return posix.resolve(root, expanded);
-}
-
-function throwIfAborted(signal: AbortSignal | undefined): void {
-  if (signal?.aborted === true) throw new Error("Operation aborted because the turn stopped");
 }
 
 /**

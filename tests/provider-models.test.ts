@@ -4,15 +4,23 @@ import {
   createConnectionChecker,
   createModelLister,
   ProviderRequestError,
-  type FetchLike,
   type ProviderRequest,
 } from "../src/server/provider/connection";
+import type { FetchLike } from "../src/server/http/client";
+
+/** 送られたヘッダを、元の綴りのまま読む（Headers は名前を小文字にするため）。 */
+function headerRecord(headers: HeadersInit | undefined): Record<string, string> {
+  if (headers === undefined) return {};
+  if (headers instanceof Headers) return Object.fromEntries(headers);
+  if (Array.isArray(headers)) return Object.fromEntries(headers);
+  return { ...headers };
+}
 
 /** 呼ばれた URL とヘッダを記録する、差し替え可能な fetch。 */
 function stubFetch(handler: (url: string) => Response) {
   const calls: { url: string; headers: Record<string, string> }[] = [];
   const fetchImpl: FetchLike = async (url, init) => {
-    calls.push({ url, headers: init.headers });
+    calls.push({ url, headers: headerRecord(init.headers) });
     return handler(url);
   };
 

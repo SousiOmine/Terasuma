@@ -1,4 +1,5 @@
 import { describeError } from "../../shared/errors";
+import { sendRequest } from "../http/client";
 import { authorizationHeader, type ConnectionProvider } from "./providers";
 
 /**
@@ -12,14 +13,20 @@ import { authorizationHeader, type ConnectionProvider } from "./providers";
 const HTTP_TIMEOUT_MS = 15_000;
 
 /** アカウント名を読む 1 回の要求。成否の扱いは呼び出し側が決める。 */
-function requestAccount(provider: ConnectionProvider, accessToken: string): Promise<Response> {
+async function requestAccount(provider: ConnectionProvider, accessToken: string): Promise<Response> {
   // パスは API の baseUrl の後ろに付ける（"/user" を URL の解決に任せると origin 直下になる）。
   const base = provider.api.baseUrl.replace(/\/+$/, "");
   const url = new URL(`${base}${provider.api.account.path}`);
-  return fetch(url, {
-    headers: { ...provider.api.headers, Authorization: authorizationHeader(provider, accessToken) },
-    signal: AbortSignal.timeout(HTTP_TIMEOUT_MS),
-  });
+
+  const outcome = await sendRequest(
+    fetch,
+    url.toString(),
+    { headers: { ...provider.api.headers, Authorization: authorizationHeader(provider, accessToken) } },
+    { timeoutMs: HTTP_TIMEOUT_MS },
+  );
+
+  if (outcome.kind === "network") throw outcome.error;
+  return outcome.response;
 }
 
 /** 応答からアカウント名を読む。無ければ null。 */

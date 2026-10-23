@@ -1,3 +1,4 @@
+import { truncateText } from "../../shared/text";
 import { toolNameFor } from "../../shared/tools";
 import type { ChatMessage, MessagePart } from "../../shared/types";
 import { userContentForModel } from "./model-content";
@@ -76,7 +77,7 @@ export function serializeConversation(messages: readonly ChatMessage[]): string 
 
       const label = part.failed ? "Tool result (failed)" : "Tool result";
       const images = (part.images ?? []).map((image) => ` [image ${image.width}x${image.height}]`).join("");
-      lines.push(`[${label}]: ${truncate(part.output)}${images}`);
+      lines.push(`[${label}]: ${truncateText(part.output, TOOL_RESULT_MAX_CHARS, "brackets")}${images}`);
     }
   }
 
@@ -85,7 +86,11 @@ export function serializeConversation(messages: readonly ChatMessage[]): string 
 
 /** ツールの呼び出しを、`名前(引数)` の形にする。 */
 function formatCall(part: Extract<MessagePart, { type: "tool-call" }>): string {
-  return truncate(`${toolNameFor(part.server, part.tool)}(${formatArgs(part.args)})`, TOOL_CALL_MAX_CHARS);
+  return truncateText(
+    `${toolNameFor(part.server, part.tool)}(${formatArgs(part.args)})`,
+    TOOL_CALL_MAX_CHARS,
+    "brackets",
+  );
 }
 
 /** 引数を `key=値` の並びにする。オブジェクトでなければ、そのまま JSON にする。 */
@@ -100,12 +105,6 @@ function formatArgs(args: unknown): string {
 function jsonOf(value: unknown): string {
   const text = JSON.stringify(value);
   return text === undefined ? String(value) : text;
-}
-
-/** 要約に見せる本文を、決めた長さに切る。切り詰めたことは本文に残す。 */
-function truncate(text: string, limit: number = TOOL_RESULT_MAX_CHARS): string {
-  if (text.length <= limit) return text;
-  return `${text.slice(0, limit)}\n[... ${text.length - limit} more characters truncated]`;
 }
 
 /**

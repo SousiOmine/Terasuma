@@ -1,6 +1,6 @@
-import { chmodSync, existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { isRecord } from "../../shared/guards";
 import { isEnvName } from "../../shared/env";
-import { describeError } from "../../shared/errors";
+import { readPrivateJson, writePrivateJson } from "./secret-file";
 import { isProviderId, mcpServerIdProblem, RESERVED_MCP_SERVER_IDS, type McpServerIdProblem } from "../../shared/ids";
 import { isModelId, type ModelId } from "../../shared/model";
 import { isWebSearchProviderId, WEB_SEARCH_PROVIDER_IDS } from "../websearch/index";
@@ -130,7 +130,16 @@ const PROVIDER_KEYS = ["apiKey", "baseUrl", "label"] as const;
 /** モデル 1 件に書ける項目。 */
 const MODEL_OPTION_KEYS = ["reasoningEffort"] as const;
 
-const FILE_KEYS = ["model", "providers", "modelOptions", "connections", "mcpServers", "webSearch", "env", "port"] as const;
+const FILE_KEYS = [
+  "model",
+  "providers",
+  "modelOptions",
+  "connections",
+  "mcpServers",
+  "webSearch",
+  "env",
+  "port",
+] as const;
 type FileKey = (typeof FILE_KEYS)[number];
 
 /** config.json に書ける設定。書かなかった項目は既定値になる。 */
@@ -174,17 +183,13 @@ export function toModelSettings(file: FileSettings): ModelSettings {
 
 /** 設定ファイルがまだ無ければ空を返す。あるのに読めない場合は起動を止める。 */
 export function readSettingsFile(path: string): FileSettings {
-  if (!existsSync(path)) return {};
-
-  const text = readFileSync(path, "utf8");
-
-  let raw: unknown;
-  try {
-    raw = JSON.parse(text);
-  } catch (error) {
-    throw new Error(`${path} を JSON として解釈できません: ${describeError(error)}`, { cause: error });
+  const content = readPrivateJson(path);
+  if (content.kind === "missing") return {};
+  if (content.kind === "unreadable") {
+    throw new Error(`${path} を JSON として解釈できません: ${content.detail}`);
   }
 
+  const raw = content.value;
   if (!isRecord(raw)) {
     throw new Error(`${path} の内容は JSON のオブジェクトにしてください`);
   }
@@ -240,14 +245,11 @@ export function readSettingsFile(path: string): FileSettings {
  * プロバイダの API キーとコンピュータの環境変数が入るので、他の利用者から読めないよう 0600 にする。
  */
 export function writeSettingsFile(path: string, settings: FileSettings): void {
-  const temporary = `${path}.tmp`;
-  writeFileSync(temporary, serialize(settings), "utf8");
-  chmodSync(temporary, 0o600);
-  renameSync(temporary, path);
+  writePrivateJson(path, orderedSettings(settings));
 }
 
-/** 設定ファイルに書く文字列。項目の並びは常に同じにして、差分を読みやすくする。 */
-function serialize(settings: FileSettings): string {
+/** 設定ファイルに書く内容。項目の並びは常に同じにして、差分を読みやすくする。 */
+function orderedSettings(settings: FileSettings): Record<string, unknown> {
   const ordered: Record<string, unknown> = {};
   if (settings.model !== undefined) ordered["model"] = settings.model;
   if (settings.providers !== undefined) ordered["providers"] = settings.providers;
@@ -257,7 +259,7 @@ function serialize(settings: FileSettings): string {
   if (settings.mcpServers !== undefined) ordered["mcpServers"] = settings.mcpServers;
   if (settings.env !== undefined) ordered["env"] = settings.env;
   if (settings.port !== undefined) ordered["port"] = settings.port;
-  return `${JSON.stringify(ordered, null, 2)}\n`;
+  return ordered;
 }
 
 /**
@@ -307,11 +309,6 @@ export function normalizeHttpUrl(value: string, source: string, what: string): s
     );
   }
   return trimmed;
-}
-
-/** オブジェクトとして読める値かどうか。配列は含めない。 */
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 /** 使える項目だけが書かれているか確かめる。綴り違いは起動時に落とす。 */

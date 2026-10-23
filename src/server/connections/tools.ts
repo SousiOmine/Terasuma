@@ -2,6 +2,8 @@ import type { ToolSet } from "ai";
 import { tool } from "ai";
 import { z } from "zod";
 import { describeError } from "../../shared/errors";
+import { truncateText } from "../../shared/text";
+import { sendRequest } from "../http/client";
 import { APP_REQUEST_TOOL_NAME, CONNECT_APP_TOOL_NAME } from "../../shared/tools";
 import { ConnectionNotFound } from "../errors";
 import type { ConnectionsManager } from "./manager";
@@ -114,20 +116,27 @@ export function createConnectionTools(options: { connections: ConnectionsManager
         const withBody = body !== undefined && method !== "GET" && method !== "DELETE";
         if (withBody) headers["Content-Type"] = "application/json";
 
-        const timeout = AbortSignal.timeout(API_TIMEOUT_MS);
-        const signal = context.abortSignal === undefined ? timeout : AbortSignal.any([context.abortSignal, timeout]);
-
-        let response: Response;
-        try {
-          response = await fetch(url, {
+        const outcome = await sendRequest(
+          fetch,
+          url.toString(),
+          {
             method,
             headers,
             ...(withBody ? { body: JSON.stringify(body) } : {}),
-            signal,
+          },
+          {
+            timeoutMs: API_TIMEOUT_MS,
+            ...(context.abortSignal === undefined ? {} : { signal: context.abortSignal }),
+          },
+        );
+
+        if (outcome.kind === "network") {
+          throw new Error(`Could not reach ${definition.name}: ${describeError(outcome.error)}`, {
+            cause: outcome.error,
           });
-        } catch (error) {
-          throw new Error(`Could not reach ${definition.name}: ${describeError(error)}`, { cause: error });
         }
+
+        const response = outcome.response;
 
         const text = await response.text();
         if (response.status === 401) {
@@ -137,7 +146,7 @@ export function createConnectionTools(options: { connections: ConnectionsManager
         }
 
         const status = `HTTP ${response.status}`;
-        return text.length === 0 ? status : `${status}\n${truncate(text)}`;
+        return text.length === 0 ? status : `${status}\n${truncateText(text, MAX_RESPONSE_CHARS, "marked")}`;
       },
     }),
   };
@@ -167,8 +176,4 @@ function apiUrl(baseUrl: string, path: string): URL {
     throw new Error("path must stay on the connected app's API");
   }
   return url;
-}
-
-function truncate(text: string): string {
-  return text.length <= MAX_RESPONSE_CHARS ? text : `${text.slice(0, MAX_RESPONSE_CHARS)}… (truncated)`;
 }

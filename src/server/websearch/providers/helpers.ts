@@ -1,3 +1,4 @@
+import { recordOf } from "../../../shared/guards";
 /**
  * プロバイダの応答を読むための小さな関数。
  *
@@ -8,12 +9,6 @@
 import { MAX_SEARCH_LIMIT, MAX_SNIPPET_CHARS } from "../constants";
 import { htmlToText } from "../html";
 import { truncateText } from "../text";
-
-/** オブジェクトとして読める値かどうか。配列は含めない。 */
-export function recordOf(value: unknown): Record<string, unknown> | null {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
-  return value as Record<string, unknown>;
-}
 
 /** オブジェクトの配列を、読める要素だけに絞って返す。 */
 export function arrayOf(value: unknown, key: string): Record<string, unknown>[] {
