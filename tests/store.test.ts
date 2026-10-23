@@ -146,6 +146,72 @@ describe("store", () => {
     }
   });
 
+  test("deleteTera は、履歴・identity・要約ごと消す", () => {
+    const store = makeStore();
+    store.ensureTera("second", "2 体目");
+    store.appendMessage({ id: "m1", teraId: "second", role: "user", content: "消える本文" });
+    store.writeIdentity("second", "# Role\n消える役割");
+    store.writeCompaction("second", { summary: "消える要約", throughSeq: 1, tokensBefore: 10, createdAt: 1 });
+
+    expect(store.deleteTera("second")).toBe(true);
+
+    expect(store.getTera("second")).toBeNull();
+    expect(store.listTeras().map((tera) => tera.id)).toEqual([DEFAULT_TERA_ID]);
+    expect(store.listMessagesSince("second", 0)).toEqual([]);
+    expect(store.readIdentity("second")).toEqual({ content: "", applied: "" });
+    expect(store.readCompaction("second")).toEqual({ summary: "", throughSeq: 0, tokensBefore: 0, createdAt: 0 });
+  });
+
+  test("deleteTera は、いない Tera には何もせず false を返す", () => {
+    const store = makeStore();
+
+    expect(store.deleteTera("ghost")).toBe(false);
+    expect(store.listTeras().map((tera) => tera.id)).toEqual([DEFAULT_TERA_ID]);
+  });
+
+  test("ensureAtLeastOneTera は、1 体でも居れば何も作らない", () => {
+    const store = makeStore();
+
+    expect(store.ensureAtLeastOneTera()).toBeNull();
+    expect(store.listTeras()).toHaveLength(1);
+  });
+
+  test("最後の 1 体を消したあとに呼ぶと、既定の Tera を既定の identity で作り直す", () => {
+    const store = makeStore();
+    expect(store.deleteTera(DEFAULT_TERA_ID)).toBe(true);
+    expect(store.listTeras()).toEqual([]);
+
+    const recreated = store.ensureAtLeastOneTera();
+    expect(recreated?.id).toBe(DEFAULT_TERA_ID);
+    expect(recreated?.name).toBe("Tera");
+    expect(store.listTeras().map((tera) => tera.id)).toEqual([DEFAULT_TERA_ID]);
+    expect(store.readIdentity(DEFAULT_TERA_ID)).toEqual({
+      content: DEFAULT_TERA_IDENTITY,
+      applied: DEFAULT_TERA_IDENTITY,
+    });
+  });
+
+  test("消した既定の Tera は、開き直しても戻らない", () => {
+    const path = join(tmpdir(), `terasuma-store-${crypto.randomUUID()}.db`);
+
+    try {
+      const first = createStore(path);
+      first.createTera({ id: "researcher", name: "調べる係", identity: "# Role\n調べる" });
+      first.deleteTera(DEFAULT_TERA_ID);
+      first.close();
+
+      const second = createStore(path);
+      try {
+        // 1 体も居なければ既定を作るが、ここには researcher が残っている。
+        expect(second.listTeras().map((tera) => tera.id)).toEqual(["researcher"]);
+      } finally {
+        second.close();
+      }
+    } finally {
+      removeDatabase(path);
+    }
+  });
+
   test("appendMessage は連番を振り、Tera の更新時刻を進める", () => {
     const store = makeStore();
     const before = store.getTera(DEFAULT_TERA_ID);

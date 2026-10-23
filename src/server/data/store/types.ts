@@ -15,7 +15,7 @@ import type {
  */
 
 /**
- * 既定の Tera。起動時に 1 体だけ用意する。
+ * 既定の Tera。Tera が 1 体も無いときに用意する（起動時と、最後の 1 体を消したとき）。
  * ほかの Tera は、エージェントが tera_create ツールから作る。
  */
 export const DEFAULT_TERA_ID = "default";
@@ -107,6 +107,18 @@ export type TeraDirectory = {
    * 同じ名前が既にあれば失敗する（画面の一覧で区別できなくなるため）。
    */
   createTera(input: NewTera): Tera;
+  /**
+   * Tera を行ごと消す。履歴・要約・identity は外部キーの連鎖で消える。
+   * 行が無ければ false を返す（何も消さない）。
+   * ファイル（作業フォルダ）と webhook は、呼ぶ側が行を消す前に片付ける。
+   */
+  deleteTera(id: string): boolean;
+  /**
+   * Tera が 1 体も無いときだけ、既定の Tera を用意して返す。
+   * 既に 1 体以上居れば何もせず null（消した Tera を戻さない）。
+   * 起動時と、最後の 1 体を消したときに呼ぶ。
+   */
+  ensureAtLeastOneTera(): Tera | null;
 };
 
 /** 履歴を 1 ページ読んだ結果。画面へ返す前に、表示に使う部品だけへ絞る。 */

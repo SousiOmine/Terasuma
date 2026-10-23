@@ -16,6 +16,11 @@ export const ja: Record<MessageKey, string> = {
   "common.loading": "読み込み中…",
 
   "tera.empty": "まだ Tera がありません",
+  "tera.deleteTitle": "Tera を削除しますか？",
+  "tera.deleteMessage":
+    "会話・identity・Discord の webhook・作業フォルダの中身が消えます。取り消せません。最後の 1 体を消したときは、既定の Tera を作り直します。",
+  "tera.deleteWithName": "{name} を削除",
+  "tera.menu": "{name} の操作",
 
   "chat.empty.title": "何をお手伝いしましょうか",
   "chat.empty.description": "調べものも、ファイルの整理も、画面の操作も。このコンピュータの中で進めます。",
@@ -78,6 +83,10 @@ export const ja: Record<MessageKey, string> = {
   "settings.title": "設定",
   "settings.back": "チャットに戻る",
   "settings.general": "一般",
+  "settings.teras": "Tera の管理",
+  "settings.teras.description":
+    "会話の持ち主（Tera）の一覧です。削除すると、その会話・identity・Discord の webhook・作業フォルダも消えます。",
+  "settings.teras.id": "作業フォルダ名：{id}",
   "settings.language.label": "言語",
   "settings.language.description": "画面の表示と、エージェントの返事に使う言語",
 

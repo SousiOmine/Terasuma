@@ -118,6 +118,7 @@ export function startServer(options: ServerOptions): StartedServer {
       catalog: options.catalog ?? createCatalog({ cachePath: join(config.dataDir, CATALOG_FILE_NAME) }),
       checkConnection: options.checkConnection ?? createConnectionChecker(),
       listModels: options.listModels ?? createModelLister(),
+      dataDir: config.dataDir,
     }),
   );
   const screen = createScreenSocket(container);

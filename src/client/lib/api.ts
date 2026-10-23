@@ -60,6 +60,15 @@ export async function listTeras(): Promise<readonly Tera[]> {
 }
 
 /**
+ * Tera を消す。履歴・identity・Discord の webhook・作業フォルダもサーバ側で消える。
+ * 消したあとの一覧が返る（最後の 1 体だったときは、作り直された既定の Tera が入っている）。
+ */
+export async function deleteTera(teraId: string): Promise<readonly Tera[]> {
+  const body = await request<{ teras: Tera[] }>(teraPath(teraId), { method: "DELETE" });
+  return body.teras;
+}
+
+/**
  * その Tera の履歴を 1 ページ読む（古い順）。
  * before は「この seq より前」を表し、null なら最新から読む。
  */

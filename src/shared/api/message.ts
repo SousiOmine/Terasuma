@@ -185,7 +185,8 @@ export type MessagePage = {
 
 /**
  * エージェント 1 体。会話の履歴を 1 本だけ持ち、モデルへ何を渡すかはこの単位で決める。
- * 既定の Tera は起動時に用意し、ほかの Tera はエージェントが tera_create ツールで作る。
+ * あり得るのは、エージェントが tera_create ツールで作る Tera と、
+ * 1 体も無いときに用意される既定の Tera のどちらか。
  */
 export type Tera = {
   id: string;

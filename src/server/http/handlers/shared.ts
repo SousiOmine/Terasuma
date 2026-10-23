@@ -77,6 +77,8 @@ export type ApiDeps = {
   checkConnection: ConnectionChecker;
   /** 独自エンドポイントのモデル一覧を取る。 */
   listModels: ProviderModelLister;
+  /** データディレクトリ。Tera の作業フォルダを消すときに使う。 */
+  dataDir: string;
 };
 
 /** Tera が無ければ 404。あれば何もしない。 */

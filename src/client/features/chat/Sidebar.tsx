@@ -1,15 +1,23 @@
-import { IconSettings, IconX } from "@tabler/icons-preact";
-import { useEffect } from "preact/hooks";
+import { IconSettings, IconTrash, IconX } from "@tabler/icons-preact";
+import { useEffect, useState } from "preact/hooks";
+import type { Tera } from "../../../shared/api/message";
+import { useDeleteTarget } from "../../hooks/useDeleteTarget";
 import { t } from "../../i18n";
 import { openTera } from "../../state/chat";
 import { openSettings } from "../../state/route";
 import { activeTeraId, teras } from "../../state/session";
+import { clearTeraError, removeTera, showTeraError, teraError } from "../../state/teras";
 import { closeSidebar, sidebarOpen } from "../../state/sidebar";
+import { ConfirmDialog } from "../../ui/ConfirmDialog";
+import { ContextMenu } from "../../ui/ContextMenu";
+import { ErrorNotice } from "../../ui/ErrorNotice";
 import { ChatAvatar } from "./ChatAvatar";
 
 /**
  * Tera の一覧。会話は Tera ごとに 1 本なので、並ぶのは会話ではなく Tera。
  * 増やすのはエージェントの仕事（tera_create）なので、ここに作るボタンは置いていない。
+ * 消すのはユーザーが決めるので、各行のボタンと、行の右クリックのメニューから消せる
+ * （設定 > Tera にも同じ導線がある）。
  *
  * md 未満では、チャットに重ねて開くドロワーになる。
  * 開閉の状態は state/sidebar.ts が持ち、ヘッダーのメニューボタンから切り替える。
@@ -17,17 +25,23 @@ import { ChatAvatar } from "./ChatAvatar";
 export function Sidebar() {
   const items = teras.value;
   const open = sidebarOpen.value;
+  const error = teraError.value;
+  /** 消す対象。確認してから、履歴・webhook・作業フォルダごと消える。 */
+  const deleting = useDeleteTarget<Tera>();
+  /** 右クリックで開いているメニュー。どの行を右クリックしたかも持つ。 */
+  const [menu, setMenu] = useState<{ point: { x: number; y: number }; tera: Tera } | null>(null);
 
   // 開いている間は Escape でも閉じられるようにする（ダイアログと同じ操作感にする）。
+  // 削除の確認や右クリックのメニューを出している間は閉じない（Escape はそちらを閉じる操作になる）。
   useEffect(() => {
-    if (!open) return;
+    if (!open || deleting.target !== null || menu !== null) return;
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") closeSidebar();
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [open]);
+  }, [open, deleting.target, menu]);
 
   return (
     <>
@@ -68,7 +82,15 @@ export function Sidebar() {
                 const active = activeTeraId.value === tera.id;
 
                 return (
-                  <li key={tera.id}>
+                  <li
+                    key={tera.id}
+                    class="relative"
+                    onContextMenu={(event) => {
+                      // ブラウザのメニューではなく、この Tera の操作を出す。
+                      event.preventDefault();
+                      setMenu({ point: { x: event.clientX, y: event.clientY }, tera });
+                    }}
+                  >
                     <button
                       type="button"
                       title={tera.name}
@@ -77,13 +99,22 @@ export function Sidebar() {
                         closeSidebar();
                         void openTera(tera.id);
                       }}
-                      class={`w-full truncate rounded-2xl px-3.5 py-2.5 text-left text-sm transition ${
+                      class={`w-full truncate rounded-2xl py-2.5 pl-3.5 pr-11 text-left text-sm transition ${
                         active
                           ? "bg-[var(--app-accent-soft)] font-medium text-[var(--app-accent-ink)]"
                           : "text-secondary hover:bg-soft hover:text-primary"
                       }`}
                     >
                       {tera.name}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => deleting.open(tera)}
+                      title={t("tera.deleteWithName", { name: tera.name })}
+                      aria-label={t("tera.deleteWithName", { name: tera.name })}
+                      class="absolute right-1.5 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-tertiary transition hover:bg-[var(--app-soft-strong)] hover:text-[var(--app-danger)]"
+                    >
+                      <IconTrash size={15} stroke={1.7} />
                     </button>
                   </li>
                 );
@@ -92,8 +123,57 @@ export function Sidebar() {
           )}
         </nav>
 
+        {error !== null && (
+          <div class="shrink-0 px-2.5 pb-2">
+            <ErrorNotice
+              error={error}
+              action={
+                <button
+                  type="button"
+                  onClick={clearTeraError}
+                  class="shrink-0 text-xs text-secondary transition hover:text-primary"
+                >
+                  {t("error.dismiss")}
+                </button>
+              }
+            />
+          </div>
+        )}
+
         <SettingsButton />
       </aside>
+
+      {/* 確認は aside の外に置く。aside は translate で変形されるので、
+          中に置くと fixed の基準が aside になってしまう。 */}
+      {deleting.target !== null && (
+        <ConfirmDialog
+          title={t("tera.deleteTitle")}
+          subject={deleting.target.name}
+          message={t("tera.deleteMessage")}
+          confirmLabel={t("common.delete")}
+          cancelLabel={t("common.cancel")}
+          danger
+          onConfirm={() => deleting.confirm(removeTera, showTeraError)}
+          onCancel={deleting.close}
+        />
+      )}
+
+      {/* 右クリックのメニューも aside の外に置く（確認と同じ理由）。 */}
+      {menu !== null && (
+        <ContextMenu
+          label={t("tera.menu", { name: menu.tera.name })}
+          point={menu.point}
+          items={[
+            {
+              label: t("common.delete"),
+              icon: <IconTrash size={15} stroke={1.7} class="shrink-0" />,
+              danger: true,
+              onSelect: () => deleting.open(menu.tera),
+            },
+          ]}
+          onClose={() => setMenu(null)}
+        />
+      )}
     </>
   );
 }

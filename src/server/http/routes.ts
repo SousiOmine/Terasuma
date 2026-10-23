@@ -17,6 +17,10 @@ export function createRoutes(api: WithErrorHandling<ApiHandlers>, screen: Screen
     "/api/teras": {
       GET: api.listTeras,
     },
+    // Tera を消す。履歴・identity・Discord の webhook・作業フォルダも消える（取り消せない）。
+    "/api/teras/:id": {
+      DELETE: api.deleteTera,
+    },
     "/api/teras/:id/messages": {
       GET: api.listMessages,
       POST: api.sendMessage,

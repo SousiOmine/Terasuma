@@ -31,6 +31,8 @@ export function prepareQueries(db: Database) {
      VALUES (?, ?, ?, ?)`,
   );
   const touchTera = db.query<unknown, [number, string]>("UPDATE teras SET updated_at = ? WHERE id = ?");
+  // 履歴・要約・identity は、外部キーの ON DELETE CASCADE で一緒に消える。
+  const deleteTera = db.query<unknown, [string]>("DELETE FROM teras WHERE id = ?");
 
   // 新しい側から limit + 1 件読み、1 件余ったら「さらに古い発言がある」と分かる。
   const selectMessagePage = db.query<MessageRow, [string, number | null, number | null, number]>(
@@ -128,6 +130,7 @@ export function prepareQueries(db: Database) {
     insertTera,
     insertTeraNew,
     touchTera,
+    deleteTera,
     selectMessagePage,
     selectMessagesSince,
     selectMessagesBetween,

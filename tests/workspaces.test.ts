@@ -1,10 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, rmSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   TERAS_DIR_IN_CONTAINER,
   ensureTeraWorkspace,
+  removeTeraWorkspace,
   teraWorkspaceDir,
   teraWorkspaceInContainer,
 } from "../src/server/computer/workspaces";
@@ -43,5 +44,30 @@ describe("Tera の作業フォルダ", () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+
+  test("removeTeraWorkspace は、フォルダを中身ごと消す（無くても失敗しない）", () => {
+    const dir = mkdtempSync(join(tmpdir(), "terasuma-workspaces-"));
+    const workspace = join(dir, "container", "home", "teras", "default");
+
+    try {
+      ensureTeraWorkspace(dir, "default");
+      writeFileSync(join(workspace, "notes.txt"), "消える");
+      mkdirSync(join(workspace, "uploads", "1"), { recursive: true });
+      writeFileSync(join(workspace, "uploads", "1", "a.txt"), "消える");
+
+      removeTeraWorkspace(dir, "default");
+      expect(existsSync(workspace)).toBe(false);
+
+      // 何度呼んでも同じ結果になる。
+      removeTeraWorkspace(dir, "default");
+      expect(existsSync(workspace)).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("removeTeraWorkspace も、フォルダ名に使えない id は止める", () => {
+    expect(() => removeTeraWorkspace("/data", "../escape")).toThrow();
   });
 });

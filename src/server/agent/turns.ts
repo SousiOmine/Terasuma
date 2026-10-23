@@ -67,6 +67,11 @@ export type Turns = {
   /** 応答を生成しているターンがあるかどうか。 */
   isRunning(teraId: string): boolean;
   /**
+   * この Tera のターンが登録されているかどうか（停止を押して、片付けている途中も含む）。
+   * Tera を消す前に確かめる。止めたターンは、終わるまで履歴を書き足すため。
+   */
+  hasTurn(teraId: string): boolean;
+  /**
    * 走っているターンの途中へ、利用者の発言を足す。
    * 発言は保存され、次のモデル呼び出しの直前に文脈の末尾へ入る。
    * ターンが動いていない（止めている途中を含む）なら null。何も保存しない。
@@ -108,6 +113,10 @@ export function createTurns(deps: TurnDeps): Turns {
     isRunning(teraId) {
       const turn = running.get(teraId);
       return turn !== undefined && !turn.stopped;
+    },
+
+    hasTurn(teraId) {
+      return running.has(teraId);
     },
 
     steer(teraId, input) {

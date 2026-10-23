@@ -1,4 +1,4 @@
-import { mkdirSync } from "node:fs";
+import { mkdirSync, rmSync } from "node:fs";
 import { join, posix } from "node:path";
 import { containerHomeDir } from "./container";
 import { WORKDIR_IN_CONTAINER } from "./contract";
@@ -62,4 +62,17 @@ export function teraWorkspaceDir(dataDir: string, teraId: string): string {
 export function ensureTeraWorkspace(dataDir: string, teraId: string): string {
   mkdirSync(teraWorkspaceDir(dataDir, teraId), { recursive: true });
   return teraWorkspaceInContainer(teraId);
+}
+
+/**
+ * その Tera の作業フォルダを、中身ごと消す。
+ *
+ * Tera を消したときに呼ぶ。コンテナの中のファイルも、ホームをマウントしている
+ * ホスト側から消す（コンテナが止まっていても消せる）。
+ * フォルダが無くても失敗しない（何度呼んでも同じ結果になる）。
+ * コンテナの中のファイルは --userns keep-id でホストのユーザーの持ち物になるので、
+ * ここからそのまま消せる。
+ */
+export function removeTeraWorkspace(dataDir: string, teraId: string): void {
+  rmSync(teraWorkspaceDir(dataDir, teraId), { recursive: true, force: true });
 }

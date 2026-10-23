@@ -70,6 +70,11 @@ export type Compaction = {
   check(teraId: string): void;
   /** いま畳む（予約からもテストからも呼ぶ）。同じ Tera で重ねて走らせない。 */
   update(teraId: string, options?: { force?: boolean }): Promise<void>;
+  /**
+   * その Tera の畳みをやめる。予約を外し、走っている分は打ち切って終わるまで待つ。
+   * Tera を消す前に呼ぶ（同じ id を作り直した先へ、古い会話の要約が書かれるのを防ぐ）。
+   */
+  cancel(teraId: string): Promise<void>;
   /** 予約を片付ける。 */
   close(): void;
 };
@@ -89,8 +94,8 @@ export type CreateCompactionOptions = {
 export function createCompaction(options: CreateCompactionOptions): Compaction {
   const { store, engine, log, contextLimit } = options;
   const now = options.now ?? Date.now;
-  /** 走っている更新。同じ Tera で 2 つ重ねないための 1 箇所。 */
-  const running = new Map<string, Promise<void>>();
+  /** 走っている更新。同じ Tera で 2 つ重ねないための 1 箇所。消すときに打ち切れるよう、口も持つ。 */
+  const running = new Map<string, { job: Promise<void>; controller: AbortController }>();
   /** 3 時間後の予約。ターンのたびに引き直す。 */
   const timers = new Map<string, ReturnType<typeof setTimeout>>();
 
@@ -114,7 +119,7 @@ export function createCompaction(options: CreateCompactionOptions): Compaction {
   }
 
   function check(teraId: string): void {
-    cancel(teraId);
+    clearTimer(teraId);
 
     const state = store.readCompaction(teraId);
     // 件数・最終時刻・文字数だけを SQL で見る（全履歴の JSON を開かない）。
@@ -145,7 +150,7 @@ export function createCompaction(options: CreateCompactionOptions): Compaction {
     );
   }
 
-  function cancel(teraId: string): void {
+  function clearTimer(teraId: string): void {
     const timer = timers.get(teraId);
     if (timer === undefined) return;
 
@@ -155,23 +160,40 @@ export function createCompaction(options: CreateCompactionOptions): Compaction {
 
   function update(teraId: string, options: { force?: boolean } = {}): Promise<void> {
     const current = running.get(teraId);
-    if (current !== undefined) return current;
+    if (current !== undefined) return current.job;
 
-    const job = run(teraId, options.force === true).finally(() => running.delete(teraId));
-    running.set(teraId, job);
+    const controller = new AbortController();
+    const job = run(teraId, options.force === true, controller.signal).finally(() => running.delete(teraId));
+    running.set(teraId, { job, controller });
     return job;
   }
 
-  async function run(teraId: string, force: boolean): Promise<void> {
+  /** 走っている畳みを打ち切り、終わるまで待つ（Tera を消すときに呼ぶ）。 */
+  async function cancel(teraId: string): Promise<void> {
+    clearTimer(teraId);
+
+    const current = running.get(teraId);
+    if (current === undefined) return;
+
+    current.controller.abort();
+    await current.job;
+  }
+
+  async function run(teraId: string, force: boolean, cancelSignal: AbortSignal): Promise<void> {
     // 更新そのものに期限を置く（長い履歴でも、1 回で際限なく呼び続けない）。
-    const signal = AbortSignal.timeout(UPDATE_TIMEOUT_MS);
+    // Tera を消すときは cancelSignal で、待たずに打ち切る。
+    const signal = AbortSignal.any([AbortSignal.timeout(UPDATE_TIMEOUT_MS), cancelSignal]);
 
     try {
       await compact(teraId, force, signal);
     } catch (error) {
       // 畳めなくても、畳んでいないやり取りは生のままモデルへ渡る（内容は失われない）。
       // ただし黙って続けない。理由を端末へ出す。
-      log(`  圧縮: 畳めませんでした（${teraId}） ${describeError(error)}`);
+      log(
+        cancelSignal.aborted
+          ? `  圧縮: 削除されたため打ち切りました（${teraId}）`
+          : `  圧縮: 畳めませんでした（${teraId}） ${describeError(error)}`,
+      );
     }
   }
 
@@ -299,7 +321,7 @@ export function createCompaction(options: CreateCompactionOptions): Compaction {
         resolve();
       };
       signal.addEventListener("abort", finish, { once: true });
-      void current.then(finish, finish);
+      void current.job.then(finish, finish);
     });
   }
 
@@ -308,7 +330,7 @@ export function createCompaction(options: CreateCompactionOptions): Compaction {
     timers.clear();
   }
 
-  return { context, check, update, close };
+  return { context, check, update, cancel, close };
 }
 
 /**

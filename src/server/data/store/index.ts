@@ -138,6 +138,17 @@ export function createStore(dbPath: string, options: CreateStoreOptions = {}): S
       return create(input);
     },
 
+    deleteTera(id) {
+      // identity・要約・履歴は、外部キーの連鎖でこの 1 文と一緒に消える。
+      return q.deleteTera.run(id).changes > 0;
+    },
+
+    ensureAtLeastOneTera() {
+      // 既に 1 体でも居れば、名前も作成日時も変えない（起動のたびに呼ばれる）。
+      if (store.listTeras().length > 0) return null;
+      return store.ensureTera(DEFAULT_TERA_ID, DEFAULT_TERA_NAME);
+    },
+
     listMessagesPage(teraId, page) {
       const rows = q.selectMessagePage.all(teraId, page.before, page.before, page.limit + 1);
       const hasMore = rows.length > page.limit;
@@ -205,7 +216,8 @@ export function createStore(dbPath: string, options: CreateStoreOptions = {}): S
     },
   };
 
-  // 会話の持ち主が無いと何も始まらないので、起動時に 1 体だけ用意する。
-  store.ensureTera(DEFAULT_TERA_ID, DEFAULT_TERA_NAME);
+  // 会話の持ち主が 1 体も無いと何も始まらないので、1 体も無いときだけ既定の Tera を用意する。
+  // 消した Tera は、再起動しても戻さない（戻すのは、最後の 1 体を消したその場だけ）。
+  store.ensureAtLeastOneTera();
   return store;
 }

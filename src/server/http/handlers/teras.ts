@@ -1,5 +1,6 @@
 import { resolveModel } from "../../provider/routing";
 import { saveUploads } from "../../computer/uploads";
+import { ensureTeraWorkspace, removeTeraWorkspace } from "../../computer/workspaces";
 import { toMessageView } from "../../agent/message-view";
 import { createTurns } from "../../agent/turns";
 import { AppError, ConflictError, ValidationError } from "../../errors";
@@ -18,9 +19,9 @@ type MessagesRequest = ApiRequest<{ id: string }> & { url: string };
  * Tera（会話の持ち主）と、その 1 本の履歴。
  */
 export function terasHandlers(
-  deps: Pick<ApiDeps, "store" | "engine" | "settings" | "container" | "catalog" | "compaction">,
+  deps: Pick<ApiDeps, "store" | "engine" | "settings" | "container" | "catalog" | "compaction" | "discord" | "dataDir">,
 ) {
-  const { store, settings, container } = deps;
+  const { store, settings, container, compaction, discord, dataDir } = deps;
 
   // 同じ Tera でターンが重なると、履歴の並びと引き受けの待ちが壊れる。
   // 「実行中かどうか」はターンの側が持つ（HTTP 層へ Set を渡さない）。
@@ -29,6 +30,38 @@ export function terasHandlers(
   return {
     /** 画面に並べる Tera の一覧。既定の Tera と、エージェントが作った Tera。 */
     listTeras(): Response {
+      return json({ teras: store.listTeras() });
+    },
+
+    /**
+     * Tera を消す。履歴・identity・Discord の webhook・作業フォルダも一緒に消す。
+     *
+     * 応答を生成しているターンがある間は消さない（消えた保存先へ書き足そうとするため）。
+     * 最後の 1 体を消したときは、既定の Tera を作り直す（画面の一覧を空にしない）。
+     * 戻り値は消したあとの一覧で、画面はそれをそのまま置き換えられる。
+     */
+    async deleteTera(req: ApiRequest<{ id: string }>): Promise<Response> {
+      const teraId = req.params.id;
+      requireTera(store, teraId);
+
+      // 停止を押したターンも、終わるまで履歴を書き足す。登録があるうちは消さない。
+      if (turns.hasTurn(teraId)) {
+        throw new ConflictError("turn_in_progress", "この Tera は応答を生成しているため削除できません");
+      }
+
+      // 走っている畳みを止めてから消す（同じ id を作り直した先へ、古い要約を書かせない）。
+      await compaction.cancel(teraId);
+
+      // webhook の置き場は Tera の一覧から作るので、行を消す前に消す。
+      discord.clear(teraId);
+      // 履歴・identity は行と一緒に消える。作業フォルダ（アップロードを含む）はここで消す。
+      removeTeraWorkspace(dataDir, teraId);
+      store.deleteTera(teraId);
+
+      // 最後の 1 体だったときは、既定の Tera が作り直されている。その作業フォルダも用意する。
+      const recreated = store.ensureAtLeastOneTera();
+      if (recreated !== null) ensureTeraWorkspace(dataDir, recreated.id);
+
       return json({ teras: store.listTeras() });
     },
 

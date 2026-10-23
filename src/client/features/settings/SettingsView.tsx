@@ -8,10 +8,12 @@ import { ConnectorsSettingsView } from "../connectors/ConnectorsSettingsView";
 import { McpSettingsView } from "../mcp/McpSettingsView";
 import { ModelSettingsView } from "../model/ModelSettingsView";
 import { ProviderSettingsView } from "../providers/ProviderSettingsView";
+import { TeraSettingsView } from "../teras/TeraSettingsView";
 
 /** 左ペインに並べるカテゴリ。増やすときはここに足す。 */
 const CATEGORIES: readonly { id: SettingsCategory; labelKey: MessageKey }[] = [
   { id: "general", labelKey: "settings.general" },
+  { id: "teras", labelKey: "settings.teras" },
   { id: "model", labelKey: "settings.model" },
   { id: "providers", labelKey: "settings.providers" },
   { id: "connectors", labelKey: "settings.connectors" },
@@ -75,6 +77,7 @@ export function SettingsView() {
               移動は付けず、濃さの変化だけにする。 */}
           <div key={category} class="tera-fade-in">
             {category === "general" && <GeneralSettings />}
+            {category === "teras" && <TeraSettingsView />}
             {category === "model" && <ModelSettingsView />}
             {category === "providers" && <ProviderSettingsView />}
             {category === "connectors" && <ConnectorsSettingsView />}

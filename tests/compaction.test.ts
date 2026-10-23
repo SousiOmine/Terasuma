@@ -100,6 +100,20 @@ function createGate() {
   return { gate, open: () => open() };
 }
 
+/**
+ * 中断されたときだけ失敗する、終わらない応答。
+ * Tera を消すときに、走っている畳みを打ち切れることを確かめるのに使う。
+ */
+function cancelableSummary(signal: AbortSignal): Promise<string> {
+  return new Promise<string>((_resolve, reject) => {
+    if (signal.aborted) {
+      reject(signal.reason);
+      return;
+    }
+    signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+  });
+}
+
 async function waitFor(condition: () => boolean, timeoutMs = 2_000): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
@@ -654,6 +668,65 @@ describe("文脈の組み立て", () => {
 
     gate.open();
     await job;
+    compaction.close();
+  });
+});
+
+describe("削除に備えて止める", () => {
+  test("cancel は走っている畳みを打ち切り、要約を書かずに終わる", async () => {
+    const store = makeStore();
+    seed(store, 1_000, 30);
+
+    const logs: string[] = [];
+    const fake = createEngine((input) => cancelableSummary(input.signal));
+    const compaction = compactionWith(store, fake.engine, {
+      limit: 1_000_000,
+      log: (message) => logs.push(message),
+    });
+
+    const job = compaction.update(DEFAULT_TERA_ID, { force: true });
+    // 要約の呼び出しが始まる（＝走っている）まで待つ。
+    await waitFor(() => fake.calls.length > 0);
+
+    await compaction.cancel(DEFAULT_TERA_ID);
+    await job;
+
+    expect(store.readCompaction(DEFAULT_TERA_ID).summary).toBe("");
+    expect(logs.some((line) => line.includes("削除されたため打ち切りました"))).toBe(true);
+    compaction.close();
+  });
+
+  test("cancel は予約も外す（予約した畳みは走らない）", async () => {
+    const store = makeStore();
+    const last = seed(store, 1_000, 5);
+
+    const fake = createEngine(() => SUMMARY);
+    // 20ms 後に畳む予約になる時刻にする。
+    const compaction = compactionWith(store, fake.engine, {
+      limit: 1_000_000,
+      now: () => last + IDLE_MS - 20,
+    });
+
+    compaction.check(DEFAULT_TERA_ID);
+    await compaction.cancel(DEFAULT_TERA_ID);
+    await tick();
+    await tick();
+
+    expect(fake.calls).toHaveLength(0);
+    expect(store.readCompaction(DEFAULT_TERA_ID).summary).toBe("");
+    compaction.close();
+  });
+
+  test("走っている畳みが無ければ、cancel は何もしない", async () => {
+    const store = makeStore();
+    seed(store, 1_000, 5);
+
+    const fake = createEngine(() => SUMMARY);
+    const compaction = compactionWith(store, fake.engine, { limit: 1_000_000 });
+
+    await compaction.cancel(DEFAULT_TERA_ID);
+
+    expect(fake.calls).toHaveLength(0);
     compaction.close();
   });
 });

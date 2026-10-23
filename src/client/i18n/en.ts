@@ -17,6 +17,11 @@ export const en = {
   "common.loading": "Loading…",
 
   "tera.empty": "No Teras yet",
+  "tera.deleteTitle": "Delete this Tera?",
+  "tera.deleteMessage":
+    "Its conversation, identity, Discord webhook and everything in its working folder are deleted. This cannot be undone. If this is the last Tera, a default one is created again.",
+  "tera.deleteWithName": "Delete {name}",
+  "tera.menu": "{name} actions",
 
   "chat.empty.title": "What can I help you with?",
   "chat.empty.description": "Look things up, organize files, and use the screen. It all happens inside this computer.",
@@ -79,6 +84,10 @@ export const en = {
   "settings.title": "Settings",
   "settings.back": "Back to chat",
   "settings.general": "General",
+  "settings.teras": "Teras",
+  "settings.teras.description":
+    "The assistants that own a conversation. Deleting one removes its conversation, identity, Discord webhook and working folder.",
+  "settings.teras.id": "Workspace folder: {id}",
   "settings.language.label": "Language",
   "settings.language.description": "Language used in the interface and in the agent's replies.",
 
