@@ -16,7 +16,8 @@ import { McpServerNotFound } from "../../mcp/manager";
 import type { WebSearchManager } from "../../websearch-manager";
 import type { Catalog } from "../../provider/catalog";
 import type { ConnectionChecker, ProviderModelLister } from "../../provider/connection";
-import { AppError } from "../../errors";
+import { AppError, ValidationError } from "../../errors";
+import { CLIENT_HEADER } from "../../../shared/api/events";
 
 /**
  * ハンドラが共有する型と、前提を確かめる小さな関数。
@@ -84,6 +85,21 @@ export type ApiDeps = {
 /** Tera が無ければ 404。あれば何もしない。 */
 export function requireTera(store: Store, id: string): void {
   if (store.getTera(id) === null) throw new AppError("tera_not_found", 404, `Tera ${id} はありません`);
+}
+
+/**
+ * 要求した画面（タブ）の id を読む。
+ *
+ * 送った画面は、送信の応答としてターンの出来事を受け取っている。購読へも同じものを配ると
+ * 二重になるので、サーバはこの id の購読を飛ばす。id は画面が 1 回の読み込みごとに作り、
+ * 会話の要求すべてに付ける（付いていなければ、どの購読を飛ばせばよいか決められない）。
+ */
+export function requireClientId(headers: Headers): string {
+  const clientId = headers.get(CLIENT_HEADER)?.trim() ?? "";
+  if (clientId.length === 0) {
+    throw new ValidationError(`${CLIENT_HEADER} ヘッダに、画面の id を指定してください`);
+  }
+  return clientId;
 }
 
 /** プロバイダが設定されていなければ 404。 */

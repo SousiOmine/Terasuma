@@ -1,5 +1,6 @@
 import { isRecord } from "./guards";
 import { API_ERROR_CODES } from "./api/error";
+import type { ConversationEvent } from "./api/events";
 import type {
   ChatAttachment,
   ChatAttachmentView,
@@ -156,5 +157,19 @@ export function isChatEvent(value: unknown): value is ChatEvent {
       );
     default:
       return false;
+  }
+}
+
+/** 会話の購読で流れてくるイベント 1 つ。 */
+export function isConversationEvent(value: unknown): value is ConversationEvent {
+  if (!isRecord(value)) return false;
+
+  switch (value.type) {
+    case "sync":
+      return isNumber(value.lastSeq) && typeof value.turnRunning === "boolean";
+    case "turn-ended":
+      return true;
+    default:
+      return isChatEvent(value);
   }
 }

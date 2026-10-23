@@ -12,14 +12,16 @@ import {
 import type { SettingsStore } from "../src/server/data/settings";
 import { DEFAULT_TERA_ID } from "../src/server/data/store";
 import type { ModelSettingsView, ProviderCheckResult, ProviderView, ReasoningView } from "../src/shared/api/settings";
+import { CLIENT_HEADER } from "../src/shared/api/events";
 import { withServer } from "./harness";
+import { TEST_CLIENT } from "./support";
 
 /** チャットの送信は multipart で受ける。 */
 function turnRequest(content: string, language = "ja"): RequestInit {
   const form = new FormData();
   form.append("content", content);
   form.append("language", language);
-  return { method: "POST", body: form };
+  return { method: "POST", body: form, headers: { [CLIENT_HEADER]: TEST_CLIENT } };
 }
 
 /** テストで使うカタログの中身。deepseek はカタログのプロバイダ、custom-1 は独自エンドポイント。 */

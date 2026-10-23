@@ -6,7 +6,9 @@ import { teraWorkspaceDir } from "../src/server/computer/workspaces";
 import { DEFAULT_TERA_ID, DEFAULT_TERA_IDENTITY } from "../src/server/data/store";
 import { parseCatalog, type Catalog } from "../src/server/provider/catalog";
 import type { Tera } from "../src/shared/api/message";
+import { CLIENT_HEADER } from "../src/shared/api/events";
 import { withServer } from "./harness";
+import { TEST_CLIENT } from "./support";
 
 /**
  * Tera の削除。行（履歴・identity・要約は連鎖）と、Discord の webhook と、
@@ -35,7 +37,7 @@ function messageRequest(content: string): RequestInit {
   const form = new FormData();
   form.append("content", content);
   form.append("language", "ja");
-  return { method: "POST", body: form };
+  return { method: "POST", body: form, headers: { [CLIENT_HEADER]: TEST_CLIENT } };
 }
 
 /** DELETE の応答を、Tera の一覧として読む。 */

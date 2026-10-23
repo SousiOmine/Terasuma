@@ -8,6 +8,7 @@ import { parseCatalog } from "../src/server/provider/catalog";
 import { DEFAULT_TERA_ID, createStore } from "../src/server/data/store";
 import type { Store } from "../src/server/data/store";
 import { MAX_ATTACHMENTS } from "../src/shared/attachments";
+import { CLIENT_HEADER } from "../src/shared/api/events";
 import { decodeChatEvents } from "../src/shared/sse";
 import type { ApiErrorCode } from "../src/shared/api/error";
 import type {
@@ -20,7 +21,7 @@ import type {
   Tera,
 } from "../src/shared/api/message";
 import { fastMock, withServer as withTestServer } from "./harness";
-import { createContainerStub } from "./support";
+import { createContainerStub, TEST_CLIENT } from "./support";
 
 /** テスト用のカタログ。TEST_SETTINGS の deepseek を解決できるようにする。 */
 function testCatalog(): Catalog {
@@ -61,6 +62,7 @@ function messageRequest(
   return {
     method: "POST",
     body: form,
+    headers: { [CLIENT_HEADER]: TEST_CLIENT },
     ...(options.signal === undefined ? {} : { signal: options.signal }),
   };
 }
@@ -69,7 +71,7 @@ function messageRequest(
 function steerRequest(content: string): RequestInit {
   const form = new FormData();
   form.append("content", content);
-  return { method: "POST", body: form };
+  return { method: "POST", body: form, headers: { [CLIENT_HEADER]: TEST_CLIENT } };
 }
 
 /** 書き込まれたパスと中身を記録する、動いているコンテナの差し替え。 */

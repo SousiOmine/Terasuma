@@ -25,6 +25,10 @@ export function createRoutes(api: WithErrorHandling<ApiHandlers>, screen: Screen
       GET: api.listMessages,
       POST: api.sendMessage,
     },
+    // 同じ Tera を開いている画面の購読。ほかの画面で起きたターンの出来事を、そのまま流す。
+    "/api/teras/:id/events": {
+      GET: api.subscribeEvents,
+    },
     // 応答を生成しているターンの途中へ、発言を足す（終わっていれば 409）。
     "/api/teras/:id/steer": {
       POST: api.steerTurn,

@@ -1,4 +1,5 @@
 import { signal } from "@preact/signals";
+import type { ConversationEvent, ConversationSync } from "../../shared/api/events";
 import type { ChatEvent, ChatMessageView, MessagePart } from "../../shared/api/message";
 import { locale } from "../i18n";
 import * as api from "../lib/api";
@@ -8,6 +9,7 @@ import { beginConnectorRequest, endConnectorRequest, resetConnectorRequest } fro
 import { beginEnvRequest, endEnvRequest, resetEnvRequest } from "./env-request";
 import { clearChatError, showChatError } from "./failure";
 import { answerHandover, beginHandover, endHandover, handoverActive } from "./handover";
+import { mergeLatestPage, mergeSaved, newestSavedSeq, UNSAVED_SEQ } from "./history";
 import { activeTeraId, refreshTeras } from "./session";
 
 /**
@@ -16,6 +18,9 @@ import { activeTeraId, refreshTeras } from "./session";
  * 確定した会話は messages、いま届いているターンは liveTurn に置く。
  * ツールの呼び出しと結果は画面に出さないので持たない（引き受けの判定にだけ使う）。
  * 画面に出るのは、モデルの本文・添付・注記だけ。
+ *
+ * 同じ Tera を開いているほかの画面で起きたターンも、購読（streamConversation）から
+ * 同じ形のイベントとして届く。どちらで起きたターンも、同じように状態へ反映する。
  */
 
 export const messages = signal<readonly ChatMessageView[]>([]);
@@ -45,6 +50,13 @@ export const isLoadingOlderMessages = signal(false);
 /** 1 回に読む履歴の件数。初回も、上端で古い履歴を足すときも同じ。 */
 const MESSAGES_PAGE_SIZE = 20;
 
+/**
+ * 購読が切れたときに、繋ぎ直すまでの待ち。試すたびに倍にし、上限で止める。
+ * 画面には理由を出さない。履歴は読めているので、繋がれば内容は揃う。
+ */
+const RESUBSCRIBE_DELAY_MS = 500;
+const RESUBSCRIBE_MAX_DELAY_MS = 5_000;
+
 /** 読み込んだ中で最も古い seq。次に古いページを読むときの before。 */
 let oldestSeq: number | null = null;
 
@@ -69,9 +81,19 @@ let current: CurrentTurn | null = null;
  */
 const teraCreateCalls = new Set<string>();
 
+/** 同じ Tera を開いている、ほかの画面からの更新の購読。 */
+let subscription: AbortController | null = null;
+
+/**
+ * 読み直しのたびに進める番号。
+ * 読み直している間に次の読み直しが始まったら、古い応答は捨てる。
+ */
+let refreshGeneration = 0;
+
 export async function openTera(id: string): Promise<void> {
   // 表示中のターンは捨てて、新しい Tera の履歴を読む。
   // サーバ側のターンは、接続が切れた時点でそれまでの内容を保存して終わる。
+  closeSubscription();
   current?.controller.abort();
   current = null;
   liveTurn.value = null;
@@ -105,7 +127,151 @@ export async function openTera(id: string): Promise<void> {
     messages.value = [];
     showChatError(error);
   } finally {
-    if (generation === messagesGeneration) isLoadingMessages.value = false;
+    if (generation === messagesGeneration) {
+      isLoadingMessages.value = false;
+      // 履歴を読んだあとから購読を始める。読んでいる間にほかの画面で起きたことは、
+      // 最初に届く sync（最新の連番）を見て取り直す。
+      openSubscription(id, generation);
+    }
+  }
+}
+
+/** 購読を張る。前の Tera の購読は畳む。 */
+function openSubscription(teraId: string, generation: number): void {
+  closeSubscription();
+
+  const controller = new AbortController();
+  subscription = controller;
+  void followConversation(teraId, generation, controller);
+}
+
+function closeSubscription(): void {
+  subscription?.abort();
+  subscription = null;
+}
+
+/**
+ * 購読を張り、切れたら繋ぎ直す。
+ * 届いたイベントは、ほかの画面で起きたターンの出来事として、そのまま状態へ反映する。
+ */
+async function followConversation(teraId: string, generation: number, controller: AbortController): Promise<void> {
+  let attempt = 0;
+
+  while (!controller.signal.aborted && generation === messagesGeneration) {
+    try {
+      for await (const event of api.streamConversation(teraId, controller.signal)) {
+        // 1 つでも届いたら、次に切れたときはすぐ繋ぎ直す。
+        attempt = 0;
+        applyConversationEvent(teraId, event);
+      }
+    } catch (error) {
+      if (controller.signal.aborted) return;
+      // 消えた Tera を購読し続けても意味が無いので、繋ぎ直さずにやめる。
+      if (error instanceof ApiError && error.code === "tera_not_found") return;
+    }
+
+    if (controller.signal.aborted || generation !== messagesGeneration) return;
+    await delay(Math.min(RESUBSCRIBE_DELAY_MS * 2 ** attempt, RESUBSCRIBE_MAX_DELAY_MS));
+    attempt += 1;
+  }
+}
+
+/** 待ってから、次の繋ぎ直しを試す。 */
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** ほかの画面で起きたことを、この画面の状態へ反映する。 */
+function applyConversationEvent(teraId: string, event: ConversationEvent): void {
+  if (activeTeraId.value !== teraId) return;
+
+  if (event.type === "sync") {
+    applySync(teraId, event);
+    return;
+  }
+
+  if (event.type === "turn-ended") {
+    // 終わりを伝えるイベントは届かなかった（送った画面が途中で離れた）。それまでの内容は
+    // 保存されているので、読み直して揃える。自分の送信は、送信の側で終わりを受け取っている。
+    if (current === null) {
+      finishRemoteTurn(teraId);
+      void refreshLatest(teraId);
+    }
+    return;
+  }
+
+  applyEvent(event);
+
+  // ほかの画面のターンが始まった。ここから終わりまで、応答中として扱う。
+  if (current === null && (event.type === "user-message" || event.type === "assistant-start")) {
+    isStreaming.value = true;
+    isStopping.value = false;
+  }
+
+  // ほかの画面のターンが終わった。応答中の表示と、入力の待ちを畳む。
+  if (current === null && (event.type === "assistant-done" || event.type === "error")) {
+    finishRemoteTurn(teraId);
+    // 失敗して終わったターンは assistant-done が届かない。保存された内容を読み直す。
+    if (event.type === "error") void refreshLatest(teraId);
+  }
+}
+
+/**
+ * 購読を張った（張り直した）時点の状態へ、画面を合わせる。
+ * 購読の切れている間に起きたことは、lastSeq を見て履歴から取り直す。
+ */
+function applySync(teraId: string, sync: ConversationSync): void {
+  if (sync.turnRunning) {
+    if (current === null) {
+      // ほかの画面のターン。切れている間に変わった入力の待ちをいったん畳み、
+      // 走っているターンの続きは、このあと流れてくるイベントで改めて出す。
+      resetEnvRequest();
+      resetConnectorRequest();
+      liveTurn.value = null;
+      isStreaming.value = true;
+      isStopping.value = false;
+    }
+  } else if (current === null) {
+    // 購読の切れている間に終わったターンも、ここで畳む。
+    finishRemoteTurn(teraId);
+  }
+
+  if (sync.lastSeq > newestSavedSeq(messages.value)) void refreshLatest(teraId);
+}
+
+/** ほかの画面で走っていたターンが終わった。応答中の表示と、入力の待ちを畳む。 */
+function finishRemoteTurn(teraId: string): void {
+  // 終わりを受け取れなかったターンも、それまでの内容は画面に残す。
+  settleLiveTurn(teraId);
+  isStreaming.value = false;
+  isStopping.value = false;
+  resetEnvRequest();
+  resetConnectorRequest();
+}
+
+/**
+ * 保存されている最新のページを読み直し、手元の履歴へ重ねる。
+ * 購読の切れている間に増えた分を、取り戻すために使う。
+ */
+async function refreshLatest(teraId: string): Promise<void> {
+  // 別の Tera を開いているなら、取り直す先が違う（購読の切り替え中に呼ばれることがある）。
+  if (activeTeraId.value !== teraId) return;
+
+  const generation = ++refreshGeneration;
+  try {
+    const page = await api.listMessages(teraId, { limit: MESSAGES_PAGE_SIZE, before: null });
+    if (generation !== refreshGeneration || activeTeraId.value !== teraId) return;
+
+    const merged = mergeLatestPage(messages.value, page);
+    messages.value = merged.messages;
+    if (merged.resetOlder) {
+      oldestSeq = page.messages[0]?.seq ?? null;
+      hasOlderMessages.value = page.hasMore;
+    }
+  } catch (error) {
+    // 取り直せなかった理由は、履歴の読み込みと同じく画面に出す。
+    // もう一度必要になったとき（次に購読が切れたとき）に、また試す。
+    if (generation === refreshGeneration && activeTeraId.value === teraId) showChatError(error);
   }
 }
 
@@ -192,18 +358,24 @@ export async function sendMessage(rawContent: string, files: readonly File[]): P
 
     if (steered !== null) {
       clearChatError();
-      insertSaved(steered);
+      upsertSaved(steered);
       return;
     }
 
-    // 最後のイベントを反映し終えるまで待つ（待たずに始めると、古いターンの
-    // assistant-done が新しいターンの表示を壊す）。
-    await running?.done;
-    if (activeTeraId.value !== teraId) return;
-    if (isStreaming.value) {
-      // 待っている間に別のターンが始まった。重ねて始めず、理由を出す。
-      showChatError(new ApiError("turn_in_progress"));
-      return;
+    if (running === null) {
+      // ほかの画面のターンは、こちらの送信より先に終わっていた。応答中の表示を畳んで、
+      // 新しいターンとして送る。
+      finishRemoteTurn(teraId);
+    } else {
+      // 自分のターンの後始末が済むまで待つ（待たずに始めると、古いターンの
+      // assistant-done が新しいターンの表示を壊す）。
+      await running.done;
+      if (activeTeraId.value !== teraId) return;
+      if (isStreaming.value) {
+        // 待っている間に別のターンが始まった。重ねて始めず、理由を出す。
+        showChatError(new ApiError("turn_in_progress"));
+        return;
+      }
     }
   }
 
@@ -220,9 +392,12 @@ export async function sendMessage(rawContent: string, files: readonly File[]): P
   isStopping.value = false;
   liveTurn.value = null;
 
+  // ターンの終わりを伝えるイベントを受け取れたかどうか。
+  let ended = false;
   try {
     for await (const event of api.streamTurn(teraId, content, locale.value, files, controller.signal)) {
       applyEvent(event);
+      if (event.type === "assistant-done" || event.type === "error") ended = true;
     }
   } catch (error) {
     showChatError(error);
@@ -238,19 +413,16 @@ export async function sendMessage(rawContent: string, files: readonly File[]): P
       resetConnectorRequest();
     }
     settle();
+
+    // 終わりを受け取れなかった。サーバはそれまでの内容を保存しているので、
+    // 読み直して、仮置きを連番の付いた同じ発言へ置き換える。
+    if (!ended) void refreshLatest(teraId);
   }
 }
 
-/**
- * 保存済みの発言を、seq の順に並ぶ位置へ入れる。
- *
- * 応答中に足した発言は、送っている間にターンが終わって assistant のメッセージが
- * 先に届くことがある。読み直したときと同じ並びになるよう、末尾ではなく seq の位置へ入れる。
- */
-function insertSaved(message: ChatMessageView): void {
-  const list = messages.value;
-  const index = list.findIndex((entry) => entry.seq > message.seq);
-  messages.value = index === -1 ? [...list, message] : [...list.slice(0, index), message, ...list.slice(index)];
+/** 保存済みの発言を、seq の順に並ぶ位置へ入れる（同じ id があれば置き換える）。 */
+function upsertSaved(message: ChatMessageView): void {
+  messages.value = mergeSaved(messages.value, [message]);
 }
 
 /**
@@ -271,7 +443,7 @@ function settleLiveTurn(teraId: string): void {
     {
       id: live.id,
       teraId,
-      seq: 0,
+      seq: UNSAVED_SEQ,
       role: "assistant",
       content: "",
       attachments: null,
@@ -306,8 +478,9 @@ function applyEvent(event: ChatEvent): void {
 
   switch (effect.kind) {
     case "message":
-      if (effect.message.role === "assistant") liveTurn.value = null;
-      messages.value = [...messages.value, effect.message];
+      // 保存された内容で置き換わるので、いま伸びていたターンは畳む。
+      if (effect.message.role === "assistant" && liveTurn.value?.id === effect.message.id) liveTurn.value = null;
+      upsertSaved(effect.message);
       break;
     case "assistant-start":
       liveTurn.value = { id: effect.id, createdAt: effect.createdAt, parts: [] };

@@ -1,13 +1,16 @@
 import { resolveModel } from "../../provider/routing";
 import { saveUploads } from "../../computer/uploads";
 import { ensureTeraWorkspace, removeTeraWorkspace } from "../../computer/workspaces";
+import { createConversationBroadcast } from "../../agent/broadcast";
 import { toMessageView } from "../../agent/message-view";
 import { createTurns } from "../../agent/turns";
 import { AppError, ConflictError, ValidationError } from "../../errors";
+import type { ConversationEvent } from "../../../shared/api/events";
+import { encodeChatEvent, encodeConversationEvent } from "../../../shared/sse";
 import { readSteerForm, readTurnForm } from "../body";
 import { json, noContent } from "../respond";
 import { createSseResponse } from "../sse";
-import { type ApiDeps, type ApiRequest, requireTera } from "./shared";
+import { type ApiDeps, type ApiRequest, requireClientId, requireTera } from "./shared";
 
 /** 履歴を 1 回に返す上限。画面はこれより小さい 20 件ずつ読む。 */
 const MAX_MESSAGE_PAGE = 100;
@@ -26,6 +29,8 @@ export function terasHandlers(
   // 同じ Tera でターンが重なると、履歴の並びと引き受けの待ちが壊れる。
   // 「実行中かどうか」はターンの側が持つ（HTTP 層へ Set を渡さない）。
   const turns = createTurns(deps);
+  // 同じ Tera を開いているほかの画面への配り口。送った画面自身には配らない。
+  const broadcast = createConversationBroadcast();
 
   return {
     /** 画面に並べる Tera の一覧。既定の Tera と、エージェントが作った Tera。 */
@@ -83,12 +88,35 @@ export function terasHandlers(
     },
 
     /**
+     * その Tera を開いている画面の購読。ほかの画面で起きたターンの出来事を、そのまま流す。
+     *
+     * 最初に sync（最新の連番と、ターンが走っているか）を 1 つ流す。購読を張るまでの間に
+     * 起きたことは、画面がその値を見て履歴を取り直す。状態を読むのと購読を始めるのを
+     * 同じ区切りで行うので、その間の出来事を取りこぼさない。
+     */
+    subscribeEvents(req: ApiRequest<{ id: string }>): Response {
+      const teraId = req.params.id;
+      requireTera(store, teraId);
+      const clientId = requireClientId(req.headers);
+
+      const sync: ConversationEvent = {
+        type: "sync",
+        lastSeq: store.lastSeq(teraId),
+        turnRunning: turns.isRunning(teraId),
+      };
+      const subscription = broadcast.subscribe(teraId, clientId, req.signal);
+      return createSseResponse(startWith(sync, subscription), encodeConversationEvent);
+    },
+
+    /**
      * ユーザー発言を保存し、そのターンの応答を SSE で流す。
      * 会話は Tera ごとに 1 本なので、履歴はこの Tera に追記されていく。
+     * 同じ出来事は、この Tera を開いているほかの画面にも配る（送った画面には配らない）。
      */
     async sendMessage(req: ApiRequest<{ id: string }>): Promise<Response> {
       // 無い Tera へ大きなファイルを送られたとき、本文を読む前に断る。
       requireTera(store, req.params.id);
+      const clientId = requireClientId(req.headers);
 
       const form = await readTurnForm(req);
       if (form.content.length === 0 && form.files.length === 0) {
@@ -113,7 +141,7 @@ export function terasHandlers(
       if (events === null) {
         throw new ConflictError("turn_in_progress", "この Tera はほかで応答を生成しています");
       }
-      return createSseResponse(events);
+      return createSseResponse(broadcast.relay(req.params.id, events, clientId), encodeChatEvent);
     },
 
     /**
@@ -123,6 +151,7 @@ export function terasHandlers(
      */
     async steerTurn(req: ApiRequest<{ id: string }>): Promise<Response> {
       requireTera(store, req.params.id);
+      const clientId = requireClientId(req.headers);
 
       // 足す先が無ければ、ファイルを置く前に断る（置いても誰も読まない）。
       if (!turns.isRunning(req.params.id)) throw noTurnError();
@@ -138,6 +167,9 @@ export function terasHandlers(
       const message = turns.steer(req.params.id, { content: form.content, attachments });
       // 本文を読んでいる間にターンが終わった。画面は新しいターンとして送り直せる。
       if (message === null) throw noTurnError();
+
+      // 足した発言は、この Tera を開いているほかの画面にも出す（送った画面には出さない）。
+      broadcast.publish(req.params.id, { type: "user-message", message: toMessageView(message) }, clientId);
       return json({ message });
     },
 
@@ -157,6 +189,15 @@ export function terasHandlers(
 /** ターンが動いていないときの失敗。 */
 function noTurnError(): AppError {
   return new ConflictError("turn_not_running", "この Tera は応答を生成していません");
+}
+
+/** 最初の 1 つ（いまの状態）を流してから、あとに続くイベントを流す。 */
+async function* startWith(
+  head: ConversationEvent,
+  rest: AsyncIterable<ConversationEvent>,
+): AsyncGenerator<ConversationEvent> {
+  yield head;
+  yield* rest;
 }
 
 /** 1 ページの件数。省略は受け付けない（読む量を呼ぶ側に決めさせる）。 */

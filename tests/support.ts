@@ -496,3 +496,9 @@ export const TEST_SETTINGS: FileSettings = {
   model: "deepseek/deepseek-flash",
   providers: { deepseek: { apiKey: "test-key" } },
 };
+
+/**
+ * テストから会話の要求を送るときの、画面（タブ）の id。
+ * 購読へ自分の出来事を配らないための識別なので、購読を確かめないテストでは同じ値で足りる。
+ */
+export const TEST_CLIENT = "test-client";

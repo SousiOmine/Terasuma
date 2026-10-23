@@ -147,6 +147,8 @@ export type MessageLog = {
   listMessagesPage(teraId: string, page: MessagePageQuery): MessagePageResult;
   /** seq より後のメッセージ（古い順）。まだ畳んでいない生の履歴を取り出す。 */
   listMessagesSince(teraId: string, seq: number): ChatMessage[];
+  /** その Tera で保存されている最新の seq。まだ 1 件も無ければ 0。 */
+  lastSeq(teraId: string): number;
   /**
    * 期間で絞ったメッセージ（古い順）。since 以上 until 未満。
    * 端は null で「制限しない」を表す（0 時と 0 を取り違えないよう、時刻ではなく null で表す）。

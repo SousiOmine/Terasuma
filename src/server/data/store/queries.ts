@@ -46,6 +46,10 @@ export function prepareQueries(db: Database) {
     `SELECT ${MESSAGE_COLUMNS}
      FROM messages WHERE tera_id = ? AND seq > ? ORDER BY seq ASC`,
   );
+  // 画面が履歴を取り直すべきかを決めるための、最新の連番。1 件も無ければ 0 が返る。
+  const selectLastSeq = db.query<{ seq: number }, [string]>(
+    "SELECT COALESCE(MAX(seq), 0) AS seq FROM messages WHERE tera_id = ?",
+  );
   // 端が null のときは、その側を制限しない。4 通りの組み合わせを 1 本の文で受ける。
   const selectMessagesBetween = db.query<
     MessageRow,
@@ -133,6 +137,7 @@ export function prepareQueries(db: Database) {
     deleteTera,
     selectMessagePage,
     selectMessagesSince,
+    selectLastSeq,
     selectMessagesBetween,
     selectPendingStats,
     insertMessage,

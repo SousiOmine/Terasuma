@@ -16,6 +16,7 @@ import type { Compaction } from "../../src/server/agent/compaction";
 import type { ContainerManager } from "../../src/server/computer/container";
 import { createStore, type Store } from "../../src/server/data/store";
 import type { ReplyLanguage } from "../../src/shared/language";
+import { CLIENT_HEADER } from "../../src/shared/api/events";
 import { decodeChatEvents } from "../../src/shared/sse";
 import { TOOL_CALL_TOOL_NAME } from "../../src/shared/tools";
 import type { ChatEvent, ChatMessageView, MessagePage, MessagePart, TokenUsage } from "../../src/shared/api/message";
@@ -87,6 +88,7 @@ export async function withLiveServer(run: (harness: LiveHarness) => Promise<void
         const response = await fetch(new URL(`/api/teras/${teraId}/messages`, base), {
           method: "POST",
           body: form,
+          headers: { [CLIENT_HEADER]: "live-test" },
         });
         expect(response.status, "送信が失敗した").toBe(200);
 

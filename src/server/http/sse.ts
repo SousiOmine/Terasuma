@@ -1,14 +1,11 @@
-import { encodeChatEvent } from "../../shared/sse";
-import type { ChatEvent } from "../../shared/api/message";
-
 /**
- * 1 ターン分のイベントを SSE として流す。
+ * 1 本のイベント列を SSE として流す。
  *
  * クライアントが読むたびに、次のイベントを 1 つずつ返す。pull ベースなので、
  * 相手が読まなくなれば cancel が呼ばれ、生成側も止まる。
  *
  * 次のイベントが来ないまま間隔が空いたら、コメント行を流して接続を保つ。
- * 止まった待ち（ユーザーの操作、長い思考）で切れないようにするため。
+ * 止まった待ち（ユーザーの操作、長い思考、ほかの画面の送信待ち）で切れないようにするため。
  * タイマーは待っている間だけ動かし、イベントが来たら必ず止める。
  */
 
@@ -22,10 +19,10 @@ const HEARTBEAT_INTERVAL_MS = 5_000;
 /** 何も流れない間に流すコメント行（SSE の仕様上、読む側は無視する）。 */
 const HEARTBEAT_FRAME = ": heartbeat\n\n";
 
-export function createSseResponse(events: AsyncIterable<ChatEvent>): Response {
+export function createSseResponse<T>(events: AsyncIterable<T>, encode: (event: T) => string): Response {
   const iterator = events[Symbol.asyncIterator]();
   const encoder = new TextEncoder();
-  let pending: Promise<IteratorResult<ChatEvent>> | null = null;
+  let pending: Promise<IteratorResult<T>> | null = null;
   let heartbeat: ReturnType<typeof setTimeout> | null = null;
 
   function stopHeartbeat(): void {
@@ -66,7 +63,7 @@ export function createSseResponse(events: AsyncIterable<ChatEvent>): Response {
         controller.close();
         return;
       }
-      controller.enqueue(encoder.encode(encodeChatEvent(outcome.result.value)));
+      controller.enqueue(encoder.encode(encode(outcome.result.value)));
     },
     async cancel() {
       stopHeartbeat();

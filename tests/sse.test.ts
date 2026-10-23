@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { decodeChatEvents, encodeChatEvent } from "../src/shared/sse";
+import {
+  decodeChatEvents,
+  decodeConversationEvents,
+  encodeChatEvent,
+  encodeConversationEvent,
+} from "../src/shared/sse";
+import type { ConversationEvent } from "../src/shared/api/events";
 import type { ChatEvent, TextPart } from "../src/shared/api/message";
 
 const part: TextPart = { type: "text", text: "こんにちは", at: 2 };
@@ -80,5 +86,20 @@ describe("SSE", () => {
 
   test("JSON として読めないフレームは、そのまま捨てずに例外を投げる", () => {
     expect(() => decodeChatEvents("data: not-json\n\n")).toThrow();
+  });
+
+  test("会話の購読のイベント（sync・turn-ended）も往復する", () => {
+    const conversation: ConversationEvent[] = [
+      { type: "sync", lastSeq: 3, turnRunning: true },
+      { type: "turn-ended" },
+      ...events,
+    ];
+    const wire = conversation.map(encodeConversationEvent).join("");
+
+    expect(decodeConversationEvents(wire).events).toEqual(conversation);
+  });
+
+  test("購読のイベントとして読めない形は、例外にする", () => {
+    expect(() => decodeConversationEvents('data: {"type":"sync","lastSeq":"x"}\n\n')).toThrow();
   });
 });

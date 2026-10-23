@@ -161,6 +161,13 @@ export function createStore(dbPath: string, options: CreateStoreOptions = {}): S
       return q.selectMessagesSince.all(teraId, seq).map(toMessage);
     },
 
+    lastSeq(teraId) {
+      // 集計は必ず 1 行返す。読めないのは保存先が壊れているときなので、黙って 0 にしない。
+      const row = q.selectLastSeq.get(teraId);
+      if (row === null) throw new Error(`最新の連番を読めませんでした: ${teraId}`);
+      return row.seq;
+    },
+
     listMessagesBetween(teraId, range) {
       return q.selectMessagesBetween.all(teraId, range.since, range.since, range.until, range.until).map(toMessage);
     },

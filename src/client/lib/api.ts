@@ -1,7 +1,8 @@
 import type { ReplyLanguage } from "../../shared/language";
 import type { DiscordWebhooksView } from "../../shared/api/discord";
+import { CLIENT_HEADER, type ConversationEvent } from "../../shared/api/events";
 import type { ModelId } from "../../shared/model";
-import { decodeChatEvents } from "../../shared/sse";
+import { decodeChatEvents, decodeConversationEvents } from "../../shared/sse";
 import type { ChatEvent, ChatMessageView, MessagePage, Tera } from "../../shared/api/message";
 import type {
   AddProviderForm,
@@ -53,6 +54,22 @@ const HANDOVER_PATH = "/api/computer/handover";
 /** コンピュータのコマンドへ渡す環境変数。 */
 const COMPUTER_ENV_PATH = "/api/computer/env";
 
+/**
+ * この画面（タブ）の id。読み込みごとに作り、会話の要求すべてに付ける。
+ * サーバは、この画面が購読している流れへ、この画面の送信を二重に流さない。
+ *
+ * crypto.randomUUID は安全な接続（HTTPS か localhost）でしか使えないため、
+ * 画面を見分けるだけのこの値は、どこでも使える getRandomValues で作る。
+ */
+const clientId = Array.from(crypto.getRandomValues(new Uint8Array(12)), (byte) =>
+  byte.toString(16).padStart(2, "0"),
+).join("");
+
+/** この画面の id を添えたヘッダ。 */
+function clientHeaders(): HeadersInit {
+  return { [CLIENT_HEADER]: clientId };
+}
+
 /** 画面に並べる Tera の一覧。 */
 export async function listTeras(): Promise<readonly Tera[]> {
   const body = await request<{ teras: Tera[] }>("/api/teras");
@@ -100,13 +117,44 @@ export async function* streamTurn(
 
   let response: Response;
   try {
-    response = await fetchOrThrow(messagesPath(teraId), { method: "POST", body: form, signal });
+    response = await fetchOrThrow(messagesPath(teraId), {
+      method: "POST",
+      body: form,
+      headers: clientHeaders(),
+      signal,
+    });
   } catch (error) {
     // 利用者の「停止」は失敗ではないので、そのまま終わる。
     if (signal.aborted) return;
     throw error;
   }
 
+  yield* readEvents(response, decodeChatEvents, signal);
+}
+
+/**
+ * その Tera の出来事の購読。同じ Tera を開いているほかの画面で起きたターンの内容も、
+ * ここからそのまま流れてくる。最初に sync が 1 つ届く（いまの連番と、ターンが走っているか）。
+ * 途中で AbortSignal が立った場合は、例外にせずそのまま終了する（画面の切り替え）。
+ */
+export async function* streamConversation(teraId: string, signal: AbortSignal): AsyncGenerator<ConversationEvent> {
+  let response: Response;
+  try {
+    response = await fetchOrThrow(`${teraPath(teraId)}/events`, { headers: clientHeaders(), signal });
+  } catch (error) {
+    if (signal.aborted) return;
+    throw error;
+  }
+
+  yield* readEvents(response, decodeConversationEvents, signal);
+}
+
+/** SSE の応答を、イベントへ戻しながら順に返す。送信の応答と購読で同じ読み方をする。 */
+async function* readEvents<T>(
+  response: Response,
+  decode: (buffer: string) => { events: T[]; rest: string },
+  signal: AbortSignal,
+): AsyncGenerator<T> {
   if (response.body === null) throw new ApiError("internal_error", "response has no body");
 
   const reader = response.body.getReader();
@@ -119,11 +167,12 @@ export async function* streamTurn(
       if (chunk.done) break;
 
       buffer += decoder.decode(chunk.value, { stream: true });
-      const { events, rest } = decodeChatEvents(buffer);
+      const { events, rest } = decode(buffer);
       buffer = rest;
       for (const event of events) yield event;
     }
   } catch (error) {
+    // 利用者の「停止」や画面の切り替えは失敗ではないので、そのまま終わる。
     if (signal.aborted) return;
     throw error;
   } finally {
@@ -144,6 +193,7 @@ export async function steerTurn(
     const body = await request<{ message: ChatMessageView }>(`${teraPath(teraId)}/steer`, {
       method: "POST",
       body: messageForm(content, files),
+      headers: clientHeaders(),
     });
     return body.message;
   } catch (error) {

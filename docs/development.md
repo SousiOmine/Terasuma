@@ -271,6 +271,25 @@ Discord はトークンではなく、Tera ごとの **webhook URL** で送る�
 以前の Bot トークン（`connections/discord.json`、`DISCORD_BOT_TOKEN`、`app_request` での Discord API）は廃止した。
 `config.json` の `connections`（Application ID）も廃止した。残っていると、未知の項目として起動に失敗するので削除する。
 
+## ほかの画面との同期
+
+同じ Tera を開いている画面どうしは、購読で揃う。画面は会話を開いている間、
+`GET /api/teras/:id/events` を 1 本張る（切れたら 0.5 秒から 5 秒までの待ちで繋ぎ直す）。
+
+- 最初に `{ type: "sync", lastSeq, turnRunning }` が 1 つ届く。`lastSeq` より新しい発言が手元に
+  無ければ、画面は最新の 20 件を読み直して seq の順に重ねる（同じ id は置き換える）。欠けが
+  1 ページに収まらないときは、古い側の読み足しを捨てて最新から読み直す。
+- そのあとに続くのは、走っているターンの出来事そのもの。送信の応答と同じ `ChatEvent` なので、
+  画面は自分が送ったターンと同じように反映する（本文・添付・注記・カード・応答中の表示）。
+  ターンの途中から購読しても、始まったところから流れる。
+- ターンの終わりを伝えるイベントを流せなかったとき（送った画面が途中で離れた）は、
+  `{ type: "turn-ended" }` を流す。受け取った画面は履歴を読み直す。
+- 送った画面の購読には配らない。同じ出来事を、送信の応答として受け取っているため。
+  どの画面かを示すのが `x-terasuma-client` ヘッダで、`POST /api/teras/:id/messages`・
+  `POST /api/teras/:id/steer`・`GET /api/teras/:id/events` のすべてに付ける（無ければ 400）。
+- 配り口はプロセスの中だけに持つ（`server/agent/broadcast.ts`）。再起動で購読は切れるが、
+  繋ぎ直したときの `sync` から揃う。
+
 ## 構成
 
 ```
@@ -290,7 +309,7 @@ src/
   client/state        signal の状態（resource.ts が読み込みの共通形）
   client/ui           見た目の部品（SecretInput・SectionHeader・ResourceList など）
   client/features     画面ごとの実装（通信は state 経由）
-  shared/api          client/server で共有する API の型（message・settings・error）
+  shared/api          client/server で共有する API の型（message・events・settings・error）
   shared              client/server 共通の純関数（ほかに依存しない）
 ```
 
