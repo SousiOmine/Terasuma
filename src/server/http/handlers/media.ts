@@ -1,6 +1,6 @@
 import type { FileStore } from "../../computer/files";
 import type { ImageStore } from "../../computer/images";
-import { jsonError } from "../respond";
+import { ResourceNotFoundError } from "../../errors";
 import type { ApiRequest } from "./shared";
 
 /**
@@ -18,7 +18,7 @@ export function mediaHandlers(deps: { images: ImageStore; files: FileStore }) {
     /** 画像。画面にそのまま表示する。 */
     readImage(req: ApiRequest<{ file: string }>): Response {
       const image = deps.images.readByName(req.params.file);
-      if (image === null) return jsonError(404, "media_not_found", `画像 ${req.params.file} はありません`);
+      if (image === null) throw new ResourceNotFoundError("media_not_found", `画像 ${req.params.file} はありません`);
 
       return new Response(new Uint8Array(image.data), {
         headers: {
@@ -31,7 +31,7 @@ export function mediaHandlers(deps: { images: ImageStore; files: FileStore }) {
     /** 画像以外のファイル。ダウンロードとして返す。 */
     readFile(req: ApiRequest<{ id: string }>): Response {
       const file = deps.files.read(req.params.id);
-      if (file === null) return jsonError(404, "media_not_found", `ファイル ${req.params.id} はありません`);
+      if (file === null) throw new ResourceNotFoundError("media_not_found", `ファイル ${req.params.id} はありません`);
 
       return new Response(new Uint8Array(file.data), {
         headers: {

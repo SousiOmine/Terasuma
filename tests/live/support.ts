@@ -9,49 +9,16 @@
  * 会話はメモリ上の DB に保存するので、端末に残っている会話には触れない。
  */
 import { expect } from "bun:test";
-import { join } from "node:path";
 import { loadConfig } from "../../src/config";
-import { createCodingToolset } from "../../src/server/agent/tools/coding";
-import { createComputerToolset } from "../../src/server/agent/tools/computer";
-import { createAttachmentTools } from "../../src/server/agent/tools/attachments";
-import { createHistoryToolset } from "../../src/server/agent/tools/history";
-import { createWebSearchToolset } from "../../src/server/agent/tools/web";
-import { createWebSearchManager } from "../../src/server/websearch-manager";
-import {
-  createContainerManager,
-  WORKDIR_IN_CONTAINER,
-  type ContainerManager,
-} from "../../src/server/computer/container";
-import { createEnvRequests } from "../../src/server/computer/env";
-import { createFileStore } from "../../src/server/computer/files";
-import { createConnections } from "../../src/server/connections/manager";
-import { createConnectionToolset } from "../../src/server/connections/tools";
-import { createEngine } from "../../src/server/agent/engine";
-import { createSkillFileStore } from "../../src/server/agent/skill-files";
+import { startApp } from "../../src/app";
 import { resolveModel } from "../../src/server/provider/routing";
-import { createHandover } from "../../src/server/computer/handover";
-import { createImageStore } from "../../src/server/computer/images";
-import { createMcpManager } from "../../src/server/mcp/manager";
-import { OAUTH_CALLBACK_PATH } from "../../src/server/mcp/oauth";
-import { createCompaction, type Compaction } from "../../src/server/agent/compaction";
-import { CATALOG_FILE_NAME, createCatalog, modelContextTokens } from "../../src/server/provider/catalog";
-import { startServer } from "../../src/server/http/server";
-import { createSettingsStore } from "../../src/server/data/settings";
+import type { Compaction } from "../../src/server/agent/compaction";
+import type { ContainerManager } from "../../src/server/computer/container";
 import { createStore, type Store } from "../../src/server/data/store";
 import type { ReplyLanguage } from "../../src/shared/language";
 import { decodeChatEvents } from "../../src/shared/sse";
 import { TOOL_CALL_TOOL_NAME } from "../../src/shared/tools";
-import type {
-  ChatEvent,
-  ChatMessage,
-  MessagePage,
-  MessagePart,
-  SentAttachment,
-  TokenUsage,
-} from "../../src/shared/types";
-
-/** Containerfile と entry.sh の置き場。src から見たときと同じ場所を指す。 */
-const CONTAINER_DIR = join(import.meta.dir, "..", "..", "container");
+import type { ChatEvent, ChatMessage, MessagePage, MessagePart, TokenUsage } from "../../src/shared/types";
 
 /** 1 ターンの待ち時間。モデルの応答とツールの実行を含むので、既定の 5 秒では足りない。 */
 export const TURN_TIMEOUT_MS = 180_000;
@@ -90,107 +57,28 @@ export async function withLiveServer(run: (harness: LiveHarness) => Promise<void
     throw new Error(`engine が ${config.engine} です。実際の API へ繋ぐ確認は engine: "ai-sdk" のときだけ動きます`);
   }
 
-  const settings = createSettingsStore(config.configPath);
-
-  // モデルの呼び出し方も文脈長もカタログから決める（index.ts と同じ組み立て）。
-  const catalog = createCatalog({ cachePath: join(config.dataDir, CATALOG_FILE_NAME) });
-  await catalog.load();
-  const resolution = resolveModel(settings.read(), catalog.snapshot());
-  if (!resolution.ok) throw new Error(`モデルを解決できません: ${resolution.detail}`);
-
-  // 何を確かめているのかが出力だけで分かるように、読んだ設定と解決したモデルを出す。
-  console.log(`  設定: ${config.configPath}`);
-  console.log(`  モデル: ${resolution.model.id}`);
-
+  // 本番と同じ組み立て（app.ts）を、会話の保存先だけメモリにして起こす。
+  // 何かを差し替えると、確かめているのがアプリなのか差し替えなのか分からなくなる。
   const store = createStore(":memory:");
-  const images = createImageStore(config.dataDir);
-  const files = createFileStore(config.dataDir);
-  const connections = createConnections({ settings, dataDir: config.dataDir });
-  const container = createContainerManager({
-    dataDir: config.dataDir,
-    containerDir: CONTAINER_DIR,
-    env: () => ({ ...settings.read().env, ...connections.env() }),
-  });
-  const handover = createHandover();
-  const envRequests = createEnvRequests({ settings });
-  const computer = createComputerToolset({ container, images, handover, env: envRequests });
-
-  // read / write / edit / bash は、コンピュータのコンテナの中だけで動く（アプリの起動時と同じ）。
-  const coding = createCodingToolset({ container, root: WORKDIR_IN_CONTAINER });
-
-  // 画像やファイルは chat_attach で添付する（アプリの起動時と同じ）。
-  const attachments = {
-    toolset: (input: { attach: (attachments: SentAttachment[]) => void }) =>
-      createAttachmentTools({ container, root: WORKDIR_IN_CONTAINER, images, files, attach: input.attach }),
-  };
-
-  // 過去の対話履歴は history_search で引く（アプリの起動時と同じ）。
-  const history = createHistoryToolset({ store });
-
-  // Web 検索は、設定した既定のプロバイダで動く（アプリの起動時と同じ）。
-  const webSearchManager = createWebSearchManager({ settings });
-  const webSearch = createWebSearchToolset({ manager: webSearchManager });
-
-  // OAuth の戻り先は、待ち受けているポートが決まってから決まる（index.ts と同じ）。
-  let boundPort: number | null = null;
-  const mcp = createMcpManager({
-    settings,
-    dataDir: config.dataDir,
-    images,
-    callbackUrl: () =>
-      boundPort === null ? null : new URL(`http://${config.host}:${boundPort}${OAUTH_CALLBACK_PATH}`),
-  });
-
-  const engine = createEngine({
-    config,
-    settings,
-    mcp,
-    computer,
-    attachments,
-    history,
-    webSearch,
-    connections: createConnectionToolset(connections),
-    coding,
-    images,
-    catalog,
-    skills: createSkillFileStore({ dataDir: config.dataDir }),
-    identity: store,
-  });
-
-  // 畳むかどうかはモデルの文脈長から決める。
-  const compaction = createCompaction({
-    store,
-    engine,
-    log: (message) => console.log(message),
-    contextLimit: () => modelContextTokens(catalog.snapshot(), settings.read().model),
-  });
-
-  const { server } = startServer({
-    config,
-    store,
-    engine,
-    compaction,
-    catalog,
-    settings,
-    mcp,
-    connections,
-    webSearch: webSearchManager,
-    container,
-    images,
-    files,
-    handover,
-    envRequests,
-  });
-  boundPort = server.port ?? null;
+  const app = startApp(config, { store });
 
   try {
-    const base = server.url;
+    // モデルの呼び出し方も文脈長もカタログから決める（index.ts と同じ組み立て）。
+    await app.catalog.load();
+    const resolution = resolveModel(app.settings.read(), app.catalog.snapshot());
+    if (!resolution.ok) throw new Error(`モデルを解決できません: ${resolution.detail}`);
+
+    // 何を確かめているのかが出力だけで分かるように、読んだ設定と解決したモデルを出す。
+    console.log(`  設定: ${config.configPath}`);
+    console.log(`  モデル: ${resolution.model.id}`);
+
+    const base = app.server.url;
     await run({
       model: resolution.model.id,
       dataDir: config.dataDir,
-      container,
+      container: app.container,
       store,
-      compaction,
+      compaction: app.compaction,
       async send(teraId, content, language = "ja") {
         const form = new FormData();
         form.append("content", content);
@@ -226,11 +114,7 @@ export async function withLiveServer(run: (harness: LiveHarness) => Promise<void
       },
     });
   } finally {
-    await server.stop(true);
-    connections.close();
-    await mcp.close();
-    compaction.close();
-    store.close();
+    await app.shutdown();
   }
 }
 

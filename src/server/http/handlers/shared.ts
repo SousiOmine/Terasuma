@@ -27,7 +27,8 @@ import { AppError } from "../../errors";
 export type ApiRequest<Params extends Record<string, string> = Record<string, never>> = {
   params: Params;
   signal: AbortSignal;
-  json(): Promise<unknown>;
+  headers: Headers;
+  text(): Promise<string>;
   formData(): Promise<FormData>;
 };
 

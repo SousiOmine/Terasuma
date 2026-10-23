@@ -1,10 +1,11 @@
 import { describeError } from "../../../shared/errors";
 import type { McpAuthorizationView } from "../../../shared/types";
-import { AppError, SettingsWriteError, ValidationError } from "../../errors";
+import { AppError, ValidationError } from "../../errors";
 import { readMcpForm } from "../body";
 import { json } from "../respond";
 import { authorizationPage, toMcpView } from "../views";
 import { type ApiDeps, type ApiRequest, requireMcpServer } from "./shared";
+import { settingsWriter } from "./settings";
 
 /**
  * MCP サーバーの設定と接続。
@@ -12,23 +13,20 @@ import { type ApiDeps, type ApiRequest, requireMcpServer } from "./shared";
  * 一覧を開いただけでは繋ぎに行かない。接続を確かめるのは、
  * 「接続を確認」を押したときと、保存した直後だけ。
  */
-export function mcpHandlers(deps: ApiDeps) {
+export function mcpHandlers(deps: Pick<ApiDeps, "settings" | "mcp">) {
   const { settings } = deps;
 
-  /** MCP の設定を書き換えて、書き換えた後の全体を返す。 */
-  function commit(change: () => void): Response {
-    try {
-      change();
-    } catch (error) {
-      throw new SettingsWriteError(describeError(error), error);
-    }
+  /** MCP 設定の現在の状態。 */
+  function currentView(): Response {
     return json(toMcpView(settings.read().mcpServers, deps.mcp));
   }
+
+  const commit = settingsWriter(currentView);
 
   return {
     /** MCP サーバーの一覧（設定と、いま分かっている接続状態）。 */
     listMcpServers(): Response {
-      return json(toMcpView(settings.read().mcpServers, deps.mcp));
+      return currentView();
     },
 
     /**

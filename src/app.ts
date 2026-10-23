@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import type { AppConfig } from "./config";
 import { createCompaction, type Compaction } from "./server/agent/compaction";
-import { createEngine } from "./server/agent/engine";
+import { createEngine, type AgentEngine } from "./server/agent/engine";
 import { createSkillFileStore } from "./server/agent/skill-files";
 import { createCodingToolset } from "./server/agent/tools/coding";
 import { createComputerToolset } from "./server/agent/tools/computer";
@@ -22,6 +22,7 @@ import { startServer, type StartedServer } from "./server/http/server";
 import { createMcpManager, type McpManager } from "./server/mcp/manager";
 import { OAUTH_CALLBACK_PATH } from "./server/mcp/oauth";
 import { CATALOG_FILE_NAME, createCatalog, modelContextTokens, type Catalog } from "./server/provider/catalog";
+import type { ConnectionChecker, ProviderModelLister } from "./server/provider/connection";
 import type { SentAttachment } from "./shared/types";
 
 /**
@@ -29,6 +30,9 @@ import type { SentAttachment } from "./shared/types";
  *
  * ここだけが「どの実装をどの設定で繋ぐか」を知っている。各モジュールは渡された相手だけを使う。
  * 起動の手順（ログ、停止の受け付け、最初の読み込み）は index.ts が受け持つ。
+ *
+ * overrides は、本物の組み立てのまま一部だけを差し替える口（live テストのように、
+ * メモリ上の DB で本番と同じ配線を確かめるときに使う）。
  */
 
 export type App = {
@@ -49,8 +53,21 @@ export type App = {
   shutdown(): Promise<void>;
 };
 
-export function startApp(config: AppConfig): App {
-  const store = createStore(config.dbPath);
+/** 本物の組み立てのまま、一部だけを差し替える口。 */
+export type AppOverrides = {
+  store?: Store;
+  engine?: AgentEngine;
+  container?: ContainerManager;
+  mcp?: McpManager;
+  connections?: ConnectionsManager;
+  webSearch?: WebSearchManager;
+  catalog?: Catalog;
+  checkConnection?: ConnectionChecker;
+  listModels?: ProviderModelLister;
+};
+
+export function startApp(config: AppConfig, overrides: AppOverrides = {}): App {
+  const store = overrides.store ?? createStore(config.dbPath);
   const settings = createSettingsStore(config.configPath);
 
   // ツールが返した画像は、データディレクトリにファイルとして置く（会話には参照だけが残る）。
@@ -64,27 +81,31 @@ export function startApp(config: AppConfig): App {
 
   // アプリの接続。トークンはデータディレクトリに置き、コンピュータの環境変数にも混ぜる。
   // 接続が設定した値は、設定ファイルの env より優先する（接続し直した結果を使うため）。
-  const connections = createConnections({ settings, dataDir: config.dataDir });
+  const connections = overrides.connections ?? createConnections({ settings, dataDir: config.dataDir });
 
   // 認可コードの受け取り先は、待ち受けているポートが決まってから決まる。
   // 実際に使うポートは startServer の戻り値で分かるので、そこまで null のままにする。
   let boundPort: number | null = null;
-  const mcp = createMcpManager({
-    settings,
-    dataDir: config.dataDir,
-    images,
-    callbackUrl: () =>
-      boundPort === null ? null : new URL(`http://${config.host}:${boundPort}${OAUTH_CALLBACK_PATH}`),
-  });
+  const mcp =
+    overrides.mcp ??
+    createMcpManager({
+      settings,
+      dataDir: config.dataDir,
+      images,
+      callbackUrl: () =>
+        boundPort === null ? null : new URL(`http://${config.host}:${boundPort}${OAUTH_CALLBACK_PATH}`),
+    });
 
   // デスクトップ用の Containerfile と entry.sh は、リポジトリの container/ に置いてある。
   // src から実行しても dist から実行しても、1 つ上がリポジトリのルートになる。
   // エージェントがチャットで受け取った環境変数は、コンテナの中のコマンドへ渡す。
-  const container = createContainerManager({
-    dataDir: config.dataDir,
-    containerDir: join(import.meta.dir, "..", "container"),
-    env: () => ({ ...settings.read().env, ...connections.env() }),
-  });
+  const container =
+    overrides.container ??
+    createContainerManager({
+      dataDir: config.dataDir,
+      containerDir: join(import.meta.dir, "..", "container"),
+      env: () => ({ ...settings.read().env, ...connections.env() }),
+    });
 
   // エージェントがユーザーへ画面を渡すときの待ち（ログインや二段階認証）。
   const handover = createHandover();
@@ -107,28 +128,30 @@ export function startApp(config: AppConfig): App {
   const history = createHistoryToolset({ store });
 
   // Web 検索とページ取得（web_search / web_fetch）。使うプロバイダは設定の既定で決まる。
-  const webSearchManager = createWebSearchManager({ settings });
+  const webSearchManager = overrides.webSearch ?? createWebSearchManager({ settings });
   const webSearch = createWebSearchToolset({ manager: webSearchManager });
 
   // 畳むかどうかは、モデルの文脈長（カタログ）から決める。
   // 起動後にカタログを読んでおくので、設定画面を開かなくても文脈長が分かる。
   // エンジンも、プロバイダの呼び出し方を決めるのにカタログを使う。
-  const catalog = createCatalog({ cachePath: join(config.dataDir, CATALOG_FILE_NAME) });
-  const engine = createEngine({
-    config,
-    settings,
-    mcp,
-    computer,
-    attachments,
-    history,
-    webSearch,
-    connections: createConnectionToolset(connections),
-    coding,
-    images,
-    catalog,
-    skills,
-    identity: store,
-  });
+  const catalog = overrides.catalog ?? createCatalog({ cachePath: join(config.dataDir, CATALOG_FILE_NAME) });
+  const engine =
+    overrides.engine ??
+    createEngine({
+      config,
+      settings,
+      mcp,
+      computer,
+      attachments,
+      history,
+      webSearch,
+      connections: createConnectionToolset(connections),
+      coding,
+      images,
+      catalog,
+      skills,
+      identity: store,
+    });
 
   // 古いやり取りは、3 時間の放置か、文脈長に近づいたときに、背景で要約へ畳む。
   // 失敗は端末に出す（会話は生の履歴のまま続く）。
@@ -154,6 +177,8 @@ export function startApp(config: AppConfig): App {
     files,
     handover,
     envRequests,
+    ...(overrides.checkConnection === undefined ? {} : { checkConnection: overrides.checkConnection }),
+    ...(overrides.listModels === undefined ? {} : { listModels: overrides.listModels }),
   });
   boundPort = server.port ?? null;
 

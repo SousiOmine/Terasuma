@@ -1,12 +1,13 @@
 import { describeError } from "../../../shared/errors";
 import { readJsonBody } from "../body";
-import { json, jsonError } from "../respond";
+import { AppError, ConflictError } from "../../errors";
+import { json } from "../respond";
 import { type ApiDeps, type ApiRequest, SCREEN_RELAY_PREFIX, type ScreenRelayRequest } from "./shared";
 
 /**
  * podman で動かすコンテナと、その画面の中継。
  */
-export function containerHandlers(deps: ApiDeps) {
+export function containerHandlers(deps: Pick<ApiDeps, "container">) {
   return {
     /** コンテナのいまの状態。設定画面とチャット画面がこれを見て案内を出す。 */
     async readContainer(): Promise<Response> {
@@ -33,7 +34,7 @@ export function containerHandlers(deps: ApiDeps) {
     async relayScreen(req: ScreenRelayRequest): Promise<Response> {
       const status = await deps.container.status();
       if (status.state !== "running" || status.vncPort === null) {
-        return jsonError(409, "container_not_running", "コンピュータが動いていないため、画面を表示できません");
+        throw new ConflictError("container_not_running", "コンピュータが動いていないため、画面を表示できません");
       }
 
       const incoming = new URL(req.url);
@@ -46,7 +47,7 @@ export function containerHandlers(deps: ApiDeps) {
           signal: req.signal,
         });
       } catch (error) {
-        return jsonError(502, "container_not_running", `画面を取れませんでした: ${describeError(error)}`);
+        throw new AppError("container_not_running", 502, `画面を取れませんでした: ${describeError(error)}`);
       }
 
       return new Response(upstream.body, {

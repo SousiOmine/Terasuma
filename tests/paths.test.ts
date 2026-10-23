@@ -58,4 +58,20 @@ describe("resolveAppPaths", () => {
     expect(mac.configDir.endsWith("Terasuma")).toBe(true);
     expect(linux.configDir.endsWith("terasuma")).toBe(true);
   });
+
+  test("Terasuma 専用の環境変数は、OS ごとの既定より強い", () => {
+    const paths = resolveAppPaths(
+      {
+        TERASUMA_CONFIG_DIR: "/srv/terasuma/conf",
+        TERASUMA_DATA_DIR: "/srv/terasuma/data",
+        XDG_CONFIG_HOME: "/opt/conf",
+        XDG_DATA_HOME: "/opt/data",
+      },
+      "linux",
+      "/home/tester",
+    );
+
+    expect(paths.configDir).toBe("/srv/terasuma/conf");
+    expect(paths.dataDir).toBe("/srv/terasuma/data");
+  });
 });

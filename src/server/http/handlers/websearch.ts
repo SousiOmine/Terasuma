@@ -7,7 +7,7 @@
 
 import { describeError } from "../../../shared/errors";
 import type { WebSearchProviderForm } from "../../../shared/types";
-import { SettingsWriteError, ValidationError, WebSearchProviderExists, WebSearchProviderNotFound } from "../../errors";
+import { ValidationError, WebSearchProviderExists, WebSearchProviderNotFound } from "../../errors";
 import { webSearchProviderSettingsFromForm } from "../../data/settings";
 import type { WebSearchProviderSettings } from "../../data/settings";
 import { isWebSearchProviderId } from "../../websearch/index";
@@ -15,22 +15,16 @@ import { readJsonBody, readWebSearchForm } from "../body";
 import { json } from "../respond";
 import { toWebSearchView } from "../views";
 import type { ApiDeps, ApiRequest } from "./shared";
+import { settingsWriter } from "./settings";
 
-export function webSearchHandlers(deps: ApiDeps) {
+export function webSearchHandlers(deps: Pick<ApiDeps, "settings" | "webSearch">) {
   const { settings, webSearch } = deps;
 
   function currentView(): Response {
     return json(toWebSearchView(settings.read().webSearch));
   }
 
-  function commit(change: () => void): Response {
-    try {
-      change();
-    } catch (error) {
-      throw new SettingsWriteError(describeError(error), error);
-    }
-    return currentView();
-  }
+  const commit = settingsWriter(currentView);
 
   /** 入力を、保存できる設定にする。検証の規則は設定ファイル側に任せる。 */
   function settingsFrom(form: WebSearchProviderForm, id: string): WebSearchProviderSettings {

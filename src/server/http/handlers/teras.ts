@@ -2,9 +2,9 @@ import { resolveModel } from "../../provider/routing";
 import { saveUploads } from "../../computer/uploads";
 import { toMessageView } from "../../agent/message-view";
 import { createTurns } from "../../agent/turns";
-import { ValidationError } from "../../errors";
+import { AppError, ConflictError, ValidationError } from "../../errors";
 import { readSteerForm, readTurnForm } from "../body";
-import { json, jsonError, noContent } from "../respond";
+import { json, noContent } from "../respond";
 import { createSseResponse } from "../sse";
 import { type ApiDeps, type ApiRequest, requireTera } from "./shared";
 
@@ -17,7 +17,9 @@ type MessagesRequest = ApiRequest<{ id: string }> & { url: string };
 /**
  * Tera（会話の持ち主）と、その 1 本の履歴。
  */
-export function terasHandlers(deps: ApiDeps) {
+export function terasHandlers(
+  deps: Pick<ApiDeps, "store" | "engine" | "settings" | "container" | "catalog" | "compaction">,
+) {
   const { store, settings, container } = deps;
 
   // 同じ Tera でターンが重なると、履歴の並びと引き受けの待ちが壊れる。
@@ -64,7 +66,7 @@ export function terasHandlers(deps: ApiDeps) {
       // 呼び出しの中で初めて失敗すると、画面には「モデルから応答を得られませんでした」としか出せない。
       // ファイルを置く前に確かめて、無駄なファイルを残さない。
       const resolution = resolveModel(settings.read(), deps.catalog.snapshot());
-      if (!resolution.ok) return jsonError(400, "model_not_configured", resolution.detail);
+      if (!resolution.ok) throw new AppError("model_not_configured", 400, resolution.detail);
 
       const uploaded = await saveUploads(container, form.files, req.signal);
       const attachments = uploaded.length === 0 ? null : uploaded;
@@ -76,7 +78,7 @@ export function terasHandlers(deps: ApiDeps) {
         signal: req.signal,
       });
       if (events === null) {
-        return jsonError(409, "turn_in_progress", "この Tera はほかで応答を生成しています");
+        throw new ConflictError("turn_in_progress", "この Tera はほかで応答を生成しています");
       }
       return createSseResponse(events);
     },
@@ -90,7 +92,7 @@ export function terasHandlers(deps: ApiDeps) {
       requireTera(store, req.params.id);
 
       // 足す先が無ければ、ファイルを置く前に断る（置いても誰も読まない）。
-      if (!turns.isRunning(req.params.id)) return noTurnError();
+      if (!turns.isRunning(req.params.id)) throw noTurnError();
 
       const form = await readSteerForm(req);
       if (form.content.length === 0 && form.files.length === 0) {
@@ -102,7 +104,7 @@ export function terasHandlers(deps: ApiDeps) {
 
       const message = turns.steer(req.params.id, { content: form.content, attachments });
       // 本文を読んでいる間にターンが終わった。画面は新しいターンとして送り直せる。
-      if (message === null) return noTurnError();
+      if (message === null) throw noTurnError();
       return json({ message });
     },
 
@@ -119,9 +121,9 @@ export function terasHandlers(deps: ApiDeps) {
   };
 }
 
-/** ターンが動いていないときの応答。 */
-function noTurnError(): Response {
-  return jsonError(409, "turn_not_running", "この Tera は応答を生成していません");
+/** ターンが動いていないときの失敗。 */
+function noTurnError(): AppError {
+  return new ConflictError("turn_not_running", "この Tera は応答を生成していません");
 }
 
 /** 1 ページの件数。省略は受け付けない（読む量を呼ぶ側に決めさせる）。 */

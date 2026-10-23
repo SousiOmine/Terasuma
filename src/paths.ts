@@ -27,6 +27,17 @@ export function resolveAppPaths(
   platform: NodeJS.Platform = process.platform,
   home: string = homedir(),
 ): AppPaths {
+  const paths = osAppPaths(env, platform, home);
+
+  // Terasuma 専用の上書きは、OS ごとの既定より強い（テストと、置き場を変えたい利用者のため）。
+  return {
+    configDir: env.TERASUMA_CONFIG_DIR?.trim() || paths.configDir,
+    dataDir: env.TERASUMA_DATA_DIR?.trim() || paths.dataDir,
+  };
+}
+
+/** OS ごとの標準的な置き場。Terasuma 固有の上書きは resolveAppPaths が当てる。 */
+function osAppPaths(env: NodeJS.ProcessEnv, platform: NodeJS.Platform, home: string): AppPaths {
   if (platform === "win32") {
     const separator = win32;
     // APPDATA が無い環境（サービスとして起動した場合など）でも標準の場所を組み立てる。

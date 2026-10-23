@@ -19,6 +19,7 @@ import {
   type FetchResponse,
   type SearchProvider,
   type SearchResponse,
+  WEB_SEARCH_FAILURE_TEXT,
   WebSearchError,
   truncateText,
 } from "../../websearch/index";
@@ -146,22 +147,6 @@ function indent(text: string): string {
 
 /** 失敗を、モデルが次にどうすればよいか分かる 1 文にする。 */
 function describeFailure(providerName: string, error: unknown): string {
-  if (error instanceof WebSearchError) {
-    switch (error.code) {
-      case "auth":
-        return `The ${providerName} API key was rejected. Ask the user to check it in Settings. (${error.message})`;
-      case "rate_limit":
-        return `The ${providerName} search provider is rate limited. Try again later. (${error.message})`;
-      case "quota":
-        return `The ${providerName} search provider has no remaining quota. (${error.message})`;
-      case "invalid":
-        return `The ${providerName} search provider rejected the request: ${error.message}`;
-      case "unsupported":
-        return `The ${providerName} search provider cannot handle this request: ${error.message}`;
-      case "unavailable":
-        return `Could not reach the ${providerName} search provider: ${error.message}`;
-    }
-  }
-
+  if (error instanceof WebSearchError) return WEB_SEARCH_FAILURE_TEXT[error.code].en(providerName, error.message);
   return `Web search failed: ${describeError(error)}`;
 }

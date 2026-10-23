@@ -25,6 +25,15 @@ export type MessageForm = {
   files: readonly UploadFile[];
 };
 
+/**
+ * JSON の本文を読むのに要る形。
+ * Bun の Request がそのまま満たす（テストでは素のオブジェクトでも渡せる）。
+ */
+export type JsonRequest = {
+  text(): Promise<string>;
+  headers: Headers;
+};
+
 /** ターンを始める送信。返事の言語も持つ。 */
 export type TurnForm = MessageForm & {
   language: ReplyLanguage;
@@ -79,9 +88,7 @@ function readContent(form: FormData): string {
  * 画面から来た MCP サーバーの入力を、保存できる形にする。
  * id と種類ごとの規則の検証は、設定ファイルを読むときと同じ 1 箇所（settings-form.ts）に任せる。
  */
-export async function readMcpForm(req: {
-  json(): Promise<unknown>;
-}): Promise<{ id: string; server: McpServerSettings }> {
+export async function readMcpForm(req: JsonRequest): Promise<{ id: string; server: McpServerSettings }> {
   const body = await readJsonBody(req);
 
   const rawId = body?.["id"];
@@ -113,7 +120,7 @@ export async function readMcpForm(req: {
  * 画面から来た検索プロバイダの入力を読む。
  * 変更では apiKey を省ける（null なら保存済みのキーを使う）。
  */
-export async function readWebSearchForm(req: { json(): Promise<unknown> }): Promise<WebSearchProviderForm> {
+export async function readWebSearchForm(req: JsonRequest): Promise<WebSearchProviderForm> {
   const body = await readJsonBody(req);
   const id = readOptionalString(body, "id");
   const apiKey = readOptionalString(body, "apiKey");
@@ -128,9 +135,7 @@ export async function readWebSearchForm(req: { json(): Promise<unknown> }): Prom
  * 画面から来た Application ID を読む。null は「設定を消す」。
  * 空の文字列も「消す」として扱う（入力欄を空にしたときの見た目と揃える）。
  */
-export async function readConnectionClientIdForm(req: {
-  json(): Promise<unknown>;
-}): Promise<{ clientId: string | null }> {
+export async function readConnectionClientIdForm(req: JsonRequest): Promise<{ clientId: string | null }> {
   const body = await readJsonBody(req);
   const clientId = readOptionalString(body, "clientId");
   if (clientId === undefined) throw new ValidationError("clientId must be a string or null");
@@ -142,7 +147,7 @@ export async function readConnectionClientIdForm(req: {
 /**
  * 画面から来たトークンを読む。空欄は受け付けない（消すときは切断を使う）。
  */
-export async function readConnectionTokenForm(req: { json(): Promise<unknown> }): Promise<{ token: string }> {
+export async function readConnectionTokenForm(req: JsonRequest): Promise<{ token: string }> {
   const body = await readJsonBody(req);
   const token = readOptionalString(body, "token");
   if (token === undefined) throw new ValidationError("token must be a string");
@@ -229,12 +234,31 @@ export function parseProviderSettings(id: string, body: Record<string, unknown> 
   }
 }
 
-/** 本文が無い・JSON でない場合は「本文なし」として扱い、呼び出し側で invalid_request にする。 */
-export async function readJsonBody(req: { json(): Promise<unknown> }): Promise<Record<string, unknown> | null> {
-  try {
-    const body = await req.json();
-    return typeof body === "object" && body !== null ? (body as Record<string, unknown>) : null;
-  } catch {
-    return null;
+/**
+ * JSON の本文を読む。
+ *
+ * 本文が空なら null（任意の項目だけを受け取る経路のため）。
+ * 壊れた JSON や JSON でない Content-Type は、その場で 400 にする。
+ * 「teraId を指定してください」のような、本文の壊れ方と関係のない理由にしないため。
+ */
+export async function readJsonBody(req: JsonRequest): Promise<Record<string, unknown> | null> {
+  const text = (await req.text()).trim();
+  if (text.length === 0) return null;
+
+  const contentType = req.headers.get("content-type") ?? "";
+  if (!contentType.toLowerCase().includes("application/json")) {
+    throw new ValidationError("Content-Type は application/json にしてください");
   }
+
+  let body: unknown;
+  try {
+    body = JSON.parse(text);
+  } catch (error) {
+    throw new ValidationError(`本文を JSON として読めませんでした: ${describeError(error)}`);
+  }
+
+  if (typeof body !== "object" || body === null || Array.isArray(body)) {
+    throw new ValidationError("本文は JSON のオブジェクトにしてください");
+  }
+  return body as Record<string, unknown>;
 }

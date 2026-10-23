@@ -26,6 +26,20 @@ export class ValidationError extends AppError {
   }
 }
 
+/** 見つからない（404）。 */
+export class ResourceNotFoundError extends AppError {
+  constructor(code: ApiErrorCode, message: string) {
+    super(code, 404, message);
+  }
+}
+
+/** いまの状態では受け付けられない（409）。 */
+export class ConflictError extends AppError {
+  constructor(code: ApiErrorCode, message: string) {
+    super(code, 409, message);
+  }
+}
+
 /** 設定ファイルを書けなかった（500）。 */
 export class SettingsWriteError extends AppError {
   constructor(message: string, cause?: unknown) {

@@ -8,7 +8,14 @@
 import { describeError } from "../shared/errors";
 import type { WebSearchTestView } from "../shared/types";
 import type { SettingsStore } from "./data/settings";
-import { createSearchProvider, isWebSearchProviderId, WebSearchError, type SearchProvider } from "./websearch/index";
+import {
+  createSearchProvider,
+  isWebSearchProviderId,
+  WebSearchError,
+  WEB_SEARCH_FAILURE_TEXT,
+  type FetchLike,
+  type SearchProvider,
+} from "./websearch/index";
 
 /** 接続確認に使う検索語。短く、どのプロバイダでも結果が返るものにする。 */
 const TEST_QUERY = "Terasuma web search connection test";
@@ -20,7 +27,7 @@ export type WebSearchManager = {
   test(input: { id: string; apiKey: string | null }, signal?: AbortSignal): Promise<WebSearchTestView>;
 };
 
-export function createWebSearchManager(options: { settings: SettingsStore }): WebSearchManager {
+export function createWebSearchManager(options: { settings: SettingsStore; fetch?: FetchLike }): WebSearchManager {
   return {
     provider() {
       const webSearch = options.settings.read().webSearch;
@@ -30,7 +37,7 @@ export function createWebSearchManager(options: { settings: SettingsStore }): We
       const provider = webSearch.providers[id];
       if (provider === undefined) return null;
 
-      return safeCreateProvider(id, provider.apiKey);
+      return safeCreateProvider(id, provider.apiKey, options.fetch);
     },
 
     async test({ id, apiKey }, signal) {
@@ -46,7 +53,11 @@ export function createWebSearchManager(options: { settings: SettingsStore }): We
       }
 
       try {
-        const provider = createSearchProvider({ id, apiKey: key });
+        const provider = createSearchProvider({
+          id,
+          apiKey: key,
+          ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
+        });
         const response = await provider.search({
           query: TEST_QUERY,
           limit: 1,
@@ -61,11 +72,11 @@ export function createWebSearchManager(options: { settings: SettingsStore }): We
 }
 
 /** 設定に壊れた id が入っていても、ツールを組めないだけで済ませる。 */
-function safeCreateProvider(id: string, apiKey: string): SearchProvider | null {
+function safeCreateProvider(id: string, apiKey: string, fetch?: FetchLike): SearchProvider | null {
   if (!isWebSearchProviderId(id)) return null;
 
   try {
-    return createSearchProvider({ id, apiKey });
+    return createSearchProvider({ id, apiKey, ...(fetch === undefined ? {} : { fetch }) });
   } catch {
     return null;
   }
@@ -74,20 +85,5 @@ function safeCreateProvider(id: string, apiKey: string): SearchProvider | null {
 /** 画面に出す、失敗の理由。ライブラリの英語の文言に、種類の説明を添える。 */
 function describeWebSearchError(error: unknown): string {
   if (!(error instanceof WebSearchError)) return describeError(error);
-
-  const reason = error.message.length === 0 ? "" : `（${error.message}）`;
-  switch (error.code) {
-    case "auth":
-      return `API キーが受け付けられませんでした${reason}`;
-    case "rate_limit":
-      return `レート制限に達しました${reason}`;
-    case "quota":
-      return `利用枠が不足しています${reason}`;
-    case "invalid":
-      return `リクエストが受け付けられませんでした${reason}`;
-    case "unsupported":
-      return `このプロバイダでは扱えません${reason}`;
-    case "unavailable":
-      return `接続できませんでした${reason}`;
-  }
+  return WEB_SEARCH_FAILURE_TEXT[error.code].ja(error.message);
 }

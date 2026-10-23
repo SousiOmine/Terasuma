@@ -44,9 +44,8 @@ export const LOOPBACK_HOST = "127.0.0.1";
  * モデルとプロバイダは設定画面から書き換えるため、ここでは返さない（SettingsStore が持つ）。
  */
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
-  const defaults = resolveAppPaths(env);
-  const configDir = env.TERASUMA_CONFIG_DIR?.trim() || defaults.configDir;
-  const dataDir = env.TERASUMA_DATA_DIR?.trim() || defaults.dataDir;
+  // 置き場の決定は paths.ts に 1 つだけ置く（環境変数による上書きもそこで当てる）。
+  const { configDir, dataDir } = resolveAppPaths(env);
   const configPath = join(configDir, CONFIG_FILE_NAME);
 
   // 読むだけでなく検証もする。壊れた設定のまま起動しないよう、起動時に一度ここを通す。

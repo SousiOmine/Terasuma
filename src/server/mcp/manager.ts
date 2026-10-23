@@ -1,28 +1,22 @@
 import { join } from "node:path";
-import {
-  Client,
-  StreamableHTTPClientTransport,
-  type CallToolResult,
-  type Tool as McpToolDefinition,
-  type Transport,
-} from "@modelcontextprotocol/client";
-import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
-import { jsonSchema, tool, type JSONSchema7, type ToolSet } from "ai";
+import { Client } from "@modelcontextprotocol/client";
+import type { ToolSet } from "ai";
 import type { McpHttpServerSettings, McpServerSettings, McpServersSettings } from "../data/settings";
 import { toolNameFor } from "../../shared/tools";
 import { AppError } from "../errors";
-import type { ImageRef, McpAuthorizationView, McpServerStatusView, McpTestView } from "../../shared/types";
+import type { McpAuthorizationView, McpServerStatusView, McpTestView } from "../../shared/types";
 import {
-  McpOAuthProvider,
   createFileOAuthStorage,
   finishMcpAuthorization,
   serverIdFromState,
   startMcpAuthorization,
   type OAuthStorage,
 } from "./oauth";
-import type { SettingsStore } from "../data/settings";
+import type { ConnectionMaterial, ServerConnection } from "./connection";
+import { connectionMaterial } from "./transport";
+import { sameServer, toolEntries } from "./tools";
 import type { ImageStore } from "../computer/images";
-import type { ImageToolOutput } from "../agent/tool-output";
+import type { SettingsStore } from "../data/settings";
 import { describeError } from "../../shared/errors";
 
 /** モデルへ渡すツール。キーは "<サーバー id>_<ツール名>"。 */
@@ -86,23 +80,6 @@ const OAUTH_DIR_NAME = "mcp-oauth";
 /** 1 サーバー分の探索の打ち切り。繋がらないサーバーで画面を待たせ続けない。 */
 const DISCOVERY_TIMEOUT_MS = 15_000;
 
-/** 1 サーバー分の接続。設定が変わったら作り直す。 */
-type ServerConnection = {
-  /** 接続を作ったときのサーバー設定（JSON）。変わったら作り直す。 */
-  key: string;
-  client: Client;
-  /** 認可が必要になったときに URL を渡してくる口。stdio では null。 */
-  oauth: McpOAuthProvider | null;
-  /** サーバーが公開しているツール（名前空間を付ける前）。 */
-  tools: readonly McpToolDefinition[];
-};
-
-/** 1 つのサーバーへ繋ぐための材料。 */
-type ConnectionMaterial = {
-  transport: Transport;
-  oauth: McpOAuthProvider | null;
-};
-
 /**
  * MCP サーバーとの接続を持つ。
  *
@@ -123,14 +100,14 @@ export function createMcpManager(options: McpManagerOptions): McpManager {
 
   /** サーバー id → つながっている接続。 */
   let connections = new Map<string, ServerConnection>();
-  /** 接続を作ったときの設定（JSON）。これが変わったら作り直す。 */
-  let settingsKey: string | null = null;
   /** サーバー id → いま分かっている状態。 */
   let statuses = new Map<string, McpServerStatusView>();
   /** モデルへ渡すツール。 */
   let tools: McpToolset = {};
   /** 一度でも探索したかどうか。落ちているサーバーを毎ターン試しに行かないため。 */
   let discovered = false;
+  /** 最後に接続を作ったときの設定（JSON）。変わったサーバーだけ繋ぎ直すための比較用。 */
+  let settingsKey: string | null = null;
   /** 認可を待っているサーバー（id → 認可画面の URL）。 */
   const pending = new Map<string, string>();
   /** 保存前の確認で認可を待っているサーバー（id → 確かめている設定と、認可画面の URL）。 */
@@ -148,26 +125,12 @@ export function createMcpManager(options: McpManagerOptions): McpManager {
 
   /** 1 つのサーバーへ繋ぐための材料。 */
   function connectionFor(serverId: string, server: McpServerSettings): ConnectionMaterial {
-    if (server.type === "stdio") {
-      return {
-        transport: new StdioClientTransport({
-          command: server.command,
-          ...(server.args === undefined ? {} : { args: [...server.args] }),
-          ...(server.env === undefined ? {} : { env: { ...server.env } }),
-        }),
-        oauth: null,
-      };
-    }
-
-    const oauth = new McpOAuthProvider({
+    return connectionMaterial({
       serverId,
-      redirectUrl: callbackUrl(),
-      storage: storageFor(serverId),
+      server,
+      callbackUrl,
+      storage: () => storageFor(serverId),
     });
-    return {
-      transport: new StreamableHTTPClientTransport(new URL(server.url), { authProvider: oauth }),
-      oauth,
-    };
   }
 
   /** すべての接続を閉じる。設定が変わったときと、終了するときに使う。 */
@@ -183,15 +146,13 @@ export function createMcpManager(options: McpManagerOptions): McpManager {
    * 設定に対応する状態に揃える。設定が変わっていれば、前の接続を閉じて状態を捨てる。
    * 接続そのものは refresh() が作る。
    */
-  async function ensureConnections(servers: McpServersSettings): Promise<void> {
+  /** 設定が変わっていれば、変わったサーバーだけ繋ぎ直す（他の接続はそのまま使う）。 */
+  async function syncSettings(servers: McpServersSettings): Promise<void> {
     const key = JSON.stringify(servers);
-    if (key === settingsKey) return;
+    if (key === settingsKey && discovered) return;
 
-    await closeConnections();
     settingsKey = key;
-    statuses = new Map();
-    tools = {};
-    discovered = false;
+    await refresh(servers);
   }
 
   /**
@@ -199,8 +160,6 @@ export function createMcpManager(options: McpManagerOptions): McpManager {
    * つながっているサーバーは、設定が変わっていない限り接続を使い回す。
    */
   async function refresh(servers: McpServersSettings): Promise<void> {
-    await ensureConnections(servers);
-
     // 設定から消えたサーバーの接続を閉じる。
     for (const serverId of [...connections.keys()]) {
       if (servers[serverId] !== undefined) continue;
@@ -336,7 +295,6 @@ export function createMcpManager(options: McpManagerOptions): McpManager {
       if (pending.has(serverId)) return statusOf(serverId);
 
       // このサーバーだけ繋ぎ直す。他のサーバーの接続はそのまま使う。
-      await ensureConnections(servers);
       const existing = connections.get(serverId);
       if (existing !== undefined) {
         connections.delete(serverId);
@@ -393,9 +351,8 @@ export function createMcpManager(options: McpManagerOptions): McpManager {
       const servers = settings.read().mcpServers;
       if (Object.keys(servers).length === 0) return {};
 
-      await ensureConnections(servers);
-      // 一度も探索していなければ繋ぎに行く。落ちているサーバーをチャットのたびに試さない。
-      if (!discovered) await refresh(servers);
+      // 設定が変わっていれば、変わったサーバーだけ繋ぎ直す。
+      await syncSettings(servers);
       return tools;
     },
 
@@ -463,78 +420,4 @@ export function createMcpManager(options: McpManagerOptions): McpManager {
       discovered = false;
     },
   };
-}
-
-/** 1 つのサーバーのツールを、モデルへ渡す名前と定義の組にする。 */
-function toolEntries(serverId: string, connection: ServerConnection, images: ImageStore): [string, ToolSet[string]][] {
-  return connection.tools.map((definition) => [
-    toolNameFor(serverId, definition.name),
-    tool({
-      description: definition.description ?? "",
-      inputSchema: jsonSchema(definition.inputSchema as unknown as JSONSchema7),
-      execute: async (input: unknown, options: { abortSignal?: AbortSignal }) => {
-        const result = await connection.client.callTool(
-          { name: definition.name, arguments: asArguments(input) },
-          options.abortSignal === undefined ? {} : { signal: options.abortSignal },
-        );
-
-        const output = callToolOutput(result, images);
-        // エラーは例外にして、モデルへ本文だけを渡す（JSON の包装を見せない）。
-        if (result.isError === true) throw new Error(output.text);
-        return output;
-      },
-    }),
-  ]);
-}
-
-/** ツールの入力は必ずオブジェクト。壊れた形は空として扱い、サーバー側の検証に任せる。 */
-function asArguments(input: unknown): Record<string, unknown> {
-  if (typeof input !== "object" || input === null || Array.isArray(input)) return {};
-  return input as Record<string, unknown>;
-}
-
-/**
- * MCP の結果から、モデルへ渡す本文と画像を取り出す。
- * 画像は置き場に保存し、会話とモデルへは参照だけを渡す（base64 を載せない）。
- */
-function callToolOutput(result: CallToolResult, images: ImageStore): ImageToolOutput {
-  const texts: string[] = [];
-  const refs: ImageRef[] = [];
-
-  for (const block of result.content) {
-    if (block.type === "text") {
-      texts.push(block.text);
-      continue;
-    }
-    if (block.type !== "image") continue;
-
-    try {
-      refs.push(images.save(Buffer.from(block.data, "base64"), block.mimeType));
-    } catch (error) {
-      // 扱えない形式や壊れた中身でも、他の内容は読めるようにする。
-      texts.push(`(Could not store the image returned by the tool: ${describeError(error)})`);
-    }
-  }
-
-  if (texts.length > 0) {
-    return { text: texts.join("\n"), ...(refs.length === 0 ? {} : { images: refs }) };
-  }
-
-  if (refs.length > 0) {
-    return {
-      text: refs.length === 1 ? "(image returned by the tool)" : `(${refs.length} images returned by the tool)`,
-      images: refs,
-    };
-  }
-
-  // テキストも画像も無い（資源や音声だけ）場合は、結果全体を JSON として見せる。
-  return { text: JSON.stringify(result) };
-}
-
-/**
- * 同じ接続先を確かめているかどうか。
- * 設定はどちらも入力から組み立てたものなので、項目の並びまで同じになる。
- */
-function sameServer(left: McpServerSettings, right: McpServerSettings): boolean {
-  return JSON.stringify(left) === JSON.stringify(right);
 }

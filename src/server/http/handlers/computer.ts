@@ -3,9 +3,9 @@ import { describeError } from "../../../shared/errors";
 import type { ComputerEnvView } from "../../../shared/types";
 import { normalizeEnvValue } from "../../computer/env";
 import type { SettingsStore } from "../../data/settings";
-import { ValidationError } from "../../errors";
+import { ConflictError, ValidationError } from "../../errors";
 import { readJsonBody } from "../body";
-import { json, jsonError, noContent } from "../respond";
+import { json, noContent } from "../respond";
 import type { ApiDeps, ApiRequest } from "./shared";
 
 /** 環境変数の一覧を、画面へ返す形にする。値は返さない。 */
@@ -18,9 +18,9 @@ function envView(settings: SettingsStore): ComputerEnvView {
  *
  * 画面を渡している間の受け渡し（引き受け）と、コンピュータのコマンドへ渡す環境変数
  * （一覧は名前だけ。値は返さない）、待っている環境変数の入力。
- * VNC の WebSocket 中継は http/server.ts が持つ（Bun の upgrade が要るため）。
+ * VNC の WebSocket 中継は screen-socket.ts が持つ（Bun の upgrade が要るため）。
  */
-export function computerHandlers(deps: ApiDeps) {
+export function computerHandlers(deps: Pick<ApiDeps, "settings" | "handover" | "envRequests">) {
   return {
     /**
      * 引き受け（画面を渡している間）の返事。
@@ -29,30 +29,28 @@ export function computerHandlers(deps: ApiDeps) {
     async answerHandover(req: ApiRequest): Promise<Response> {
       const body = await readJsonBody(req);
       const teraId = typeof body?.["teraId"] === "string" ? body["teraId"] : "";
-      if (teraId.length === 0) {
-        return jsonError(400, "invalid_request", "teraId を指定してください");
-      }
+      if (teraId.length === 0) throw new ValidationError("teraId を指定してください");
 
       const kind = body?.["kind"];
       if (kind === "text") {
         const raw = body?.["text"];
         const text = typeof raw === "string" ? raw.trim() : "";
-        if (text.length === 0) return jsonError(400, "invalid_request", "送る文が空です");
+        if (text.length === 0) throw new ValidationError("送る文が空です");
 
         if (!deps.handover.answer(teraId, { kind: "text", text })) {
-          return jsonError(409, "handover_not_pending", "この Tera は操作を待っていません");
+          throw new ConflictError("handover_not_pending", "この Tera は操作を待っていません");
         }
         return noContent();
       }
 
       if (kind === "done") {
         if (!deps.handover.answer(teraId, { kind: "done" })) {
-          return jsonError(409, "handover_not_pending", "この Tera は操作を待っていません");
+          throw new ConflictError("handover_not_pending", "この Tera は操作を待っていません");
         }
         return noContent();
       }
 
-      return jsonError(400, "invalid_request", 'kind は "text" か "done" にしてください');
+      throw new ValidationError('kind は "text" か "done" にしてください');
     },
 
     /** コンピュータのコマンドへ渡す環境変数の名前。値は返さない。 */
@@ -76,39 +74,37 @@ export function computerHandlers(deps: ApiDeps) {
     async answerEnv(req: ApiRequest): Promise<Response> {
       const body = await readJsonBody(req);
       const teraId = typeof body?.["teraId"] === "string" ? body["teraId"] : "";
-      if (teraId.length === 0) {
-        return jsonError(400, "invalid_request", "teraId を指定してください");
-      }
+      if (teraId.length === 0) throw new ValidationError("teraId を指定してください");
 
       // 名前が違う返事は、遅れて届いた別の呼び出しのもの。受け付けない。
       const name = typeof body?.["name"] === "string" ? body["name"] : "";
-      if (!isEnvName(name)) return jsonError(400, "invalid_request", "環境変数名を指定してください");
+      if (!isEnvName(name)) throw new ValidationError("環境変数名を指定してください");
 
       const kind = body?.["kind"];
       if (kind === "cancel") {
         if (!deps.envRequests.answer(teraId, { kind: "cancel", name })) {
-          return jsonError(409, "env_request_not_pending", "この Tera は環境変数の入力を待っていません");
+          throw new ConflictError("env_request_not_pending", "この Tera は環境変数の入力を待っていません");
         }
         return noContent();
       }
 
       if (kind !== "value") {
-        return jsonError(400, "invalid_request", 'kind は "value" か "cancel" にしてください');
+        throw new ValidationError('kind は "value" か "cancel" にしてください');
       }
 
       const raw = body?.["value"];
-      if (typeof raw !== "string") return jsonError(400, "invalid_request", "value を指定してください");
+      if (typeof raw !== "string") throw new ValidationError("value を指定してください");
 
       let value: string;
       try {
         value = normalizeEnvValue(raw);
       } catch (error) {
         // 送られた値そのものは、理由にも応答にも含めない。
-        return jsonError(400, "invalid_request", describeError(error));
+        throw new ValidationError(describeError(error));
       }
 
       if (!deps.envRequests.answer(teraId, { kind: "value", name, value })) {
-        return jsonError(409, "env_request_not_pending", "この Tera は環境変数の入力を待っていません");
+        throw new ConflictError("env_request_not_pending", "この Tera は環境変数の入力を待っていません");
       }
       return noContent();
     },

@@ -11,7 +11,7 @@ import type { ApiDeps, ApiRequest } from "./shared";
  * 接続はトークンを貼るだけなので、認可の開始・中止は無い。
  * チャットのカードが待ちをやめるときだけ、wait を止める。
  */
-export function connectionHandlers(deps: ApiDeps) {
+export function connectionHandlers(deps: Pick<ApiDeps, "connections">) {
   const { connections } = deps;
 
   /** 知らない接続 id はここで 404 にする。 */

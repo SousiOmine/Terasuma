@@ -4,7 +4,7 @@ import { findEndpointPreset } from "../../../shared/providers";
 import type { CatalogProviderView, ProviderCheckResult, ReasoningView } from "../../../shared/types";
 import { selectableEfforts } from "../../provider/reasoning";
 import type { ProviderSettings } from "../../data/settings";
-import { AppError, CatalogUnavailableError, SettingsWriteError, ValidationError } from "../../errors";
+import { AppError, CatalogUnavailableError, ValidationError } from "../../errors";
 import { catalogModel, catalogModels, catalogProvider, type CatalogSnapshot } from "../../provider/catalog";
 import { type ConnectionTarget, connectionTarget } from "../../provider/connection";
 import { providerSpecForId } from "../../provider/kinds";
@@ -12,6 +12,7 @@ import { parseProviderSettings, readCredentials, readDefaultModel, readJsonBody,
 import { json } from "../respond";
 import { toSettingsView } from "../views";
 import { type ApiDeps, type ApiRequest, requireProvider } from "./shared";
+import { settingsWriter } from "./settings";
 
 /**
  * モデルとプロバイダの設定。
@@ -19,7 +20,7 @@ import { type ApiDeps, type ApiRequest, requireProvider } from "./shared";
  * 設定を変える API はすべて、変えた後の全体を返す（画面は返ってきた値をそのまま置き直す）。
  * カタログと接続確認は、設定画面を開いたときと保存の前だけ使う。
  */
-export function modelHandlers(deps: ApiDeps) {
+export function modelHandlers(deps: Pick<ApiDeps, "settings" | "catalog" | "checkConnection" | "listModels">) {
   const { settings } = deps;
 
   /** モデル設定の現在の状態。 */
@@ -27,19 +28,7 @@ export function modelHandlers(deps: ApiDeps) {
     return json(toSettingsView(settings.read()));
   }
 
-  /**
-   * 設定を書き換えて、書き換えた後の全体を返す。
-   * 書けなかった理由（置き場所の権限が無い、起動中に手で壊されたなど）は、
-   * そのまま画面に出せるようにする。
-   */
-  function commit(change: () => void): Response {
-    try {
-      change();
-    } catch (error) {
-      throw new SettingsWriteError(describeError(error), error);
-    }
-    return currentView();
-  }
+  const commit = settingsWriter(currentView);
 
   /**
    * カタログを使える状態にする。

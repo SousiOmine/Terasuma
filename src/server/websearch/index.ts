@@ -8,6 +8,7 @@
 
 export { DEFAULT_FETCH_CHARS, DEFAULT_SEARCH_LIMIT, MAX_FETCH_CHARS, MAX_SEARCH_LIMIT } from "./constants";
 export { WebSearchError, type WebSearchErrorCode } from "./errors";
+export { WEB_SEARCH_FAILURE_TEXT } from "./failure-text";
 export { decodeEntities, htmlToText, pageTitle } from "./html";
 export { truncateText } from "./text";
 export {
