@@ -11,7 +11,7 @@ import {
 } from "../src/server/provider/connection";
 import type { SettingsStore } from "../src/server/data/settings";
 import { DEFAULT_TERA_ID } from "../src/server/data/store";
-import type { ModelSettingsView, ProviderCheckResult, ProviderView, ReasoningView } from "../src/shared/types";
+import type { ModelSettingsView, ProviderCheckResult, ProviderView, ReasoningView } from "../src/shared/api/settings";
 import { withServer } from "./harness";
 
 /** チャットの送信は multipart で受ける。 */

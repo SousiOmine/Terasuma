@@ -4,7 +4,7 @@ import type { ConnectionToolsetProvider } from "../../connections/tools";
 import type { ImageStore } from "../../computer/images";
 import type { CatalogSnapshot } from "../../provider/catalog";
 import type { ReplyLanguage } from "../../../shared/language";
-import type { ChatMessage, MessagePart, SentAttachment, TokenUsage } from "../../../shared/types";
+import type { ChatMessage, MessagePart, SentAttachment, TokenUsage } from "../../../shared/api/message";
 import type {
   AttachmentToolsetProvider,
   ComputerToolsetProvider,

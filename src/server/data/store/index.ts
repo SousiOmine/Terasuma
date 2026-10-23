@@ -1,5 +1,5 @@
 import { Database } from "bun:sqlite";
-import type { ChatMessage } from "../../../shared/types";
+import type { ChatMessage } from "../../../shared/api/message";
 import { migrateSchema } from "./migrations";
 import { prepareQueries } from "./queries";
 import { toMessage, toTera } from "./rows";
@@ -28,6 +28,7 @@ export type {
   CreateStoreOptions,
   MessageLog,
   MessagePageQuery,
+  MessagePageResult,
   Store,
   TeraDirectory,
   TeraIdentity,

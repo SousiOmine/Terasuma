@@ -1,6 +1,6 @@
 import { IconPlus } from "@tabler/icons-preact";
 import { useEffect, useState } from "preact/hooks";
-import type { WebSearchProviderView } from "../../../shared/types";
+import type { WebSearchProviderView } from "../../../shared/api/settings";
 import { useDeleteTarget } from "../../hooks/useDeleteTarget";
 import { t } from "../../i18n";
 import {

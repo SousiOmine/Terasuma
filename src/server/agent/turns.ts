@@ -11,7 +11,7 @@ import type {
   SentAttachment,
   TextPart,
   TokenUsage,
-} from "../../shared/types";
+} from "../../shared/api/message";
 import type { Compaction } from "./compaction";
 import type { AgentEngine } from "./engine";
 import { toMessageView } from "./message-view";

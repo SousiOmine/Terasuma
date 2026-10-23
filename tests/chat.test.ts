@@ -9,16 +9,16 @@ import { DEFAULT_TERA_ID, createStore } from "../src/server/data/store";
 import type { Store } from "../src/server/data/store";
 import { MAX_ATTACHMENTS } from "../src/shared/attachments";
 import { decodeChatEvents } from "../src/shared/sse";
+import type { ApiErrorCode } from "../src/shared/api/error";
 import type {
-  ApiErrorCode,
   AttachmentPart,
   ChatEvent,
-  ChatMessage,
+  ChatMessageView,
   MessagePage,
   SentAttachment,
   TextPart,
   Tera,
-} from "../src/shared/types";
+} from "../src/shared/api/message";
 import { fastMock, withServer as withTestServer } from "./harness";
 import { createContainerStub } from "./support";
 
@@ -44,7 +44,7 @@ type Harness = {
   request(path: string, init?: RequestInit): Promise<Response>;
   send(teraId: string, content: string, files?: readonly File[]): Promise<ChatEvent[]>;
   teras(): Promise<Tera[]>;
-  messages(teraId: string): Promise<ChatMessage[]>;
+  messages(teraId: string): Promise<ChatMessageView[]>;
 };
 
 /** 送信の multipart を組み立てる。本文と言語、ファイルを 1 つの要求にまとめる。 */
@@ -121,7 +121,7 @@ async function withServer<T>(
           return ((await response.json()) as { teras: Tera[] }).teras;
         },
         async messages(teraId) {
-          const messages: ChatMessage[] = [];
+          const messages: ChatMessageView[] = [];
           let before: number | null = null;
 
           for (;;) {
@@ -161,18 +161,18 @@ function visibleText(events: ChatEvent[]): string {
 }
 
 /** 保存されたメッセージから、本文のパーツだけを取り出す。 */
-function textParts(message: ChatMessage): TextPart[] {
+function textParts(message: ChatMessageView): TextPart[] {
   if (message.parts === null) return [];
   return message.parts.filter((part): part is TextPart => part.type === "text");
 }
 
 /** 保存されたメッセージから、添付のパーツだけを取り出す。 */
-function attachmentParts(message: ChatMessage): AttachmentPart[] {
+function attachmentParts(message: ChatMessageView): AttachmentPart[] {
   if (message.parts === null) return [];
   return message.parts.filter((part): part is AttachmentPart => part.type === "attachment");
 }
 
-function assistantDone(events: ChatEvent[]): ChatMessage {
+function assistantDone(events: ChatEvent[]): ChatMessageView {
   const last = events.at(-1);
   if (last?.type !== "assistant-done") throw new Error("最後のイベントが assistant-done ではない");
   return last.message;
@@ -439,7 +439,9 @@ describe("チャット API", () => {
       expect(visibleText(events).length).toBeGreaterThan(0);
       // モデルの本文は画面に出さないので、assistant の content は常に空。
       expect(done.content).toBe("");
-      expect(done.usage).not.toBeNull();
+      // トークン数は保存された記録にだけ残る（画面へは返さない）。
+      const stored = harness.store.listMessagesSince(DEFAULT_TERA_ID, 0).find((message) => message.id === done.id);
+      expect(stored?.usage).not.toBeNull();
     });
   });
 
@@ -479,7 +481,10 @@ describe("チャット API", () => {
       const messages = await harness.messages(DEFAULT_TERA_ID);
       expect(messages.map((message) => message.role)).toEqual(["user", "assistant"]);
       expect(messages.map((message) => message.seq)).toEqual([1, 2]);
-      expect(messages[1]?.usage).not.toBeNull();
+
+      // トークン数は保存された記録にだけ残る（画面へは返さない）。
+      const stored = harness.store.listMessagesSince(DEFAULT_TERA_ID, 0);
+      expect(stored[1]?.usage).not.toBeNull();
     });
   });
 
@@ -615,12 +620,17 @@ describe("チャット API", () => {
         if (attachment === undefined) throw new Error("添付ファイルが記録されていない");
         expect(attachment.name).toBe("notes.txt");
         expect(attachment.size).toBe(file.size);
-        expect(attachment.path).toMatch(/^\/home\/agent\/uploads\/.+\/01-notes\.txt$/);
+        // パスは保存された記録にだけ残る（画面へは返さない）。
+        const stored = harness.store.listMessagesSince(DEFAULT_TERA_ID, 0)[0];
+        if (stored === undefined) throw new Error("保存された発言が無い");
+        const storedAttachment = stored.attachments?.[0];
+        if (storedAttachment === undefined) throw new Error("保存された添付が無い");
+        expect(storedAttachment.path).toMatch(/^\/home\/agent\/uploads\/.+\/01-notes\.txt$/);
 
-        const modelText = userContentForModel(message);
+        const modelText = userContentForModel(stored);
         expect(modelText).toContain("[Attached files]");
         expect(modelText).toContain("notes.txt");
-        expect(modelText).toContain(attachment.path);
+        expect(modelText).toContain(storedAttachment.path);
 
         const write = container.writes[0];
         if (write === undefined) throw new Error("ファイルが書かれていない");
@@ -684,10 +694,15 @@ describe("チャット API", () => {
         expect(attachment.name).toBe("only.txt");
         expect(attachment.size).toBe(file.size);
 
-        const modelText = userContentForModel(message);
+        const stored = harness.store.listMessagesSince(DEFAULT_TERA_ID, 0)[0];
+        if (stored === undefined) throw new Error("保存された発言が無い");
+        const storedAttachment = stored.attachments?.[0];
+        if (storedAttachment === undefined) throw new Error("保存された添付が無い");
+
+        const modelText = userContentForModel(stored);
         expect(modelText).toContain("[Attached files]");
         expect(modelText).toContain("only.txt");
-        expect(modelText).toContain(attachment.path);
+        expect(modelText).toContain(storedAttachment.path);
         expect(events.at(-1)?.type).toBe("assistant-done");
       },
       { container },
@@ -771,7 +786,7 @@ describe("チャット API", () => {
 
       const steered = await harness.request(`/api/teras/${DEFAULT_TERA_ID}/steer`, steerRequest("追加の指示"));
       expect(steered.status).toBe(200);
-      const { message } = (await steered.json()) as { message: ChatMessage };
+      const { message } = (await steered.json()) as { message: ChatMessageView };
       expect(message.role).toBe("user");
       expect(message.content).toBe("追加の指示");
 

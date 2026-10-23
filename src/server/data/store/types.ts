@@ -1,12 +1,11 @@
 import type {
   ChatAttachment,
   ChatMessage,
-  MessagePage,
   MessagePart,
   MessageRole,
   Tera,
   TokenUsage,
-} from "../../../shared/types";
+} from "../../../shared/api/message";
 
 /**
  * 保存する前の形と、読み書きの口。
@@ -92,13 +91,21 @@ export type TeraDirectory = {
   ensureTera(id: string, name: string): Tera;
 };
 
+/** 履歴を 1 ページ読んだ結果。画面へ返す前に、表示に使う部品だけへ絞る。 */
+export type MessagePageResult = {
+  /** 古い順。 */
+  messages: ChatMessage[];
+  /** このページより古いメッセージが残っているか。 */
+  hasMore: boolean;
+};
+
 /** 履歴の追記と読み出し。 */
 export type MessageLog = {
   /**
    * 履歴を新しい側から 1 ページ読む（返す並びは古い順）。
    * limit は件数の上限、before は「この seq より前」を表す。
    */
-  listMessagesPage(teraId: string, page: MessagePageQuery): MessagePage;
+  listMessagesPage(teraId: string, page: MessagePageQuery): MessagePageResult;
   /** seq より後のメッセージ（古い順）。まだ畳んでいない生の履歴を取り出す。 */
   listMessagesSince(teraId: string, seq: number): ChatMessage[];
   /**

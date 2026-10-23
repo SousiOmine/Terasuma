@@ -1,6 +1,6 @@
 import { mcpServerIdProblem } from "../../../shared/ids";
 import { trimOrNull } from "../../../shared/strings";
-import type { McpServerForm, ProviderCredentials, WebSearchProviderForm } from "../../../shared/types";
+import type { McpServerForm, ProviderCredentials, WebSearchProviderForm } from "../../../shared/api/settings";
 import { normalizeProvider, normalizeWebSearchProvider, readMcpServerEntry } from "./read";
 import {
   describeMcpServerIdProblem,

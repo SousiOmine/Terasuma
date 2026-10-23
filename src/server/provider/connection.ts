@@ -8,7 +8,8 @@
  *
  * 独自エンドポイント（OpenAI 互換）はカタログに無いので、モデルの一覧もここから取る。
  */
-import type { ApiErrorCode, ProviderCheckResult } from "../../shared/types";
+import type { ApiErrorCode } from "../../shared/api/error";
+import type { ProviderCheckResult } from "../../shared/api/settings";
 import { describeError } from "../../shared/errors";
 import { AppError } from "../errors";
 import { readErrorDetail, sendRequest, type FetchLike } from "../http/client";

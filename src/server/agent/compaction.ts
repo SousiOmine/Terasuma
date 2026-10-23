@@ -1,5 +1,5 @@
 import { describeError } from "../../shared/errors";
-import type { ChatMessage } from "../../shared/types";
+import type { ChatMessage } from "../../shared/api/message";
 import type { CompactionState, Store } from "../data/store";
 import {
   assertSummary,

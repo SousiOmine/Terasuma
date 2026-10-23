@@ -1,5 +1,5 @@
 import type { McpServersSettings, ModelSettings, StoredWebSearchSettings } from "../data/settings";
-import type { McpServersView, ModelSettingsView, WebSearchSettingsView } from "../../shared/types";
+import type { McpServersView, ModelSettingsView, WebSearchSettingsView } from "../../shared/api/settings";
 import type { McpManager } from "../mcp/manager";
 import { isWebSearchProviderId, providerInfo, WEB_SEARCH_PROVIDERS } from "../websearch/index";
 

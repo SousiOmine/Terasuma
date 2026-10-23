@@ -4,7 +4,7 @@ import type {
   WebSearchAvailableProviderView,
   WebSearchProviderForm,
   WebSearchProviderView,
-} from "../../../shared/types";
+} from "../../../shared/api/settings";
 import { useInFlight } from "../../hooks/useInFlight";
 import { t } from "../../i18n";
 import { type ErrorState, toErrorState } from "../../lib/errors";

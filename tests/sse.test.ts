@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { decodeChatEvents, encodeChatEvent } from "../src/shared/sse";
-import type { ChatEvent, TextPart } from "../src/shared/types";
+import type { ChatEvent, TextPart } from "../src/shared/api/message";
 
 const part: TextPart = { type: "text", text: "こんにちは", at: 2 };
 
@@ -66,7 +66,6 @@ describe("SSE", () => {
           },
         ],
         createdAt: 1,
-        usage: { inputTokens: 1, outputTokens: 2, cachedInputTokens: 3 },
       },
     };
 

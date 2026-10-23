@@ -11,7 +11,7 @@ import {
 import { createFileStore, type FileStore } from "../src/server/computer/files";
 import { createImageStore, type ImageStore } from "../src/server/computer/images";
 import { MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES } from "../src/shared/attachments";
-import type { SentAttachment } from "../src/shared/types";
+import type { SentAttachment } from "../src/shared/api/message";
 import { testPng } from "./support";
 
 /**

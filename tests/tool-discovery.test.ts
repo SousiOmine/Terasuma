@@ -5,7 +5,7 @@ import { readToolOutput } from "../src/server/agent/tool-output";
 import { createDiscoveryTools } from "../src/server/agent/tools/discovery";
 import { createToolRegistry, type ToolRegistry } from "../src/server/agent/tools/registry";
 import { TOOL_CALL_TOOL_NAME, TOOL_SEARCH_TOOL_NAME } from "../src/shared/tools";
-import type { ImageRef } from "../src/shared/types";
+import type { ImageRef } from "../src/shared/api/message";
 
 /**
  * モデルのツール一覧に載せないツールの置き場と、それを検索・実行する 2 つ。

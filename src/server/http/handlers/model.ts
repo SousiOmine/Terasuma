@@ -1,7 +1,7 @@
 import { describeError } from "../../../shared/errors";
 import { isModelId, modelParts, modelProvider } from "../../../shared/model";
 import { findEndpointPreset } from "../../../shared/providers";
-import type { CatalogProviderView, ProviderCheckResult, ReasoningView } from "../../../shared/types";
+import type { CatalogProviderView, ProviderCheckResult, ReasoningView } from "../../../shared/api/settings";
 import { selectableEfforts } from "../../provider/reasoning";
 import type { ProviderSettings } from "../../data/settings";
 import { AppError, CatalogUnavailableError, ValidationError } from "../../errors";

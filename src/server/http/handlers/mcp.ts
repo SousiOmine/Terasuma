@@ -1,5 +1,5 @@
 import { describeError } from "../../../shared/errors";
-import type { McpAuthorizationView } from "../../../shared/types";
+import type { McpAuthorizationView } from "../../../shared/api/settings";
 import { AppError, ValidationError } from "../../errors";
 import { readMcpForm } from "../body";
 import { json } from "../respond";

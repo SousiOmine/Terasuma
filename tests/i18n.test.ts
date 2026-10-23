@@ -4,7 +4,7 @@ import { join, relative } from "node:path";
 import { setLocale, t } from "../src/client/i18n";
 import { en } from "../src/client/i18n/en";
 import { ja } from "../src/client/i18n/ja";
-import { API_ERROR_CODES } from "../src/shared/types";
+import { API_ERROR_CODES } from "../src/shared/api/error";
 
 const root = join(import.meta.dir, "..");
 

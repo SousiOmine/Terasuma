@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { FileSettings } from "../src/server/data/settings";
 import type { WebSearchManager } from "../src/server/websearch-manager";
-import type { WebSearchSettingsView, WebSearchTestView } from "../src/shared/types";
+import type { WebSearchSettingsView, WebSearchTestView } from "../src/shared/api/settings";
 import { withServer } from "./harness";
 
 /** 検索を持たない manager。API が設定をどう扱うかだけを確かめる。 */

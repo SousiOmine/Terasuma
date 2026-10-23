@@ -1,7 +1,7 @@
 import type { LanguageModelUsage, TextStreamPart, ToolSet } from "ai";
 import { describeError, messageOf } from "../../../shared/errors";
 import { splitToolName } from "../../../shared/tools";
-import type { MessagePart, TokenUsage } from "../../../shared/types";
+import type { MessagePart, TokenUsage } from "../../../shared/api/message";
 import { readToolOutput } from "../tool-output";
 import type { EngineEvent, EngineStream } from "./index";
 

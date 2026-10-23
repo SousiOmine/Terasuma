@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import type { ConnectionsView } from "../../shared/types";
+import type { ConnectionsView } from "../../shared/api/settings";
 import type { SettingsStore } from "../data/settings";
 import { ConnectionNotFound } from "../errors";
 import { verifyAccount } from "./account";

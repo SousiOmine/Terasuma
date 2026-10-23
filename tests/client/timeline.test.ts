@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { CHAT_SERVER_ID, UI_TOOL } from "../../src/shared/tools";
-import type { ChatMessage, MessagePart } from "../../src/shared/types";
+import type { ChatMessage, MessagePart } from "../../src/shared/api/message";
 import { buildItems } from "../../src/client/features/chat/timeline";
 import type { LiveTurn } from "../../src/client/state/chat";
 

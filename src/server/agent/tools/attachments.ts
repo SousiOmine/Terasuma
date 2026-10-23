@@ -6,7 +6,7 @@ import { MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS_TOTAL_BYTES } fr
 import { throwIfAborted } from "../../../shared/async";
 import { formatBytes } from "../../../shared/text";
 import { ATTACH_TOOL_NAME } from "../../../shared/tools";
-import type { SentAttachment } from "../../../shared/types";
+import type { SentAttachment } from "../../../shared/api/message";
 import type { ImageStore } from "../../computer/images";
 import { imageUrl } from "../../computer/images";
 import type { FileStore } from "../../computer/files";

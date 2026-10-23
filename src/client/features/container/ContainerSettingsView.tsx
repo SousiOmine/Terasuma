@@ -1,5 +1,5 @@
 import { useEffect, useState } from "preact/hooks";
-import type { ContainerState } from "../../../shared/types";
+import type { ContainerState } from "../../../shared/api/settings";
 import { useDeleteTarget } from "../../hooks/useDeleteTarget";
 import type { MessageKey } from "../../i18n";
 import { t } from "../../i18n";

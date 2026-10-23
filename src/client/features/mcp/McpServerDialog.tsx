@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "preact/hooks";
-import type { McpServerForm, McpServerView, McpTestView } from "../../../shared/types";
+import type { McpServerForm, McpServerView, McpTestView } from "../../../shared/api/settings";
 import { useInFlight } from "../../hooks/useInFlight";
 import { t } from "../../i18n";
 import { type ErrorState, toErrorState } from "../../lib/errors";

@@ -1,5 +1,5 @@
 import type { ToolResultPart } from "ai";
-import type { ImageRef } from "../../shared/types";
+import type { ImageRef } from "../../shared/api/message";
 import type { ImageReader } from "../computer/images";
 
 /**

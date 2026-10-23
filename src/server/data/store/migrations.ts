@@ -1,7 +1,7 @@
 import type { Database } from "bun:sqlite";
 import { isMessagePart, isSentAttachment } from "../../../shared/chat-event";
 import { CHAT_SERVER_ID } from "../../../shared/tools";
-import type { MessagePart, SentAttachment } from "../../../shared/types";
+import type { MessagePart, SentAttachment } from "../../../shared/api/message";
 import { SCHEMA_VERSION } from "./schema";
 
 /**

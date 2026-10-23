@@ -6,7 +6,14 @@ import {
   TOOL_CALL_TOOL,
   TOOL_SERVER_ID,
 } from "../../shared/tools";
-import type { AttachmentPart, ChatEvent, ChatMessage, MessagePart, NoticePart, TextPart } from "../../shared/types";
+import type {
+  AttachmentPart,
+  ChatEvent,
+  ChatMessageView,
+  MessagePart,
+  NoticePart,
+  TextPart,
+} from "../../shared/api/message";
 import type { ClientErrorCode } from "../lib/http";
 import { chatUiPartOf } from "../lib/ui";
 
@@ -18,7 +25,7 @@ import { chatUiPartOf } from "../lib/ui";
  */
 
 export type ChatEventEffect =
-  | { kind: "message"; message: ChatMessage }
+  | { kind: "message"; message: ChatMessageView }
   | { kind: "assistant-start"; id: string; createdAt: number }
   | { kind: "assistant-part"; id: string; part: TextPart | AttachmentPart | NoticePart }
   /** chat_ui の呼び出し。カードを画面に置く。 */

@@ -15,7 +15,7 @@ import { BUILTIN_SKILLS } from "../src/server/agent/skills";
 import type { Skill } from "../src/server/agent/skill-types";
 import { readContext } from "../src/server/agent/compaction";
 import { DEFAULT_TERA_ID, DEFAULT_TERA_IDENTITY } from "../src/server/data/store";
-import type { ImageRef } from "../src/shared/types";
+import type { ImageRef } from "../src/shared/api/message";
 import { createImageStub, makeStore, testPng } from "./support";
 
 /**

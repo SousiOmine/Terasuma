@@ -1,4 +1,4 @@
-import type { ChatMessage } from "../../shared/types";
+import type { ChatMessage } from "../../shared/api/message";
 import type { CompactionState } from "../data/store";
 import { userContentForModel } from "./model-content";
 import { summaryText } from "./prompt";

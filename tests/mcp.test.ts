@@ -9,7 +9,7 @@ import type { McpServerSettings, McpServersSettings } from "../src/server/data/s
 import { McpServerNotFound, createMcpManager, type McpManager } from "../src/server/mcp/manager";
 import { createImageStore, type ImageStore } from "../src/server/computer/images";
 import { createSettingsStore } from "../src/server/data/settings";
-import type { ImageRef } from "../src/shared/types";
+import type { ImageRef } from "../src/shared/api/message";
 import { startFakeOAuthServer } from "./fixtures/oauth-server";
 import { testPng } from "./support";
 

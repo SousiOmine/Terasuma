@@ -1,5 +1,5 @@
 import { isChatAttachment, isMessagePart } from "../../../shared/chat-event";
-import type { ChatAttachment, ChatMessage, MessagePart, MessageRole, Tera } from "../../../shared/types";
+import type { ChatAttachment, ChatMessage, MessagePart, MessageRole, Tera } from "../../../shared/api/message";
 
 /** SQLite の行と、ドメインの型の対応。 */
 

@@ -1,11 +1,10 @@
 import type { ReplyLanguage } from "../../shared/language";
 import type { ModelId } from "../../shared/model";
 import { decodeChatEvents } from "../../shared/sse";
+import type { ChatEvent, ChatMessageView, MessagePage, Tera } from "../../shared/api/message";
 import type {
   AddProviderForm,
   CatalogProviderView,
-  ChatEvent,
-  ChatMessage,
   ComputerEnvView,
   ConnectionsView,
   ContainerStatusView,
@@ -14,17 +13,15 @@ import type {
   McpServersView,
   McpServerStatusView,
   McpTestView,
-  MessagePage,
   ModelSettingsView,
   ProviderCheckResult,
   ProviderCredentials,
   ProviderForm,
   ReasoningView,
-  Tera,
   WebSearchProviderForm,
   WebSearchSettingsView,
   WebSearchTestView,
-} from "../../shared/types";
+} from "../../shared/api/settings";
 
 import { ApiError, fetchOrThrow, jsonRequest, request } from "./http";
 
@@ -128,9 +125,13 @@ export async function* streamTurn(
  * 応答を生成しているターンの途中へ、発言を足す。
  * ターンがちょうど終わっていたら null（呼び出し側は、新しいターンとして送り直せる）。
  */
-export async function steerTurn(teraId: string, content: string, files: readonly File[]): Promise<ChatMessage | null> {
+export async function steerTurn(
+  teraId: string,
+  content: string,
+  files: readonly File[],
+): Promise<ChatMessageView | null> {
   try {
-    const body = await request<{ message: ChatMessage }>(`${teraPath(teraId)}/steer`, {
+    const body = await request<{ message: ChatMessageView }>(`${teraPath(teraId)}/steer`, {
       method: "POST",
       body: messageForm(content, files),
     });

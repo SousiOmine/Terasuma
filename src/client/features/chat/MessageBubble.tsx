@@ -1,6 +1,12 @@
 import { IconDownload, IconFile } from "@tabler/icons-preact";
 import { formatBytes } from "../../../shared/text";
-import type { AttachmentPart, ChatMessage, NoticePart, SentAttachment, TextPart } from "../../../shared/types";
+import type {
+  AttachmentPart,
+  ChatMessageView,
+  NoticePart,
+  SentAttachment,
+  TextPart,
+} from "../../../shared/api/message";
 import { t } from "../../i18n";
 import { ChatAvatar } from "./ChatAvatar";
 import { Markdown } from "./Markdown";
@@ -13,7 +19,7 @@ import { Markdown } from "./Markdown";
  * 時刻は発言の脇ではなく下に置き、本文の幅を削らない。
  */
 
-export function UserMessageBubble({ message, time }: { message: ChatMessage; time: string }) {
+export function UserMessageBubble({ message, time }: { message: ChatMessageView; time: string }) {
   const files = message.attachments ?? [];
   if (message.content.length === 0 && files.length === 0) return null;
 

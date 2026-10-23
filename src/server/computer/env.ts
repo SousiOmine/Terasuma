@@ -1,4 +1,4 @@
-import { isEnvName, isReservedEnvName } from "../../shared/env";
+import { isEnvName, isReservedEnvName } from "./env-name";
 import { describeError } from "../../shared/errors";
 import type { SettingsStore } from "../data/settings";
 import { SettingsWriteError } from "../errors";

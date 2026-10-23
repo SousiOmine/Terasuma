@@ -1,6 +1,6 @@
 import { truncateText } from "../../shared/text";
 import { toolNameFor } from "../../shared/tools";
-import type { ChatMessage, MessagePart } from "../../shared/types";
+import type { ChatMessage, MessagePart } from "../../shared/api/message";
 import { userContentForModel } from "./model-content";
 
 /**

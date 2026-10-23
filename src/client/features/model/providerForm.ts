@@ -4,7 +4,7 @@ import {
   findEndpointPreset,
   type EndpointPreset,
 } from "../../../shared/providers";
-import type { CatalogProviderView, ProviderView } from "../../../shared/types";
+import type { CatalogProviderView, ProviderView } from "../../../shared/api/settings";
 
 /**
  * プロバイダ追加ウィザードの純粋な部分。

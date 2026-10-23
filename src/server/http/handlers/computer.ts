@@ -1,6 +1,6 @@
-import { isEnvName } from "../../../shared/env";
+import { isEnvName } from "../../computer/env-name";
 import { describeError } from "../../../shared/errors";
-import type { ComputerEnvView } from "../../../shared/types";
+import type { ComputerEnvView } from "../../../shared/api/settings";
 import { normalizeEnvValue } from "../../computer/env";
 import type { SettingsStore } from "../../data/settings";
 import { ConflictError, ValidationError } from "../../errors";

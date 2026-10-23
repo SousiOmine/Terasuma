@@ -6,7 +6,7 @@ import {
   pickModel,
   targetOf,
 } from "../../src/client/features/model/providerForm";
-import type { ProviderView } from "../../src/shared/types";
+import type { ProviderView } from "../../src/shared/api/settings";
 
 /**
  * プロバイダ追加ウィザードの純粋な部分。

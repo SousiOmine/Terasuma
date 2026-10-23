@@ -3,7 +3,7 @@ import { useState } from "preact/hooks";
 import { modelId } from "../../../shared/model";
 import { trimOrNull } from "../../../shared/strings";
 import type { EndpointPreset } from "../../../shared/providers";
-import type { ProviderCredentials, ProviderView } from "../../../shared/types";
+import type { ProviderCredentials, ProviderView } from "../../../shared/api/settings";
 import { toErrorState, type ErrorState } from "../../lib/errors";
 import { t } from "../../i18n";
 import {

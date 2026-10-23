@@ -9,7 +9,7 @@
 import { expect, test } from "bun:test";
 import { join } from "node:path";
 import { DEFAULT_TERA_ID } from "../../src/server/data/store";
-import type { MessagePart } from "../../src/shared/types";
+import type { MessagePart } from "../../src/shared/api/message";
 import {
   CONTAINER_TIMEOUT_MS,
   expectTurnSucceeded,

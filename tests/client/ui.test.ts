@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { chatUiPartOf, choiceMessage, formComplete, formMessage } from "../../src/client/lib/ui";
-import type { MessagePart } from "../../src/shared/types";
+import type { MessagePart } from "../../src/shared/api/message";
 import type { UiChoiceBlock, UiFormBlock } from "../../src/shared/ui-markup";
 
 /**

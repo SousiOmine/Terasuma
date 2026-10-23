@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { toMessageView } from "../src/server/agent/message-view";
-import type { ChatMessage, MessagePart, SentAttachment } from "../src/shared/types";
+import type { ChatMessage, MessagePart, SentAttachment } from "../src/shared/api/message";
 
 const attachment: SentAttachment = {
   name: "notes.txt",
@@ -19,7 +19,7 @@ function message(parts: MessagePart[]): ChatMessage {
     attachments: null,
     parts,
     createdAt: 1,
-    usage: null,
+    usage: { inputTokens: 1, outputTokens: 2, cachedInputTokens: 0 },
   };
 }
 
@@ -43,9 +43,11 @@ describe("toMessageView", () => {
     expect(view.parts).toEqual([text, uiCall, notice, attachmentPart]);
   });
 
-  test("落とす部分が無ければ、同じメッセージを返す", () => {
-    const original = message([text, uiCall]);
-    expect(toMessageView(original)).toBe(original);
+  test("落とす部分が無くても、usage は返さない", () => {
+    const view = toMessageView(message([text, uiCall]));
+
+    expect(view.parts).toEqual([text, uiCall]);
+    expect("usage" in view).toBe(false);
   });
 
   test("保存した記録と配列を書き換えない", () => {
@@ -58,7 +60,7 @@ describe("toMessageView", () => {
     expect(view.parts?.map((part) => part.type)).toEqual(["text", "notice"]);
   });
 
-  test("parts が null のメッセージはそのまま返す", () => {
+  test("parts が null のメッセージも、usage を落として返す", () => {
     const user: ChatMessage = {
       id: "u1",
       teraId: "default",
@@ -71,6 +73,20 @@ describe("toMessageView", () => {
       usage: null,
     };
 
-    expect(toMessageView(user)).toBe(user);
+    const view = toMessageView(user);
+    expect(view.parts).toBeNull();
+    expect("usage" in view).toBe(false);
+  });
+
+  test("添付のコンテナ内パスは返さない", () => {
+    const withFile: ChatMessage = {
+      ...message([]),
+      role: "user",
+      content: "見て",
+      parts: null,
+      attachments: [{ name: "notes.txt", size: 5, path: "/home/agent/uploads/1/01-notes.txt" }],
+    };
+
+    expect(toMessageView(withFile).attachments).toEqual([{ name: "notes.txt", size: 5 }]);
   });
 });

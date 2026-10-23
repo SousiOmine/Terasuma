@@ -4,7 +4,7 @@ import { rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createStore, DEFAULT_TERA_ID, DEFAULT_TERA_IDENTITY, type Store } from "../src/server/data/store";
-import type { ChatMessage } from "../src/shared/types";
+import type { ChatMessage } from "../src/shared/api/message";
 import { makeStore } from "./support";
 
 /** 一時ファイルの DB を片付ける。WAL と共有メモリのファイルも残さない。 */

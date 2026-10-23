@@ -1,5 +1,5 @@
 import { isDisplayPart } from "../../shared/display-parts";
-import type { ChatMessage } from "../../shared/types";
+import type { ChatMessage, ChatMessageView } from "../../shared/api/message";
 
 /**
  * 画面へ渡すメッセージ。
@@ -8,11 +8,16 @@ import type { ChatMessage } from "../../shared/types";
  * 送る直前にこの形へ絞り、履歴を読むたびに大きな文字列を運ばないようにする。
  * 記録そのもの（store）は書き換えない。モデルへ渡す文脈は full の parts を使う。
  */
-export function toMessageView(message: ChatMessage): ChatMessage {
-  const parts = message.parts;
-  if (parts === null) return message;
-
-  const display = parts.filter(isDisplayPart);
-  if (display.length === parts.length) return message;
-  return { ...message, parts: display };
+export function toMessageView(message: ChatMessage): ChatMessageView {
+  return {
+    id: message.id,
+    teraId: message.teraId,
+    seq: message.seq,
+    role: message.role,
+    content: message.content,
+    // 添付のパスはコンテナの中の場所。画面は名前と大きさだけを使う。
+    attachments: message.attachments === null ? null : message.attachments.map(({ name, size }) => ({ name, size })),
+    parts: message.parts === null ? null : message.parts.filter(isDisplayPart),
+    createdAt: message.createdAt,
+  };
 }

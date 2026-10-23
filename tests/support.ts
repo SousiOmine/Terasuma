@@ -28,7 +28,7 @@ import { createSettingsStore, type SettingsStore } from "../src/server/data/sett
 import { createStore, type Store, type TeraIdentity } from "../src/server/data/store";
 import { createCompaction, type Compaction } from "../src/server/agent/compaction";
 import type { IdentityStore } from "../src/server/agent/identity";
-import type { ContainerStatusView } from "../src/shared/types";
+import type { ContainerStatusView } from "../src/shared/api/settings";
 
 /** 時刻を固定したストア。updated_at の比較を決定的にするため。 */
 export function makeStore() {

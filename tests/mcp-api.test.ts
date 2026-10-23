@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { FileSettings, McpServerSettings } from "../src/server/data/settings";
 import type { AuthorizationCallback, McpManager } from "../src/server/mcp/manager";
-import type { McpServerStatusView, McpServersView, McpTestView } from "../src/shared/types";
+import type { McpServerStatusView, McpServersView, McpTestView } from "../src/shared/api/settings";
 import { withServer } from "./harness";
 
 const UNKNOWN: McpServerStatusView = { state: "unknown", tools: [], detail: null };

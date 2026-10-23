@@ -1,5 +1,5 @@
 import { CHAT_SERVER_ID, UI_TOOL } from "./tools";
-import type { MessagePart } from "./types";
+import type { MessagePart } from "./api/message";
 
 /**
  * 画面が描く部品かどうか。

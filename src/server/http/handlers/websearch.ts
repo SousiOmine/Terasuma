@@ -6,7 +6,7 @@
  */
 
 import { describeError } from "../../../shared/errors";
-import type { WebSearchProviderForm } from "../../../shared/types";
+import type { WebSearchProviderForm } from "../../../shared/api/settings";
 import { ValidationError, WebSearchProviderExists, WebSearchProviderNotFound } from "../../errors";
 import { webSearchProviderSettingsFromForm } from "../../data/settings";
 import type { WebSearchProviderSettings } from "../../data/settings";

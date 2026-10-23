@@ -3,7 +3,7 @@ import { createCompaction, type Compaction } from "../src/server/agent/compactio
 import { estimateMessageTokens, estimateTokens } from "../src/server/agent/tokens";
 import type { CompleteInput } from "../src/server/agent/engine";
 import { DEFAULT_TERA_ID, DEFAULT_TERA_IDENTITY, type Store } from "../src/server/data/store";
-import type { ChatMessage, MessagePart } from "../src/shared/types";
+import type { ChatMessage, MessagePart } from "../src/shared/api/message";
 import { makeStore } from "./support";
 
 const HOUR_MS = 60 * 60 * 1000;

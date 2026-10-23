@@ -1,7 +1,7 @@
 import { IconPlus } from "@tabler/icons-preact";
 import { useEffect, useState } from "preact/hooks";
 import { modelProvider } from "../../../shared/model";
-import type { ProviderView } from "../../../shared/types";
+import type { ProviderView } from "../../../shared/api/settings";
 import { useDeleteTarget } from "../../hooks/useDeleteTarget";
 import { t } from "../../i18n";
 import {

@@ -19,7 +19,7 @@ import type {
 import { createAttachmentTools } from "../src/server/agent/tools/attachments";
 import { createHistoryToolset } from "../src/server/agent/tools/history";
 import { createFileStore } from "../src/server/computer/files";
-import type { ChatMessage, ImageRef, SentAttachment } from "../src/shared/types";
+import type { ChatMessage, ImageRef, SentAttachment } from "../src/shared/api/message";
 import { createImageStore, type ImageStore } from "../src/server/computer/images";
 import type { CatalogSnapshot } from "../src/server/provider/catalog";
 import type { SkillFileStore } from "../src/server/agent/skill-types";

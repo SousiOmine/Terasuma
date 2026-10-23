@@ -1,7 +1,7 @@
 import { mkdirSync, rmSync } from "node:fs";
 import { createServer } from "node:net";
 import { join, posix } from "node:path";
-import type { ContainerStatusView } from "../../shared/types";
+import type { ContainerStatusView } from "../../shared/api/settings";
 import { AppError } from "../errors";
 import { runCommand, runCommandBytes, type CommandByteRunner, type CommandResult, type CommandRunner } from "./command";
 import { podmanExec } from "./podman";

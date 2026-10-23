@@ -1,5 +1,5 @@
 import { CHAT_SERVER_ID, UI_TOOL } from "../../shared/tools";
-import type { MessagePart } from "../../shared/types";
+import type { MessagePart } from "../../shared/api/message";
 import { parseUiMarkup, type UiChoiceBlock, type UiFormBlock, type UiView } from "../../shared/ui-markup";
 
 /**

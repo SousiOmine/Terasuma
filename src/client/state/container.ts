@@ -1,5 +1,5 @@
 import { signal } from "@preact/signals";
-import type { ContainerStatusView } from "../../shared/types";
+import type { ContainerStatusView } from "../../shared/api/settings";
 import * as api from "../lib/api";
 import { createErrorSignal } from "../lib/errors";
 import { createResource } from "./resource";

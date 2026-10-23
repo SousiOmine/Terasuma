@@ -1,7 +1,7 @@
 import type { ToolSet } from "ai";
 import { tool } from "ai";
 import { z } from "zod";
-import { ENV_NAME_PATTERN, isReservedEnvName } from "../../../shared/env";
+import { ENV_NAME_PATTERN, isReservedEnvName } from "../../computer/env-name";
 import type { ContainerManager, ShellResult } from "../../computer/container";
 import type { ComputerToolsetProvider } from "../contracts";
 import type { EnvRequests } from "../../computer/env";

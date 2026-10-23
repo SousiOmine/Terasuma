@@ -1,5 +1,5 @@
 import type { ToolSet } from "ai";
-import type { SentAttachment } from "../../shared/types";
+import type { SentAttachment } from "../../shared/api/message";
 import type { McpToolset } from "../mcp/manager";
 import type { AttachmentToolset } from "./tools/attachments";
 import type { ComputerToolset } from "./tools/computer";

@@ -1,5 +1,5 @@
 import { encodeChatEvent } from "../../shared/sse";
-import type { ChatEvent } from "../../shared/types";
+import type { ChatEvent } from "../../shared/api/message";
 
 /**
  * 1 ターン分のイベントを SSE として流す。

@@ -1,5 +1,5 @@
 import { isDisplayPart } from "../../../shared/display-parts";
-import type { AttachmentPart, ChatMessage, MessagePart, NoticePart, TextPart } from "../../../shared/types";
+import type { AttachmentPart, ChatMessageView, MessagePart, NoticePart, TextPart } from "../../../shared/api/message";
 import type { UiView } from "../../../shared/ui-markup";
 import { locale } from "../../i18n";
 import { chatUiPartOf } from "../../lib/ui";
@@ -23,7 +23,7 @@ export type DisplayPart = GroupPart | UiDisplayPart | NoticePart;
 
 export type ChatItem =
   | { kind: "date"; key: string; label: string }
-  | { kind: "user"; key: string; message: ChatMessage }
+  | { kind: "user"; key: string; message: ChatMessageView }
   | { kind: "agent"; key: string; parts: readonly GroupPart[] }
   | { kind: "ui"; key: string; view: UiView | null }
   | { kind: "notice"; key: string; part: NoticePart };
@@ -36,7 +36,7 @@ export type ChatItem =
  * 保存済みと受信中を分けて組み立てるときは、startDay に前の並びの最後の日を渡す。
  */
 export function buildItems(
-  saved: readonly ChatMessage[],
+  saved: readonly ChatMessageView[],
   live: LiveTurn | null,
   tag: string,
   startDay: string | null = null,

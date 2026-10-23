@@ -1,14 +1,16 @@
 import { isRecord } from "./guards";
-import { API_ERROR_CODES } from "./types";
+import { API_ERROR_CODES } from "./api/error";
 import type {
   ChatAttachment,
+  ChatAttachmentView,
   ChatEvent,
   ChatMessage,
+  ChatMessageView,
   ImageRef,
   MessagePart,
   SentAttachment,
   TokenUsage,
-} from "./types";
+} from "./api/message";
 
 /**
  * 通信と保存データの形を、実行時に確かめる。
@@ -41,6 +43,11 @@ function isImageRef(value: unknown): value is ImageRef {
 /** 画面に出す添付ファイル 1 件。 */
 export function isChatAttachment(value: unknown): value is ChatAttachment {
   return isRecord(value) && isString(value.name) && isNumber(value.size) && isString(value.path);
+}
+
+/** 画面へ返す添付ファイル 1 件。コンテナの中のパスは持たない。 */
+export function isChatAttachmentView(value: unknown): value is ChatAttachmentView {
+  return isRecord(value) && isString(value.name) && isNumber(value.size);
 }
 
 /** エージェントが送った添付ファイル 1 件。 */
@@ -102,6 +109,23 @@ export function isChatMessage(value: unknown): value is ChatMessage {
   );
 }
 
+/** 画面へ返す 1 件のメッセージ。usage を持たない。 */
+export function isChatMessageView(value: unknown): value is ChatMessageView {
+  if (!isRecord(value)) return false;
+
+  return (
+    isString(value.id) &&
+    isString(value.teraId) &&
+    isNumber(value.seq) &&
+    (value.role === "user" || value.role === "assistant") &&
+    isString(value.content) &&
+    (value.attachments === null ||
+      (Array.isArray(value.attachments) && value.attachments.every(isChatAttachmentView))) &&
+    (value.parts === null || (Array.isArray(value.parts) && value.parts.every(isMessagePart))) &&
+    isNumber(value.createdAt)
+  );
+}
+
 /** SSE で流れてくるイベント 1 つ。 */
 export function isChatEvent(value: unknown): value is ChatEvent {
   if (!isRecord(value)) return false;
@@ -109,7 +133,7 @@ export function isChatEvent(value: unknown): value is ChatEvent {
   switch (value.type) {
     case "user-message":
     case "assistant-done":
-      return isChatMessage(value.message);
+      return isChatMessageView(value.message);
     case "assistant-start":
       return isString(value.id) && isNumber(value.createdAt);
     case "assistant-message":

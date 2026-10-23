@@ -23,7 +23,7 @@ import { createMcpManager, type McpManager } from "./server/mcp/manager";
 import { OAUTH_CALLBACK_PATH } from "./server/mcp/oauth";
 import { CATALOG_FILE_NAME, createCatalog, modelContextTokens, type Catalog } from "./server/provider/catalog";
 import type { ConnectionChecker, ProviderModelLister } from "./server/provider/connection";
-import type { SentAttachment } from "./shared/types";
+import type { SentAttachment } from "./shared/api/message";
 
 /**
  * 依存を組み立てて、動くアプリを 1 つ作る（合成ルート）。

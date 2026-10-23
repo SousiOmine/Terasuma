@@ -1,4 +1,4 @@
-import type { ChatMessage, TokenUsage } from "../../../shared/types";
+import type { ChatMessage, TokenUsage } from "../../../shared/api/message";
 import { userContentForModel } from "../model-content";
 import type { AgentEngine, EngineEvent } from "./index";
 

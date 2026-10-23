@@ -1,5 +1,5 @@
 import { describeError } from "../../shared/errors";
-import { API_ERROR_CODES, type ApiErrorCode } from "../../shared/types";
+import { API_ERROR_CODES, type ApiErrorCode } from "../../shared/api/error";
 
 /**
  * HTTP の入り口。

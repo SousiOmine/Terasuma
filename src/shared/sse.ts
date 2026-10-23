@@ -1,5 +1,5 @@
 import { isChatEvent } from "./chat-event";
-import type { ChatEvent } from "./types";
+import type { ChatEvent } from "./api/message";
 
 /**
  * ChatEvent を SSE のフレームに変換する。

@@ -1,5 +1,5 @@
 import { computed, signal } from "@preact/signals";
-import type { Tera } from "../../shared/types";
+import type { Tera } from "../../shared/api/message";
 import * as api from "../lib/api";
 
 /**

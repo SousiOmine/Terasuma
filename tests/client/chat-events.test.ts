@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { interpretEvent } from "../../src/client/state/chat-events";
-import type { AttachmentPart, ChatMessage, NoticePart, TextPart } from "../../src/shared/types";
+import type { AttachmentPart, ChatMessage, NoticePart, TextPart } from "../../src/shared/api/message";
 
 /**
  * SSE のイベントを、画面の状態に何をするかへ読み替える部分。

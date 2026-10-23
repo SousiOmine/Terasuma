@@ -1,5 +1,5 @@
 import { formatBytes } from "../../shared/text";
-import type { ChatAttachment, ChatMessage } from "../../shared/types";
+import type { ChatAttachment, ChatMessage } from "../../shared/api/message";
 
 /**
  * モデルへ渡す本文の組み立て。

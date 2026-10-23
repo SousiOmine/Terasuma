@@ -1,7 +1,7 @@
 import { posix } from "node:path";
 import { MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS_TOTAL_BYTES } from "../../shared/attachments";
 import { formatBytes } from "../../shared/text";
-import type { ChatAttachment } from "../../shared/types";
+import type { ChatAttachment } from "../../shared/api/message";
 import { ValidationError } from "../errors";
 import { WORKDIR_IN_CONTAINER, type ContainerManager } from "./container";
 

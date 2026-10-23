@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { ImageRef } from "../../shared/types";
+import type { ImageRef } from "../../shared/api/message";
 
 /**
  * ツールが返した画像を、データディレクトリにファイルとして置く。

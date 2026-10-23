@@ -6,7 +6,7 @@
  */
 
 import { describeError } from "../shared/errors";
-import type { WebSearchTestView } from "../shared/types";
+import type { WebSearchTestView } from "../shared/api/settings";
 import type { SettingsStore } from "./data/settings";
 import {
   createSearchProvider,

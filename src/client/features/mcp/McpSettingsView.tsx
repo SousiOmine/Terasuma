@@ -1,6 +1,6 @@
 import { IconExternalLink, IconPlus, IconRefresh } from "@tabler/icons-preact";
 import { useEffect, useState } from "preact/hooks";
-import type { McpServerState, McpServerView } from "../../../shared/types";
+import type { McpServerState, McpServerView } from "../../../shared/api/settings";
 import { useDeleteTarget } from "../../hooks/useDeleteTarget";
 import type { MessageKey } from "../../i18n";
 import { t } from "../../i18n";

@@ -1,4 +1,4 @@
-import type { WebSearchProviderForm, WebSearchTestView } from "../../shared/types";
+import type { WebSearchProviderForm, WebSearchTestView } from "../../shared/api/settings";
 import * as api from "../lib/api";
 import { createErrorSignal } from "../lib/errors";
 import { createResource } from "./resource";

@@ -6,7 +6,7 @@
  */
 import { expect, test } from "bun:test";
 import { DEFAULT_TERA_ID } from "../../src/server/data/store";
-import type { MessagePart } from "../../src/shared/types";
+import type { MessagePart } from "../../src/shared/api/message";
 import {
   CONTAINER_TIMEOUT_MS,
   TURN_TIMEOUT_MS,
@@ -34,10 +34,12 @@ test(
       const text = visibleText(first);
       expect(text.length, "本文が空だった").toBeGreaterThan(0);
       expect(messageText(done), "流れてきた本文と保存された本文が食い違っている").toBe(text);
-      expect(done.usage, "トークン数が報告されなかった").not.toBeNull();
-      expect(done.usage?.inputTokens ?? 0, "入力トークンが 0 だった").toBeGreaterThan(0);
-      expect(done.usage?.outputTokens ?? 0, "出力トークンが 0 だった").toBeGreaterThan(0);
-      report("1 ターン目", done);
+      const storedUsage =
+        harness.store.listMessagesSince(DEFAULT_TERA_ID, 0).find((message) => message.id === done.id)?.usage ?? null;
+      expect(storedUsage, "トークン数が報告されなかった").not.toBeNull();
+      expect(storedUsage?.inputTokens ?? 0, "入力トークンが 0 だった").toBeGreaterThan(0);
+      expect(storedUsage?.outputTokens ?? 0, "出力トークンが 0 だった").toBeGreaterThan(0);
+      report("1 ターン目", done, storedUsage);
 
       // 2 ターン目は、1 ターン目の履歴をそのまま積んで送る。
       // 保存済みの履歴がプロバイダに通るかどうかは、ここでしか分からない。

@@ -4,7 +4,7 @@ import type { ToolSet } from "ai";
 import type { McpHttpServerSettings, McpServerSettings, McpServersSettings } from "../data/settings";
 import { toolNameFor } from "../../shared/tools";
 import { AppError } from "../errors";
-import type { McpAuthorizationView, McpServerStatusView, McpTestView } from "../../shared/types";
+import type { McpAuthorizationView, McpServerStatusView, McpTestView } from "../../shared/api/settings";
 import {
   createFileOAuthStorage,
   finishMcpAuthorization,

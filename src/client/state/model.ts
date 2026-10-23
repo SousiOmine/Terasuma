@@ -7,7 +7,7 @@ import type {
   ProviderForm,
   ProviderView,
   ReasoningView,
-} from "../../shared/types";
+} from "../../shared/api/settings";
 import * as api from "../lib/api";
 import { createErrorSignal } from "../lib/errors";
 import { createResource } from "./resource";

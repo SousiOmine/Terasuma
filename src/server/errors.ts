@@ -1,4 +1,4 @@
-import type { ApiErrorCode } from "../shared/types";
+import type { ApiErrorCode } from "../shared/api/error";
 
 /**
  * 画面へ返す失敗。

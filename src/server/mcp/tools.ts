@@ -2,7 +2,7 @@ import type { CallToolResult } from "@modelcontextprotocol/client";
 import { jsonSchema, tool, type JSONSchema7, type ToolSet } from "ai";
 import { describeError } from "../../shared/errors";
 import { toolNameFor } from "../../shared/tools";
-import type { ImageRef } from "../../shared/types";
+import type { ImageRef } from "../../shared/api/message";
 import type { ImageToolOutput } from "../agent/tool-output";
 import type { ImageStore } from "../computer/images";
 import type { McpServerSettings } from "../data/settings";

@@ -2,7 +2,7 @@ import { describeError } from "../../shared/errors";
 import { isProviderId } from "../../shared/ids";
 import { isReplyLanguage, type ReplyLanguage } from "../../shared/language";
 import { isModelId, type ModelId } from "../../shared/model";
-import type { McpServerForm, ProviderCredentials, WebSearchProviderForm } from "../../shared/types";
+import type { McpServerForm, ProviderCredentials, WebSearchProviderForm } from "../../shared/api/settings";
 import type { UploadFile } from "../computer/uploads";
 import { readUploadedFiles } from "../computer/uploads";
 import { mcpServerSettingsFromForm, parseProviderCredentials } from "../data/settings";

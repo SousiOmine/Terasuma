@@ -1,5 +1,5 @@
 import { describeError } from "../../shared/errors";
-import type { ApiErrorCode } from "../../shared/types";
+import type { ApiErrorCode } from "../../shared/api/error";
 import { AppError } from "../errors";
 
 /**

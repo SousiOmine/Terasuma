@@ -1,6 +1,6 @@
 import type { ModelMessage } from "ai";
 import type { ReplyLanguage } from "../../shared/language";
-import type { ChatMessage, ImageRef, MessagePart } from "../../shared/types";
+import type { ChatMessage, ImageRef, MessagePart } from "../../shared/api/message";
 import { formatLocalDate } from "../../shared/text";
 import { toolNameFor } from "../../shared/tools";
 import type { ImageReader } from "../computer/images";

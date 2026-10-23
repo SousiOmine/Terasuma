@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { DEFAULT_TERA_ID, type Store } from "../src/server/data/store";
-import type { MessagePage, MessagePart, NoticePart, TextPart } from "../src/shared/types";
+import type { MessagePage, MessagePart, NoticePart, TextPart } from "../src/shared/api/message";
 import { type ServerHarness, withServer } from "./harness";
 
 const TERA = DEFAULT_TERA_ID;

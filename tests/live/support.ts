@@ -18,7 +18,7 @@ import { createStore, type Store } from "../../src/server/data/store";
 import type { ReplyLanguage } from "../../src/shared/language";
 import { decodeChatEvents } from "../../src/shared/sse";
 import { TOOL_CALL_TOOL_NAME } from "../../src/shared/tools";
-import type { ChatEvent, ChatMessage, MessagePage, MessagePart, TokenUsage } from "../../src/shared/types";
+import type { ChatEvent, ChatMessageView, MessagePage, MessagePart, TokenUsage } from "../../src/shared/api/message";
 
 /** 1 ターンの待ち時間。モデルの応答とツールの実行を含むので、既定の 5 秒では足りない。 */
 export const TURN_TIMEOUT_MS = 180_000;
@@ -39,7 +39,7 @@ export type LiveHarness = {
   compaction: Compaction;
   send(teraId: string, content: string, language?: ReplyLanguage): Promise<ChatEvent[]>;
   /** その Tera の履歴（古い順）。 */
-  messages(teraId: string): Promise<ChatMessage[]>;
+  messages(teraId: string): Promise<ChatMessageView[]>;
 };
 
 /**
@@ -95,7 +95,7 @@ export async function withLiveServer(run: (harness: LiveHarness) => Promise<void
         return decoded.events;
       },
       async messages(teraId) {
-        const messages: ChatMessage[] = [];
+        const messages: ChatMessageView[] = [];
         let before: number | null = null;
 
         for (;;) {
@@ -128,7 +128,7 @@ export function visibleText(events: ChatEvent[]): string {
 }
 
 /** 保存された assistant メッセージから、本文を取り出す。 */
-export function messageText(message: ChatMessage): string {
+export function messageText(message: ChatMessageView): string {
   if (message.parts === null) return message.content;
 
   return message.parts
@@ -141,7 +141,7 @@ export function messageText(message: ChatMessage): string {
  * ターンが最後まで通ったことを確かめ、保存された assistant の本文を返す。
  * 失敗はストリームの最後のイベントとして届くので、理由をそのままテストの出力に出す。
  */
-export function expectTurnSucceeded(events: ChatEvent[]): ChatMessage {
+export function expectTurnSucceeded(events: ChatEvent[]): ChatMessageView {
   const last = events.at(-1);
   if (last?.type === "error") {
     throw new Error(`ターンが失敗した（${last.code}）: ${last.detail ?? "(理由なし)"}`);
@@ -162,10 +162,8 @@ export function preview(content: string, width = 100): string {
  * 応答の中身と消費したトークンを出力に残す。
  * 実際に何が返ってきたかと、キャッシュが当たったかどうかが、走らせただけで分かるようにする。
  */
-export function report(label: string, message: ChatMessage): void {
+export function report(label: string, message: ChatMessageView, usage: TokenUsage | null = null): void {
   console.log(`  ${label}: 「${preview(messageText(message))}」`);
-
-  const usage: TokenUsage | null = message.usage;
   if (usage === null) {
     console.log(`  ${label}: トークン数は報告されなかった`);
     return;

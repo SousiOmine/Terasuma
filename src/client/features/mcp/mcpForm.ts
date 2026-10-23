@@ -1,5 +1,5 @@
 import { mcpServerIdProblem } from "../../../shared/ids";
-import type { McpServerForm } from "../../../shared/types";
+import type { McpServerForm } from "../../../shared/api/settings";
 import type { MessageKey } from "../../i18n";
 
 /**

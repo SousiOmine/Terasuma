@@ -1,5 +1,5 @@
 import { signal } from "@preact/signals";
-import type { ChatEvent, ChatMessage, MessagePart } from "../../shared/types";
+import type { ChatEvent, ChatMessageView, MessagePart } from "../../shared/api/message";
 import { locale } from "../i18n";
 import * as api from "../lib/api";
 import { ApiError } from "../lib/http";
@@ -18,7 +18,7 @@ import { activeTeraId } from "./session";
  * 画面に出るのは、モデルの本文・添付・注記だけ。
  */
 
-export const messages = signal<readonly ChatMessage[]>([]);
+export const messages = signal<readonly ChatMessageView[]>([]);
 
 /** いま届いているターンの、画面に出す本文・添付・注記と、UI のカードの呼び出し。 */
 export type LiveTurn = {
@@ -165,7 +165,7 @@ export async function sendMessage(rawContent: string, files: readonly File[]): P
   // 足す先がちょうど終わっていたら、後始末が済んでから新しいターンとして送り直す。
   if (isStreaming.value) {
     const running = current;
-    let steered: ChatMessage | null;
+    let steered: ChatMessageView | null;
     try {
       steered = await api.steerTurn(teraId, content, files);
     } catch (error) {
@@ -232,7 +232,7 @@ export async function sendMessage(rawContent: string, files: readonly File[]): P
  * 応答中に足した発言は、送っている間にターンが終わって assistant のメッセージが
  * 先に届くことがある。読み直したときと同じ並びになるよう、末尾ではなく seq の位置へ入れる。
  */
-function insertSaved(message: ChatMessage): void {
+function insertSaved(message: ChatMessageView): void {
   const list = messages.value;
   const index = list.findIndex((entry) => entry.seq > message.seq);
   messages.value = index === -1 ? [...list, message] : [...list.slice(0, index), message, ...list.slice(index)];
@@ -262,7 +262,6 @@ function settleLiveTurn(teraId: string): void {
       attachments: null,
       parts: [...live.parts],
       createdAt: live.createdAt,
-      usage: null,
     },
   ];
 }
