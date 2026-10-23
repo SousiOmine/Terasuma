@@ -3,7 +3,7 @@ import { Database } from "bun:sqlite";
 import { rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createStore, DEFAULT_TERA_ID, type Store } from "../src/server/data/store";
+import { createStore, DEFAULT_TERA_ID, DEFAULT_TERA_IDENTITY, type Store } from "../src/server/data/store";
 import type { ChatMessage } from "../src/shared/types";
 import { makeStore } from "./support";
 
@@ -47,6 +47,48 @@ describe("store", () => {
     const again = store.ensureTera("second", "別の名前");
     expect(again.name).toBe("2 体目");
     expect(again.createdAt).toBe(created.createdAt);
+  });
+
+  test("新しい Tera には、既定の役割が system プロンプト用として入っている", () => {
+    const store = makeStore();
+    const identity = store.readIdentity(DEFAULT_TERA_ID);
+
+    expect(identity.content).toBe(DEFAULT_TERA_IDENTITY);
+    expect(identity.applied).toBe(DEFAULT_TERA_IDENTITY);
+  });
+
+  test("identity を書いても、system プロンプト用の版は変わらない", () => {
+    const store = makeStore();
+    const written = store.writeIdentity(DEFAULT_TERA_ID, "# Role\n調べる");
+
+    expect(written).toEqual({ content: "# Role\n調べる", applied: DEFAULT_TERA_IDENTITY });
+    expect(store.readIdentity(DEFAULT_TERA_ID)).toEqual(written);
+  });
+
+  test("identity を切り替えると、書いた版が system プロンプト用になる", () => {
+    const store = makeStore();
+    store.writeIdentity(DEFAULT_TERA_ID, "# Role\n調べる");
+
+    expect(store.applyIdentity(DEFAULT_TERA_ID)).toBe(true);
+    expect(store.readIdentity(DEFAULT_TERA_ID)).toEqual({
+      content: "# Role\n調べる",
+      applied: "# Role\n調べる",
+    });
+  });
+
+  test("同じ内容で identity を切り替えても、変化なしとして扱う", () => {
+    const store = makeStore();
+
+    expect(store.applyIdentity(DEFAULT_TERA_ID)).toBe(false);
+  });
+
+  test("identity は Tera ごとに別", () => {
+    const store = makeStore();
+    store.ensureTera("second", "2 体目");
+    store.writeIdentity("second", "# Role\n2 体目");
+
+    expect(store.readIdentity("second").content).toBe("# Role\n2 体目");
+    expect(store.readIdentity(DEFAULT_TERA_ID).content).toBe(DEFAULT_TERA_IDENTITY);
   });
 
   test("appendMessage は連番を振り、Tera の更新時刻を進める", () => {
@@ -185,6 +227,29 @@ describe("store", () => {
         expect(again?.name).toBe("Tera");
         expect(again?.createdAt).toBe(created?.createdAt);
         expect(allMessages(second, DEFAULT_TERA_ID).map((message) => message.content)).toEqual(["残る本文"]);
+      } finally {
+        second.close();
+      }
+    } finally {
+      removeDatabase(path);
+    }
+  });
+
+  test("開き直しても、identity は書いた版と切り替えた版のまま", () => {
+    const path = join(tmpdir(), `terasuma-store-${crypto.randomUUID()}.db`);
+
+    try {
+      const first = createStore(path);
+      first.writeIdentity(DEFAULT_TERA_ID, "# Role\n残る役割");
+      first.applyIdentity(DEFAULT_TERA_ID);
+      first.close();
+
+      const second = createStore(path);
+      try {
+        expect(second.readIdentity(DEFAULT_TERA_ID)).toEqual({
+          content: "# Role\n残る役割",
+          applied: "# Role\n残る役割",
+        });
       } finally {
         second.close();
       }

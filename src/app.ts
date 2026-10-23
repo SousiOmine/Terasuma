@@ -127,6 +127,7 @@ export function startApp(config: AppConfig): App {
     images,
     catalog,
     skills,
+    identity: store,
   });
 
   // 古いやり取りは、3 時間の放置か、文脈長に近づいたときに、背景で要約へ畳む。

@@ -11,12 +11,14 @@ import { readStoredImages, toolResultOutput, type StoredImages } from "./tool-ou
 /**
  * モデルへ渡す system プロンプト。
  *
- * スキルの一覧以外は定数にする。日時・ユーザー名・件数・ファイル一覧などを混ぜると、
- * リクエストの先頭が一致しなくなり、毎回プロンプトキャッシュが外れる。
+ * 固定の文と、identity と、スキルの一覧で組み立てる。日時・ユーザー名・件数・ファイル一覧などを
+ * 混ぜると、リクエストの先頭が一致しなくなり、毎回プロンプトキャッシュが外れる。
  * スキルの一覧はターンの開始時に組み立てるので、スキルが変わらない限り前のターンと一致する。
  * スキルが増減したときだけ、そのターンから先頭が変わる。
  * ターンの途中でスキルが増えた場合は system プロンプトを組み直さず、
  * 次のモデル呼び出しの前に user メッセージで知らせる（engine.ts）。
+ * identity は圧縮が要約を書き換えたときだけ切り替わる（compaction.ts）。
+ * 要約も同じ瞬間に変わるので、その間はプロンプトキャッシュが当たり続ける。
  * 日時のような毎回変わる情報は、履歴の末尾（最後の user メッセージの後ろ）に置く。
  * 畳んだ要約（TeraContext）は、この定数ではなく先頭の user メッセージとして渡す。
  */
@@ -39,15 +41,29 @@ const SYSTEM_PROMPT_BASE = [
   "Use app_request to call the API of a connected app with its token (for example GET /user on github); the token is never shown to you.",
   "Use history_search to look up earlier conversation with the user, including turns compacted out of your visible history: terms are regular expressions (all must match), from/to take YYYY-MM-DD dates, limit caps the newest matches, and invert/wholeWord work like grep -v/-w.",
   "Skills you created live in the computer at /home/agent/.agents/skills; create, update and delete them with skill_manage. Built-in skills are read-only.",
+  "Your identity is your role and the knowledge you need for it. You own it: read or rewrite it with the identity tool.",
+  "A rewrite replaces the identity in this prompt only when the conversation is compacted and the summary is rewritten. Until then this prompt keeps the previous version.",
 ];
 
-/** モデルへ渡す system プロンプト。スキルの一覧だけがターンごとに変わる。 */
-export function buildSystemPrompt(skills: readonly Skill[]): string {
+/**
+ * モデルへ渡す system プロンプト。
+ * identity は圧縮のときだけ、スキルの一覧はターンの開始時に変わる。
+ */
+export function buildSystemPrompt(skills: readonly Skill[], identity: string): string {
   return [
     ...SYSTEM_PROMPT_BASE,
+    ...identitySection(identity),
     "Skills (load one with the skill tool before starting work that matches it):",
     skillCatalogText(skills),
   ].join("\n");
+}
+
+/** system プロンプトに載せる identity。空なら、これから書けることを伝える。 */
+function identitySection(identity: string): string[] {
+  if (identity === "") {
+    return ["", "Your identity: none yet. Write one with the identity tool when you know the role you take.", ""];
+  }
+  return ["", "Your identity:", "<identity>", identity, "</identity>", ""];
 }
 
 /**
@@ -231,9 +247,10 @@ export function buildModelInput(
   options: ModelInputOptions,
   now: number,
   skills: readonly Skill[],
+  identity: string,
 ): ModelMessage[] {
   return [
-    { role: "system", content: buildSystemPrompt(skills) },
+    { role: "system", content: buildSystemPrompt(skills, identity) },
     ...toModelMessages(context, images, replyLanguage, options, now),
   ];
 }

@@ -29,6 +29,10 @@ import { contextTokens, estimateMessageTokens } from "./tokens";
  *
  * 要約は先頭の user メッセージとして渡す（prompt.ts）。
  * 要約が変わらない限り前置きは前のターンと一致するので、プロンプトキャッシュは当たり続ける。
+ *
+ * 要約を書き換えたときは、Tera が書いた identity も system プロンプト用の版へ切り替える。
+ * 畳むものが無いときや失敗したときは切り替えない。書き換えた直後には反映されないので、
+ * 次の圧縮まではプロンプト（とキャッシュ）がそのまま保たれる。
  */
 
 /** 最後のやり取りからこれだけたったら、閾値に関係なく畳む。 */
@@ -207,6 +211,12 @@ export function createCompaction(options: CreateCompactionOptions): Compaction {
       tokensBefore,
       createdAt: now(),
     });
+
+    // 要約を書き換えたので、書かれている identity も system プロンプト用の版へ切り替える。
+    // 畳むものが無いとき（下の early return）は、ここへ来ない。
+    if (store.applyIdentity(teraId)) {
+      log(`  圧縮: identity を新しい版に切り替えました（${teraId}）`);
+    }
 
     log(
       `  圧縮: 古いやり取り ${cut.firstKept} 件を要約しました（${teraId}）` +

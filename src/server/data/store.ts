@@ -28,6 +28,17 @@ const LEGACY_SEND_TOOL = "send";
 export const DEFAULT_TERA_ID = "default";
 const DEFAULT_TERA_NAME = "Tera";
 
+/**
+ * 既定の identity。Tera が自分で書き換える出発点になる。
+ * system プロンプトに常に載るので、短く保つ。
+ */
+export const DEFAULT_TERA_IDENTITY = [
+  "# Role",
+  "",
+  "You are a general-purpose assistant for the user. You run on their own machine and answer in this chat.",
+  "You help with whatever they bring: questions, writing and changing code, the desktop container, and web research.",
+].join("\n");
+
 export type AppendMessageInput = {
   id: string;
   teraId: string;
@@ -64,10 +75,25 @@ export type CompactionState = {
   createdAt: number;
 };
 
+/**
+ * Tera の identity（自分の役割と、必要な知識）。
+ *
+ * content は Tera が identity ツールで書いた最新の本文。
+ * applied は system プロンプトに載っている版で、最後に圧縮が要約を書き換えた時点の content が入る。
+ * system プロンプトは applied だけを読むので、書き換えただけでは次の圧縮まで変わらない。
+ */
+export type TeraIdentity = {
+  content: string;
+  applied: string;
+};
+
 export type Store = {
   listTeras(): Tera[];
   getTera(id: string): Tera | null;
-  /** 無ければ作る。既にあれば名前も作成日時も変えない（起動のたびに呼ばれる）。 */
+  /**
+   * 無ければ作る。既にあれば名前も作成日時も変えない（起動のたびに呼ばれる）。
+   * identity も無ければ既定の役割で作り、既にあれば変えない。
+   */
   ensureTera(id: string, name: string): Tera;
   /**
    * 履歴を新しい側から 1 ページ読む（返す並びは古い順）。
@@ -86,6 +112,15 @@ export type Store = {
   readCompaction(teraId: string): CompactionState;
   /** 要約を置き換える。throughSeq は呼ぶ側が前に進める（戻さない）。 */
   writeCompaction(teraId: string, state: CompactionState): void;
+  /** Tera の identity を読む。まだ書かれていなければ、どちらも空。 */
+  readIdentity(teraId: string): TeraIdentity;
+  /** Tera が書いた identity を置き換える。system プロンプト用の版（applied）は変えない。 */
+  writeIdentity(teraId: string, content: string): TeraIdentity;
+  /**
+   * 書かれている identity を、system プロンプト用の版へ切り替える。
+   * 圧縮が要約を書き換えたときに呼ぶ。変わったときだけ true。
+   */
+  applyIdentity(teraId: string): boolean;
   close(): void;
 };
 
@@ -207,6 +242,12 @@ export function createStore(dbPath: string, options: CreateStoreOptions = {}): S
       tokens_before INTEGER NOT NULL,
       created_at    INTEGER NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS tera_identity (
+      tera_id TEXT PRIMARY KEY REFERENCES teras (id) ON DELETE CASCADE,
+      content TEXT NOT NULL,
+      applied TEXT NOT NULL
+    );
   `);
 
   const selectTera = db.query<TeraRow, [string]>("SELECT id, name, created_at, updated_at FROM teras WHERE id = ?");
@@ -279,6 +320,23 @@ export function createStore(dbPath: string, options: CreateStoreOptions = {}): S
        created_at = excluded.created_at`,
   );
 
+  const selectIdentity = db.query<{ content: string; applied: string }, [string]>(
+    "SELECT content, applied FROM tera_identity WHERE tera_id = ?",
+  );
+  // 行が無ければ applied を空で作る。既にあれば content だけを書き換え、applied は据え置く。
+  const upsertIdentity = db.query<unknown, [string, string]>(
+    `INSERT INTO tera_identity (tera_id, content, applied) VALUES (?, ?, '')
+     ON CONFLICT (tera_id) DO UPDATE SET content = excluded.content`,
+  );
+  const insertIdentityIfMissing = db.query<unknown, [string, string, string]>(
+    `INSERT INTO tera_identity (tera_id, content, applied) VALUES (?, ?, ?)
+     ON CONFLICT (tera_id) DO NOTHING`,
+  );
+  // 変わる行が無ければ changes は 0 になる（同じ内容での切り替えを「変化なし」と呼べる）。
+  const switchIdentity = db.query<unknown, [string]>(
+    "UPDATE tera_identity SET applied = content WHERE tera_id = ? AND content <> applied",
+  );
+
   const append = db.transaction((input: AppendMessageInput): ChatMessage => {
     const at = now();
     const parts = input.parts ?? null;
@@ -328,6 +386,8 @@ export function createStore(dbPath: string, options: CreateStoreOptions = {}): S
     ensureTera(id, name) {
       const at = now();
       insertTera.run(id, name, at, at);
+      // identity の行が無いときだけ、既定の役割を入れる（書かれている本文は変えない）。
+      insertIdentityIfMissing.run(id, DEFAULT_TERA_IDENTITY, DEFAULT_TERA_IDENTITY);
 
       const row = selectTera.get(id);
       if (row === null) throw new Error(`Tera を作成できなかった: ${id}`);
@@ -366,6 +426,23 @@ export function createStore(dbPath: string, options: CreateStoreOptions = {}): S
       upsertCompaction.run(teraId, state.summary, state.throughSeq, state.tokensBefore, state.createdAt);
     },
 
+    readIdentity(teraId) {
+      const row = selectIdentity.get(teraId);
+      return row === null ? { content: "", applied: "" } : { content: row.content, applied: row.applied };
+    },
+
+    writeIdentity(teraId, content) {
+      upsertIdentity.run(teraId, content);
+
+      const row = selectIdentity.get(teraId);
+      if (row === null) throw new Error(`identity を保存できませんでした: ${teraId}`);
+      return { content: row.content, applied: row.applied };
+    },
+
+    applyIdentity(teraId) {
+      return switchIdentity.run(teraId).changes > 0;
+    },
+
     appendMessage(input) {
       return append(input);
     },
@@ -380,8 +457,11 @@ export function createStore(dbPath: string, options: CreateStoreOptions = {}): S
   return store;
 }
 
-/** いまの保存の形の版。形を変えたら上げ、migrateSchema に移行を足す。 */
-const SCHEMA_VERSION = 4;
+/**
+ * いまの保存の形の版。形を変えたら上げ、migrateSchema に移行を足す。
+ * 新しいテーブルは CREATE TABLE IF NOT EXISTS が作るので、移行の関数は要らない（v5 で tera_identity を足した）。
+ */
+const SCHEMA_VERSION = 5;
 
 /**
  * 保存の形を、いまの版に合わせる。

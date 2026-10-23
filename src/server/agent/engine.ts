@@ -26,7 +26,9 @@ import { createDiscoveryTools } from "./tools/discovery";
 import { createToolRegistry } from "./tools/registry";
 import { createSkillTools } from "./tools/skill";
 import { createSkillManageTools, type SkillChange } from "./tools/skill-manage";
+import { createIdentityTools } from "./tools/identity";
 import { createSkillLibrary } from "./skills";
+import type { IdentityStore } from "./identity";
 import type { SkillFileStore } from "./skill-types";
 
 /** モデルから流れてくる出来事。画面へ流す単位でもある。 */
@@ -160,6 +162,8 @@ export function createEngine(options: {
   catalog: CatalogReader;
   /** エージェントが作ったスキルの置き場。 */
   skills: SkillFileStore;
+  /** Tera の identity の読み書き。system プロンプトに載せる版と、書いた版を持つ。 */
+  identity: IdentityStore;
 }): AgentEngine {
   if (options.config.engine === "mock") return createMockEngine();
   return createAiSdkEngine({
@@ -174,6 +178,7 @@ export function createEngine(options: {
     images: options.images,
     catalog: options.catalog,
     skills: options.skills,
+    identity: options.identity,
   });
 }
 
@@ -207,11 +212,25 @@ export type AiSdkEngineOptions = {
   catalog: CatalogReader;
   /** エージェントが作ったスキルの置き場。 */
   skills: SkillFileStore;
+  /** Tera の identity の読み書き。system プロンプトに載せる版と、書いた版を持つ。 */
+  identity: IdentityStore;
 };
 
 export function createAiSdkEngine(options: AiSdkEngineOptions): AgentEngine {
-  const { settings, mcp, computer, attachments, history, webSearch, connections, coding, images, catalog, skills } =
-    options;
+  const {
+    settings,
+    mcp,
+    computer,
+    attachments,
+    history,
+    webSearch,
+    connections,
+    coding,
+    images,
+    catalog,
+    skills,
+    identity,
+  } = options;
 
   // スキルの一覧はターンの開始時に読み直す。ツールの定義は変わらないので、ここで 1 度だけ組む。
   const library = createSkillLibrary(skills);
@@ -234,6 +253,10 @@ export function createAiSdkEngine(options: AiSdkEngineOptions): AgentEngine {
 
       // ツールの結果に画像を置けるかはプロバイダ次第。置けない場合は user メッセージで渡す。
       const toolResultImages = toolResultTakesImages(model.provider.kind);
+
+      // system プロンプトに載せる identity は、最後に要約を書き換えた時点の版（applied）。
+      // 書き換えただけの版（content）は、次の圧縮まで使わない（プロンプトを組み直さない）。
+      const appliedIdentity = identity.readIdentity(teraId).applied;
 
       // 畳んだ要約を先頭に、生の履歴をその後ろに置く。生の履歴には要約も並べ替えもしない
       // （プロンプトキャッシュが当たり続けるようにするため）。
@@ -283,6 +306,7 @@ export function createAiSdkEngine(options: AiSdkEngineOptions): AgentEngine {
           ...createDiscoveryTools(registry),
           ...skillTools,
           ...skillManageTools,
+          ...createIdentityTools({ store: identity, teraId }),
         },
         {
           includeImages: toolResultImages,
@@ -297,7 +321,7 @@ export function createAiSdkEngine(options: AiSdkEngineOptions): AgentEngine {
 
       const result = streamText({
         model: createLanguageModel(model),
-        instructions: buildSystemPrompt(library.all()),
+        instructions: buildSystemPrompt(library.all(), appliedIdentity),
         messages,
         abortSignal: signal,
         ...(Object.keys(tools).length === 0 ? {} : { tools }),

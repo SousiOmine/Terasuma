@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { createCompaction, type Compaction } from "../src/server/agent/compaction";
 import { estimateMessageTokens, estimateTokens } from "../src/server/agent/tokens";
 import type { CompleteInput } from "../src/server/agent/engine";
-import { DEFAULT_TERA_ID, type Store } from "../src/server/data/store";
+import { DEFAULT_TERA_ID, DEFAULT_TERA_IDENTITY, type Store } from "../src/server/data/store";
 import type { ChatMessage, MessagePart } from "../src/shared/types";
 import { makeStore } from "./support";
 
@@ -534,6 +534,70 @@ describe("失敗したとき", () => {
 
     expect(started).toBe(1);
     expect(store.readCompaction(DEFAULT_TERA_ID).throughSeq).toBe(10);
+    compaction.close();
+  });
+});
+
+describe("identity の切り替え", () => {
+  test("要約を書き換えたら、書いてあった identity を system プロンプト用に切り替える", async () => {
+    const store = makeStore();
+    store.writeIdentity(DEFAULT_TERA_ID, "# Role\n新しい役割");
+    const last = seed(store, 1_000, 30);
+
+    const fake = createEngine(() => SUMMARY);
+    const compaction = compactionWith(store, fake.engine, { limit: 1_000_000, now: () => last });
+
+    await compaction.update(DEFAULT_TERA_ID, { force: true });
+
+    expect(store.readIdentity(DEFAULT_TERA_ID)).toEqual({
+      content: "# Role\n新しい役割",
+      applied: "# Role\n新しい役割",
+    });
+    compaction.close();
+  });
+
+  test("畳むものが無ければ、identity は切り替えない", async () => {
+    const store = makeStore();
+    store.writeIdentity(DEFAULT_TERA_ID, "# Role\n新しい役割");
+    const last = seed(store, 1_000, 5);
+
+    const fake = createEngine(() => SUMMARY);
+    const compaction = compactionWith(store, fake.engine, { limit: 1_000_000, now: () => last });
+
+    // 放置の引き金（force）でも、要約を書き換えなければ切り替えない。
+    await compaction.update(DEFAULT_TERA_ID, { force: true });
+
+    expect(fake.calls).toHaveLength(0);
+    expect(store.readIdentity(DEFAULT_TERA_ID).applied).toBe(DEFAULT_TERA_IDENTITY);
+    compaction.close();
+  });
+
+  test("閾値に届いていなければ、identity は切り替えない", async () => {
+    const store = makeStore();
+    store.writeIdentity(DEFAULT_TERA_ID, "# Role\n新しい役割");
+    const last = seed(store, 1_000, 5);
+
+    const fake = createEngine(() => SUMMARY);
+    const compaction = compactionWith(store, fake.engine, { limit: 1_000_000, now: () => last });
+
+    await compaction.update(DEFAULT_TERA_ID);
+
+    expect(fake.calls).toHaveLength(0);
+    expect(store.readIdentity(DEFAULT_TERA_ID).applied).toBe(DEFAULT_TERA_IDENTITY);
+    compaction.close();
+  });
+
+  test("要約に失敗したら、identity は切り替えない", async () => {
+    const store = makeStore();
+    store.writeIdentity(DEFAULT_TERA_ID, "# Role\n新しい役割");
+    const last = seed(store, 1_000, 30);
+
+    const fake = createEngine(() => Promise.reject(new Error("繋がらない")));
+    const compaction = compactionWith(store, fake.engine, { limit: 1_000_000, now: () => last });
+
+    await compaction.update(DEFAULT_TERA_ID, { force: true });
+
+    expect(store.readIdentity(DEFAULT_TERA_ID).applied).toBe(DEFAULT_TERA_IDENTITY);
     compaction.close();
   });
 });

@@ -14,7 +14,7 @@ import {
 import { BUILTIN_SKILLS } from "../src/server/agent/skills";
 import type { Skill } from "../src/server/agent/skill-types";
 import { readContext } from "../src/server/agent/compaction";
-import { DEFAULT_TERA_ID } from "../src/server/data/store";
+import { DEFAULT_TERA_ID, DEFAULT_TERA_IDENTITY } from "../src/server/data/store";
 import type { ImageRef } from "../src/shared/types";
 import { createImageStub, makeStore, testPng } from "./support";
 
@@ -29,12 +29,17 @@ function contextOf(store: ReturnType<typeof makeStore>): TeraContext {
 const NOW = new Date(2026, 9, 21, 12, 0).getTime();
 
 /** このテストの会話は日本語なので、返事の言語は ja に固定する。 */
-function buildInput(context: TeraContext, images: ImageReader, skills: readonly Skill[] = BUILTIN_SKILLS) {
-  return buildModelInput(context, images, "ja", { toolResultImages: true }, NOW, skills);
+function buildInput(
+  context: TeraContext,
+  images: ImageReader,
+  skills: readonly Skill[] = BUILTIN_SKILLS,
+  identity: string = DEFAULT_TERA_IDENTITY,
+) {
+  return buildModelInput(context, images, "ja", { toolResultImages: true }, NOW, skills, identity);
 }
 
-/** 組み込みスキルだけを載せた system プロンプト。 */
-const SYSTEM_PROMPT = buildSystemPrompt(BUILTIN_SKILLS);
+/** 組み込みスキルと既定の identity を載せた system プロンプト。 */
+const SYSTEM_PROMPT = buildSystemPrompt(BUILTIN_SKILLS, DEFAULT_TERA_IDENTITY);
 
 /** 入力の末尾に必ず 1 件足される、返事の言語と今日の日付。 */
 const TAIL_MESSAGE = { role: "user", content: turnTail("ja", NOW) } as const;
@@ -323,6 +328,7 @@ describe("返事の言語", () => {
       { toolResultImages: true },
       NOW,
       BUILTIN_SKILLS,
+      DEFAULT_TERA_IDENTITY,
     );
     const en = buildModelInput(
       { summary: null, messages: [] },
@@ -331,6 +337,7 @@ describe("返事の言語", () => {
       { toolResultImages: true },
       NOW,
       BUILTIN_SKILLS,
+      DEFAULT_TERA_IDENTITY,
     );
 
     expect(ja.at(-1)).toEqual(TAIL_MESSAGE);
@@ -350,11 +357,51 @@ describe("スキルの一覧", () => {
     const skills = [...BUILTIN_SKILLS, custom];
     const input = buildInput({ summary: null, messages: [] }, createImageStub(), skills);
 
-    expect(input[0]).toEqual({ role: "system", content: buildSystemPrompt(skills) });
+    expect(input[0]).toEqual({ role: "system", content: buildSystemPrompt(skills, DEFAULT_TERA_IDENTITY) });
     expect(JSON.stringify(input[0])).toContain("- computer-use: ");
     expect(JSON.stringify(input[0])).toContain("- skill-create: ");
     expect(JSON.stringify(input[0])).toContain("- deploy-notes: Deploy notes");
     expect(JSON.stringify(input.at(-1))).not.toContain("deploy-notes");
+  });
+});
+
+describe("identity", () => {
+  /** store が system プロンプトに載せる identity（前回の圧縮で確定した版）。 */
+  function appliedIdentity(store: ReturnType<typeof makeStore>): string {
+    return store.readIdentity(DEFAULT_TERA_ID).applied;
+  }
+
+  test("書いただけでは system プロンプトが変わらず、切り替えた版だけが載る", () => {
+    const store = makeStore();
+    store.writeIdentity(DEFAULT_TERA_ID, "# Role\n新しい役割");
+
+    const before = buildInput(contextOf(store), createImageStub(), BUILTIN_SKILLS, appliedIdentity(store));
+    expect(before[0]).toEqual({ role: "system", content: SYSTEM_PROMPT });
+    expect(JSON.stringify(before[0])).not.toContain("新しい役割");
+
+    store.applyIdentity(DEFAULT_TERA_ID);
+    const after = buildInput(contextOf(store), createImageStub(), BUILTIN_SKILLS, appliedIdentity(store));
+    expect(after[0]).toEqual({
+      role: "system",
+      content: buildSystemPrompt(BUILTIN_SKILLS, "# Role\n新しい役割"),
+    });
+    expect(JSON.stringify(after[0])).toContain("新しい役割");
+  });
+
+  test("identity は system プロンプトにだけ載り、末尾のメッセージには載らない", () => {
+    const input = buildInput(contextOf(makeStore()), createImageStub());
+    const system = input[0];
+    if (system?.role !== "system" || typeof system.content !== "string") throw new Error("system プロンプトが無い");
+
+    expect(system.content).toContain("<identity>");
+    expect(system.content).toContain(DEFAULT_TERA_IDENTITY);
+    expect(JSON.stringify(input.at(-1))).not.toContain("Your identity");
+  });
+
+  test("identity が空なら、まだ無いことを伝える", () => {
+    const input = buildInput({ summary: null, messages: [] }, createImageStub(), BUILTIN_SKILLS, "");
+
+    expect(JSON.stringify(input[0])).toContain("Your identity: none yet.");
   });
 });
 
@@ -399,6 +446,7 @@ describe("画像つきのツール結果", () => {
         { toolResultImages: true },
         NOW,
         BUILTIN_SKILLS,
+        DEFAULT_TERA_IDENTITY,
       );
 
       expect(input[3]).toEqual({
@@ -440,6 +488,7 @@ describe("画像つきのツール結果", () => {
         { toolResultImages: false },
         NOW,
         BUILTIN_SKILLS,
+        DEFAULT_TERA_IDENTITY,
       );
 
       expect(input[3]).toEqual({
@@ -481,6 +530,7 @@ describe("画像つきのツール結果", () => {
         { toolResultImages: false },
         NOW,
         BUILTIN_SKILLS,
+        DEFAULT_TERA_IDENTITY,
       );
 
       expect(input[4]).toEqual({

@@ -24,6 +24,7 @@ import type { ChatMessage, ImageRef, SentAttachment } from "../src/shared/types"
 import { createImageStore, type ImageStore } from "../src/server/computer/images";
 import type { CatalogSnapshot } from "../src/server/provider/catalog";
 import type { SkillFileStore } from "../src/server/agent/skill-types";
+import type { IdentityStore } from "../src/server/agent/identity";
 
 import { createHandover } from "../src/server/computer/handover";
 import {
@@ -35,6 +36,7 @@ import {
   createHistoryStub,
   createImageStub,
   createAttachmentsStub,
+  createIdentityStoreStub,
   createSkillFileStoreStub,
   createWebSearchToolsStub,
   makeStore,
@@ -244,6 +246,7 @@ async function run(
   attached: SentAttachment[] = [],
   historyTools: HistoryToolsetProvider = createHistoryStub(),
   skills: SkillFileStore = createSkillFileStoreStub(),
+  identity: IdentityStore = createIdentityStoreStub(),
 ): Promise<EngineEvent[]> {
   const reader: SettingsReader = { read: () => settings };
   const stream = await createAiSdkEngine({
@@ -258,6 +261,7 @@ async function run(
     images,
     catalog: { snapshot: () => catalog },
     skills,
+    identity,
   }).stream({
     context: { summary: null, messages: history() },
     signal: new AbortController().signal,
@@ -287,6 +291,7 @@ describe("ツール検索（AI SDK 経由）", () => {
       // 事前に渡るのは内蔵のツールだけ。MCP のツール定義はリクエストに載らない。
       expect(toolNames(fake.bodies[0]).sort()).toEqual([
         "chat_ui",
+        "identity",
         "skill",
         "skill_manage",
         "tool_call",
@@ -352,13 +357,14 @@ describe("ツール検索（AI SDK 経由）", () => {
     }
   });
 
-  test("つなぐツールが無くても、内蔵のツール（tool_search / tool_call / skill / skill_manage）は渡す", async () => {
+  test("つなぐツールが無くても、内蔵のツール（tool_search / tool_call / skill / skill_manage / identity）は渡す", async () => {
     const fake = startScriptedProvider([{ text: "はい" }]);
 
     try {
       await run({ toolset: async () => ({}) }, settingsFor(portOf(fake.server)));
       expect(toolNames(fake.bodies[0]).sort()).toEqual([
         "chat_ui",
+        "identity",
         "skill",
         "skill_manage",
         "tool_call",
@@ -960,6 +966,7 @@ describe("途中で届いた発言", () => {
         images: createImageStub(),
         catalog: { snapshot: () => null },
         skills: createSkillFileStoreStub(),
+        identity: createIdentityStoreStub(),
       }).stream({
         context: { summary: null, messages: history() },
         signal: new AbortController().signal,
@@ -979,6 +986,39 @@ describe("途中で届いた発言", () => {
       expect(fake.bodies).toHaveLength(2);
       expect(JSON.stringify(fake.bodies[0])).not.toContain("方針を変えてください");
       expect(JSON.stringify(fake.bodies[1])).toContain("方針を変えてください");
+    } finally {
+      await fake.server.stop(true);
+    }
+  });
+});
+
+describe("identity（AI SDK 経由）", () => {
+  test("system プロンプトには切り替えた版だけが載り、identity ツールが常に渡る", async () => {
+    const fake = startScriptedProvider([{ text: "読みました" }]);
+    const identity = createIdentityStoreStub({
+      content: "# Role\n書きかけの役割",
+      applied: "# Role\n確定した役割",
+    });
+
+    try {
+      await run(
+        { toolset: async () => ({}) },
+        settingsFor(portOf(fake.server)),
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        identity,
+      );
+
+      const body = JSON.stringify(fake.bodies[0]);
+      expect(body).toContain("確定した役割");
+      expect(body).not.toContain("書きかけの役割");
+      expect(toolNames(fake.bodies[0])).toContain("identity");
     } finally {
       await fake.server.stop(true);
     }

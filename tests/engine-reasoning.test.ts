@@ -8,6 +8,7 @@ import {
   createComputerStub,
   createConnectionToolsStub,
   createHistoryStub,
+  createIdentityStoreStub,
   createImageStub,
   createMcpStub,
   createSkillFileStoreStub,
@@ -100,6 +101,7 @@ async function runEngine(settings: ModelSettings): Promise<string> {
     images: createImageStub(),
     catalog: { snapshot: () => null },
     skills: createSkillFileStoreStub(),
+    identity: createIdentityStoreStub(),
   }).stream({
     context: { summary: null, messages: history() },
     signal: new AbortController().signal,

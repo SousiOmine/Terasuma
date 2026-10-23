@@ -93,6 +93,12 @@ export const SKILL_MANAGE_TOOL = "manage";
 /** モデルへ渡すときの、スキルを管理するツールの名前。 */
 export const SKILL_MANAGE_TOOL_NAME = `${SKILL_SERVER_ID}${TOOL_NAME_SEPARATOR}${SKILL_MANAGE_TOOL}`;
 
+/**
+ * 自分の identity を読む・書き換えるツール名。
+ * 区切りを持たないので、プレフィックスを持つ MCP サーバーのツールとは衝突しない。
+ */
+export const IDENTITY_TOOL = "identity";
+
 /** 画面をユーザーへ渡すツール名（サーバー id を付けない形）。 */
 export const ASK_USER_TOOL = "ask_user";
 

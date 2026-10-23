@@ -129,6 +129,22 @@ user メッセージとして文脈の末尾へ足される。
 スキルの一覧は system プロンプトに載る。ターンの途中でスキルが変わったときは、そのターンの system プロンプトを組み直さず、次のモデル呼び出しの前に user メッセージで知らせる。
 スキルはコンテナのホームの中にあるので、ホームを消すリセットでは一緒に消える。
 
+## アイデンティティ
+
+Tera は自分の identity（役割と、必要な知識）を持つ。identity は Tera ごとに SQLite の `tera_identity` に保存し、
+2 つの本文を持つ。
+
+- `content`: Tera が `identity` ツールで書いた最新の本文
+- `applied`: system プロンプトに載っている版
+
+system プロンプトは `applied` だけを読む。書いただけでは変わらず、圧縮が要約を書き換えたときに
+`applied` が `content` へ切り替わる（`server/agent/compaction.ts`）。
+書き換え直後にプロンプトを組み直さないのは、先頭が変わるとプロンプトキャッシュが外れるため。
+圧縮はもともと要約を書き換えてキャッシュを切るので、identity も同じ瞬間に切り替える。
+
+新しい Tera には、既定の役割（`DEFAULT_TERA_IDENTITY`）が `content` と `applied` の両方に入る。
+`identity` ツールは `tool_search` を挟まず、モデルへ常に渡す。長さは 4,000 文字まで。
+
 ## アプリの接続
 
 アプリの接続は、利用者が発行したトークンを貼る方式に統一している（`server/connections/providers.ts`）。

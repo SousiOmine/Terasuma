@@ -154,6 +154,7 @@ export async function withLiveServer(run: (harness: LiveHarness) => Promise<void
     images,
     catalog,
     skills: createSkillFileStore({ dataDir: config.dataDir }),
+    identity: store,
   });
 
   // 畳むかどうかはモデルの文脈長から決める。

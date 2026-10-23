@@ -20,8 +20,9 @@ import type { ConnectionToolsetProvider } from "../src/server/connections/tools"
 import type { ConnectionsManager } from "../src/server/connections/manager";
 import type { WebSearchManager } from "../src/server/websearch-manager";
 import { createSettingsStore, type SettingsStore } from "../src/server/data/settings";
-import { createStore, type Store } from "../src/server/data/store";
+import { createStore, type Store, type TeraIdentity } from "../src/server/data/store";
 import { createCompaction, type Compaction } from "../src/server/agent/compaction";
+import type { IdentityStore } from "../src/server/agent/identity";
 import type { ContainerStatusView } from "../src/shared/types";
 
 /** 時刻を固定したストア。updated_at の比較を決定的にするため。 */
@@ -158,6 +159,22 @@ export function createSkillFileStoreStub(initial: readonly Skill[] = []): SkillF
       return loaded(next);
     },
     delete: (name) => skills.delete(name),
+  };
+}
+
+/**
+ * identity を持たないテストのための差し替え（エンジン用）。
+ * applied を渡すと、その版が system プロンプトに載る。
+ */
+export function createIdentityStoreStub(initial: TeraIdentity = { content: "", applied: "" }): IdentityStore {
+  const identity: TeraIdentity = { ...initial };
+
+  return {
+    readIdentity: () => ({ ...identity }),
+    writeIdentity: (_teraId, content) => {
+      identity.content = content;
+      return { ...identity };
+    },
   };
 }
 
