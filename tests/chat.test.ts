@@ -64,6 +64,13 @@ function messageRequest(
   };
 }
 
+/** 応答中の割り込みの multipart。返事の言語は走っているターンのものを使うので送らない。 */
+function steerRequest(content: string): RequestInit {
+  const form = new FormData();
+  form.append("content", content);
+  return { method: "POST", body: form };
+}
+
 /** 書き込まれたパスと中身を記録する、動いているコンテナの差し替え。 */
 function recordingContainer(): ContainerManager & { writes: { path: string; bytes: Uint8Array }[] } {
   const writes: { path: string; bytes: Uint8Array }[] = [];
@@ -267,6 +274,118 @@ function createStoppableEngine(): AgentEngine {
             }
             input.signal.addEventListener("abort", () => resolve(), { once: true });
           });
+        })(),
+        usage: Promise.resolve(null),
+      });
+    },
+    complete() {
+      return Promise.reject(new Error("テスト用のエンジンでは要約を作れません"));
+    },
+  };
+}
+
+/** 途中で届いた発言を待ち、届いたら受け取った内容を本文にして返すエンジン。 */
+function createSteeringEngine(): AgentEngine {
+  return {
+    name: "steering",
+    stream(input): Promise<EngineStream> {
+      return Promise.resolve({
+        events: (async function* () {
+          yield { type: "text-delta", delta: "作業中です。" } as const;
+
+          // 利用者が送ってくるまで、少しずつ待つ。
+          const received: string[] = [];
+          for (let attempt = 0; attempt < 500 && received.length === 0; attempt += 1) {
+            received.push(...input.takeSteering().map((message) => message.content));
+            if (received.length === 0) await new Promise((resolve) => setTimeout(resolve, 10));
+          }
+
+          yield { type: "text-delta", delta: `受け取りました: ${received.join(" / ")}` } as const;
+        })(),
+        usage: Promise.resolve(null),
+      });
+    },
+    complete() {
+      return Promise.reject(new Error("テスト用のエンジンでは要約を作れません"));
+    },
+  };
+}
+
+/** 1 回目の応答の終わりを、テストから決められるエンジン。 */
+function createDeferredEndEngine(): AgentEngine & { started: Promise<void>; release: () => void } {
+  let markStarted = (): void => undefined;
+  const started = new Promise<void>((resolve) => {
+    markStarted = resolve;
+  });
+  let release = (): void => undefined;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let calls = 0;
+
+  return {
+    name: "deferred-end",
+    started,
+    release,
+    stream(input): Promise<EngineStream> {
+      calls += 1;
+      const first = calls === 1;
+
+      return Promise.resolve({
+        events: (async function* () {
+          if (first) {
+            yield { type: "text-delta", delta: "最初の返事。" } as const;
+            markStarted();
+            await gate;
+            return;
+          }
+
+          // 2 回目の呼び出しでは、間に合わなかった発言が prepareStep（ここでは takeSteering）で渡る。
+          const steered = input.takeSteering().map((message) => message.content);
+          const lastUser = [...input.context.messages].reverse().find((message) => message.role === "user");
+          yield { type: "text-delta", delta: `続き: ${steered.join(" / ") || lastUser?.content || ""}` } as const;
+        })(),
+        usage: Promise.resolve(null),
+      });
+    },
+    complete() {
+      return Promise.reject(new Error("テスト用のエンジンでは要約を作れません"));
+    },
+  };
+}
+
+/**
+ * takeSteering を呼ばず、文脈の末尾だけを読むエンジン。
+ * 区切りの終わりをテストから決められるので、取り出されなかった発言の扱いを確かめられる。
+ */
+function createPassiveEngine(): AgentEngine & { started: Promise<void>; release: () => void } {
+  let markStarted = (): void => undefined;
+  const started = new Promise<void>((resolve) => {
+    markStarted = resolve;
+  });
+  let release = (): void => undefined;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let calls = 0;
+
+  return {
+    name: "passive",
+    started,
+    release,
+    stream(input): Promise<EngineStream> {
+      calls += 1;
+      const first = calls === 1;
+
+      return Promise.resolve({
+        events: (async function* () {
+          const lastUser = [...input.context.messages].reverse().find((message) => message.role === "user");
+          yield { type: "text-delta", delta: `読んだ: ${lastUser?.content ?? ""}` } as const;
+
+          if (first) {
+            markStarted();
+            await gate;
+          }
         })(),
         usage: Promise.resolve(null),
       });
@@ -618,6 +737,96 @@ describe("チャット API", () => {
         "1 つ目の質問",
         "3 つ目の質問",
       ]);
+    });
+  });
+
+  test("応答を生成している間も発言を受け付け、次のモデル呼び出しで文脈へ渡す", async () => {
+    await withServer(createSteeringEngine(), async (harness) => {
+      const first = await harness.request(`/api/teras/${DEFAULT_TERA_ID}/messages`, messageRequest("最初の質問"));
+      expect(first.status).toBe(200);
+
+      // 本文を読み始めると、エンジンが動き出す。
+      const body = first.text();
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      const steered = await harness.request(`/api/teras/${DEFAULT_TERA_ID}/steer`, steerRequest("追加の指示"));
+      expect(steered.status).toBe(200);
+      const { message } = (await steered.json()) as { message: ChatMessage };
+      expect(message.role).toBe("user");
+      expect(message.content).toBe("追加の指示");
+
+      const decoded = decodeChatEvents(await body);
+      expect(decoded.rest).toBe("");
+      expect(visibleText(decoded.events)).toContain("受け取りました: 追加の指示");
+
+      // 保存されるのは、最初の発言・割り込んだ発言・その応答の順。
+      const messages = await harness.messages(DEFAULT_TERA_ID);
+      expect(messages.map((entry) => [entry.role, entry.content])).toEqual([
+        ["user", "最初の質問"],
+        ["user", "追加の指示"],
+        ["assistant", ""],
+      ]);
+      expect(messages[1]?.seq).toBeLessThan(messages[2]?.seq ?? 0);
+    });
+  });
+
+  test("応答していないときの割り込みは 409 turn_not_running で断り、履歴に残さない", async () => {
+    await withServer(fastMock(), async (harness) => {
+      const response = await harness.request(`/api/teras/${DEFAULT_TERA_ID}/steer`, steerRequest("こんにちは"));
+
+      expect(response.status).toBe(409);
+      expect(((await response.json()) as { code: string }).code).toBe("turn_not_running");
+      expect(await harness.messages(DEFAULT_TERA_ID)).toEqual([]);
+    });
+  });
+
+  test("最後のモデル呼び出しに間に合わなかった発言も、続けて応答する", async () => {
+    const engine = createDeferredEndEngine();
+
+    await withServer(engine, async (harness) => {
+      const response = await harness.request(`/api/teras/${DEFAULT_TERA_ID}/messages`, messageRequest("最初の質問"));
+      expect(response.status).toBe(200);
+      const body = response.text();
+
+      // 最初の区切りが終わる前に割り込み、そのまま終わらせる。
+      await engine.started;
+      const steered = await harness.request(`/api/teras/${DEFAULT_TERA_ID}/steer`, steerRequest("あとから送った指示"));
+      expect(steered.status).toBe(200);
+      engine.release();
+
+      const decoded = decodeChatEvents(await body);
+      expect(decoded.rest).toBe("");
+      expect(visibleText(decoded.events)).toContain("最初の返事。");
+      expect(visibleText(decoded.events)).toContain("続き: あとから送った指示");
+
+      // 応答は 2 つに分かれ、割り込んだ発言はその手前の seq に残る。
+      const messages = await harness.messages(DEFAULT_TERA_ID);
+      expect(messages.map((entry) => entry.role)).toEqual(["user", "user", "assistant", "assistant"]);
+      expect(messages[1]?.content).toBe("あとから送った指示");
+    });
+  });
+
+  test("エンジンが途中の発言を取り出さなくても、続きの区切りで文脈に入り、2 回で止まる", async () => {
+    const engine = createPassiveEngine();
+
+    await withServer(engine, async (harness) => {
+      const response = await harness.request(`/api/teras/${DEFAULT_TERA_ID}/messages`, messageRequest("最初の質問"));
+      expect(response.status).toBe(200);
+      const body = response.text();
+
+      await engine.started;
+      const steered = await harness.request(`/api/teras/${DEFAULT_TERA_ID}/steer`, steerRequest("途中で送った指示"));
+      expect(steered.status).toBe(200);
+      engine.release();
+
+      const decoded = decodeChatEvents(await body);
+      expect(decoded.rest).toBe("");
+
+      // エンジンが取り出さなかった発言は、続きの区切りの文脈の末尾に入る。
+      expect(visibleText(decoded.events)).toContain("読んだ: 途中で送った指示");
+      // 同じ発言が残り続けて、応答が終わらなくなることはない。
+      expect(decoded.events.filter((event) => event.type === "assistant-done")).toHaveLength(2);
+      expect(await harness.messages(DEFAULT_TERA_ID)).toHaveLength(4);
     });
   });
 

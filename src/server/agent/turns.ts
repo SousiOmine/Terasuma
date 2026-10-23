@@ -14,6 +14,7 @@ import type {
 } from "../../shared/types";
 import type { Compaction } from "./compaction";
 import type { AgentEngine } from "./engine";
+import type { TeraContext } from "./prompt";
 import type { Store } from "../data/store";
 
 /**
@@ -21,6 +22,10 @@ import type { Store } from "../data/store";
  *
  * 保存 → モデル呼び出し → 保存、の順で進み、履歴は常に追記だけになる。
  * 「実行中かどうか」はこのモジュールの中だけで持ち、HTTP 層へ Set を渡さない。
+ *
+ * ターンは 1 つ以上の区切りからなる。応答の途中で利用者が発言を足したら、
+ * その区切りの中では次のモデル呼び出しの直前（prepareStep）に文脈へ足す。
+ * 最後の呼び出しに間に合わなかった発言は、ターンを終える前に続きの区切りで応答する。
  *
  * モデルの本文は text パートとして画面へ流す。画像やファイルはエージェントが
  * chat_attach で添付し（parts の attachment）、システムの注記は notice に残る。
@@ -44,12 +49,28 @@ export type TurnInput = {
   signal: AbortSignal;
 };
 
+/** 応答の途中で足す、利用者の発言。 */
+export type SteerInput = {
+  /** ユーザーが書いた本文。 */
+  content: string;
+  /** ユーザーが添付したファイル。無ければ null。 */
+  attachments: ChatAttachment[] | null;
+};
+
 export type Turns = {
   /**
    * ターンを始める。同じ Tera で実行中なら null（重ねて流さない）。
    * 終わったら（止められた場合も）実行中の印は必ず外れる。
    */
   begin(teraId: string, input: TurnInput): AsyncIterable<ChatEvent> | null;
+  /** 応答を生成しているターンがあるかどうか。 */
+  isRunning(teraId: string): boolean;
+  /**
+   * 走っているターンの途中へ、利用者の発言を足す。
+   * 発言は保存され、次のモデル呼び出しの直前に文脈の末尾へ入る。
+   * ターンが動いていない（止めている途中を含む）なら null。何も保存しない。
+   */
+  steer(teraId: string, input: SteerInput): ChatMessage | null;
   /**
    * 走っているターンを止める。エージェントはそこで打ち切り、それまでに書いた
    * 本文や添付は保存して assistant-done で返す。
@@ -63,9 +84,13 @@ type RunningTurn = {
   controller: AbortController;
   /** 利用者の「停止」で止めたかどうか。止められたことを失敗として扱わない。 */
   stopped: boolean;
+  /** 保存したが、まだモデルへ渡していない発言（届いた順）。 */
+  pending: ChatMessage[];
 };
 
 export function createTurns(deps: TurnDeps): Turns {
+  const { store } = deps;
+
   /** いま応答を生成している Tera と、その中止の口。 */
   const running = new Map<string, RunningTurn>();
 
@@ -74,9 +99,30 @@ export function createTurns(deps: TurnDeps): Turns {
       // 画面は 1 つのターンしか始めないが、別のタブから同じ Tera を開けるため、ここでも断る。
       if (running.has(teraId)) return null;
 
-      const turn: RunningTurn = { controller: new AbortController(), stopped: false };
+      const turn: RunningTurn = { controller: new AbortController(), stopped: false, pending: [] };
       running.set(teraId, turn);
       return runTurn(deps, teraId, input, turn, running);
+    },
+
+    isRunning(teraId) {
+      const turn = running.get(teraId);
+      return turn !== undefined && !turn.stopped;
+    },
+
+    steer(teraId, input) {
+      const turn = running.get(teraId);
+      // 止めている途中のターンには足さない。足しても応答しないまま履歴に残る。
+      if (turn === undefined || turn.stopped) return null;
+
+      const message = store.appendMessage({
+        id: crypto.randomUUID(),
+        teraId,
+        role: "user",
+        content: input.content,
+        attachments: input.attachments,
+      });
+      turn.pending.push(message);
+      return message;
     },
 
     stop(teraId) {
@@ -91,7 +137,7 @@ export function createTurns(deps: TurnDeps): Turns {
 }
 
 /**
- * 1 ターン分のイベント列。終わったら、実行中の印を必ず外す。
+ * ターン分のイベント列。終わったら、実行中の印を必ず外す。
  * 「停止」やタブの切断でジェネレータが閉じられた場合も、finally は通る。
  */
 async function* runTurn(
@@ -107,7 +153,16 @@ async function* runTurn(
   else input.signal.addEventListener("abort", onRequestAbort, { once: true });
 
   try {
-    yield* turnEvents(deps, teraId, input, turn);
+    // 最初の区切りは、送られた発言から始まる。
+    // 途中で届いた発言が残っていたら（最後のモデル呼び出しに間に合わなかった）、
+    // 続けてその発言に応答する。届いたのに返事が無いままにしない。
+    let startsTurn = true;
+    for (;;) {
+      const completed = yield* turnEvents(deps, teraId, input, turn, startsTurn);
+      startsTurn = false;
+      if (!completed || turn.stopped || turn.controller.signal.aborted) break;
+      if (turn.pending.length === 0) break;
+    }
   } finally {
     input.signal.removeEventListener("abort", onRequestAbort);
     running.delete(teraId);
@@ -118,32 +173,40 @@ async function* runTurn(
 }
 
 /**
- * 1 ターン分のイベント列。
+ * 1 区切り分のイベント列。
+ *
  * 保存 → モデル呼び出し → 保存、の順で進み、履歴は常に追記だけになる。
+ * startsTurn が true のときだけ、このターンの発言を保存して画面へ流す
+ * （途中で届いた発言は steer が保存済みなので、続きの区切りでは流さない）。
+ *
+ * 戻り値は、この区切りを最後まで流せたかどうか（失敗したら false）。
  */
 async function* turnEvents(
   deps: TurnDeps,
   teraId: string,
   { content, attachments, language }: TurnInput,
   turn: RunningTurn,
-): AsyncGenerator<ChatEvent> {
+  startsTurn: boolean,
+): AsyncGenerator<ChatEvent, boolean> {
   const { store, engine, compaction } = deps;
 
   // Tera は起動時に用意されている（無い id は、ここへ来る前に断っている）。
-  const userMessage = store.appendMessage({
-    id: crypto.randomUUID(),
-    teraId,
-    role: "user",
-    content,
-    attachments,
-  });
-  yield { type: "user-message", message: userMessage };
+  if (startsTurn) {
+    const userMessage = store.appendMessage({
+      id: crypto.randomUUID(),
+      teraId,
+      role: "user",
+      content,
+      attachments,
+    });
+    yield { type: "user-message", message: userMessage };
+  }
 
   const assistantId = crypto.randomUUID();
   const createdAt = Date.now();
   yield { type: "assistant-start", id: assistantId, createdAt };
 
-  /** このターンの記録（本文・ツール・添付・注記）。保存される並びそのもの。 */
+  /** この区切りの記録（本文・ツール・添付・注記）。保存される並びそのもの。 */
   const parts: MessagePart[] = [];
   /** まだ画面へ流していない、本文と添付。 */
   const outgoing: (TextPart | AttachmentPart)[] = [];
@@ -213,12 +276,24 @@ async function* turnEvents(
     // （プロンプトキャッシュが当たり続けるようにするため）。
     const context = await compaction.context(teraId, turn.controller.signal);
 
+    // まだモデルへ渡していない発言は、この区切りの最初のモデル呼び出しから見えるよう、
+    // 文脈の末尾へ移す。保存された位置からは外す（同じ発言を二重に渡さない）。
+    // 続きの区切りでは、前の区切りに間に合わなかった発言がここで末尾に来て、最新の指示として読まれる。
+    const steering = turn.pending;
+    turn.pending = [];
+
     const stream = await engine.stream({
-      context,
+      context: withSteering(context, steering),
       signal: turn.controller.signal,
       teraId,
       replyLanguage: language,
       attach,
+      // 区切りの途中で届いた発言は、次のモデル呼び出しの直前に足す。
+      takeSteering: () => {
+        const arrived = turn.pending;
+        turn.pending = [];
+        return arrived;
+      },
     });
 
     for await (const event of stream.events) {
@@ -277,13 +352,29 @@ async function* turnEvents(
 
   if (failure === null) {
     if (finalMessage !== null) yield { type: "assistant-done", message: finalMessage };
-    return;
+    return true;
   }
 
   // クライアントが離脱済みなら届け先が無いのでイベントにしない。
   if (!turn.controller.signal.aborted) {
     yield { type: "error", code: "model_error", detail: failure };
   }
+  return false;
+}
+
+/**
+ * まだモデルへ渡していない発言を、文脈の末尾へ移す。
+ * 保存された位置からは外すので、同じ発言が二重に渡ることはない。
+ * 末尾に来るので、モデルは最新の指示として読める。
+ */
+function withSteering(context: TeraContext, steering: readonly ChatMessage[]): TeraContext {
+  if (steering.length === 0) return context;
+
+  const ids = new Set(steering.map((message) => message.id));
+  return {
+    ...context,
+    messages: [...context.messages.filter((message) => !ids.has(message.id)), ...steering],
+  };
 }
 
 /** ユーザーの目に触れる部分があるかどうか。 */

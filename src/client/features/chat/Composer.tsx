@@ -96,7 +96,8 @@ export function Composer() {
   };
 
   const submit = () => {
-    if (streaming || !canSend) return;
+    // 停止を頼んだ直後は、止まったターンに足さない（足しても応答しない）。
+    if (!canSend || stopping) return;
     const content = draft.trim();
 
     // 引き受けている間の入力は、画面を見ている利用者からの返事になる。
@@ -149,8 +150,8 @@ export function Composer() {
               ref={textareaRef}
               rows={1}
               value={draft}
-              placeholder={t("composer.placeholder")}
-              aria-label={t("composer.placeholder")}
+              placeholder={t(streaming ? "composer.placeholder.steering" : "composer.placeholder")}
+              aria-label={t(streaming ? "composer.placeholder.steering" : "composer.placeholder")}
               enterkeyhint="send"
               class="max-h-40 min-h-9 flex-1 resize-none bg-transparent px-1.5 py-2 text-[15px] leading-6 text-[var(--app-text)] outline-none placeholder:text-[var(--app-text-tertiary)]"
               onInput={(event) => setDraft(event.currentTarget.value)}
@@ -163,29 +164,30 @@ export function Composer() {
               }}
             />
 
-            {streaming ? (
+            {/* 応答中も送れる（走っているターンへ足す）。止めたいときは、その隣の停止を押す。 */}
+            {streaming && (
               <button
                 type="button"
                 onClick={() => void stopStreaming()}
                 disabled={stopping}
                 title={t(stopping ? "composer.stopping" : "composer.stop")}
                 aria-label={t(stopping ? "composer.stopping" : "composer.stop")}
-                class="mb-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--app-accent-fill)] text-[var(--app-on-accent)] shadow-[var(--app-shadow-2)] transition hover:bg-[var(--app-accent-hover)] disabled:opacity-50 md:h-9 md:w-9"
+                class="mb-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--app-soft)] text-[var(--app-text-secondary)] transition hover:bg-[var(--app-soft-strong)] hover:text-[var(--app-text)] disabled:opacity-50 md:h-9 md:w-9"
               >
-                <IconPlayerStopFilled size={16} />
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={submit}
-                disabled={!canSend}
-                title={t("composer.send")}
-                aria-label={t("composer.send")}
-                class="mb-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--app-accent-fill)] text-[var(--app-on-accent)] shadow-[var(--app-shadow-2)] transition hover:bg-[var(--app-accent-hover)] disabled:opacity-30 md:h-9 md:w-9"
-              >
-                <IconSend size={17} stroke={1.8} />
+                <IconPlayerStopFilled size={14} />
               </button>
             )}
+
+            <button
+              type="button"
+              onClick={submit}
+              disabled={!canSend || stopping}
+              title={t("composer.send")}
+              aria-label={t("composer.send")}
+              class="mb-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--app-accent-fill)] text-[var(--app-on-accent)] shadow-[var(--app-shadow-2)] transition hover:bg-[var(--app-accent-hover)] disabled:opacity-30 md:h-9 md:w-9"
+            >
+              <IconSend size={17} stroke={1.8} />
+            </button>
           </div>
         </div>
       </div>

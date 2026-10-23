@@ -2,7 +2,7 @@ import { resolveModel } from "../../provider/routing";
 import { saveUploads } from "../../computer/uploads";
 import { createTurns } from "../../agent/turns";
 import { ValidationError } from "../../errors";
-import { readTurnForm } from "../body";
+import { readSteerForm, readTurnForm } from "../body";
 import { json, jsonError, noContent } from "../respond";
 import { createSseResponse } from "../sse";
 import { type ApiDeps, type ApiRequest, requireTera } from "./shared";
@@ -63,6 +63,31 @@ export function terasHandlers(deps: ApiDeps) {
     },
 
     /**
+     * 応答を生成しているターンの途中へ、利用者の発言を足す。
+     * 発言は通常の送信と同じく保存され、次のモデル呼び出しの直前に文脈の末尾へ入る。
+     * ターンが動いていなければ 409 turn_not_running（画面は新しいターンとして送り直す）。
+     */
+    async steerTurn(req: ApiRequest<{ id: string }>): Promise<Response> {
+      requireTera(store, req.params.id);
+
+      // 足す先が無ければ、ファイルを置く前に断る（置いても誰も読まない）。
+      if (!turns.isRunning(req.params.id)) return noTurnError();
+
+      const form = await readSteerForm(req);
+      if (form.content.length === 0 && form.files.length === 0) {
+        throw new ValidationError("content or files must be provided");
+      }
+
+      const uploaded = await saveUploads(container, form.files, req.signal);
+      const attachments = uploaded.length === 0 ? null : uploaded;
+
+      const message = turns.steer(req.params.id, { content: form.content, attachments });
+      // 本文を読んでいる間にターンが終わった。画面は新しいターンとして送り直せる。
+      if (message === null) return noTurnError();
+      return json({ message });
+    },
+
+    /**
      * 走っているターンを止める。止めたターンは、それまでに書いた本文や添付を保存して
      * assistant-done で終わる（SSE は閉じない。画面はそのまま結果を受け取れる）。
      * すでに終わっていても、止めるものが無いだけで成功にする（連打しても害が無い）。
@@ -73,4 +98,9 @@ export function terasHandlers(deps: ApiDeps) {
       return noContent();
     },
   };
+}
+
+/** ターンが動いていないときの応答。 */
+function noTurnError(): Response {
+  return jsonError(409, "turn_not_running", "この Tera は応答を生成していません");
 }

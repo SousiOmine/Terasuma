@@ -65,6 +65,7 @@ export const en = {
   "chat.connection.failed": "The connection could not be completed. Ask again.",
 
   "composer.placeholder": "Send a message",
+  "composer.placeholder.steering": "Send to the working agent",
   "composer.send": "Send",
   "composer.stop": "Stop",
   "composer.stopping": "Stopping…",
@@ -300,6 +301,7 @@ export const en = {
   "error.handover_not_pending": "This conversation is not waiting for you.",
   "error.env_request_not_pending": "This conversation is not waiting for an environment variable.",
   "error.turn_in_progress": "This conversation is already generating a reply elsewhere.",
+  "error.turn_not_running": "This conversation is not generating a reply.",
   "error.media_not_found": "The file was not found.",
   "error.settings_write_failed": "The settings could not be saved.",
   "error.internal_error": "Something went wrong.",

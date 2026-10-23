@@ -264,6 +264,7 @@ async function run(
     teraId: "t1",
     replyLanguage: "ja",
     attach: (files) => attached.push(...files),
+    takeSteering: () => [],
   });
 
   const events: EngineEvent[] = [];
@@ -921,6 +922,63 @@ describe("チャットの UI", () => {
       const result = resultOf(events, call.part.id);
       expect(result.part.failed).toBe(true);
       expect(result.part.output).toContain("Invalid UI markup");
+    } finally {
+      await fake.server.stop(true);
+    }
+  });
+});
+
+describe("途中で届いた発言", () => {
+  test("次のステップの直前の user メッセージとしてモデルへ渡る", async () => {
+    const fake = startScriptedProvider([
+      { tool: "tool_search", args: JSON.stringify({ query: "local" }) },
+      { text: "受け取りました" },
+    ]);
+    const steering: ChatMessage = {
+      id: "steering-1",
+      teraId: "t1",
+      seq: 2,
+      role: "user",
+      content: "方針を変えてください",
+      attachments: null,
+      parts: null,
+      createdAt: 1,
+      usage: null,
+    };
+    let calls = 0;
+
+    try {
+      const stream = await createAiSdkEngine({
+        settings: { read: () => settingsFor(portOf(fake.server)) },
+        mcp: { toolset: async () => ({}) },
+        computer: createComputerStub(),
+        attachments: createAttachmentsStub(),
+        history: createHistoryStub(),
+        webSearch: createWebSearchToolsStub(),
+        connections: createConnectionToolsStub(),
+        coding: createCodingStub(),
+        images: createImageStub(),
+        catalog: { snapshot: () => null },
+        skills: createSkillFileStoreStub(),
+      }).stream({
+        context: { summary: null, messages: history() },
+        signal: new AbortController().signal,
+        teraId: "t1",
+        replyLanguage: "ja",
+        attach: () => undefined,
+        takeSteering: () => {
+          calls += 1;
+          return calls === 1 ? [] : [steering];
+        },
+      });
+
+      for await (const event of stream.events) {
+        if (event.type === "step-limit") throw new Error("ステップの上限に達した");
+      }
+
+      expect(fake.bodies).toHaveLength(2);
+      expect(JSON.stringify(fake.bodies[0])).not.toContain("方針を変えてください");
+      expect(JSON.stringify(fake.bodies[1])).toContain("方針を変えてください");
     } finally {
       await fake.server.stop(true);
     }

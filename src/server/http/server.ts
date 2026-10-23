@@ -144,6 +144,10 @@ export function startServer(options: ServerOptions): StartedServer {
           GET: api.listMessages,
           POST: api.sendMessage,
         },
+        // 応答を生成しているターンの途中へ、発言を足す（終わっていれば 409）。
+        "/api/teras/:id/steer": {
+          POST: api.steerTurn,
+        },
         // 生成中のターンを、ここで打ち切る（それまでの本文や添付は保存される）。
         "/api/teras/:id/stop": {
           POST: api.stopTurn,

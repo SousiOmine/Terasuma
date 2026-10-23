@@ -64,6 +64,7 @@ export const ja: Record<MessageKey, string> = {
   "chat.connection.failed": "接続できませんでした。もう一度頼んでください。",
 
   "composer.placeholder": "メッセージを入力",
+  "composer.placeholder.steering": "作業中のエージェントへ送る",
   "composer.send": "送信",
   "composer.stop": "停止",
   "composer.stopping": "停止しています…",
@@ -298,6 +299,7 @@ export const ja: Record<MessageKey, string> = {
   "error.handover_not_pending": "この会話は操作を待っていません。",
   "error.env_request_not_pending": "この会話は環境変数の入力を待っていません。",
   "error.turn_in_progress": "この会話はほかで応答を生成しています。",
+  "error.turn_not_running": "この会話は応答を生成していません。",
   "error.media_not_found": "ファイルが見つかりません。",
   "error.settings_write_failed": "設定を保存できませんでした。",
   "error.internal_error": "問題が発生しました。",

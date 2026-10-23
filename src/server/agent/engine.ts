@@ -59,6 +59,12 @@ export type EngineInput = {
    * モデルの本文は text-delta として流れ、ターンの側が画面へ出す。
    */
   attach: (attachments: SentAttachment[]) => void;
+  /**
+   * 利用者がターンの途中で送った発言を取り出す口。モデルを呼ぶたびに呼び、
+   * 届いていれば user メッセージとして文脈の末尾へ足す。
+   * 発言はターンの側がすでに保存しているので、ここではモデルへ渡す本文にするだけ。
+   */
+  takeSteering: () => readonly ChatMessage[];
 };
 
 /**
@@ -223,7 +229,7 @@ export function createAiSdkEngine(options: AiSdkEngineOptions): AgentEngine {
 
   return {
     name: "ai-sdk",
-    async stream({ context, signal, teraId, replyLanguage, attach }) {
+    async stream({ context, signal, teraId, replyLanguage, attach, takeSteering }) {
       const model = resolve();
 
       // ツールの結果に画像を置けるかはプロバイダ次第。置けない場合は user メッセージで渡す。
@@ -304,6 +310,7 @@ export function createAiSdkEngine(options: AiSdkEngineOptions): AgentEngine {
         // 画像を結果に置けないプロバイダでは、結果の直後に user メッセージとして足し、
         // どの呼び出しの画像かを本文で示す（プロバイダの役割の並びも壊さない）。
         // ターンの途中でスキルが変わったときも、次の呼び出しの前に user メッセージで知らせる。
+        // 利用者が途中で送った発言は、届いた順にそのまま足す（最新の指示として扱わせる）。
         prepareStep: ({ messages: current }) => {
           const appended: ModelMessage[] = [];
 
@@ -314,6 +321,10 @@ export function createAiSdkEngine(options: AiSdkEngineOptions): AgentEngine {
 
           if (skillNotices.length > 0) {
             appended.push({ role: "user", content: skillNotices.splice(0).join("\n\n") });
+          }
+
+          for (const message of takeSteering()) {
+            appended.push({ role: "user", content: userContentForModel(message) });
           }
 
           return appended.length === 0 ? undefined : { messages: [...current, ...appended] };

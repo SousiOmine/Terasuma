@@ -34,7 +34,12 @@ export const isStopping = signal(false);
 export const isLoadingMessages = signal(false);
 
 /** いま繋いでいるターン。切り替えや停止で、古いターンの後始末が新しい状態を壊さないようにする。 */
-type CurrentTurn = { teraId: string; controller: AbortController };
+type CurrentTurn = {
+  teraId: string;
+  controller: AbortController;
+  /** 画面の後始末（liveTurn の確定と状態の更新）が終わったら解決する。 */
+  done: Promise<void>;
+};
 let current: CurrentTurn | null = null;
 
 export async function openTera(id: string): Promise<void> {
@@ -75,8 +80,6 @@ export async function sendMessage(rawContent: string, files: readonly File[]): P
     return;
   }
 
-  if (isStreaming.value) return;
-
   // 送り先は起動時に読んだ一覧から決まる。読めていないときは送り先が無い。
   const teraId = activeTeraId.value;
   if (teraId === null) {
@@ -84,10 +87,45 @@ export async function sendMessage(rawContent: string, files: readonly File[]): P
     return;
   }
 
+  // 応答を生成している間は、新しいターンを重ねず、走っているターンへ足す。
+  // 足す先がちょうど終わっていたら、後始末が済んでから新しいターンとして送り直す。
+  if (isStreaming.value) {
+    const running = current;
+    let steered: ChatMessage | null;
+    try {
+      steered = await api.steerTurn(teraId, content, files);
+    } catch (error) {
+      showChatError(error);
+      return;
+    }
+    // 待っている間に別の Tera へ切り替えたら、その発言は送らない。
+    if (activeTeraId.value !== teraId) return;
+
+    if (steered !== null) {
+      clearChatError();
+      insertSaved(steered);
+      return;
+    }
+
+    // 最後のイベントを反映し終えるまで待つ（待たずに始めると、古いターンの
+    // assistant-done が新しいターンの表示を壊す）。
+    await running?.done;
+    if (activeTeraId.value !== teraId) return;
+    if (isStreaming.value) {
+      // 待っている間に別のターンが始まった。重ねて始めず、理由を出す。
+      showChatError(new ApiError("turn_in_progress"));
+      return;
+    }
+  }
+
   clearChatError();
 
   const controller = new AbortController();
-  const turn: CurrentTurn = { teraId, controller };
+  let settle = (): void => undefined;
+  const done = new Promise<void>((resolve) => {
+    settle = resolve;
+  });
+  const turn: CurrentTurn = { teraId, controller, done };
   current = turn;
   isStreaming.value = true;
   isStopping.value = false;
@@ -110,7 +148,20 @@ export async function sendMessage(rawContent: string, files: readonly File[]): P
       resetEnvRequest();
       resetConnectionRequest();
     }
+    settle();
   }
+}
+
+/**
+ * 保存済みの発言を、seq の順に並ぶ位置へ入れる。
+ *
+ * 応答中に足した発言は、送っている間にターンが終わって assistant のメッセージが
+ * 先に届くことがある。読み直したときと同じ並びになるよう、末尾ではなく seq の位置へ入れる。
+ */
+function insertSaved(message: ChatMessage): void {
+  const list = messages.value;
+  const index = list.findIndex((entry) => entry.seq > message.seq);
+  messages.value = index === -1 ? [...list, message] : [...list.slice(0, index), message, ...list.slice(index)];
 }
 
 /**

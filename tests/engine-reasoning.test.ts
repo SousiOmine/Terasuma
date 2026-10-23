@@ -106,6 +106,7 @@ async function runEngine(settings: ModelSettings): Promise<string> {
     teraId: "t1",
     replyLanguage: "ja",
     attach: () => undefined,
+    takeSteering: () => [],
   });
 
   let text = "";

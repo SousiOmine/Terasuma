@@ -191,6 +191,7 @@ export const API_ERROR_CODES = [
   "handover_not_pending",
   "env_request_not_pending",
   "turn_in_progress",
+  "turn_not_running",
   "media_not_found",
   "settings_write_failed",
   "internal_error",

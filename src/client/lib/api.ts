@@ -80,10 +80,8 @@ export async function* streamTurn(
   files: readonly File[],
   signal: AbortSignal,
 ): AsyncGenerator<ChatEvent> {
-  const form = new FormData();
-  form.append("content", content);
+  const form = messageForm(content, files);
   form.append("language", language);
-  for (const file of files) form.append("files", file, file.name);
 
   let response: Response;
   try {
@@ -116,6 +114,31 @@ export async function* streamTurn(
   } finally {
     reader.releaseLock();
   }
+}
+
+/**
+ * 応答を生成しているターンの途中へ、発言を足す。
+ * ターンがちょうど終わっていたら null（呼び出し側は、新しいターンとして送り直せる）。
+ */
+export async function steerTurn(teraId: string, content: string, files: readonly File[]): Promise<ChatMessage | null> {
+  try {
+    const body = await request<{ message: ChatMessage }>(`${teraPath(teraId)}/steer`, {
+      method: "POST",
+      body: messageForm(content, files),
+    });
+    return body.message;
+  } catch (error) {
+    if (error instanceof ApiError && error.code === "turn_not_running") return null;
+    throw error;
+  }
+}
+
+/** 発言の multipart。送信と割り込みで同じ組み立てを使う。 */
+function messageForm(content: string, files: readonly File[]): FormData {
+  const form = new FormData();
+  form.append("content", content);
+  for (const file of files) form.append("files", file, file.name);
+  return form;
 }
 
 /**

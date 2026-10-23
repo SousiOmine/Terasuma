@@ -17,13 +17,17 @@ import { ValidationError } from "../errors";
  */
 
 /**
- * チャットの送信本文。multipart/form-data で受ける。
- * 本文と返事の言語は文字列、添付ファイルは "files" の部品として並ぶ。
+ * チャットの発言。multipart/form-data で受ける。
+ * 本文は文字列、添付ファイルは "files" の部品として並ぶ。
  */
-export type TurnForm = {
+export type MessageForm = {
   content: string;
-  language: ReplyLanguage;
   files: readonly UploadFile[];
+};
+
+/** ターンを始める送信。返事の言語も持つ。 */
+export type TurnForm = MessageForm & {
+  language: ReplyLanguage;
 };
 
 /**
@@ -31,17 +35,7 @@ export type TurnForm = {
  * JSON は受け付けない（ファイルの有無で経路を分けると、片方だけ直し忘れるため）。
  */
 export async function readTurnForm(req: { formData(): Promise<FormData> }): Promise<TurnForm> {
-  let form: FormData;
-  try {
-    form = await req.formData();
-  } catch (error) {
-    throw new ValidationError(`multipart/form-data として読めませんでした: ${describeError(error)}`);
-  }
-
-  const rawContent = form.get("content");
-  if (rawContent !== null && typeof rawContent !== "string") {
-    throw new ValidationError("content must be a string");
-  }
+  const form = await readFormData(req);
 
   const language = form.get("language");
   if (!isReplyLanguage(language)) {
@@ -49,10 +43,36 @@ export async function readTurnForm(req: { formData(): Promise<FormData> }): Prom
   }
 
   return {
-    content: rawContent?.trim() ?? "",
+    content: readContent(form),
     language,
     files: await readUploadedFiles(form),
   };
+}
+
+/**
+ * 応答中の割り込みの multipart を読む。
+ * 返事の言語は走っているターンのものを使うので、ここでは読まない。
+ */
+export async function readSteerForm(req: { formData(): Promise<FormData> }): Promise<MessageForm> {
+  const form = await readFormData(req);
+  return { content: readContent(form), files: await readUploadedFiles(form) };
+}
+
+async function readFormData(req: { formData(): Promise<FormData> }): Promise<FormData> {
+  try {
+    return await req.formData();
+  } catch (error) {
+    throw new ValidationError(`multipart/form-data として読めませんでした: ${describeError(error)}`);
+  }
+}
+
+/** 本文を取り出す。無ければ空文字、文字列でなければ断る。 */
+function readContent(form: FormData): string {
+  const rawContent = form.get("content");
+  if (rawContent !== null && typeof rawContent !== "string") {
+    throw new ValidationError("content must be a string");
+  }
+  return rawContent?.trim() ?? "";
 }
 
 /**
