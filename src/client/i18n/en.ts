@@ -134,7 +134,7 @@ export const en = {
   "settings.container.resetting": "Recreating…",
   "settings.container.resetTitle": "Recreate the computer?",
   "settings.container.resetMessage":
-    "Apps and settings the agent added are lost. Files stay unless you choose to clear the home folder.",
+    "Apps and settings the agent added are lost. The home folder, including each Tera's workspace, stays unless you choose to clear it.",
   "settings.container.resetWipeHome": "Also clear the home folder",
   "settings.container.confirmReset": "Recreate",
 

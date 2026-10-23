@@ -33,7 +33,7 @@ function localContainer(dir: string): CodingContainer {
     },
     shell: async (script, options) => {
       const result = await runCommand(["bash", "-lc", script], {
-        cwd: dir,
+        cwd: options.workdir ?? dir,
         timeoutMs: options.timeoutMs,
         signal: options.signal,
         outputFrom: "tail",
@@ -263,6 +263,19 @@ describe("edit", () => {
 });
 
 describe("bash", () => {
+  test("作業フォルダを cwd にして動く", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "terasuma-coding-"));
+    const workspace = join(dir, "teras", "default");
+    mkdirSync(workspace, { recursive: true });
+
+    try {
+      const tools = createCodingToolset({ container: localContainer(dir), root: workspace });
+      expect(await callTool(tools, "bash", { command: "pwd -P" })).toBe(realpathSync(workspace));
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   test("標準出力と標準エラーをまとめ、終了コードが 0 でなければ失敗にする", async () => {
     await withTools(async ({ tools }) => {
       const failure = await callTool(tools, "bash", {
@@ -355,21 +368,23 @@ describe("ホストへは落ちない", () => {
 });
 
 describe("パスの解決", () => {
-  test("相対パスは基準ディレクトリから解決する", () => {
-    expect(resolveToolPath("src/a.ts", "/home/agent")).toBe(posix.resolve("/home/agent", "src/a.ts"));
+  test("相対パスは作業フォルダから解決する", () => {
+    const root = "/home/agent/teras/default";
+    expect(resolveToolPath("src/a.ts", root)).toBe(posix.resolve(root, "src/a.ts"));
   });
 
   test("絶対パスはそのまま使う", () => {
-    expect(resolveToolPath("/tmp/a.ts", "/home/agent")).toBe("/tmp/a.ts");
+    expect(resolveToolPath("/tmp/a.ts", "/home/agent/teras/default")).toBe("/tmp/a.ts");
   });
 
-  test("~ はコンテナのホームに広げる", () => {
-    expect(resolveToolPath("~", "/home/agent")).toBe("/home/agent");
-    expect(resolveToolPath("~/a.ts", "/home/agent")).toBe("/home/agent/a.ts");
+  test("~ はコンテナのホームに広げる（bash の ~ と同じ）", () => {
+    const root = "/home/agent/teras/default";
+    expect(resolveToolPath("~", root)).toBe("/home/agent");
+    expect(resolveToolPath("~/a.ts", root)).toBe("/home/agent/a.ts");
   });
 
   test("空のパスは失敗する", () => {
-    expect(() => resolveToolPath("  ", "/home/agent")).toThrow("path must not be empty");
+    expect(() => resolveToolPath("  ", "/home/agent/teras/default")).toThrow("path must not be empty");
   });
 });
 

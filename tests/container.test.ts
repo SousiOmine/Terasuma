@@ -219,6 +219,17 @@ describe("コンテナの中での実行", () => {
     });
   });
 
+  test("workdir を渡すと、その場所で実行する（Tera の作業フォルダ）", async () => {
+    const workdir = "/home/agent/teras/default";
+
+    await withManager({ exec: { code: 0, stdout: `${workdir}\n`, stderr: "" } }, async ({ container, calls }) => {
+      await container.shell("pwd", { timeoutMs: 1_000, workdir });
+
+      const exec = callsOf(calls, "exec")[0];
+      expect(exec).toEqual(["podman", "exec", "--workdir", workdir, "terasuma", "bash", "-lc", "pwd"]);
+    });
+  });
+
   test("設定された環境変数は、動かすコマンドへ --env で渡す", async () => {
     const variables: Record<string, string> = { GITHUB_TOKEN: "ghp_1", NO_COLOR: "1" };
 

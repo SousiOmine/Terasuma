@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import type { AppConfig } from "./config";
+import type { AttachmentToolsetProvider, CodingToolsetProvider } from "./server/agent/contracts";
 import { createCompaction, type Compaction } from "./server/agent/compaction";
 import { createEngine, type AgentEngine } from "./server/agent/engine";
 import { createSkillFileStore } from "./server/agent/skill-files";
@@ -10,11 +11,11 @@ import { createHistoryToolset } from "./server/agent/tools/history";
 import { createWebSearchToolset } from "./server/agent/tools/web";
 import { createWebSearchManager, type WebSearchManager } from "./server/websearch-manager";
 import { createContainerManager, type ContainerManager } from "./server/computer/container";
-import { WORKDIR_IN_CONTAINER } from "./server/computer/contract";
 import { createEnvRequests } from "./server/computer/env";
 import { createFileStore } from "./server/computer/files";
 import { createHandover } from "./server/computer/handover";
 import { createImageStore } from "./server/computer/images";
+import { ensureTeraWorkspace } from "./server/computer/workspaces";
 import { createSettingsStore, type SettingsStore } from "./server/data/settings";
 import { createStore, type Store } from "./server/data/store";
 import { createConnections, type ConnectionsManager } from "./server/connections/manager";
@@ -26,7 +27,6 @@ import { createMcpManager, type McpManager } from "./server/mcp/manager";
 import { OAUTH_CALLBACK_PATH } from "./server/mcp/oauth";
 import { CATALOG_FILE_NAME, createCatalog, modelContextTokens, type Catalog } from "./server/provider/catalog";
 import type { ConnectionChecker, ProviderModelLister } from "./server/provider/connection";
-import type { SentAttachment } from "./shared/api/message";
 
 /**
  * 依存を組み立てて、動くアプリを 1 つ作る（合成ルート）。
@@ -75,6 +75,10 @@ export type AppOverrides = {
 export function startApp(config: AppConfig, overrides: AppOverrides = {}): App {
   const store = overrides.store ?? createStore(config.dbPath);
   const settings = createSettingsStore(config.configPath);
+
+  // Tera ごとの作業フォルダは、コンテナのホームの中に置く（/home/agent/teras/<tera id>）。
+  // 起動時に既知の Tera の分を作っておく（ターンの開始時にも作るので、リセットで消えても戻る）。
+  for (const tera of store.listTeras()) ensureTeraWorkspace(config.dataDir, tera.id);
 
   // ツールが返した画像は、データディレクトリにファイルとして置く（会話には参照だけが残る）。
   // MCP の接続もこの置き場へ画像を保存するので、接続より先に用意する。
@@ -125,12 +129,22 @@ export function startApp(config: AppConfig, overrides: AppOverrides = {}): App {
 
   // コンテナのファイルとシェルを扱うツール（read / write / edit / bash）。
   // いずれもコンピュータのコンテナの中だけで動き、ホストのファイルには触れない。
-  const coding = createCodingToolset({ container, root: WORKDIR_IN_CONTAINER });
+  // 相対パスと bash の cwd は Tera ごとの作業フォルダになるので、ターンごとに組む。
+  const coding: CodingToolsetProvider = {
+    toolset: ({ teraId }) => createCodingToolset({ container, root: ensureTeraWorkspace(config.dataDir, teraId) }),
+  };
 
-  // 画像やファイルをチャットへ添付するツール（chat_attach）。添付の口はターンごとに渡す。
-  const attachments = {
-    toolset: (input: { attach: (attachments: SentAttachment[]) => void }) =>
-      createAttachmentTools({ container, root: WORKDIR_IN_CONTAINER, images, files, attach: input.attach }),
+  // 画像やファイルをチャットへ添付するツール（chat_attach）。
+  // 添付の口はターンごとに変わり、相対パスはその Tera の作業フォルダを基準にする。
+  const attachments: AttachmentToolsetProvider = {
+    toolset: ({ teraId, attach }) =>
+      createAttachmentTools({
+        container,
+        root: ensureTeraWorkspace(config.dataDir, teraId),
+        images,
+        files,
+        attach,
+      }),
   };
 
   // 過去の対話履歴を検索するツール（history_search）。引く履歴はターンごとに渡す。

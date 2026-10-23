@@ -105,10 +105,14 @@ export type ContainerManager = {
   start(): Promise<ContainerStatusView>;
   /** コンテナを作り直す。wipeHome を選ぶと、マウントしたフォルダの中身も消す。 */
   reset(options: { wipeHome: boolean }): Promise<ContainerStatusView>;
-  /** コンテナの中で bash -lc を実行する。動いていなければ ContainerError を投げる。 */
+  /**
+   * コンテナの中で bash -lc を実行する。動いていなければ ContainerError を投げる。
+   * workdir は実行するディレクトリ。省くとコンテナのホーム（/home/agent）。
+   * Tera の作業フォルダで動かすときは、存在することを確かめてから渡す。
+   */
   shell(
     script: string,
-    options: { timeoutMs: number; signal?: AbortSignal; maxOutputChars?: number },
+    options: { timeoutMs: number; signal?: AbortSignal; maxOutputChars?: number; workdir?: string },
   ): Promise<ShellResult>;
   /**
    * コンテナの中の 1 つのコマンドを実行する。
@@ -376,13 +380,13 @@ export function createContainerManager(options: ContainerManagerOptions): Contai
       return start();
     },
 
-    async shell(script, { timeoutMs, signal, maxOutputChars }) {
+    async shell(script, { timeoutMs, signal, maxOutputChars, workdir }) {
       await requireRunning();
 
       const result = await run(
         podmanExec({
           container: CONTAINER_NAME,
-          workdir: WORKDIR_IN_CONTAINER,
+          workdir: workdir ?? WORKDIR_IN_CONTAINER,
           env: options.env(),
           command: ["bash", "-lc", script],
         }),

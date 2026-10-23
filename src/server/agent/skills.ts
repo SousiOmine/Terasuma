@@ -100,9 +100,9 @@ hand) shows what is under it.
 ## Files and the screen are the same machine
 
 read, write, edit and bash already run inside this container. To show a local file on the
-screen, write it with write, then open it with computer_open (for example
-file:///home/agent/page.html). To show the screen or a file to the user in the chat, use
-chat_attach with screenshot true or with files.
+screen, write it with write, then open it with computer_open using its absolute path as a
+file:// URL. To show the screen or a file to the user in the chat, use chat_attach with
+screenshot true or with files.
 
 ## Asking the user
 

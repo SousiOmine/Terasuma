@@ -4,20 +4,21 @@ import { formatBytes } from "../../shared/text";
 import type { ChatAttachment } from "../../shared/api/message";
 import { ValidationError } from "../errors";
 import type { ContainerManager } from "./container";
-import { WORKDIR_IN_CONTAINER } from "./contract";
+import { teraWorkspaceInContainer } from "./workspaces";
 
 /**
  * チャットへ添付されたファイルを、エージェントが操作するコンテナの中へ置く。
  *
- * 置き場は /home/agent/uploads/<受付ごとのフォルダ>/ にする。
- * /home/agent はホストのデータディレクトリにマウントされているので、
- * コンテナを作り直してもファイルは残る。
+ * 置き場は、その Tera の作業フォルダの中の uploads/<受付ごとのフォルダ>/ にする
+ * （/home/agent/teras/<tera id>/uploads/...）。送られたファイルが、その Tera の
+ * 作業材料として 1 か所にまとまる。
+ * ホームはホストのデータディレクトリにマウントされているので、コンテナを作り直しても残る。
  *
  * ファイル名は画面から来た値をそのまま使わない。パス区切りを落とし、
  * 同じ受付の中では連番を頭に付けて、置き場の外を指したり名前が衝突したりしないようにする。
  */
 
-/** 置き場の名前。WORKDIR_IN_CONTAINER の直下に作る。 */
+/** 置き場の名前。Tera の作業フォルダの直下に作る。 */
 const UPLOADS_DIR_NAME = "uploads";
 
 /** 保存するファイル名のバイト数の上限。ファイルシステムの上限（255 バイト）より十分短くする。 */
@@ -63,24 +64,26 @@ export async function readUploadedFiles(form: FormData): Promise<UploadFile[]> {
 }
 
 /**
- * ファイルをコンテナへ置く。
+ * ファイルをコンテナへ置く。置き場は、その Tera の作業フォルダの中。
  * 1 つでも書けなければ例外にし、途中まで置いたファイルは残る（会話は始めない）。
  */
 export async function saveUploads(
   container: UploadWriter,
+  teraId: string,
   files: readonly UploadFile[],
   signal: AbortSignal,
 ): Promise<ChatAttachment[]> {
   assertLimits(files.map((file) => file.bytes.length));
   if (files.length === 0) return [];
 
+  const workspace = teraWorkspaceInContainer(teraId);
   const folder = `${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
   const saved: ChatAttachment[] = [];
 
   for (const [index, file] of files.entries()) {
     const safeName = safeFileName(file.name);
     const storedName = `${String(index + 1).padStart(2, "0")}-${safeName}`;
-    const path = posix.join(WORKDIR_IN_CONTAINER, UPLOADS_DIR_NAME, folder, storedName);
+    const path = posix.join(workspace, UPLOADS_DIR_NAME, folder, storedName);
 
     await container.writeFile(path, file.bytes, signal);
     saved.push({ name: safeName, path, size: file.bytes.length });

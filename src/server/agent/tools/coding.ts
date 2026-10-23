@@ -5,6 +5,7 @@ import { throwIfAborted } from "../../../shared/async";
 import { formatBytes } from "../../../shared/text";
 import { z } from "zod";
 import type { ShellResult } from "../../computer/container";
+import { WORKDIR_IN_CONTAINER } from "../../computer/contract";
 
 /**
  * エージェントが、Debian のデスクトップコンテナの中のファイルを読み書きし、
@@ -14,7 +15,9 @@ import type { ShellResult } from "../../computer/container";
  * Terasuma 本体が動いているホストや、アプリのコンテナのファイルには触れない。
  * コンテナが動いていなければ、どのツールも理由付きで失敗する（ホストへは落ちない）。
  *
- * 相対パスはコンテナの /home/agent を基準にし、~ も同じ場所に広げる。
+ * 相対パスと bash の作業ディレクトリは、渡された root（Tera の作業フォルダ）を基準にする。
+ * ~ はコンテナのホーム（/home/agent）に広げる（bash の ~ と同じ場所）。
+ * 絶対パスは制限しないので、ほかの Tera の作業フォルダにも触れられる。
  */
 
 /** モデルへ渡すツール。キーはツール名（"read" など）。 */
@@ -26,7 +29,7 @@ export type CodingContainer = {
   writeFile(path: string, content: Uint8Array, signal?: AbortSignal): Promise<void>;
   shell(
     script: string,
-    options: { timeoutMs: number; signal?: AbortSignal; maxOutputChars?: number },
+    options: { timeoutMs: number; signal?: AbortSignal; maxOutputChars?: number; workdir?: string },
   ): Promise<ShellResult>;
 };
 
@@ -66,7 +69,7 @@ const UTF8 = new TextDecoder("utf-8", { ignoreBOM: true });
 type ToolContext = { abortSignal?: AbortSignal };
 
 export function createCodingToolset({ container, root }: CodingToolsetOptions): CodingToolset {
-  const where = `Paths are relative to ${root} unless absolute.`;
+  const where = `Paths are relative to ${root} unless absolute; ~ is ${WORKDIR_IN_CONTAINER}.`;
 
   return {
     read: tool({
@@ -163,7 +166,7 @@ export function createCodingToolset({ container, root }: CodingToolsetOptions): 
       }),
       execute: async ({ command, timeout }: { command: string; timeout?: number }, context: ToolContext) => {
         throwIfAborted(context.abortSignal);
-        const output = await runBash(container, command, timeout, context.abortSignal);
+        const output = await runBash(container, root, command, timeout, context.abortSignal);
         throwIfAborted(context.abortSignal);
         return output;
       },
@@ -172,14 +175,15 @@ export function createCodingToolset({ container, root }: CodingToolsetOptions): 
 }
 
 /**
- * 相対パスを、コンテナの基準ディレクトリから解決する。
- * `~` と `~/...` だけは基準ディレクトリ（agent のホーム）に広げる。
+ * 相対パスを、コンテナの基準ディレクトリ（Tera の作業フォルダ）から解決する。
+ * `~` と `~/...` だけはコンテナのホーム（/home/agent）に広げる（bash の ~ と同じ）。
  */
 export function resolveToolPath(input: string, root: string): string {
   const path = input.trim();
   if (path.length === 0) throw new Error("path must not be empty");
 
-  const expanded = path === "~" ? root : path.startsWith("~/") ? posix.join(root, path.slice(2)) : path;
+  const home = WORKDIR_IN_CONTAINER;
+  const expanded = path === "~" ? home : path.startsWith("~/") ? posix.join(home, path.slice(2)) : path;
   return posix.resolve(root, expanded);
 }
 
@@ -336,6 +340,7 @@ function restoreLineEndings(text: string, ending: "\r\n" | "\n"): string {
 /** コンテナの中で bash を実行し、結果をモデルが読める形にする。 */
 async function runBash(
   container: CodingContainer,
+  workdir: string,
   command: string,
   timeoutSeconds: number | undefined,
   signal: AbortSignal | undefined,
@@ -349,6 +354,8 @@ async function runBash(
     signal,
     // 表示用に詰めるのは 2,000 行 / 50 KB だが、その手前で末尾 1 MB まで受け取る。
     maxOutputChars: BASH_RAW_OUTPUT_CHARS,
+    // 相対パスの基準（root）と同じフォルダで動かす。
+    workdir,
   });
 
   const output = formatBashOutput(result);

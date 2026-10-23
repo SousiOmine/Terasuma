@@ -3,6 +3,8 @@ import type { ReplyLanguage } from "../../shared/language";
 import type { ChatMessage, ImageRef, MessagePart } from "../../shared/api/message";
 import { formatLocalDate } from "../../shared/text";
 import { toolNameFor } from "../../shared/tools";
+import { WORKDIR_IN_CONTAINER } from "../computer/contract";
+import { TERAS_DIR_IN_CONTAINER } from "../computer/workspaces";
 import type { ImageReader } from "../computer/images";
 import { userContentForModel } from "./model-content";
 import { skillCatalogText } from "./skills";
@@ -32,7 +34,6 @@ const SYSTEM_PROMPT_BASE = [
   "Use the chat_ui tool to show a diagram, a table or a card with choices: it takes one <Card> of UI markup and its description lists the tags. Clicking an option sends that label as the user's next message, so the user can click only after your turn ends.",
   "Always follow the reply-language instruction at the end of the conversation, and write your reply in that language.",
   "The read, write, edit, and bash tools run inside the Debian desktop container that you operate.",
-  "Relative paths in read, write, edit, and chat_attach, and the working directory of bash, are /home/agent. Absolute paths are container paths.",
   "Use read to examine a file before changing it. Use edit for targeted changes; use write only for new files or complete rewrites.",
   "MCP server tools and the computer_ tools that drive the container's screen are not in your tool list.",
   "Find them with tool_search (omit the query to list every available tool by name), then run one with tool_call, using the exact name and the arguments its search result describes.",
@@ -49,14 +50,30 @@ const SYSTEM_PROMPT_BASE = [
 /**
  * モデルへ渡す system プロンプト。
  * identity は圧縮のときだけ、スキルの一覧はターンの開始時に変わる。
+ * 作業場（workspace）は Tera ごとに決まり、その Tera の中では変わらない。
  */
-export function buildSystemPrompt(skills: readonly Skill[], identity: string): string {
+export function buildSystemPrompt(skills: readonly Skill[], identity: string, workspace: string): string {
   return [
     ...SYSTEM_PROMPT_BASE,
+    ...workspaceSection(workspace),
     ...identitySection(identity),
     "Skills (load one with the skill tool before starting work that matches it):",
     skillCatalogText(skills),
   ].join("\n");
+}
+
+/**
+ * system プロンプトに載せる作業場の説明。
+ *
+ * パスは Tera ごとに決まるが、その Tera の中では変わらないので、プロンプトの先頭は
+ * ターンをまたいで一致し、キャッシュが当たり続ける。
+ * ほかの Tera の作業場も同じ親の下に並ぶので、絶対パスで触れられる。
+ */
+function workspaceSection(workspace: string): string[] {
+  return [
+    `Your workspace is ${workspace}. Relative paths in read, write, edit, and chat_attach, and the working directory of bash, are inside it; ~ is ${WORKDIR_IN_CONTAINER}.`,
+    `Other Teras' workspaces are the sibling folders under ${TERAS_DIR_IN_CONTAINER}, one folder per Tera id. You may read and write there too, but change another Tera's files only when the user asks (ls ${TERAS_DIR_IN_CONTAINER} lists them).`,
+  ];
 }
 
 /** system プロンプトに載せる identity。空なら、これから書けることを伝える。 */
@@ -261,9 +278,10 @@ export function buildModelInput(
   now: number,
   skills: readonly Skill[],
   identity: string,
+  workspace: string,
 ): ModelMessage[] {
   return [
-    { role: "system", content: buildSystemPrompt(skills, identity) },
+    { role: "system", content: buildSystemPrompt(skills, identity, workspace) },
     ...toModelMessages(context, images, replyLanguage, options, now),
   ];
 }

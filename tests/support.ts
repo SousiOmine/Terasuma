@@ -9,15 +9,15 @@ import type {
   CommandResult,
   CommandRunner,
 } from "../src/server/computer/command";
-import type { CodingToolset } from "../src/server/agent/tools/coding";
 import { ContainerError, type ContainerManager } from "../src/server/computer/container";
-import type { EnvRequests } from "../src/server/computer/env";
 import type {
   AttachmentToolsetProvider,
+  CodingToolsetProvider,
   ComputerToolsetProvider,
   HistoryToolsetProvider,
   WebSearchToolsetProvider,
 } from "../src/server/agent/contracts";
+import type { EnvRequests } from "../src/server/computer/env";
 import type { LoadedSkill, Skill, SkillFileStore } from "../src/server/agent/skill-types";
 import type { ImageStore } from "../src/server/computer/images";
 import type { McpManager } from "../src/server/mcp/manager";
@@ -233,8 +233,9 @@ export function createWebSearchStub(): WebSearchManager {
 }
 
 /** 端末のツールを渡さないテストのための差し替え。 */
-export function createCodingStub(): CodingToolset {
-  return {};
+/** コンテナのファイルとシェルを渡さないテストのための差し替え。 */
+export function createCodingStub(): CodingToolsetProvider {
+  return { toolset: () => ({}) };
 }
 
 /**

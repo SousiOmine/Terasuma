@@ -53,7 +53,7 @@ async function withAttachments(
     const files = createFileStore(dir);
     const tools = createAttachmentTools({
       container: createContainer(contents),
-      root: "/home/agent",
+      root: "/home/agent/teras/default",
       images,
       files,
       attach: (attachments) => attached.push(...attachments),
@@ -76,7 +76,7 @@ describe("chat_attach", () => {
   test("コンテナの中のファイルを添付できる", async () => {
     const bytes = new TextEncoder().encode("hello attachment");
 
-    await withAttachments({ "/home/agent/notes.txt": bytes }, async ({ tools, attached, files }) => {
+    await withAttachments({ "/home/agent/teras/default/notes.txt": bytes }, async ({ tools, attached, files }) => {
       const result = await callTool(tools, { files: ["notes.txt"] });
 
       expect(result).toBe("Attached 1 file to the chat.");
@@ -97,20 +97,28 @@ describe("chat_attach", () => {
     });
   });
 
-  test("~ と相対パスは /home/agent から解決する", async () => {
-    const bytes = new TextEncoder().encode("home");
+  test("相対パスは作業フォルダから、~ はコンテナのホームから解決する", async () => {
+    const workspace = new TextEncoder().encode("workspace");
+    const home = new TextEncoder().encode("home");
 
-    await withAttachments({ "/home/agent/home.txt": bytes }, async ({ tools, attached }) => {
-      await callTool(tools, { files: ["~/home.txt", "./home.txt"] });
-      expect(attached).toHaveLength(2);
-      expect(attached.every((attachment) => attachment.name === "home.txt")).toBe(true);
-    });
+    await withAttachments(
+      { "/home/agent/teras/default/home.txt": workspace, "/home/agent/home.txt": home },
+      async ({ tools, attached }) => {
+        await callTool(tools, { files: ["./home.txt", "~/home.txt"] });
+
+        expect(attached).toHaveLength(2);
+        expect(attached.every((attachment) => attachment.name === "home.txt")).toBe(true);
+        // 相対パスは作業フォルダのファイル、~ はホームのファイルを読む。
+        expect(attached[0]?.size).toBe(workspace.length);
+        expect(attached[1]?.size).toBe(home.length);
+      },
+    );
   });
 
   test("画像は写真として、縦横を添えて添付する", async () => {
     const png = testPng(4, 3);
 
-    await withAttachments({ "/home/agent/picture.png": png }, async ({ tools, attached, images }) => {
+    await withAttachments({ "/home/agent/teras/default/picture.png": png }, async ({ tools, attached, images }) => {
       await callTool(tools, { files: ["picture.png"] });
 
       const attachment = attached[0];
@@ -156,7 +164,7 @@ describe("chat_attach", () => {
   test("添付の数と大きさの上限を守る", async () => {
     const big = new Uint8Array(MAX_ATTACHMENT_BYTES + 1);
 
-    await withAttachments({ "/home/agent/big.bin": big }, async ({ tools, attached }) => {
+    await withAttachments({ "/home/agent/teras/default/big.bin": big }, async ({ tools, attached }) => {
       await expect(callTool(tools, { files: ["big.bin"] })).rejects.toThrow("smaller");
 
       const many = Array.from({ length: MAX_ATTACHMENTS + 1 }, (_, index) => `file-${index}.txt`);

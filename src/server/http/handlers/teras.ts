@@ -68,7 +68,7 @@ export function terasHandlers(
       const resolution = resolveModel(settings.read(), deps.catalog.snapshot());
       if (!resolution.ok) throw new AppError("model_not_configured", 400, resolution.detail);
 
-      const uploaded = await saveUploads(container, form.files, req.signal);
+      const uploaded = await saveUploads(container, req.params.id, form.files, req.signal);
       const attachments = uploaded.length === 0 ? null : uploaded;
 
       const events = turns.begin(req.params.id, {
@@ -99,7 +99,7 @@ export function terasHandlers(
         throw new ValidationError("content or files must be provided");
       }
 
-      const uploaded = await saveUploads(container, form.files, req.signal);
+      const uploaded = await saveUploads(container, req.params.id, form.files, req.signal);
       const attachments = uploaded.length === 0 ? null : uploaded;
 
       const message = turns.steer(req.params.id, { content: form.content, attachments });

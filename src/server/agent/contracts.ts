@@ -2,6 +2,7 @@ import type { ToolSet } from "ai";
 import type { SentAttachment } from "../../shared/api/message";
 import type { McpToolset } from "../mcp/manager";
 import type { AttachmentToolset } from "./tools/attachments";
+import type { CodingToolset } from "./tools/coding";
 import type { ComputerToolset } from "./tools/computer";
 import type { HistoryToolset } from "./tools/history";
 
@@ -25,11 +26,19 @@ export type ComputerToolsetProvider = {
 };
 
 /**
+ * コンテナのファイルとシェルのツールの供給元。
+ * 相対パスと bash の作業ディレクトリの基準は Tera ごとの作業フォルダなので、ターンごとに teraId を渡す。
+ */
+export type CodingToolsetProvider = {
+  toolset(input: { teraId: string }): CodingToolset;
+};
+
+/**
  * 画像やファイルをチャットへ添付するツールの供給元。
- * 添付の口はターンごとに差し替わるので、呼び出しのたびに渡す。
+ * 添付の口はターンごとに差し替わり、相対パスの基準も Tera ごとに変わるので、両方を渡す。
  */
 export type AttachmentToolsetProvider = {
-  toolset(input: { attach: (attachments: SentAttachment[]) => void }): AttachmentToolset;
+  toolset(input: { teraId: string; attach: (attachments: SentAttachment[]) => void }): AttachmentToolset;
 };
 
 /**

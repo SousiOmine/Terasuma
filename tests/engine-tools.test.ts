@@ -5,13 +5,14 @@ import { join } from "node:path";
 import { tool } from "ai";
 import { z } from "zod";
 import type { ModelSettings } from "../src/server/data/settings";
-import { createCodingToolset, type CodingToolset } from "../src/server/agent/tools/coding";
+import { createCodingToolset } from "../src/server/agent/tools/coding";
 import { createComputerTools } from "../src/server/agent/tools/computer";
 import type { ContainerManager } from "../src/server/computer/container";
 import { createAiSdkEngine } from "../src/server/agent/engine/sdk";
 import type { EngineEvent, SettingsReader } from "../src/server/agent/engine";
 import type {
   AttachmentToolsetProvider,
+  CodingToolsetProvider,
   ComputerToolsetProvider,
   HistoryToolsetProvider,
   ToolsetProvider,
@@ -239,7 +240,7 @@ async function run(
   provider: ToolsetProvider,
   settings: ModelSettings,
   computer: ComputerToolsetProvider = createComputerStub(),
-  coding: CodingToolset = createCodingStub(),
+  coding: CodingToolsetProvider = createCodingStub(),
   images: ImageStore = createImageStub(),
   catalog: CatalogSnapshot | null = null,
   attachments: AttachmentToolsetProvider = createAttachmentsStub(),
@@ -620,7 +621,7 @@ describe("コンテナのツール（tool_call 経由）", () => {
     const container: ContainerManager = {
       ...createContainerStub(),
       readFile: async (path) => {
-        expect(path).toBe("/home/agent/note.txt");
+        expect(path).toBe("/home/agent/teras/t1/note.txt");
         return new TextEncoder().encode("hello from the container\n");
       },
     };
@@ -635,7 +636,8 @@ describe("コンテナのツール（tool_call 経由）", () => {
         { toolset: async () => ({}) },
         settingsFor(portOf(fake.server)),
         createComputerStub(),
-        createCodingToolset({ container, root: "/home/agent" }),
+        // 相対パスは、このターンの Tera（t1）の作業フォルダから解決する。
+        { toolset: () => createCodingToolset({ container, root: "/home/agent/teras/t1" }) },
       );
 
       // コンテナの読み書きは、ツール検索を挟まずにそのままの名前でモデルへ渡る。
@@ -650,6 +652,23 @@ describe("コンテナのツール（tool_call 経由）", () => {
 
       // 2 回目の呼び出しには、読んだ内容が載っている。
       expect(JSON.stringify(fake.bodies[1])).toContain("hello from the container");
+    } finally {
+      await fake.server.stop(true);
+    }
+  });
+});
+
+describe("作業場", () => {
+  test("system プロンプトに、自分の作業場と、ほかの Tera の作業場の案内が載る", async () => {
+    const fake = startScriptedProvider([{ text: "わかりました" }]);
+
+    try {
+      await run({ toolset: async () => ({}) }, settingsFor(portOf(fake.server)));
+
+      // 相対パスの基準は、このターンの Tera（t1）の作業フォルダ。
+      const prompt = JSON.stringify(fake.bodies[0]);
+      expect(prompt).toContain("Your workspace is /home/agent/teras/t1.");
+      expect(prompt).toContain("Other Teras' workspaces are the sibling folders under /home/agent/teras");
     } finally {
       await fake.server.stop(true);
     }

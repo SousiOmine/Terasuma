@@ -41,10 +41,11 @@ describe("添付ファイルの名前", () => {
 });
 
 describe("添付ファイルの保存", () => {
-  test("コンテナの uploads に置き、名前とパスと大きさを返す", async () => {
+  test("Tera の作業フォルダの uploads に置き、名前とパスと大きさを返す", async () => {
     const writer = recordingWriter();
     const files = await saveUploads(
       writer,
+      "default",
       [upload("notes.txt", "hello"), upload("photo.png", "image")],
       new AbortController().signal,
     );
@@ -53,7 +54,7 @@ describe("添付ファイルの保存", () => {
     expect(files[0]).toEqual({
       name: "notes.txt",
       size: 5,
-      path: expect.stringMatching(/^\/home\/agent\/uploads\/.+\/01-notes\.txt$/),
+      path: expect.stringMatching(/^\/home\/agent\/teras\/default\/uploads\/.+\/01-notes\.txt$/),
     });
     expect(files[1]?.path.endsWith("/02-photo.png")).toBe(true);
 
@@ -64,7 +65,7 @@ describe("添付ファイルの保存", () => {
 
   test("ファイルが無ければ何も書かず、空の配列を返す", async () => {
     const writer = recordingWriter();
-    const files = await saveUploads(writer, [], new AbortController().signal);
+    const files = await saveUploads(writer, "default", [], new AbortController().signal);
 
     expect(files).toEqual([]);
     expect(writer.writes).toEqual([]);
@@ -74,7 +75,7 @@ describe("添付ファイルの保存", () => {
     const writer = recordingWriter();
     const files = Array.from({ length: MAX_ATTACHMENTS + 1 }, (_, index) => upload(`${index}.txt`, "x"));
 
-    await expect(saveUploads(writer, files, new AbortController().signal)).rejects.toThrow(
+    await expect(saveUploads(writer, "default", files, new AbortController().signal)).rejects.toThrow(
       `You can attach up to ${MAX_ATTACHMENTS} files`,
     );
     expect(writer.writes).toEqual([]);

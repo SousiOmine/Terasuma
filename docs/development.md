@@ -129,6 +129,26 @@ user メッセージとして文脈の末尾へ足される。
 - 画面を引き受けている間（`computer_ask_user`）の入力は、これまでどおりツールの戻り値になる。
 - 選択肢カードは応答中に押せない（押した内容は新しい発言として扱うため）。
 
+## Tera ごとの作業場
+
+エージェントの read / write / edit は、相対パスを自分の作業フォルダから解決する。bash も、そのフォルダを cwd にして動く。
+作業フォルダは、コンテナ（仮想マシン）のホームの直下に Tera ごとに 1 つ置く。
+
+| 場所 | パス |
+| --- | --- |
+| コンテナの中 | `/home/agent/teras/<tera id>/` |
+| ホスト | `~/.local/share/terasuma/container/home/teras/<tera id>/` |
+
+- フォルダ名は表示名ではなく tera id にする（名前を変えてもパスが動かない）。id は `[a-z0-9][a-z0-9-]*` に限り、外れた id は別名にせず失敗させる（`server/computer/workspaces.ts`）。
+- `~` はコンテナのホーム `/home/agent` に広げる（bash の `~` と同じ場所）。相対パスだけが作業フォルダを基準にする。
+- 作業フォルダは境界ではない。絶対パスは制限しないので、ほかの Tera の作業フォルダにも読み書きできる。system プロンプトにその案内を載せている（見つけるためのツールは増やしていない）。
+- 作業フォルダは、起動時に既知の Tera の分を作り、ターンの開始時にも作る。`podman exec --workdir` は存在しないフォルダを指定すると失敗するため。
+- 添付ファイルは、その Tera の作業フォルダの中の `uploads/<受付ごとのフォルダ>/` に置く。以前の版が `/home/agent/uploads/` に置いたファイルはそのまま残るので、過去のメッセージの絶対パスも有効。
+- 既存の `/home/agent` 直下のファイルは、作業フォルダへは移さない。絶対パスで触れる。
+- スキル（`/home/agent/.agents/skills/`）と画面（デスクトップ）は、コンテナで 1 つを全 Tera で共有する。
+- 設定画面のリセットで「ホームの中身も消す」を選ぶと、全 Tera の作業フォルダが消える。
+- 作業フォルダのパスは system プロンプトに載る。Tera ごとに固定なので、その Tera のプロンプトキャッシュは当たり続ける（ほかの Tera とは先頭が違ってよい）。
+
 ## スキル
 
 エージェントが作ったスキルは、コンピュータのホームの中の `.agents/skills/<name>/SKILL.md` に置く。
@@ -204,7 +224,7 @@ src/
   server/mcp          MCP の接続（connection / transport / tools）と OAuth
   server/connections  アプリの接続（トークン保存・検証・ツール）
   server/discord      Discord の webhook（Tera ごとの保存・検証・送信・ツール）
-  server/computer     podman・画像・引き受け・契約値
+  server/computer     podman・画像・引き受け・契約値・Tera ごとの作業フォルダ
   server/data         設定と会話の永続化（store/ と settings/ に分かれる）
   server/wait         中断で片付く待ち
   client/lib          通信・失敗・待ち

@@ -133,7 +133,7 @@ export const ja: Record<MessageKey, string> = {
   "settings.container.resetting": "作り直しています…",
   "settings.container.resetTitle": "コンピュータを作り直しますか？",
   "settings.container.resetMessage":
-    "エージェントが入れたアプリと設定は消えます。置いたファイルは、「ホームの中身も消す」を選ばない限り残ります。",
+    "エージェントが入れたアプリと設定は消えます。Tera ごとの作業フォルダを含むホームの中身は、「ホームの中身も消す」を選んだときだけ消えます。",
   "settings.container.resetWipeHome": "ホームの中身も消す",
   "settings.container.confirmReset": "作り直す",
 

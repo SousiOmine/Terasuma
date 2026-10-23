@@ -625,7 +625,7 @@ describe("チャット API", () => {
         if (stored === undefined) throw new Error("保存された発言が無い");
         const storedAttachment = stored.attachments?.[0];
         if (storedAttachment === undefined) throw new Error("保存された添付が無い");
-        expect(storedAttachment.path).toMatch(/^\/home\/agent\/uploads\/.+\/01-notes\.txt$/);
+        expect(storedAttachment.path).toMatch(/^\/home\/agent\/teras\/default\/uploads\/.+\/01-notes\.txt$/);
 
         const modelText = userContentForModel(stored);
         expect(modelText).toContain("[Attached files]");
@@ -634,7 +634,7 @@ describe("チャット API", () => {
 
         const write = container.writes[0];
         if (write === undefined) throw new Error("ファイルが書かれていない");
-        expect(write.path.startsWith("/home/agent/uploads/")).toBe(true);
+        expect(write.path.startsWith("/home/agent/teras/default/uploads/")).toBe(true);
         expect(write.path.endsWith("/01-notes.txt")).toBe(true);
         expect(new TextDecoder().decode(write.bytes)).toBe("hello attachment");
 

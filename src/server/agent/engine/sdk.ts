@@ -7,17 +7,18 @@ import type { IdentityStore } from "../identity";
 import type { SkillFileStore } from "../skill-types";
 import type {
   AttachmentToolsetProvider,
+  CodingToolsetProvider,
   ComputerToolsetProvider,
   HistoryToolsetProvider,
   ToolsetProvider,
   WebSearchToolsetProvider,
 } from "../contracts";
-import type { CodingToolset } from "../tools/coding";
 import type { AgentEngine, CatalogReader, SettingsReader } from "./index";
 import { createLanguageModel } from "../../provider/adapters";
 import { toolResultTakesImages } from "../../provider/kinds";
 import { reasoningProviderOptions } from "../../provider/reasoning";
 import { type ResolvedModel, resolveModel } from "../../provider/routing";
+import { teraWorkspaceInContainer } from "../../computer/workspaces";
 import { buildSystemPrompt, imagesMessage, toModelMessages, type PendingImages } from "../prompt";
 import { userContentForModel } from "../model-content";
 import { createChatUiTools } from "../tools/ui";
@@ -57,8 +58,8 @@ export type AiSdkEngineOptions = {
   connections: ConnectionToolsetProvider;
   /** Discord の webhook（送信先は Tera ごと）のツール。 */
   discord: DiscordToolsetProvider;
-  /** コンテナのファイルとシェルのツール。 */
-  coding: CodingToolset;
+  /** コンテナのファイルとシェルのツール。相対パスと bash の cwd が Tera ごとに違うので、ターンごとに組む。 */
+  coding: CodingToolsetProvider;
   images: ImageStore;
   /** models.dev のカタログ。プロバイダの呼び出し方を決めるのに使う。 */
   catalog: CatalogReader;
@@ -111,6 +112,10 @@ export function createAiSdkEngine(options: AiSdkEngineOptions): AgentEngine {
       // 書き換えただけの版（content）は、次の圧縮まで使わない（プロンプトを組み直さない）。
       const appliedIdentity = identity.readIdentity(teraId).applied;
 
+      // このターンの Tera の作業フォルダ。read / write / edit の相対パスと bash の cwd の基準になる。
+      // system プロンプトにも載せる（この Tera の中では変わらないので、キャッシュは当たり続ける）。
+      const workspace = teraWorkspaceInContainer(teraId);
+
       // 畳んだ要約を先頭に、生の履歴をその後ろに置く。生の履歴には要約も並べ替えもしない
       // （プロンプトキャッシュが当たり続けるようにするため）。
       // 今日の日付は履歴の末尾に置く（先頭を変えず、履歴検索の期間指定に使えるようにする）。
@@ -147,8 +152,11 @@ export function createAiSdkEngine(options: AiSdkEngineOptions): AgentEngine {
         ...discordTools,
       });
 
-      // 添付の口はターンごとに差し替わるので、ここで組む。
-      const attachmentTools = attachments.toolset({ attach });
+      // コンテナのツール（read / write / edit / bash）は、この Tera の作業フォルダを基準にする。
+      const codingTools = coding.toolset({ teraId });
+
+      // 添付の口と相対パスの基準はターンごとに変わるので、ここで組む。
+      const attachmentTools = attachments.toolset({ teraId, attach });
 
       // 過去の履歴を引く先はターンの対象の Tera なので、ここで組む。
       const historyTools = history.toolset({ teraId });
@@ -158,7 +166,7 @@ export function createAiSdkEngine(options: AiSdkEngineOptions): AgentEngine {
 
       const tools = withToolModelOutput(
         {
-          ...coding,
+          ...codingTools,
           ...attachmentTools,
           ...chatUiTools,
           ...historyTools,
@@ -181,7 +189,7 @@ export function createAiSdkEngine(options: AiSdkEngineOptions): AgentEngine {
 
       const result = streamText({
         model: createLanguageModel(model),
-        instructions: buildSystemPrompt(library.all(), appliedIdentity),
+        instructions: buildSystemPrompt(library.all(), appliedIdentity, workspace),
         messages,
         abortSignal: signal,
         ...(Object.keys(tools).length === 0 ? {} : { tools }),

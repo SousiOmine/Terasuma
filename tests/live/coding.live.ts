@@ -2,13 +2,13 @@
  * 実際のプロバイダへ繋ぎ、モデルにコンテナの read / write / edit / bash を使わせる確認。
  * `bun test tests/live/coding.live.ts` で動かす（`bun run test:live` にも含まれる）。
  *
- * コンピュータの /home/agent にファイルを作らせて、モデルが本当に
+ * その Tera の作業フォルダにファイルを作らせて、モデルが本当に
  * そのファイルを書き換えられるかどうかを、コンテナの中身でも確かめる。
  * モデルの応答だけを信じない（「書きました」と言って書いていない場合を見逃さない）。
  */
 import { expect, test } from "bun:test";
 import type { ContainerManager } from "../../src/server/computer/container";
-import { WORKDIR_IN_CONTAINER } from "../../src/server/computer/contract";
+import { teraWorkspaceInContainer } from "../../src/server/computer/workspaces";
 import { DEFAULT_TERA_ID } from "../../src/server/data/store";
 import {
   CONTAINER_TIMEOUT_MS,
@@ -30,7 +30,7 @@ async function readInContainer(container: ContainerManager, path: string): Promi
 test(
   "モデルがコンテナのファイルを書き、読み、編集し、bash で確かめられる",
   async () => {
-    const path = `${WORKDIR_IN_CONTAINER}/terasuma-live-coding-${crypto.randomUUID()}.txt`;
+    const path = `${teraWorkspaceInContainer(DEFAULT_TERA_ID)}/terasuma-live-coding-${crypto.randomUUID()}.txt`;
 
     await withLiveServer(async (harness) => {
       // coding ツールはコンテナの中で動くので、先に起こしておく（アプリの起動時と同じ）。

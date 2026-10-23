@@ -8,13 +8,13 @@ import type { ReplyLanguage } from "../../../shared/language";
 import type { ChatMessage, MessagePart, SentAttachment, TokenUsage } from "../../../shared/api/message";
 import type {
   AttachmentToolsetProvider,
+  CodingToolsetProvider,
   ComputerToolsetProvider,
   HistoryToolsetProvider,
   ToolsetProvider,
   WebSearchToolsetProvider,
 } from "../contracts";
 import type { TeraContext } from "../prompt";
-import type { CodingToolset } from "../tools/coding";
 import type { IdentityStore } from "../identity";
 import type { SkillFileStore } from "../skill-types";
 import { createAiSdkEngine } from "./sdk";
@@ -117,8 +117,8 @@ export function createEngine(options: {
   connections: ConnectionToolsetProvider;
   /** Discord の webhook（送信先は Tera ごと）のツール。 */
   discord: DiscordToolsetProvider;
-  /** コンテナのファイルとシェルのツール。ターンごとに変わらないので、そのまま渡す。 */
-  coding: CodingToolset;
+  /** コンテナのファイルとシェルのツール。相対パスと bash の cwd が Tera ごとに違うので、ターンごとに組む。 */
+  coding: CodingToolsetProvider;
   /** 撮った画像の置き場。履歴から画像を読み直してモデルへ渡す。 */
   images: ImageStore;
   /** models.dev のカタログ。プロバイダの呼び出し方を決めるのに使う。 */
