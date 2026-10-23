@@ -1,0 +1,72 @@
+import type { Server, WebSocketHandler } from "bun";
+import type { ContainerManager } from "../computer/container";
+import { jsonError } from "./respond";
+
+/**
+ * 画面の WebSocket 中継で、ブラウザ 1 つとコンテナを結ぶ分。
+ * noVNC はバイナリで RFB を話すので、そのまま転送する。
+ */
+export type ScreenSocketData = {
+  /** 中継先のコンテナのポート。接続した時点の値。 */
+  vncPort: number;
+  /** コンテナ側の socket。繋がるまでは null。 */
+  upstream: WebSocket | null;
+  /** 繋がる前にブラウザから届いた分。順番を保って送るために貯める。 */
+  queue: (string | Uint8Array)[];
+};
+
+/** 画面の WebSocket 中継。ルートの upgrade と、Bun.serve の websocket を 1 つにまとめる。 */
+export type ScreenSocket = {
+  upgrade(req: Request, server: Server<ScreenSocketData>): Promise<Response | undefined>;
+  websocket: WebSocketHandler<ScreenSocketData>;
+};
+
+export function createScreenSocket(container: ContainerManager): ScreenSocket {
+  return {
+    async upgrade(req, server) {
+      const status = await container.status();
+      if (status.state !== "running" || status.vncPort === null) {
+        return jsonError(409, "container_not_running", "コンピュータが動いていないため、画面を表示できません");
+      }
+
+      const upgraded = server.upgrade(req, {
+        data: { vncPort: status.vncPort, upstream: null, queue: [] },
+      });
+      // 切り替えに成功した場合、Bun はこの戻り値を使わない（undefined を返す）。
+      return upgraded ? undefined : jsonError(400, "invalid_request", "WebSocket に切り替えられませんでした");
+    },
+
+    websocket: {
+      open(ws) {
+        const upstream = new WebSocket(`ws://127.0.0.1:${ws.data.vncPort}/websockify`);
+        upstream.binaryType = "arraybuffer";
+
+        upstream.onopen = () => {
+          ws.data.upstream = upstream;
+          // 繋がる前にブラウザから届いた分を、順番のまま送る。
+          for (const item of ws.data.queue) upstream.send(item);
+          ws.data.queue.length = 0;
+        };
+        upstream.onmessage = (event) => {
+          ws.send(typeof event.data === "string" ? event.data : new Uint8Array(event.data as ArrayBuffer));
+        };
+        // コンテナ側が切れたらブラウザ側も切る（繋がっているように見せない）。
+        upstream.onclose = () => ws.close();
+        upstream.onerror = () => ws.close();
+      },
+      message(ws, message) {
+        if (ws.data.upstream === null) {
+          // 最初の挨拶を落とすと繋がらないので、繋がるまで貯める。
+          ws.data.queue.push(typeof message === "string" ? message : new Uint8Array(message));
+          return;
+        }
+        ws.data.upstream.send(message);
+      },
+      close(ws) {
+        const upstream = ws.data.upstream;
+        ws.data.upstream = null;
+        upstream?.close();
+      },
+    },
+  };
+}

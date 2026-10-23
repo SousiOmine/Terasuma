@@ -1,6 +1,5 @@
 import type { Server } from "bun";
 import { join } from "node:path";
-import index from "../../client/index.html";
 import type { AppConfig } from "../../config";
 import type { ContainerManager } from "../computer/container";
 import type { EnvRequests } from "../computer/env";
@@ -13,7 +12,6 @@ import { describeError } from "../../shared/errors";
 import { jsonError, withErrorHandling } from "./respond";
 import type { ConnectionsManager } from "../connections/manager";
 import type { McpManager } from "../mcp/manager";
-import { OAUTH_CALLBACK_PATH } from "../mcp/oauth";
 import type { WebSearchManager } from "../websearch-manager";
 import type { Compaction } from "../agent/compaction";
 import { CATALOG_FILE_NAME, createCatalog, type Catalog } from "../provider/catalog";
@@ -26,6 +24,9 @@ import {
 import { createApiHandlers } from "./handlers";
 import type { SettingsStore } from "../data/settings";
 import type { Store } from "../data/store";
+import { createRoutes } from "./routes";
+import { routeProblem } from "./route-problem";
+import { createScreenSocket, type ScreenSocketData } from "./screen-socket";
 
 export type ServerOptions = {
   config: AppConfig;
@@ -68,19 +69,6 @@ export type StartedServer = {
 };
 
 /**
- * 画面の WebSocket 中継で、ブラウザ 1 つとコンテナを結ぶ分。
- * noVNC はバイナリで RFB を話すので、そのまま転送する。
- */
-type ScreenSocketData = {
-  /** 中継先のコンテナのポート。接続した時点の値。 */
-  vncPort: number;
-  /** コンテナ側の socket。繋がるまでは null。 */
-  upstream: WebSocket | null;
-  /** 繋がる前にブラウザから届いた分。順番を保って送るために貯める。 */
-  queue: (string | Uint8Array)[];
-};
-
-/**
  * ポートを OS に選ばせるための値（Bun.serve の port に渡す）。
  * 設定したポートが埋まっていたときの逃げ道としてだけ使う。
  */
@@ -89,7 +77,7 @@ const ANY_FREE_PORT = 0;
 /**
  * HTTP サーバを起動する。設定したポートが埋まっていたら、空いているポートを OS に選ばせて起動する。
  *
- * ルートはここでリテラルのパスとして並べる（Bun のルータは文字列リテラルからパラメータ型を作る）。
+ * ルートの対応は routes.ts が持つ。ここは依存を組み立てて、Bun.serve に渡すだけにする。
  */
 export function startServer(options: ServerOptions): StartedServer {
   const {
@@ -127,6 +115,8 @@ export function startServer(options: ServerOptions): StartedServer {
       listModels: options.listModels ?? createModelLister(),
     }),
   );
+  const screen = createScreenSocket(container);
+  const routes = createRoutes(api, screen);
 
   const serve = (port: number) =>
     Bun.serve<ScreenSocketData>({
@@ -134,190 +124,11 @@ export function startServer(options: ServerOptions): StartedServer {
       port,
       maxRequestBodySize: MAX_REQUEST_BODY_BYTES,
       development: config.isDevelopment,
-      routes: {
-        "/": index,
-        // Tera（会話の持ち主）と、その 1 本の履歴。
-        "/api/teras": {
-          GET: api.listTeras,
-        },
-        "/api/teras/:id/messages": {
-          GET: api.listMessages,
-          POST: api.sendMessage,
-        },
-        // 応答を生成しているターンの途中へ、発言を足す（終わっていれば 409）。
-        "/api/teras/:id/steer": {
-          POST: api.steerTurn,
-        },
-        // 生成中のターンを、ここで打ち切る（それまでの本文や添付は保存される）。
-        "/api/teras/:id/stop": {
-          POST: api.stopTurn,
-        },
-        // エージェントが送った画像・ファイル。URL は中身のハッシュから決まる。
-        "/api/images/:file": {
-          GET: api.readImage,
-        },
-        "/api/files/:id": {
-          GET: api.readFile,
-        },
-        "/api/model": {
-          GET: api.readModelSettings,
-          PUT: api.setDefaultModel,
-        },
-        "/api/model/reasoning": {
-          GET: api.readReasoning,
-          PUT: api.setReasoning,
-        },
-        "/api/model/catalog": {
-          GET: api.listCatalogProviders,
-        },
-        "/api/model/catalog/:id/models": {
-          GET: api.listCatalogModels,
-        },
-        "/api/model/check": {
-          POST: api.checkProvider,
-        },
-        "/api/model/providers": {
-          POST: api.addProvider,
-        },
-        "/api/model/providers/:id": {
-          PATCH: api.updateProvider,
-          DELETE: api.removeProvider,
-        },
-        "/api/model/providers/:id/models": {
-          GET: api.listProviderModels,
-        },
-        "/api/mcp/servers": {
-          GET: api.listMcpServers,
-          POST: api.addMcpServer,
-        },
-        // 追加の前に、入力された設定で繋がるかを確かめる（設定には書かない）。
-        "/api/mcp/test": {
-          POST: api.testMcpServer,
-        },
-        "/api/mcp/servers/:id": {
-          PATCH: api.updateMcpServer,
-          DELETE: api.removeMcpServer,
-        },
-        "/api/mcp/servers/:id/check": {
-          POST: api.checkMcpServer,
-        },
-        "/api/mcp/servers/:id/authorize": {
-          POST: api.authorizeMcpServer,
-          DELETE: api.cancelMcpAuthorization,
-        },
-        // アプリの接続。トークンの保存と、保存待ちの中止。
-        "/api/connections": {
-          GET: api.listConnections,
-        },
-        "/api/connections/:id": {
-          PUT: api.setConnectionClientId,
-          DELETE: api.disconnectConnection,
-        },
-        "/api/connections/:id/token": {
-          PUT: api.setConnectionToken,
-        },
-        "/api/connections/:id/wait": {
-          DELETE: api.cancelConnectionWait,
-        },
-        // Web 検索のプロバイダ。保存前の確認は接続先へ 1 回検索を投げる。
-        "/api/websearch": {
-          GET: api.readWebSearch,
-        },
-        "/api/websearch/test": {
-          POST: api.testWebSearchProvider,
-        },
-        "/api/websearch/providers": {
-          POST: api.addWebSearchProvider,
-        },
-        "/api/websearch/providers/:id": {
-          PATCH: api.updateWebSearchProvider,
-          DELETE: api.removeWebSearchProvider,
-        },
-        "/api/websearch/default": {
-          PUT: api.setDefaultWebSearchProvider,
-        },
-        "/api/container": {
-          GET: api.readContainer,
-        },
-        "/api/container/start": {
-          POST: api.startContainer,
-        },
-        "/api/container/reset": {
-          POST: api.resetContainer,
-        },
-        // 画面の中継。noVNC の HTML と JS をコンテナから取ってきて返す。
-        "/api/computer/screen/*": {
-          GET: api.relayScreen,
-        },
-        // 画面の操作。ブラウザと、コンテナの中の x11vnc を繋ぐ。
-        // 引き受け（画面を渡している間）の返事。
-        "/api/computer/handover": {
-          POST: api.answerHandover,
-        },
-        // コンピュータのコマンドへ渡す環境変数。値は返さず、名前だけを扱う。
-        "/api/computer/env": {
-          GET: api.listEnv,
-        },
-        // 待っている環境変数の入力。値はこの経路でだけ受け取り、モデルへは返さない。
-        "/api/computer/env/answer": {
-          POST: api.answerEnv,
-        },
-        "/api/computer/env/:name": {
-          DELETE: api.deleteEnv,
-        },
-        "/api/computer/vnc": {
-          GET: async (req: Request, server: Server<ScreenSocketData>) => {
-            const status = await container.status();
-            if (status.state !== "running" || status.vncPort === null) {
-              return new Response("コンピュータが動いていないため、画面を表示できません", { status: 409 });
-            }
-
-            const upgraded = server.upgrade(req, {
-              data: { vncPort: status.vncPort, upstream: null, queue: [] },
-            });
-            // 切り替えに成功した場合、Bun はこの戻り値を使わない（undefined を返す）。
-            return upgraded ? undefined : new Response("WebSocket に切り替えられませんでした", { status: 400 });
-          },
-        },
-        // 認可のコールバックは、OAuth 側が組み立てる URL（OAUTH_CALLBACK_PATH）と同じパスに置く。
-        [OAUTH_CALLBACK_PATH]: {
-          GET: api.mcpOAuthCallback,
-        },
-      },
-      websocket: {
-        open(ws) {
-          const upstream = new WebSocket(`ws://127.0.0.1:${ws.data.vncPort}/websockify`);
-          upstream.binaryType = "arraybuffer";
-
-          upstream.onopen = () => {
-            ws.data.upstream = upstream;
-            // 繋がる前にブラウザから届いた分を、順番のまま送る。
-            for (const item of ws.data.queue) upstream.send(item);
-            ws.data.queue.length = 0;
-          };
-          upstream.onmessage = (event) => {
-            ws.send(typeof event.data === "string" ? event.data : new Uint8Array(event.data as ArrayBuffer));
-          };
-          // コンテナ側が切れたらブラウザ側も切る（繋がっているように見せない）。
-          upstream.onclose = () => ws.close();
-          upstream.onerror = () => ws.close();
-        },
-        message(ws, message) {
-          if (ws.data.upstream === null) {
-            // 最初の挨拶を落とすと繋がらないので、繋がるまで貯める。
-            ws.data.queue.push(typeof message === "string" ? message : new Uint8Array(message));
-            return;
-          }
-          ws.data.upstream.send(message);
-        },
-        close(ws) {
-          const upstream = ws.data.upstream;
-          ws.data.upstream = null;
-          upstream?.close();
-        },
-      },
-      fetch() {
-        return new Response("Not Found", { status: 404 });
+      routes,
+      websocket: screen.websocket,
+      fetch(request) {
+        const problem = routeProblem(routes, new URL(request.url).pathname, request.method);
+        return problem === "method_not_allowed" ? jsonError(405, "method_not_allowed") : jsonError(404, "not_found");
       },
       /**
        * ハンドラから漏れた例外も、ほかの失敗と同じ JSON で返す。

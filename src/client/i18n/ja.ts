@@ -98,8 +98,7 @@ export const ja: Record<MessageKey, string> = {
   "settings.connections.applicationId.saving": "保存しています…",
   "settings.connections.token.save": "保存",
   "settings.connections.token.saving": "確かめています…",
-  "settings.connections.token.saved":
-    "トークンは保存済みです。変更するときだけ、新しいトークンを貼り付けてください。",
+  "settings.connections.token.saved": "トークンは保存済みです。変更するときだけ、新しいトークンを貼り付けてください。",
   "settings.connections.openSetup": "アプリの設定を開く",
   "settings.connections.invite": "サーバーに追加",
   "settings.connections.inviteNeedsId": "Application ID を保存すると、サーバーへ追加するリンクが出ます。",
@@ -302,6 +301,8 @@ export const ja: Record<MessageKey, string> = {
   "error.turn_in_progress": "この会話はほかで応答を生成しています。",
   "error.turn_not_running": "この会話は応答を生成していません。",
   "error.media_not_found": "ファイルが見つかりません。",
+  "error.not_found": "その場所は見つかりませんでした。",
+  "error.method_not_allowed": "その操作は受け付けていません。",
   "error.settings_write_failed": "設定を保存できませんでした。",
   "error.internal_error": "問題が発生しました。",
   "error.network": "サーバーに接続できません。",

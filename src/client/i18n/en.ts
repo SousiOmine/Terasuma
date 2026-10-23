@@ -304,6 +304,8 @@ export const en = {
   "error.turn_in_progress": "This conversation is already generating a reply elsewhere.",
   "error.turn_not_running": "This conversation is not generating a reply.",
   "error.media_not_found": "The file was not found.",
+  "error.not_found": "That location was not found.",
+  "error.method_not_allowed": "That operation is not supported here.",
   "error.settings_write_failed": "The settings could not be saved.",
   "error.internal_error": "Something went wrong.",
   "error.network": "The server is not reachable.",

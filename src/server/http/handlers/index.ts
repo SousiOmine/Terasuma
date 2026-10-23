@@ -10,18 +10,34 @@ import { webSearchHandlers } from "./websearch";
 
 /**
  * API のハンドラを 1 つにまとめる。
- * ルートの対応（どのメソッドがどのパスか）は http/server.ts が持つ。
+ * ルートの対応（どのメソッドがどのパスか）は http/routes.ts が持つ。
+ *
+ * どのハンドラ名がどのモジュールから来るかを 1 か所にまとめておき、
+ * ルート表との突き合わせ（tests/architecture.test.ts）が同じ一覧を使えるようにする。
  */
+export const HANDLER_MODULES = {
+  teras: terasHandlers,
+  model: modelHandlers,
+  mcp: mcpHandlers,
+  connections: connectionHandlers,
+  webSearch: webSearchHandlers,
+  container: containerHandlers,
+  computer: computerHandlers,
+  media: mediaHandlers,
+} as const;
+
+export type ApiHandlers = ReturnType<typeof createApiHandlers>;
+
 export function createApiHandlers(deps: ApiDeps) {
   return {
-    ...terasHandlers(deps),
-    ...modelHandlers(deps),
-    ...mcpHandlers(deps),
-    ...connectionHandlers(deps),
-    ...webSearchHandlers(deps),
-    ...containerHandlers(deps),
-    ...computerHandlers(deps),
-    ...mediaHandlers(deps),
+    ...HANDLER_MODULES.teras(deps),
+    ...HANDLER_MODULES.model(deps),
+    ...HANDLER_MODULES.mcp(deps),
+    ...HANDLER_MODULES.connections(deps),
+    ...HANDLER_MODULES.webSearch(deps),
+    ...HANDLER_MODULES.container(deps),
+    ...HANDLER_MODULES.computer(deps),
+    ...HANDLER_MODULES.media(deps),
   };
 }
 

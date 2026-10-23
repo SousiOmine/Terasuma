@@ -205,6 +205,8 @@ export const API_ERROR_CODES = [
   "turn_in_progress",
   "turn_not_running",
   "media_not_found",
+  "not_found",
+  "method_not_allowed",
   "settings_write_failed",
   "internal_error",
 ] as const;

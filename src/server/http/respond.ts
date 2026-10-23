@@ -45,21 +45,18 @@ export function handle<Args extends unknown[]>(
   };
 }
 
-/** ハンドラの集まりを、まとめて handle で包む。 */
-export function withErrorHandling<T extends Record<string, unknown>>(
-  handlers: T,
-): {
+/** ハンドラの集まりを、まとめて handle で包んだ後の型。ルート表はこれを受け取る。 */
+export type WithErrorHandling<T> = {
   [K in keyof T]: T[K] extends (...args: infer Args) => Response | Promise<Response>
     ? (...args: Args) => Promise<Response>
     : T[K];
-} {
+};
+
+/** ハンドラの集まりを、まとめて handle で包む。 */
+export function withErrorHandling<T extends Record<string, unknown>>(handlers: T): WithErrorHandling<T> {
   const wrapped: Record<string, unknown> = {};
   for (const [name, value] of Object.entries(handlers)) {
     wrapped[name] = typeof value === "function" ? handle(value as (...args: unknown[]) => Response) : value;
   }
-  return wrapped as {
-    [K in keyof T]: T[K] extends (...args: infer Args) => Response | Promise<Response>
-      ? (...args: Args) => Promise<Response>
-      : T[K];
-  };
+  return wrapped as WithErrorHandling<T>;
 }

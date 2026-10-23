@@ -24,6 +24,9 @@ jobs:
           bun-version: 1.4.3
       - run: bun install --frozen-lockfile
       - run: bun run check
+      # Tailwind のプラグイン指定は bunfig.toml（開発）と scripts/build.ts（本番）の
+      # 2 か所にある。片方だけ直すと CSS が未処理のまま出るので、ビルドまで通す。
+      - run: bun run build
 
   publish:
     needs: check
