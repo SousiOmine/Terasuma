@@ -1,6 +1,7 @@
 import { generateText, stepCountIs, streamText } from "ai";
 import type { ModelMessage } from "ai";
 import type { ConnectionToolsetProvider } from "../../connections/tools";
+import type { DiscordToolsetProvider } from "../../discord/tools";
 import type { ImageStore } from "../../computer/images";
 import type { IdentityStore } from "../identity";
 import type { SkillFileStore } from "../skill-types";
@@ -52,8 +53,10 @@ export type AiSdkEngineOptions = {
   history: HistoryToolsetProvider;
   /** Web 検索とページ取得のツール。 */
   webSearch: WebSearchToolsetProvider;
-  /** アプリの接続（OAuth）のツール。 */
+  /** アプリの接続（トークン）のツール。 */
   connections: ConnectionToolsetProvider;
+  /** Discord の webhook（送信先は Tera ごと）のツール。 */
+  discord: DiscordToolsetProvider;
   /** コンテナのファイルとシェルのツール。 */
   coding: CodingToolset;
   images: ImageStore;
@@ -74,6 +77,7 @@ export function createAiSdkEngine(options: AiSdkEngineOptions): AgentEngine {
     history,
     webSearch,
     connections,
+    discord,
     coding,
     images,
     catalog,
@@ -134,7 +138,14 @@ export function createAiSdkEngine(options: AiSdkEngineOptions): AgentEngine {
       // 一覧は呼び出しのたびに組み直すので、設定画面でサーバーを足しても作り直さずに済む。
       const [mcpTools, computerTools] = await Promise.all([mcp.toolset(), computer.toolset({ teraId })]);
       // アプリの接続ツール（computer_connect_app と app_request）も、検索してから実行する。
-      const registry = await createToolRegistry({ ...mcpTools, ...computerTools, ...connections.toolset() });
+      // Discord のツールは送信先が Tera ごとに決まるので、このターンの Tera で組む。
+      const discordTools = discord.toolset({ teraId });
+      const registry = await createToolRegistry({
+        ...mcpTools,
+        ...computerTools,
+        ...connections.toolset(),
+        ...discordTools,
+      });
 
       // 添付の口はターンごとに差し替わるので、ここで組む。
       const attachmentTools = attachments.toolset({ attach });

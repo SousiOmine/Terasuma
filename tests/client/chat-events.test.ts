@@ -204,6 +204,42 @@ describe("チャットのイベントの読み替え", () => {
     ).toBeNull();
   });
 
+  test("tool_call 越しの discord_connect は、Discord の接続カードを出す", () => {
+    expect(
+      interpretEvent({
+        type: "tool-call",
+        id: "a1",
+        part: {
+          type: "tool-call",
+          id: "c11",
+          server: "tool",
+          tool: "call",
+          args: { name: "discord_connect", args: { reason: "通知を送るため" } },
+        },
+      }),
+    ).toEqual({
+      kind: "connection-request-start",
+      callId: "c11",
+      provider: "discord",
+      reason: "通知を送るため",
+    });
+
+    // 理由が無くても、ツール名だけで Discord と分かる。
+    expect(
+      interpretEvent({
+        type: "tool-call",
+        id: "a1",
+        part: {
+          type: "tool-call",
+          id: "c12",
+          server: "tool",
+          tool: "call",
+          args: { name: "discord_connect", args: {} },
+        },
+      }),
+    ).toEqual({ kind: "connection-request-start", callId: "c12", provider: "discord", reason: null });
+  });
+
   test("待ちの結果は、どの呼び出しの結果かだけを伝える", () => {
     const part = {
       type: "tool-result" as const,

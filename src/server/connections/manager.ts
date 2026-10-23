@@ -1,6 +1,5 @@
 import { join } from "node:path";
 import type { ConnectionsView } from "../../shared/api/settings";
-import type { SettingsStore } from "../data/settings";
 import { ConnectionNotFound } from "../errors";
 import { verifyAccount } from "./account";
 import { CONNECTION_PROVIDERS, type ConnectionProvider } from "./providers";
@@ -16,6 +15,8 @@ import { createPendingRegistry } from "../wait/pending";
  *
  * 同じアプリを待つツールが複数あれば、保存時にまとめて解く（待ちはプロバイダごとの集合）。
  * ターンが止まったときは signal で待ちを外す（環境変数の入力と同じ扱い）。
+ *
+ * Discord はここではなく、Tera ごとの webhook を server/discord が受け持つ。
  */
 
 /** トークンの保存を待っているツール 1 つ。 */
@@ -31,8 +32,6 @@ export type ConnectionsManager = {
   provider(id: string): ConnectionProvider;
   /** 定義されているプロバイダの id。ツールの案内に使う。 */
   ids(): readonly string[];
-  /** Application ID を変える。null で設定ごと消す（Discord の招待リンクに使う）。 */
-  setClientId(id: string, clientId: string | null): ConnectionsView;
   /**
    * トークンを保存する。保存する前にアカウントを読んで、受け付けられないトークンは保存しない。
    * 保存できたら、このアプリの待ちをすべて解く。
@@ -56,7 +55,6 @@ export type ConnectionsManager = {
 };
 
 export type ConnectionsOptions = {
-  settings: SettingsStore;
   /** トークンを置くディレクトリ。 */
   dataDir: string;
   /** 差し替えたいときだけ渡す（テスト用）。 */
@@ -70,7 +68,6 @@ const TOKENS_DIR_NAME = "connections";
 const WAIT_ENDED = "The turn ended before the token was saved.";
 
 export function createConnections(options: ConnectionsOptions): ConnectionsManager {
-  const { settings } = options;
   const providers = options.providers ?? CONNECTION_PROVIDERS;
 
   /** トークンの保存を待っているツール（プロバイダ id → 待ち）。同じ id を複数のツールが待てる。 */
@@ -91,11 +88,6 @@ export function createConnections(options: ConnectionsOptions): ConnectionsManag
     const store = createTokenStore(join(options.dataDir, TOKENS_DIR_NAME, `${id}.json`));
     stores.set(id, store);
     return store;
-  }
-
-  /** 保存済みの Application ID。未設定なら null。 */
-  function clientIdOf(id: string): string | null {
-    return settings.read().connections[id]?.clientId ?? null;
   }
 
   /** ツールへ返す、接続できたときの文。トークンそのものは含めない。 */
@@ -132,7 +124,6 @@ export function createConnections(options: ConnectionsOptions): ConnectionsManag
     return {
       providers: providers.map((provider) => {
         const token = tokenStore(provider.id).read();
-        const clientId = clientIdOf(provider.id);
 
         return {
           id: provider.id,
@@ -142,12 +133,9 @@ export function createConnections(options: ConnectionsOptions): ConnectionsManag
           token: provider.token,
           permissions: provider.permissions,
           env: provider.env,
-          clientId,
-          needsClientId: provider.invite !== undefined,
           connected: token.kind === "token",
           account: token.kind === "token" ? token.token.account : null,
           detail: token.kind === "unreadable" ? token.detail : null,
-          inviteUrl: inviteUrlOf(provider, clientId),
         };
       }),
     };
@@ -171,16 +159,6 @@ export function createConnections(options: ConnectionsOptions): ConnectionsManag
       const account = await verifyAccount(provider, token);
       tokenStore(id).save({ accessToken: token, account, obtainedAt: Date.now() });
       resolveWaiters(id, connectedText(provider, account));
-      return view();
-    },
-
-    setClientId(id, clientId) {
-      requireProvider(id);
-
-      const current = clientIdOf(id);
-      if (current === clientId) return view();
-
-      settings.setConnectionClientId(id, clientId);
       return view();
     },
 
@@ -230,15 +208,4 @@ export function createConnections(options: ConnectionsOptions): ConnectionsManag
       }
     },
   };
-}
-
-/** アプリをサーバーへ追加するリンク。Application ID が未設定、または invite を持たなければ null。 */
-function inviteUrlOf(provider: ConnectionProvider, clientId: string | null): string | null {
-  if (provider.invite === undefined || clientId === null) return null;
-
-  const url = new URL(provider.invite.authorizeUrl);
-  url.searchParams.set("client_id", clientId);
-  url.searchParams.set("scope", provider.invite.scope);
-  url.searchParams.set("permissions", provider.invite.permissions);
-  return url.toString();
 }

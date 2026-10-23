@@ -60,7 +60,7 @@ export const ja: Record<MessageKey, string> = {
   "chat.env.waiting": "入力待ち",
 
   "chat.connection.title": "{app} の接続が必要です",
-  "chat.connection.waiting": "トークンを貼り付けて保存すると、そのまま続きを進めます。",
+  "chat.connection.waiting": "貼り付けて保存すると、そのまま続きを進めます。",
   "chat.connection.waitingShort": "接続待ち",
   "chat.connection.failed": "接続できませんでした。もう一度頼んでください。",
 
@@ -90,23 +90,31 @@ export const ja: Record<MessageKey, string> = {
   "settings.connections.state.disconnected": "未接続",
   "settings.connections.account": "{account} として接続中",
   "settings.connections.permissions": "必要な権限: {permissions}",
-  "settings.connections.applicationId.label": "Application ID（Discord のアプリ）",
-  "settings.connections.applicationId.description":
-    "Discord の Developer Portal でアプリを作り、General Information の Application ID を貼り付けます。",
-  "settings.connections.applicationId.placeholder": "例: 123456789012345678",
-  "settings.connections.applicationId.save": "保存",
-  "settings.connections.applicationId.saving": "保存しています…",
   "settings.connections.token.save": "保存",
   "settings.connections.token.saving": "確かめています…",
   "settings.connections.token.saved": "トークンは保存済みです。変更するときだけ、新しいトークンを貼り付けてください。",
   "settings.connections.openSetup": "アプリの設定を開く",
-  "settings.connections.invite": "サーバーに追加",
-  "settings.connections.inviteNeedsId": "Application ID を保存すると、サーバーへ追加するリンクが出ます。",
   "settings.connections.env": "コンピュータへ渡す環境変数: {names}",
   "settings.connections.disconnect": "切断",
   "settings.connections.disconnectTitle": "接続を切断しますか？",
   "settings.connections.disconnectMessage":
     "保存されている接続情報を消します。コンピュータの環境変数からもトークンが外れます。",
+
+  "settings.discord.description":
+    "Tera ごとに、メッセージを送るチャンネルの webhook URL を保存します。エージェントは discord_send でそのチャンネルへ投稿します。",
+  "settings.discord.field.label": "ウェブフック URL",
+  "settings.discord.field.description":
+    "Discord のチャンネル設定 > 連携サービス > ウェブフック で URL をコピーし、ここに貼り付けます。",
+  "settings.discord.channel": "送信先のチャンネル: {channel}",
+  "settings.discord.webhookName": "ウェブフックの名前: {name}",
+  "settings.discord.save": "保存",
+  "settings.discord.saving": "確かめています…",
+  "settings.discord.setup": "ウェブフックの作り方を開く",
+  "settings.discord.disconnect": "切断",
+  "settings.discord.disconnectTitle": "Discord の webhook を切断しますか？",
+  "settings.discord.disconnectMessage":
+    "送信先の webhook URL を消します。以後、この Tera は Discord へ投稿できません。",
+  "settings.discord.empty": "まだ Tera がありません。",
 
   "settings.container": "コンピュータ",
   "settings.container.description":

@@ -2,9 +2,12 @@
  * アプリの接続に使うプロバイダの定義。
  *
  * 接続はすべて「利用者が発行したトークンを貼る」方式に統一している。
- * GitHub は Personal Access Token、Discord は Bot トークンを使う。
+ * GitHub は Personal Access Token を使う。
  * アプリを足すときは、ここに定義を 1 つ足す（画面と API はこの定義から組み立てる）。
  * トークンの保存と検証は manager.ts、アカウントの読み取りは account.ts が受け持つ。
+ *
+ * Discord はここには無い。送信先の webhook URL を Tera ごとに保存する別の仕組みで、
+ * server/discord が受け持つ（webhook は投稿だけができ、読み取りはできないため）。
  */
 
 /** 接続に共通する定義。 */
@@ -23,7 +26,7 @@ export type ConnectionProvider = {
     description: string;
     placeholder: string;
   };
-  /** トークンに付ける権限。画面に出す（GitHub は scope、Discord は API の権限名）。 */
+  /** トークンに付ける権限。画面に出す（GitHub は scope）。 */
   permissions: readonly string[];
   /** 接続がコンピュータへ渡す環境変数の名前。 */
   env: readonly string[];
@@ -36,21 +39,6 @@ export type ConnectionProvider = {
     headers: Record<string, string>;
     /** アカウント名を読むための API。 */
     account: { path: string; field: string };
-    /**
-     * Authorization ヘッダーの値。省略すると `Bearer <token>`。
-     * Discord の bot トークンのように、`Bot <token>` を要求する API で使う。
-     */
-    authorization?(token: string): string;
-  };
-  /**
-   * 招待リンクに使う Application ID を設定するアプリ（Discord）。
-   * 定義すると、設定画面に Application ID 欄と「サーバーに追加」リンクが出る。
-   */
-  invite?: {
-    authorizeUrl: string;
-    scope: string;
-    /** API が解釈する権限の数値。 */
-    permissions: string;
   };
 };
 
@@ -87,50 +75,5 @@ const GITHUB: ConnectionProvider = {
   },
 };
 
-/**
- * Discord（bot）。
- *
- * OAuth のユーザートークンではメッセージを送れない（送信の scope が無く、
- * ユーザーアカウントの自動操作は規約で禁止されている）。そのため bot を作り、
- * Developer Portal で発行したトークンを貼る。
- *
- * メッセージ本文を読むには、ポータルの Bot ページで MESSAGE_CONTENT を有効にする。
- * 招待リンクの権限は、チャンネルを見る・メッセージを送る・履歴を読む 3 つだけにする。
- */
-const DISCORD: ConnectionProvider = {
-  id: "discord",
-  name: "Discord",
-  description: "ボットとしてメッセージを読み書きする",
-  setupUrl: "https://discord.com/developers/applications",
-  token: {
-    label: "Bot トークン",
-    description:
-      "Bot ページの Reset Token で発行したトークンを貼り付けます。保存する前に、そのトークンでアカウントを確かめます。",
-    placeholder: "Bot トークンを貼り付け",
-  },
-  permissions: ["View Channel", "Send Messages", "Read Message History"],
-  env: ["DISCORD_BOT_TOKEN"],
-  usage:
-    "For the API, use app_request (for example GET /channels/{channel_id}/messages " +
-    'or POST /channels/{channel_id}/messages with a JSON body like {"content": "..."}).',
-  invite: {
-    authorizeUrl: "https://discord.com/oauth2/authorize",
-    scope: "bot",
-    // VIEW_CHANNEL (1<<10) | SEND_MESSAGES (1<<11) | READ_MESSAGE_HISTORY (1<<16)
-    permissions: "68608",
-  },
-  api: {
-    baseUrl: "https://discord.com/api/v10",
-    headers: { Accept: "application/json" },
-    account: { path: "/users/@me", field: "username" },
-    authorization: (token) => `Bot ${token}`,
-  },
-};
-
 /** 標準で使えるプロバイダ。並び順が設定画面の並び順になる。 */
-export const CONNECTION_PROVIDERS: readonly ConnectionProvider[] = [GITHUB, DISCORD];
-
-/** Authorization ヘッダーの値。プロバイダごとの方式（Bearer / Bot）をここに集める。 */
-export function authorizationHeader(provider: ConnectionProvider, token: string): string {
-  return provider.api.authorization?.(token) ?? `Bearer ${token}`;
-}
+export const CONNECTION_PROVIDERS: readonly ConnectionProvider[] = [GITHUB];

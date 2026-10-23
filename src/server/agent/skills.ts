@@ -74,11 +74,10 @@ If tool_search finds no computer_ tools, the container is not available on this 
   paste a secret into the chat.
 - computer_connect_app(provider, reason) — connect an app by having the user paste a
   token. A card opens in the chat with a link to create the token and a field to paste
-  it. GitHub's token becomes GH_TOKEN for commands; Discord's becomes DISCORD_BOT_TOKEN.
+  it. GitHub's token becomes GH_TOKEN for commands.
   Use this when a task needs the app and its environment variable is not set.
 - app_request(provider, method, path, body?) — call the API of a connected app. The
-  token is used by Terasuma and never shown to you. For Discord, use a bot token; then
-  use GET or POST /channels/{id}/messages.
+  token is used by Terasuma and never shown to you.
 
 ## Coordinates
 
@@ -115,9 +114,8 @@ chat_attach with screenshot true or with files.
 - When a task needs GitHub and it is not connected, use computer_connect_app instead of
   asking for a personal access token. The card has a field for it; never ask the user to
   send a token in a message.
-- Do not ask for a Discord user token: automating a user account is not allowed. The
-  user saves a bot token in Settings > Connections and adds the bot to the server with
-  the "Add to server" link.
+- For Discord, load the discord skill. The user saves a channel webhook URL per Tera with
+  discord_connect; a webhook can only post, so do not offer to read or edit messages.
 - Write the question for the user to read, in the reply language.
 - Do not take screenshots or type while the user is working on the screen; wait for the
   result.
@@ -240,8 +238,76 @@ export const SKILL_CREATE_SKILL: Skill = {
   content: SKILL_CREATE_CONTENT,
 };
 
+/**
+ * Discord へメッセージを送るためのスキル。
+ *
+ * 送信先は Tera ごとに保存された webhook が決める（送るたびにチャンネルを選ぶツールではない）。
+ * webhook は投稿だけができるので、読み取りや編集の手順は書かない。
+ * 制限（文字数・レート・メンション）を先に伝え、無駄な失敗を減らす。
+ */
+const DISCORD_CONTENT = `# Posting messages to Discord
+
+Each Tera has one Discord channel, set by a webhook URL that the user saved. You post to
+that channel. You cannot choose another channel, read messages, edit or delete them, add
+reactions, or upload files.
+
+## Tools
+
+- discord_send(content, username?, embeds?) — post a message to the channel.
+- discord_connect(reason) — open a card where the user pastes the webhook URL.
+
+Both are behind tool_search: find them with tool_search and run them with tool_call.
+
+## When to post
+
+- The user asks you to send, notify, report or announce something.
+- A standing instruction for this chat says to post (for example "report here when done").
+- Otherwise, do not post. The channel may have other people in it.
+
+Ask first when the text is long, contains private data, or the channel may be shared with
+people the user did not name. Do not send the same message twice; the returned message id
+shows that the first one went out.
+
+## Limits
+
+- content: up to 2000 characters. Longer text must be split into several messages.
+- username: up to 80 characters; it overrides the webhook's display name.
+- embeds: at most 10 objects, passed to Discord as-is. Common keys are title (256
+  characters), description (4096 characters), url, color (an integer) and fields (up to
+  25). Pass content, embeds, or both.
+- Mentions do not notify anyone: Terasuma disables them, so @everyone, role and user
+  mentions stay plain text.
+- About 30 messages per minute per webhook. A 429 result says how many seconds to wait;
+  tell the user instead of retrying in a loop.
+- A webhook can only post. If the user asks to read a channel, say that the current
+  connection cannot do it; do not ask for a bot token.
+
+## Connecting
+
+If discord_send says Discord is not connected, call discord_connect with a short reason.
+A card opens in the chat. The user creates a webhook in the channel's settings
+(Integrations > Webhooks) and pastes its URL; you never see the URL.
+
+Do not ask the user to paste the URL in a message, and do not ask for a bot token: the
+bot connection was replaced by webhooks.
+
+## Checking the result
+
+discord_send returns the message id and the channel id. A 404 means the webhook was
+deleted: ask the user to save a new URL. A 400 means Discord rejected the payload: read
+the reason in the result and fix the message (usually a limit was exceeded).
+`;
+
+export const DISCORD_SKILL: Skill = {
+  name: "discord",
+  description:
+    "Posting messages to one Discord channel per Tera through a webhook: when to send, " +
+    "the 2000-character and embed limits, rate limits, and how to connect a webhook.",
+  content: DISCORD_CONTENT,
+};
+
 /** このアプリに組み込まれているスキル。 */
-export const BUILTIN_SKILLS: readonly Skill[] = [COMPUTER_USE_SKILL, SKILL_CREATE_SKILL];
+export const BUILTIN_SKILLS: readonly Skill[] = [COMPUTER_USE_SKILL, SKILL_CREATE_SKILL, DISCORD_SKILL];
 
 /**
  * system プロンプトに載せる一覧。1 スキル 1 行にして、本文を読む前の判断材料だけを与える。

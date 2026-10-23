@@ -21,9 +21,6 @@ export const connectionsError = failure.error;
 export const showConnectionsError = failure.show;
 export const clearConnectionsError = failure.clear;
 
-/** Application ID を保存している接続。操作中の表示に使う。 */
-export const savingConnection = signal<string | null>(null);
-
 /** トークンを保存している接続。操作中の表示に使う。 */
 export const savingToken = signal<string | null>(null);
 
@@ -31,16 +28,6 @@ export const savingToken = signal<string | null>(null);
 export const loadConnections = connectionsResource.load;
 /** 一覧を読み直す。 */
 export const refreshConnections = connectionsResource.refresh;
-
-/** Application ID を保存する。空文字は「消す」として null を送る。 */
-export async function saveClientId(id: string, clientId: string): Promise<void> {
-  savingConnection.value = id;
-  try {
-    connections.value = await api.saveConnectionClientId(id, clientId.trim().length === 0 ? null : clientId.trim());
-  } finally {
-    if (savingConnection.value === id) savingConnection.value = null;
-  }
-}
 
 /** トークンを保存する。受け付けられなければ、サーバーが理由を返す。 */
 export async function saveConnectionToken(id: string, token: string): Promise<void> {

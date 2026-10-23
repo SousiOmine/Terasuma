@@ -5,6 +5,7 @@ import { createHandover } from "../src/server/computer/handover";
 import {
   BUILTIN_SKILLS,
   COMPUTER_USE_SKILL,
+  DISCORD_SKILL,
   SKILL_CREATE_SKILL,
   createSkillLibrary,
   skillCatalogText,
@@ -68,14 +69,16 @@ function skillManageTools(initial: readonly { name: string; description: string;
 }
 
 describe("スキルのカタログ", () => {
-  test("computer-use と skill-create が説明つきで載る", () => {
+  test("computer-use と skill-create と discord が説明つきで載る", () => {
     const catalog = skillCatalogText(BUILTIN_SKILLS);
 
     expect(catalog).toContain("- computer-use: ");
     expect(catalog).toContain(COMPUTER_USE_SKILL.description);
     expect(catalog).toContain("- skill-create: ");
     expect(catalog).toContain(SKILL_CREATE_SKILL.description);
-    expect(BUILTIN_SKILLS.map((skill) => skill.name)).toEqual(["computer-use", "skill-create"]);
+    expect(catalog).toContain("- discord: ");
+    expect(catalog).toContain(DISCORD_SKILL.description);
+    expect(BUILTIN_SKILLS.map((skill) => skill.name)).toEqual(["computer-use", "skill-create", "discord"]);
   });
 });
 
@@ -127,7 +130,7 @@ describe("skill ツール", () => {
 
     await expect(
       definition.execute({ name: "nope" } as never, { toolCallId: "call-1", messages: [] } as never),
-    ).rejects.toThrow('Unknown skill "nope". Available skills: computer-use, skill-create');
+    ).rejects.toThrow('Unknown skill "nope". Available skills: computer-use, skill-create, discord');
   });
 
   test("名前は空を許さない", async () => {
@@ -288,5 +291,26 @@ describe("skill-create の本文", () => {
     expect(content).toContain("SKILL.md");
     expect(content).toContain("skill_manage");
     expect(content).toContain("references/");
+  });
+});
+
+describe("discord の本文", () => {
+  test("送るツールと、事前に渡らないことと、見つけ方を書いている", () => {
+    const content = DISCORD_SKILL.content;
+
+    expect(content).toContain("discord_send");
+    expect(content).toContain("discord_connect");
+    expect(content).toContain("tool_search");
+    expect(content).toContain("tool_call");
+  });
+
+  test("文字数・レート・メンションの制限と、できないことを書いている", () => {
+    const content = DISCORD_SKILL.content;
+
+    expect(content).toContain("2000");
+    expect(content).toContain("429");
+    expect(content).toContain("Mentions do not notify");
+    expect(content).toContain("can only post");
+    expect(content).toContain("bot token");
   });
 });

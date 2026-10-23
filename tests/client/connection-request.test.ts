@@ -14,12 +14,13 @@ import {
  */
 describe("接続カードの状態", () => {
   test("始めた呼び出しの結果でだけ閉じる", () => {
-    beginConnectionRequest("c1", "github", "issue を読むため");
+    beginConnectionRequest("c1", "github", "issue を読むため", null);
 
     expect(connectionRequest.value).toEqual({
       callId: "c1",
       provider: "github",
       reason: "issue を読むため",
+      teraId: null,
       phase: "waiting",
     });
 
@@ -32,14 +33,14 @@ describe("接続カードの状態", () => {
   });
 
   test("失敗はカードに残す", () => {
-    beginConnectionRequest("c3", "github", null);
+    beginConnectionRequest("c3", "github", null, null);
 
     endConnectionRequest("c3", true);
     expect(connectionRequest.value?.phase).toBe("failed");
   });
 
   test("リセットは待ちを残さず、あとから届いた結果でも戻らない", () => {
-    beginConnectionRequest("c5", "github", null);
+    beginConnectionRequest("c5", "github", null, null);
 
     resetConnectionRequest();
     expect(connectionRequest.value).toBeNull();
@@ -49,7 +50,7 @@ describe("接続カードの状態", () => {
   });
 
   test("理由は無くてもよい", () => {
-    beginConnectionRequest("c6", "github", null);
+    beginConnectionRequest("c6", "github", null, null);
     expect(connectionRequest.value?.reason).toBeNull();
 
     resetConnectionRequest();

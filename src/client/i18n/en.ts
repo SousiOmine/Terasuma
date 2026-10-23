@@ -61,7 +61,7 @@ export const en = {
   "chat.env.waiting": "Waiting for your input",
 
   "chat.connection.title": "Connect {app}",
-  "chat.connection.waiting": "Paste the token and save it; the task continues from there.",
+  "chat.connection.waiting": "Paste it and save; the task continues from there.",
   "chat.connection.waitingShort": "Waiting for connection",
   "chat.connection.failed": "The connection could not be completed. Ask again.",
 
@@ -91,23 +91,31 @@ export const en = {
   "settings.connections.state.disconnected": "Not connected",
   "settings.connections.account": "Connected as {account}",
   "settings.connections.permissions": "Required permissions: {permissions}",
-  "settings.connections.applicationId.label": "Application ID",
-  "settings.connections.applicationId.description":
-    "Create an app in the Discord Developer Portal and paste its Application ID from General Information.",
-  "settings.connections.applicationId.placeholder": "For example: 123456789012345678",
-  "settings.connections.applicationId.save": "Save",
-  "settings.connections.applicationId.saving": "Saving…",
   "settings.connections.token.save": "Save",
   "settings.connections.token.saving": "Checking…",
   "settings.connections.token.saved": "The token is saved. Paste a new one only when you want to replace it.",
   "settings.connections.openSetup": "Open the app settings",
-  "settings.connections.invite": "Add to server",
-  "settings.connections.inviteNeedsId": "Save the Application ID to show the link that adds the bot to a server.",
   "settings.connections.env": "Environment variables for the computer: {names}",
   "settings.connections.disconnect": "Disconnect",
   "settings.connections.disconnectTitle": "Disconnect this app?",
   "settings.connections.disconnectMessage":
     "The saved connection is removed, and the token is no longer passed to the computer.",
+
+  "settings.discord.description":
+    "Save the webhook URL of the channel each Tera posts to. The agent posts there with discord_send.",
+  "settings.discord.field.label": "Webhook URL",
+  "settings.discord.field.description":
+    "Copy the URL from the channel's settings (Integrations > Webhooks) in Discord and paste it here.",
+  "settings.discord.channel": "Channel: {channel}",
+  "settings.discord.webhookName": "Webhook name: {name}",
+  "settings.discord.save": "Save",
+  "settings.discord.saving": "Checking…",
+  "settings.discord.setup": "Open the webhook guide",
+  "settings.discord.disconnect": "Disconnect",
+  "settings.discord.disconnectTitle": "Disconnect this Discord webhook?",
+  "settings.discord.disconnectMessage":
+    "The saved webhook URL is removed, and this Tera can no longer post to Discord.",
+  "settings.discord.empty": "There are no Teras yet.",
 
   "settings.container": "Computer",
   "settings.container.description":

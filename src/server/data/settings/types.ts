@@ -43,19 +43,6 @@ export type ProvidersSettings = Record<string, ProviderSettings>;
  */
 export type EnvSettings = Record<string, string>;
 
-/**
- * 接続 1 件の設定。Application ID だけを保存する（Discord の招待リンクに使う）。
- *
- * トークンは設定ファイルではなく、データディレクトリの別のファイル（0600）に置く。
- * Application ID は秘密ではないが、利用者ごとに違うので設定として持つ。
- */
-export type ConnectionSettings = {
-  clientId: string;
-};
-
-/** 接続 id → 設定。並び順は設定ファイルに書かれた順のまま保つ。 */
-export type ConnectionsSettings = Record<string, ConnectionSettings>;
-
 /** この端末で動かす MCP サーバー（stdio）。コマンドを起動して標準入出力で話す。 */
 export type McpStdioServerSettings = {
   type: "stdio";
@@ -112,7 +99,6 @@ export const FILE_KEYS = [
   "model",
   "providers",
   "modelOptions",
-  "connections",
   "mcpServers",
   "webSearch",
   "env",
@@ -125,7 +111,6 @@ export type FileSettings = Partial<{
   model: ModelId;
   providers: ProvidersSettings;
   modelOptions: ModelOptionsSettings;
-  connections: ConnectionsSettings;
   mcpServers: McpServersSettings;
   webSearch: WebSearchSettings;
   env: EnvSettings;

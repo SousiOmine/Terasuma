@@ -19,6 +19,8 @@ import { createSettingsStore, type SettingsStore } from "./server/data/settings"
 import { createStore, type Store } from "./server/data/store";
 import { createConnections, type ConnectionsManager } from "./server/connections/manager";
 import { createConnectionToolset } from "./server/connections/tools";
+import { createDiscordWebhooks, type DiscordWebhooks } from "./server/discord/manager";
+import { createDiscordToolset } from "./server/discord/tools";
 import { startServer, type StartedServer } from "./server/http/server";
 import { createMcpManager, type McpManager } from "./server/mcp/manager";
 import { OAUTH_CALLBACK_PATH } from "./server/mcp/oauth";
@@ -47,6 +49,8 @@ export type App = {
   mcp: McpManager;
   /** アプリの接続（GitHub など）。設定画面とチャットのカードから使う。 */
   connections: ConnectionsManager;
+  /** Discord の webhook（送信先は Tera ごと）。設定画面とチャットのカードから使う。 */
+  discord: DiscordWebhooks;
   container: ContainerManager;
   /** Web 検索の設定と接続確認。設定画面からの操作もここを通す。 */
   webSearch: WebSearchManager;
@@ -61,6 +65,7 @@ export type AppOverrides = {
   container?: ContainerManager;
   mcp?: McpManager;
   connections?: ConnectionsManager;
+  discord?: DiscordWebhooks;
   webSearch?: WebSearchManager;
   catalog?: Catalog;
   checkConnection?: ConnectionChecker;
@@ -82,7 +87,10 @@ export function startApp(config: AppConfig, overrides: AppOverrides = {}): App {
 
   // アプリの接続。トークンはデータディレクトリに置き、コンピュータの環境変数にも混ぜる。
   // 接続が設定した値は、設定ファイルの env より優先する（接続し直した結果を使うため）。
-  const connections = overrides.connections ?? createConnections({ settings, dataDir: config.dataDir });
+  const connections = overrides.connections ?? createConnections({ dataDir: config.dataDir });
+
+  // Discord の送信先（webhook URL）は Tera ごとに持つ。URL は秘密なのでデータディレクトリへ 0600 で置く。
+  const discord = overrides.discord ?? createDiscordWebhooks({ store, dataDir: config.dataDir });
 
   // 認可コードの受け取り先は、待ち受けているポートが決まってから決まる。
   // 実際に使うポートは startServer の戻り値で分かるので、そこまで null のままにする。
@@ -147,6 +155,7 @@ export function startApp(config: AppConfig, overrides: AppOverrides = {}): App {
       history,
       webSearch,
       connections: createConnectionToolset(connections),
+      discord: createDiscordToolset({ discord }),
       coding,
       images,
       catalog,
@@ -172,6 +181,7 @@ export function startApp(config: AppConfig, overrides: AppOverrides = {}): App {
     settings,
     mcp,
     connections,
+    discord,
     webSearch: webSearchManager,
     container,
     images,
@@ -193,6 +203,7 @@ export function startApp(config: AppConfig, overrides: AppOverrides = {}): App {
     compaction,
     mcp,
     connections,
+    discord,
     container,
     webSearch: webSearchManager,
 
@@ -200,6 +211,7 @@ export function startApp(config: AppConfig, overrides: AppOverrides = {}): App {
       // 畳まないと、MCP サーバーの接続と SQLite の WAL、圧縮の予約がそのまま残る。
       await server.stop(true);
       connections.close();
+      discord.close();
       await mcp.close();
       compaction.close();
       store.close();

@@ -23,6 +23,7 @@ import type { ImageStore } from "../src/server/computer/images";
 import type { McpManager } from "../src/server/mcp/manager";
 import type { ConnectionToolsetProvider } from "../src/server/connections/tools";
 import type { ConnectionsManager } from "../src/server/connections/manager";
+import type { DiscordToolsetProvider } from "../src/server/discord/tools";
 import type { WebSearchManager } from "../src/server/websearch-manager";
 import { createSettingsStore, type SettingsStore } from "../src/server/data/settings";
 import { createStore, type Store, type TeraIdentity } from "../src/server/data/store";
@@ -193,6 +194,11 @@ export function createConnectionToolsStub(): ConnectionToolsetProvider {
   return { toolset: () => ({}) };
 }
 
+/** Discord のツールを渡さないテストのための差し替え（エンジン用）。 */
+export function createDiscordToolsStub(): DiscordToolsetProvider {
+  return { toolset: () => ({}) };
+}
+
 /**
  * 接続を持たないテストのための差し替え。
  * ツール名を数えるだけの用途（プロバイダを引こうとすると失敗する）。
@@ -205,7 +211,6 @@ export function createConnectionsStub(): ConnectionsManager {
       throw new Error("No connection providers in this stub");
     },
     ids: () => [],
-    setClientId: () => empty,
     setToken: async () => empty,
     cancelWait: () => undefined,
     disconnect: () => empty,

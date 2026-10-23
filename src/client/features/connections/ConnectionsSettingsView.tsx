@@ -11,9 +11,7 @@ import {
   isLoadingConnections,
   loadConnections,
   removeConnection,
-  saveClientId,
   saveConnectionToken,
-  savingConnection,
   savingToken,
   showConnectionsError,
 } from "../../state/connections";
@@ -23,6 +21,7 @@ import { Field } from "../../ui/Field";
 import { SettingsSection } from "../../ui/SettingsSection";
 import { StatusBadge } from "../../ui/StatusBadge";
 import { CARD_ACTION_CLASS, CARD_CLASS, INPUT_CLASS } from "../../ui/styles";
+import { DiscordWebhooksSection } from "./DiscordWebhooksSection";
 
 /** 接続状態の文言。i18n のキーは文字列リテラルで持つ（未使用キーの検査に載せるため）。 */
 const STATE_LABELS: Record<"connected" | "disconnected", MessageKey> = {
@@ -34,8 +33,8 @@ const STATE_LABELS: Record<"connected" | "disconnected", MessageKey> = {
  * 設定 > 接続。
  *
  * サービスごとにトークンを発行し、貼り付けて保存する。
- * GitHub は Personal Access Token、Discord は Bot トークン。
  * 保存すると、コンピュータの環境変数と app_request が使えるようになる。
+ * Discord はトークンではなく webhook を使うので、DiscordWebhooksSection が受け持つ。
  */
 export function ConnectionsSettingsView() {
   const view = connections.value;
@@ -62,6 +61,8 @@ export function ConnectionsSettingsView() {
         )}
       </div>
 
+      <DiscordWebhooksSection />
+
       {disconnecting.target !== null && (
         <ConfirmDialog
           title={t("settings.connections.disconnectTitle")}
@@ -85,7 +86,6 @@ type ConnectionCardProps = {
 
 function ConnectionCard({ provider, onDisconnect }: ConnectionCardProps) {
   const savingTokenNow = savingToken.value === provider.id;
-  const savingClientId = savingConnection.value === provider.id;
 
   return (
     <div class={CARD_CLASS}>
@@ -120,8 +120,6 @@ function ConnectionCard({ provider, onDisconnect }: ConnectionCardProps) {
       </div>
 
       <TokenConnectionForm provider={provider} saving={savingTokenNow} />
-
-      {provider.needsClientId && <ApplicationIdForm provider={provider} saving={savingClientId} />}
 
       {provider.connected && (
         <p class="mt-3 text-[11px] leading-5 text-secondary">
@@ -184,65 +182,6 @@ function TokenConnectionForm({ provider, saving }: { provider: ConnectionProvide
         </a>
         {provider.connected && (
           <p class="text-[11px] leading-5 text-secondary">{t("settings.connections.token.saved")}</p>
-        )}
-      </div>
-    </div>
-  );
-}
-
-/**
- * Application ID の入力（Discord）。
- * 招待リンクに使うだけで、トークンの保存とは独立している。
- */
-function ApplicationIdForm({ provider, saving }: { provider: ConnectionProviderView; saving: boolean }) {
-  const [clientId, setClientId] = useState(provider.clientId ?? "");
-
-  // 保存された値が変わったら、入力欄もその値に戻す。
-  useEffect(() => {
-    setClientId(provider.clientId ?? "");
-  }, [provider.clientId]);
-
-  const save = (): void => {
-    void saveClientId(provider.id, clientId).catch(showConnectionsError);
-  };
-
-  return (
-    <div class="mt-3 border-t border-stroke pt-3">
-      <Field
-        label={t("settings.connections.applicationId.label")}
-        description={t("settings.connections.applicationId.description")}
-      >
-        <div class="flex items-center gap-2">
-          <input
-            class={`${INPUT_CLASS} min-w-0 flex-1`}
-            value={clientId}
-            placeholder={t("settings.connections.applicationId.placeholder")}
-            aria-label={t("settings.connections.applicationId.label")}
-            autocomplete="off"
-            autocapitalize="off"
-            spellcheck={false}
-            disabled={saving}
-            onInput={(event) => setClientId(event.currentTarget.value)}
-          />
-          <Button disabled={saving} onClick={save}>
-            {t(saving ? "settings.connections.applicationId.saving" : "settings.connections.applicationId.save")}
-          </Button>
-        </div>
-      </Field>
-
-      <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
-        {provider.inviteUrl !== null ? (
-          <a
-            href={provider.inviteUrl}
-            target="_blank"
-            rel="noreferrer noopener"
-            class="inline-flex items-center justify-center gap-1.5 rounded-full bg-soft px-4 py-2 text-xs font-medium whitespace-nowrap text-primary transition hover:bg-[var(--app-soft-strong)]"
-          >
-            <IconExternalLink size={13} stroke={1.7} class="shrink-0" />
-            {t("settings.connections.invite")}
-          </a>
-        ) : (
-          <span class="text-[11px] leading-5 text-secondary">{t("settings.connections.inviteNeedsId")}</span>
         )}
       </div>
     </div>

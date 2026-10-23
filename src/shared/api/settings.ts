@@ -228,22 +228,16 @@ export type ConnectionProviderView = {
     description: string;
     placeholder: string;
   };
-  /** トークンに付ける権限（GitHub は scope、Discord は API の権限名）。 */
+  /** トークンに付ける権限。画面に出す（GitHub は scope）。 */
   permissions: readonly string[];
   /** 接続がコンピュータへ渡す環境変数の名前。 */
   env: readonly string[];
-  /** 招待リンクに使う Application ID。使わないアプリでは null。 */
-  clientId: string | null;
-  /** Application ID を設定するアプリか。 */
-  needsClientId: boolean;
   /** トークンが保存されているか。account を読めなくても true になる。 */
   connected: boolean;
   /** 接続中のアカウント。未接続なら null。 */
   account: string | null;
   /** 保存されているトークンを読めなかった理由。無ければ null。 */
   detail: string | null;
-  /** アプリをサーバーへ追加するリンク。無ければ null。 */
-  inviteUrl: string | null;
 };
 
 /** 接続の設定の現在の状態。設定を変える API はすべてこの形を返す。 */

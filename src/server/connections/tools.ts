@@ -7,7 +7,6 @@ import { sendRequest } from "../http/client";
 import { APP_REQUEST_TOOL_NAME, CONNECT_APP_TOOL_NAME } from "../../shared/tools";
 import { ConnectionNotFound } from "../errors";
 import type { ConnectionsManager } from "./manager";
-import { authorizationHeader } from "./providers";
 
 /**
  * アプリの接続を扱うツール。
@@ -88,7 +87,7 @@ export function createConnectionTools(options: { connections: ConnectionsManager
       description: [
         "Call the API of a connected app with its saved token.",
         "Use tool_search to find this when you need the API instead of the CLI.",
-        'path must begin with "/" and stay on the app\'s API, for example "/user" or "/channels/123/messages".',
+        'path must begin with "/" and stay on the app\'s API, for example "/user" or "/repos/{owner}/{repo}".',
         "The token is never returned. A 401 means the user must connect the app again.",
       ].join(" "),
       inputSchema: z.object({
@@ -109,7 +108,7 @@ export function createConnectionTools(options: { connections: ConnectionsManager
         const url = apiUrl(definition.api.baseUrl, path);
         const headers: Record<string, string> = {
           ...definition.api.headers,
-          Authorization: authorizationHeader(definition, token),
+          Authorization: `Bearer ${token}`,
         };
 
         // GET と DELETE に本文は付けない（付けるとサーバーによっては拒否される）。

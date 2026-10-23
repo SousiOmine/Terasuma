@@ -1,4 +1,5 @@
 import type { ReplyLanguage } from "../../shared/language";
+import type { DiscordWebhooksView } from "../../shared/api/discord";
 import type { ModelId } from "../../shared/model";
 import { decodeChatEvents } from "../../shared/sse";
 import type { ChatEvent, ChatMessageView, MessagePage, Tera } from "../../shared/api/message";
@@ -34,8 +35,11 @@ const MCP_PATH = "/api/mcp/servers";
 /** MCP サーバーを追加する前の接続確認。 */
 const MCP_TEST_PATH = "/api/mcp/test";
 
-/** アプリの接続（OAuth）。 */
+/** アプリの接続（トークン）。 */
 const CONNECTIONS_PATH = "/api/connections";
+
+/** Discord の webhook（Tera ごと）。 */
+const DISCORD_PATH = "/api/discord";
 
 /** Web 検索の設定。 */
 const WEB_SEARCH_PATH = "/api/websearch";
@@ -269,14 +273,9 @@ function mcpServerPath(serverId: string): string {
   return `${MCP_PATH}/${encodeURIComponent(serverId)}`;
 }
 
-/** アプリの接続の一覧（Application ID の設定と、接続中のアカウント）。 */
+/** アプリの接続の一覧（接続中のアカウント）。 */
 export async function fetchConnections(): Promise<ConnectionsView> {
   return request<ConnectionsView>(CONNECTIONS_PATH);
-}
-
-/** Application ID を保存する。null で設定ごと消す。 */
-export async function saveConnectionClientId(id: string, clientId: string | null): Promise<ConnectionsView> {
-  return request<ConnectionsView>(connectionPath(id), jsonRequest("PUT", { clientId }));
 }
 
 /** トークンを保存する。保存する前に、サーバーがトークンでアカウントを確かめる。 */
@@ -296,6 +295,30 @@ export async function disconnectConnection(id: string): Promise<ConnectionsView>
 
 function connectionPath(id: string): string {
   return `${CONNECTIONS_PATH}/${encodeURIComponent(id)}`;
+}
+
+/** Discord の webhook（Tera ごとの状態）。 */
+export async function fetchDiscord(): Promise<DiscordWebhooksView> {
+  return request<DiscordWebhooksView>(DISCORD_PATH);
+}
+
+/** Tera の webhook URL を保存する。保存する前に、サーバーが webhook を確かめる。 */
+export async function saveDiscordWebhook(teraId: string, url: string): Promise<DiscordWebhooksView> {
+  return request<DiscordWebhooksView>(discordPath(teraId), jsonRequest("PUT", { url }));
+}
+
+/** Tera の webhook を消す。 */
+export async function clearDiscordWebhook(teraId: string): Promise<DiscordWebhooksView> {
+  return request<DiscordWebhooksView>(discordPath(teraId), { method: "DELETE" });
+}
+
+/** 接続の待ちをやめる（チャットのカード）。 */
+export async function cancelDiscordWait(teraId: string): Promise<DiscordWebhooksView> {
+  return request<DiscordWebhooksView>(`${discordPath(teraId)}/wait`, { method: "DELETE" });
+}
+
+function discordPath(teraId: string): string {
+  return `${DISCORD_PATH}/${encodeURIComponent(teraId)}`;
 }
 
 /** Web 検索の設定（既定のプロバイダと、登録済みのプロバイダ）。 */

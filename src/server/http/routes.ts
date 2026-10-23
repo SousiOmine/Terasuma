@@ -87,7 +87,6 @@ export function createRoutes(api: WithErrorHandling<ApiHandlers>, screen: Screen
       GET: api.listConnections,
     },
     "/api/connections/:id": {
-      PUT: api.setConnectionClientId,
       DELETE: api.disconnectConnection,
     },
     "/api/connections/:id/token": {
@@ -95,6 +94,17 @@ export function createRoutes(api: WithErrorHandling<ApiHandlers>, screen: Screen
     },
     "/api/connections/:id/wait": {
       DELETE: api.cancelConnectionWait,
+    },
+    // Discord の webhook（Tera ごとに 1 つ）。保存する前に、その URL の webhook を確かめる。
+    "/api/discord": {
+      GET: api.readDiscord,
+    },
+    "/api/discord/:teraId": {
+      PUT: api.setDiscordWebhook,
+      DELETE: api.clearDiscordWebhook,
+    },
+    "/api/discord/:teraId/wait": {
+      DELETE: api.cancelDiscordWait,
     },
     // Web 検索のプロバイダ。保存前の確認は接続先へ 1 回検索を投げる。
     "/api/websearch": {

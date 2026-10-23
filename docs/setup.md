@@ -134,7 +134,7 @@ sudo tailscale serve reset
 Tailscale 経由では、MCP サーバーの OAuth 認可は完了しない。
 コールバックの URL が `http://127.0.0.1:3000` で組み立てられるため、リモートのブラウザではその端末の localhost を指してしまう。
 API キーで繋ぐ MCP サーバーはこの制限を受けない。
-`設定 > 接続` で行うアプリの接続（GitHub の Personal Access Token、Discord の Bot トークン）はコールバック URL を使わないので、Tailscale 経由でも完了する。
+`設定 > 接続` で行うアプリの接続（GitHub の Personal Access Token、Discord の webhook URL）はコールバック URL を使わないので、Tailscale 経由でも完了する。
 
 ## 最初の設定
 
@@ -164,31 +164,27 @@ git は `git -c http.extraHeader="Authorization: Bearer $GH_TOKEN" clone ...` �
 有効期限が切れると、`app_request` は 401 を返す。
 そのときは新しいトークンを発行し、同じ欄に貼り直す。
 
-## Discord の接続
+## Discord への送信
 
-Discord の OAuth には、ユーザーとしてメッセージを送る scope が無い。
-ユーザーアカウントの自動操作（self-bot）も規約で禁止されているため、bot を作り、そのトークンを使う。
-bot なら、参加しているサーバーのメッセージを読むことも送ることもできる。
+Discord へ通知を送るときは、チャンネルの **webhook URL** を `設定 > 接続` の Discord に保存する。
+送信先は Tera ごとに 1 つ。エージェントは `discord_send` でそのチャンネルへ投稿する。
+webhook は投稿だけができるので、メッセージの読み取り・編集・リアクションはできない。
 
-1. [Discord Developer Portal](https://discord.com/developers/applications) で New Application を作る。
-2. General Information の **Application ID** を、Terasuma の `設定 > 接続` に貼り付けて保存する。
-3. Bot ページで **Reset Token** を押し、表示されたトークンを `設定 > 接続` の「Bot トークン」に貼り付けて保存する。
-4. 同じ Bot ページの **Privileged Gateway Intents** で **MESSAGE_CONTENT** を ON にする。これを有効にしないと、チャンネルの本文が空で返る（自分が送ったメッセージ、DM、自分へのメンションは例外）。
-5. `設定 > 接続` の「サーバーに追加」を押し、Discord の画面でサーバーと権限を選んで承認する。権限は「チャンネルを見る」「メッセージを送信」「メッセージ履歴を読む」の 3 つ。
+1. Discord で送信先のチャンネルを開き、`チャンネルの編集 > 連携サービス > ウェブフック` を選ぶ。
+2. **新しいウェブフック** を作り、**ウェブフック URL をコピー** を押す。
+3. Terasuma の `設定 > 接続` を開き、Discord の送信先にしたい Tera の欄へ URL を貼り付けて保存する。
 
-トークンは `~/.local/share/terasuma/connections/discord.json`（0600）に保存され、コンピュータの `DISCORD_BOT_TOKEN` にも渡る。
-エージェントは `app_request` で Discord の API を叩く。
+保存する前に、Terasuma がその URL の webhook を読んで確かめる（webhook の名前とチャンネル ID が画面に出る）。
+URL は `~/.local/share/terasuma/discord/<teraId>.json`（0600）に保存される。
+エージェントは URL を直接見ない（`discord_send` が Terasuma の側で使う）。
 
-| やりたいこと | 呼び出し |
-|---|---|
-| 参加しているサーバーを見る | `GET /users/@me/guilds` |
-| サーバーのチャンネルを見る | `GET /guilds/{guild_id}/channels` |
-| チャンネルのメッセージを読む | `GET /channels/{channel_id}/messages?limit=20` |
-| 新着だけを読む | `GET /channels/{channel_id}/messages?after={message_id}` |
-| メッセージを送る | `POST /channels/{channel_id}/messages`（本文 `{"content": "..."}`） |
+エージェントに接続を頼むこともできる。未接続のまま `discord_send` を呼ぶと `discord_connect` の案内が返り、
+チャットに接続カードが出る。カードに URL を貼っても同じ場所へ保存される。
 
-bot は、参加しているサーバーの、権限のあるチャンネルしか読めない。
-メッセージの本文を読むには MESSAGE_CONTENT が要る（上の 4 番）。
+webhook はメンションを通知しない（`@everyone` などを本文に書いても、そのままの文字で届く）。
+短時間に送りすぎると Discord が 429 を返す。そのときは、結果に出る秒数だけ待ってから送り直す。
+
+以前の Bot トークンの `~/.local/share/terasuma/connections/discord.json` は使われない。削除してよい。
 
 ## データの場所
 
@@ -200,12 +196,13 @@ Quadlet は、ホストで直接動かすときと同じパスをコンテナに
 | `~/.local/share/terasuma/terasuma.db` | 会話の履歴 |
 | `~/.local/share/terasuma/images/` | ツールが撮った画像 |
 | `~/.local/share/terasuma/models-dev.json` | モデルカタログのキャッシュ |
-| `~/.local/share/terasuma/connections/` | アプリの接続のトークン（`github.json` / `discord.json`、0600。バックアップに含める） |
+| `~/.local/share/terasuma/connections/` | アプリの接続のトークン（`github.json`、0600。バックアップに含める） |
+| `~/.local/share/terasuma/discord/` | Tera ごとの Discord の webhook URL（`<teraId>.json`、0600。バックアップに含める） |
 | `~/.local/share/terasuma/container/home/` | コンピュータのホーム（エージェントの read / write / edit / bash の場所。チャットで添付したファイルは `uploads/` に置かれる） |
 | `~/.local/share/terasuma/container/home/.agents/skills/` | エージェントが作成したスキル。コンテナの中では `/home/agent/.agents/skills/` |
 
 バックアップを取るときは、`~/.config/terasuma` と `~/.local/share/terasuma` をまとめてコピーすればよい。
-接続のトークン（`connections/`）もこの中に入るので、バックアップの扱いには注意する。
+接続のトークンと webhook の URL（`connections/` と `discord/`）もこの中に入るので、バックアップの扱いには注意する。
 
 ```sh
 tar czf terasuma-backup.tgz -C "$HOME" .config/terasuma .local/share/terasuma

@@ -11,9 +11,6 @@ import { readPrivateJson } from "../secret-file";
 /** MCP サーバー 1 件に書ける項目。 */
 const MCP_SERVER_KEYS = ["type", "command", "args", "env", "url"] as const;
 
-/** 接続 1 件に書ける項目。 */
-const CONNECTION_KEYS = ["clientId"] as const;
-
 /** Web 検索の設定に書ける項目。 */
 const WEB_SEARCH_KEYS = ["default", "providers"] as const;
 
@@ -29,8 +26,6 @@ const MODEL_OPTION_KEYS = ["reasoningEffort"] as const;
 import {
   FILE_KEYS,
   describeMcpServerIdProblem,
-  type ConnectionSettings,
-  type ConnectionsSettings,
   type EnvSettings,
   type FileKey,
   type FileSettings,
@@ -98,9 +93,6 @@ export function readSettingsFile(path: string): FileSettings {
 
   const modelOptions = readModelOptions(source, path);
   if (modelOptions !== undefined) settings.modelOptions = modelOptions;
-
-  const connections = readConnections(source, path);
-  if (connections !== undefined) settings.connections = connections;
 
   const mcpServers = readMcpServers(source, path);
   if (mcpServers !== undefined) settings.mcpServers = mcpServers;
@@ -460,47 +452,6 @@ function readEnv(source: Record<string, unknown>, path: string): EnvSettings | u
     variables[name] = entry;
   }
   return variables;
-}
-
-/**
- * アプリの接続の設定を読む。
- * id は接続のプロバイダ名（"discord" など）で、値は Application ID だけを持つ。
- * どの id が使えるかはサーバーの接続モジュールが決めるので、ここでは形だけを確かめる。
- */
-function readConnections(source: Record<string, unknown>, path: string): ConnectionsSettings | undefined {
-  const value = source["connections"];
-  if (value === undefined) return undefined;
-
-  if (!isRecord(value)) {
-    throw new Error(`${path} の connections はオブジェクトにしてください`);
-  }
-
-  const connections: ConnectionsSettings = {};
-  for (const [id, entry] of Object.entries(value)) {
-    if (!isProviderId(id)) {
-      throw new Error(
-        `${path} の connections に使えない id があります: ${JSON.stringify(id)}（英小文字・数字・ハイフンで指定してください）`,
-      );
-    }
-    connections[id] = readConnectionEntry(id, entry, path);
-  }
-  return connections;
-}
-
-/** 接続 1 件を読む。画面から来た入力を検証するときも、同じ規則をここに任せる。 */
-export function readConnectionEntry(id: string, raw: unknown, path: string): ConnectionSettings {
-  const where = `${path} の connections.${id}`;
-  if (!isRecord(raw)) {
-    throw new Error(`${where} はオブジェクトにしてください`);
-  }
-
-  assertKnownKeys(raw, CONNECTION_KEYS, where);
-  const clientId = raw["clientId"];
-  if (typeof clientId !== "string" || clientId.trim().length === 0) {
-    throw new Error(`${where} の clientId は空でない文字列にしてください`);
-  }
-
-  return { clientId: clientId.trim() };
 }
 
 /** モデルごとの設定（思考強度など）を読む。 */

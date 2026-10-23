@@ -156,19 +156,9 @@ system プロンプトは `applied` だけを読む。書いただけでは変�
 
 ## アプリの接続
 
-アプリの接続は、利用者が発行したトークンを貼る方式に統一している（`server/connections/providers.ts`）。
-GitHub は Personal Access Token、Discord は Bot トークンを使う。
+アプリの接続は、利用者が発行したトークンを貼る方式にしている（`server/connections/providers.ts`）。
+GitHub は Personal Access Token を使う。
 プロバイダの定義は、トークン欄の文言、要求する権限、コンピュータへ渡す環境変数の名前を持つ。
-
-`config.json` に置くのは、招待リンクに使う Application ID だけ（Discord）。
-
-```json
-"connections": {
-  "discord": { "clientId": "123456789012345678" }
-}
-```
-
-`clientId` は Discord の Application ID（OAuth2 の client ID）を指す。
 
 トークンは `config.json` ではなく、データディレクトリの `connections/<id>.json` に保存する（ディレクトリ 0700、ファイル 0600）。
 保存する前に、アカウントを読んで受け付けられるか確かめる（間違ったトークンを黙って保存しない）。
@@ -176,17 +166,31 @@ GitHub は Personal Access Token、Discord は Bot トークンを使う。
 SSH トンネルでも Tailscale 経由でも設定できる。
 MCP サーバーの redirect 方式（`server/mcp/oauth.ts`）とはここが違う。
 
-接続が得たトークンは、コンピュータのコマンドへ環境変数として渡す（GitHub は `GH_TOKEN` / `GITHUB_TOKEN`、Discord は `DISCORD_BOT_TOKEN`）。
+接続が得たトークンは、コンピュータのコマンドへ環境変数として渡す（GitHub は `GH_TOKEN` / `GITHUB_TOKEN`）。
 同じ名前が `config.json` の `env` にある場合は、接続の値を優先する（接続し直した結果を使うため）。
-モデルは値を直接見ないが、コンテナの中で `echo $DISCORD_BOT_TOKEN` を実行すれば読める（`computer_set_env` と同じ性質）。
+モデルは値を直接見ないが、コンテナの中で `echo $GH_TOKEN` を実行すれば読める（`computer_set_env` と同じ性質）。
 
 エージェントは `computer_connect_app` でトークンの保存を待ち、`app_request` で接続済みアプリの API を叩く。
 どちらもツール一覧には載せず、`tool_search` で見つけて `tool_call` で実行する。
-`app_request` の Authorization はプロバイダの `api.authorization` が決める（既定は `Bearer`、Discord は `Bot`）。
-`app_request` のパスは接続先の API の origin に収まるものだけを受け付ける。
+`app_request` の Authorization は `Bearer <token>` で、パスは接続先の API の origin に収まるものだけを受け付ける。
 
-`connections` は新しい項目なので、これを知らない古い版へダウングレードすると、設定ファイルの
-未知の項目として起動に失敗する（設定を消すか、新しい版へ戻す）。
+## Discord の webhook
+
+Discord はトークンの接続ではなく、Tera ごとの **webhook URL** で送る（`server/discord/`）。
+送信先は 1 つのチャンネルで、投稿だけができる。読み取り・編集・リアクションは無い。
+
+- 保存先: `~/.local/share/terasuma/discord/<teraId>.json`（ディレクトリ 0700、ファイル 0600）
+- 保存の前に `GET <webhook>` で webhook を読み、名前とチャンネル ID を確かめる（受け付けられない URL は保存しない）
+- 送信は `POST <webhook>?wait=true`。本文は `{ content, username?, embeds?, allowed_mentions: { parse: [] } }`
+- ツールは `discord_connect`（カードを出して URL の保存を待つ）と `discord_send`（投稿する）
+- どちらもツール一覧には載せず、`tool_search` で見つけて `tool_call` で実行する。送信先が Tera ごとに決まるので、ツール一式はターンごとに組む
+- ツールの戻り値（モデルの文脈）には URL を含めない
+
+`discord_connect` と `discord_send` の説明は、組み込みスキル `discord` が補う。
+メンションは通知しない（`allowed_mentions` で止める）。429 のときは `retry_after` の秒数を伝える。
+
+以前の Bot トークン（`connections/discord.json`、`DISCORD_BOT_TOKEN`、`app_request` での Discord API）は廃止した。
+`config.json` の `connections`（Application ID）も廃止した。残っていると、未知の項目として起動に失敗するので削除する。
 
 ## 構成
 
@@ -199,6 +203,7 @@ src/
   server/provider     種別表・呼び出し・カタログ・疎通確認
   server/mcp          MCP の接続（connection / transport / tools）と OAuth
   server/connections  アプリの接続（トークン保存・検証・ツール）
+  server/discord      Discord の webhook（Tera ごとの保存・検証・送信・ツール）
   server/computer     podman・画像・引き受け・契約値
   server/data         設定と会話の永続化（store/ と settings/ に分かれる）
   server/wait         中断で片付く待ち

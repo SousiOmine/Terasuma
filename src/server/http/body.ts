@@ -132,16 +132,17 @@ export async function readWebSearchForm(req: JsonRequest): Promise<WebSearchProv
 }
 
 /**
- * 画面から来た Application ID を読む。null は「設定を消す」。
- * 空の文字列も「消す」として扱う（入力欄を空にしたときの見た目と揃える）。
+ * 画面から来た webhook URL を読む。空欄は受け付けない（消すときは切断を使う）。
  */
-export async function readConnectionClientIdForm(req: JsonRequest): Promise<{ clientId: string | null }> {
+export async function readDiscordWebhookForm(req: JsonRequest): Promise<{ url: string }> {
   const body = await readJsonBody(req);
-  const clientId = readOptionalString(body, "clientId");
-  if (clientId === undefined) throw new ValidationError("clientId must be a string or null");
+  const url = readOptionalString(body, "url");
+  if (url === undefined) throw new ValidationError("url must be a string");
 
-  const trimmed = clientId?.trim() ?? "";
-  return { clientId: trimmed.length === 0 ? null : trimmed };
+  const trimmed = url?.trim() ?? "";
+  if (trimmed.length === 0) throw new ValidationError("url must not be empty");
+
+  return { url: trimmed };
 }
 
 /**

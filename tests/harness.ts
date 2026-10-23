@@ -18,6 +18,7 @@ import { startServer, type StartedServer } from "../src/server/http/server";
 import { createSettingsStore, type SettingsStore } from "../src/server/data/settings";
 import { createStore, type Store } from "../src/server/data/store";
 import { createConnections, type ConnectionsManager } from "../src/server/connections/manager";
+import { createDiscordWebhooks, type DiscordWebhooks } from "../src/server/discord/manager";
 import {
   TEST_SETTINGS,
   createCompactionStub,
@@ -56,6 +57,8 @@ export type ServerHarnessOptions = {
   mcp?: McpManager;
   /** アプリの接続。省くと本物を作る（宛先は本物の GitHub のまま）。 */
   connections?: ConnectionsManager | ((context: { settings: SettingsStore; dir: string }) => ConnectionsManager);
+  /** Discord の webhook。省くと本物を作る（通信は本物の fetch のまま）。 */
+  discord?: DiscordWebhooks | ((context: { store: Store; dir: string }) => DiscordWebhooks);
   /** Web 検索。省くと「プロバイダ未設定」の差し替えを使う。 */
   webSearch?: WebSearchManager;
   /** 引き受け。省くと本物を作る。 */
@@ -81,6 +84,8 @@ export type ServerHarness = {
   store: Store;
   settings: SettingsStore;
   settingsPath: string;
+  /** Discord の webhook（Tera ごとの保存先）。テストから状態を確かめるときに使う。 */
+  discord: DiscordWebhooks;
   /** エージェントが送った画像の置き場（配信のテストで使う）。 */
   images: ImageStore;
   /** エージェントが送ったファイルの置き場（配信のテストで使う）。 */
@@ -117,7 +122,12 @@ export async function withServer<T>(
   const connections =
     typeof options.connections === "function"
       ? options.connections({ settings, dir })
-      : (options.connections ?? createConnections({ settings, dataDir: dir }));
+      : (options.connections ?? createConnections({ dataDir: dir }));
+
+  const discord =
+    typeof options.discord === "function"
+      ? options.discord({ store, dir })
+      : (options.discord ?? createDiscordWebhooks({ store, dataDir: dir }));
 
   const config: AppConfig = {
     host: "127.0.0.1",
@@ -141,6 +151,7 @@ export async function withServer<T>(
       settings,
       mcp: options.mcp ?? createMcpStub(),
       connections,
+      discord,
       webSearch: options.webSearch ?? createWebSearchStub(),
       container,
       images,
@@ -166,6 +177,7 @@ export async function withServer<T>(
     store,
     settings,
     settingsPath,
+    discord,
     images,
     files,
     handover,
@@ -179,6 +191,7 @@ export async function withServer<T>(
   } finally {
     compaction.close();
     connections.close();
+    discord.close();
     await started.server.stop(true);
     store.close();
     rmSync(dir, { recursive: true, force: true });

@@ -2,7 +2,6 @@ import type { ModelId } from "../../../shared/model";
 import { readSettingsFile, toModelSettings } from "./read";
 import { writeSettingsFile } from "./write";
 import type {
-  ConnectionsSettings,
   EnvSettings,
   FileSettings,
   McpServerSettings,
@@ -23,8 +22,6 @@ import type {
 
 /** 読み出した設定の全体。 */
 export type StoredSettings = ModelSettings & {
-  /** アプリの接続（Application ID）。トークンはここには入らない。 */
-  connections: ConnectionsSettings;
   mcpServers: McpServersSettings;
   webSearch: StoredWebSearchSettings;
   /** コンピュータ（デスクトップコンテナ）のコマンドへ渡す環境変数。 */
@@ -53,11 +50,6 @@ export type SettingsStore = {
   /** MCP サーバーを消す。設定が無ければ false を返し、何も書かない。 */
   deleteMcpServer(id: string): boolean;
   /**
-   * アプリの接続に使う Application ID を変える（Discord の招待リンクに使う）。
-   * null で設定ごと消す。トークンはここではなく接続モジュールが保存する。
-   */
-  setConnectionClientId(id: string, clientId: string | null): void;
-  /**
    * 検索プロバイダを追加・変更する。
    * makeDefault が true、または既定が未設定なら、このプロバイダを既定にする。
    */
@@ -79,7 +71,6 @@ export type SettingsStore = {
 function toStoredSettings(file: FileSettings): StoredSettings {
   return {
     ...toModelSettings(file),
-    connections: file.connections ?? {},
     mcpServers: file.mcpServers ?? {},
     webSearch: {
       default: file.webSearch?.default ?? null,
@@ -182,26 +173,6 @@ export function createSettingsStore(configPath: string): SettingsStore {
       return removed;
     },
 
-    setConnectionClientId(id, clientId) {
-      mutate((settings) => {
-        const connections = { ...settings.connections };
-
-        if (clientId === null) {
-          if (connections[id] === undefined) return false;
-
-          delete connections[id];
-          // 空になったら項目ごと消す（書かない状態と同じ意味なので残さない）。
-          if (Object.keys(connections).length === 0) delete settings.connections;
-          else settings.connections = connections;
-          return true;
-        }
-
-        connections[id] = { clientId };
-        settings.connections = connections;
-        return true;
-      });
-    },
-
     putWebSearchProvider(id, provider, makeDefault) {
       mutate((settings) => {
         const current = settings.webSearch ?? { providers: {} };
@@ -270,7 +241,6 @@ export {
   normalizeHttpUrl,
   normalizeProvider,
   normalizeWebSearchProvider,
-  readConnectionEntry,
   readMcpServerEntry,
   readSettingsFile,
   readWebSearchProviderEntry,
@@ -285,8 +255,6 @@ export {
 } from "./form";
 export { describeMcpServerIdProblem } from "./types";
 export type {
-  ConnectionSettings,
-  ConnectionsSettings,
   EngineKind,
   EnvSettings,
   FileSettings,

@@ -1,36 +1,23 @@
 import { describe, expect, test } from "bun:test";
 import { createConnections } from "../src/server/connections/manager";
-import type { ConnectionProvider } from "../src/server/connections/providers";
 import type { ConnectionsView } from "../src/shared/api/settings";
 import { type ServerHarness, withServer } from "./harness";
-import {
-  fakeBotProvider,
-  fakeProvider,
-  startFakeConnectionServer,
-  type FakeConnectionServer,
-} from "./fixtures/connection-server";
+import { fakeProvider, startFakeConnectionServer, type FakeConnectionServer } from "./fixtures/connection-server";
 
 /**
  * アプリの接続の HTTP API。
  * トークンは偽の API サーバーで検証する。
+ * Discord は Tera ごとの webhook なので、ここではなく tests/discord-api.test.ts が確かめる。
  */
 
 type Run = (harness: ServerHarness, server: FakeConnectionServer) => Promise<void>;
 
 /** 偽の接続先を宛先にした接続マネージャで、サーバを起こす。 */
-async function withConnectionServer(
-  run: Run,
-  extraProviders: (server: FakeConnectionServer) => ConnectionProvider[] = () => [],
-): Promise<void> {
+async function withConnectionServer(run: Run): Promise<void> {
   const server = startFakeConnectionServer();
   try {
     await withServer((harness) => run(harness, server), {
-      connections: ({ settings, dir }) =>
-        createConnections({
-          settings,
-          dataDir: dir,
-          providers: [fakeProvider(server), ...extraProviders(server)],
-        }),
+      connections: ({ dir }) => createConnections({ dataDir: dir, providers: [fakeProvider(server)] }),
     });
   } finally {
     await server.server.stop(true);
@@ -57,8 +44,6 @@ describe("接続の API", () => {
       expect(view.providers[0]).toMatchObject({
         id: "github",
         name: "GitHub",
-        clientId: null,
-        needsClientId: false,
         account: null,
         detail: null,
       });
@@ -119,69 +104,6 @@ describe("接続の API", () => {
     });
   });
 
-  test("Application ID を保存すると、設定ファイルにも書かれる", async () => {
-    await withConnectionServer(
-      async (harness) => {
-        const response = await harness.request(
-          "/api/connections/discord",
-          jsonRequest("PUT", { clientId: "  app-1  " }),
-        );
-
-        expect(response.status).toBe(200);
-        const provider = ((await response.json()) as ConnectionsView).providers.find((entry) => entry.id === "discord");
-        expect(provider?.clientId).toBe("app-1");
-        expect(provider?.needsClientId).toBe(true);
-        expect(harness.file().connections).toEqual({ discord: { clientId: "app-1" } });
-      },
-      (server) => [fakeBotProvider(server)],
-    );
-  });
-
-  test("空の Application ID は設定ごと消す", async () => {
-    await withConnectionServer(
-      async (harness) => {
-        await harness.request("/api/connections/discord", jsonRequest("PUT", { clientId: "app-1" }));
-
-        const response = await harness.request("/api/connections/discord", jsonRequest("PUT", { clientId: "  " }));
-
-        expect(response.status).toBe(200);
-        const provider = ((await response.json()) as ConnectionsView).providers.find((entry) => entry.id === "discord");
-        expect(provider?.clientId).toBeNull();
-        expect(harness.file().connections).toBeUndefined();
-      },
-      (server) => [fakeBotProvider(server)],
-    );
-  });
-
-  test("Application ID が文字列でも null でもなければ 400", async () => {
-    await withConnectionServer(
-      async (harness) => {
-        const response = await harness.request("/api/connections/discord", jsonRequest("PUT", { clientId: 42 }));
-
-        expect(response.status).toBe(400);
-        expect(((await response.json()) as { code: string }).code).toBe("invalid_request");
-      },
-      (server) => [fakeBotProvider(server)],
-    );
-  });
-
-  test("Application ID から招待リンクを組み立てる", async () => {
-    await withConnectionServer(
-      async (harness, server) => {
-        await harness.request("/api/connections/discord", jsonRequest("PUT", { clientId: "app-1" }));
-
-        const provider = (await connections(harness)).providers.find((entry) => entry.id === "discord");
-        const expected = new URL(`${server.origin}/authorize`);
-        expected.searchParams.set("client_id", "app-1");
-        expected.searchParams.set("scope", "bot");
-        expected.searchParams.set("permissions", "68608");
-
-        expect(provider?.inviteUrl).toBe(expected.toString());
-      },
-      (server) => [fakeBotProvider(server)],
-    );
-  });
-
   test("接続の待ちを中止できる", async () => {
     await withConnectionServer(async (harness) => {
       const response = await harness.request("/api/connections/github/wait", { method: "DELETE" });
@@ -189,39 +111,5 @@ describe("接続の API", () => {
       expect(response.status).toBe(200);
       expect(((await response.json()) as ConnectionsView).providers[0]?.connected).toBe(false);
     });
-  });
-
-  test("Discord のトークンを保存すると、接続済みとして返す", async () => {
-    await withConnectionServer(
-      async (harness, server) => {
-        const response = await harness.request(
-          "/api/connections/discord/token",
-          jsonRequest("PUT", { token: `  ${server.botToken}  ` }),
-        );
-
-        expect(response.status).toBe(200);
-        const provider = ((await response.json()) as ConnectionsView).providers.find((entry) => entry.id === "discord");
-        expect(provider).toMatchObject({
-          connected: true,
-          account: server.botAccount,
-          clientId: null,
-        });
-      },
-      (server) => [fakeBotProvider(server)],
-    );
-  });
-
-  test("受け付けられない Discord トークンは 400", async () => {
-    await withConnectionServer(
-      async (harness) => {
-        const response = await harness.request(
-          "/api/connections/discord/token",
-          jsonRequest("PUT", { token: "wrong" }),
-        );
-
-        expect(response.status).toBe(400);
-      },
-      (server) => [fakeBotProvider(server)],
-    );
   });
 });

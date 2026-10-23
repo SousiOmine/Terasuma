@@ -129,6 +129,27 @@ export const APP_REQUEST_TOOL = "request";
 /** モデルへ渡すときの、アプリの API を叩くツールの名前。 */
 export const APP_REQUEST_TOOL_NAME = `${APP_SERVER_ID}${TOOL_NAME_SEPARATOR}${APP_REQUEST_TOOL}`;
 
+/**
+ * Discord へメッセージを送る内蔵ツールのサーバー id。
+ * 送信先は Tera ごとに保存した webhook が決めるので、名前はこの 1 つにまとめる。
+ */
+export const DISCORD_SERVER_ID = "discord";
+
+/**
+ * Discord に接続する（webhook URL を保存する）ツール名（サーバー id を付けない形）。
+ * ユーザーはチャットのカードから URL を貼り、URL はモデルに渡らない。
+ */
+export const DISCORD_CONNECT_TOOL = "connect";
+
+/** モデルへ渡すときの、Discord に接続するツールの名前。 */
+export const DISCORD_CONNECT_TOOL_NAME = `${DISCORD_SERVER_ID}${TOOL_NAME_SEPARATOR}${DISCORD_CONNECT_TOOL}`;
+
+/** Discord のチャンネルへメッセージを送るツール名（サーバー id を付けない形）。 */
+export const DISCORD_SEND_TOOL = "send";
+
+/** モデルへ渡すときの、Discord へメッセージを送るツールの名前。 */
+export const DISCORD_SEND_TOOL_NAME = `${DISCORD_SERVER_ID}${TOOL_NAME_SEPARATOR}${DISCORD_SEND_TOOL}`;
+
 /** 画像やファイルをチャットへ添付するツール名（サーバー id を付けない形）。 */
 export const ATTACH_TOOL = "attach";
 

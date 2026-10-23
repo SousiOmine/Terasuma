@@ -11,6 +11,7 @@ import type { Handover } from "../computer/handover";
 import { describeError } from "../../shared/errors";
 import { jsonError, withErrorHandling } from "./respond";
 import type { ConnectionsManager } from "../connections/manager";
+import type { DiscordWebhooks } from "../discord/manager";
 import type { McpManager } from "../mcp/manager";
 import type { WebSearchManager } from "../websearch-manager";
 import type { Compaction } from "../agent/compaction";
@@ -36,8 +37,10 @@ export type ServerOptions = {
   settings: SettingsStore;
   /** MCP サーバーとの接続。OAuth のコールバックもここを通る。 */
   mcp: McpManager;
-  /** アプリの接続（OAuth）。設定画面とチャットのカードからの操作もここを通る。 */
+  /** アプリの接続（トークン）。設定画面とチャットのカードからの操作もここを通る。 */
   connections: ConnectionsManager;
+  /** Discord の webhook（送信先は Tera ごと）。設定画面とチャットのカードからの操作もここを通る。 */
+  discord: DiscordWebhooks;
   /** Web 検索の設定と接続確認。設定画面からの操作もここを通る。 */
   webSearch: WebSearchManager;
   /** podman で動かすコンテナ。設定画面からの操作もここを通る。 */
@@ -88,6 +91,7 @@ export function startServer(options: ServerOptions): StartedServer {
     settings,
     mcp,
     connections,
+    discord,
     webSearch,
     container,
     images,
@@ -103,6 +107,7 @@ export function startServer(options: ServerOptions): StartedServer {
       settings,
       mcp,
       connections,
+      discord,
       webSearch,
       container,
       images,

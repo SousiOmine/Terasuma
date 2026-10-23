@@ -326,7 +326,8 @@ function applyEvent(event: ChatEvent): void {
       beginEnvRequest(effect.callId, effect.name, effect.description);
       break;
     case "connection-request-start":
-      beginConnectionRequest(effect.callId, effect.provider, effect.reason);
+      // Discord は Tera ごとの webhook なので、カードを出した時点の Tera を覚えておく。
+      beginConnectionRequest(effect.callId, effect.provider, effect.reason, activeTeraId.value);
       break;
     case "wait-end":
       // 画面の引き受けは、成功したときだけ終える（失敗した呼び出しでは待ちが続いている）。

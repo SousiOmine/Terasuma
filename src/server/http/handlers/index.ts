@@ -1,6 +1,7 @@
 import { computerHandlers } from "./computer";
 import { connectionHandlers } from "./connections";
 import { containerHandlers } from "./container";
+import { discordHandlers } from "./discord";
 import { mcpHandlers } from "./mcp";
 import { mediaHandlers } from "./media";
 import { modelHandlers } from "./model";
@@ -20,6 +21,7 @@ export const HANDLER_MODULES = {
   model: modelHandlers,
   mcp: mcpHandlers,
   connections: connectionHandlers,
+  discord: discordHandlers,
   webSearch: webSearchHandlers,
   container: containerHandlers,
   computer: computerHandlers,
@@ -34,6 +36,7 @@ export function createApiHandlers(deps: ApiDeps) {
     ...HANDLER_MODULES.model(deps),
     ...HANDLER_MODULES.mcp(deps),
     ...HANDLER_MODULES.connections(deps),
+    ...HANDLER_MODULES.discord(deps),
     ...HANDLER_MODULES.webSearch(deps),
     ...HANDLER_MODULES.container(deps),
     ...HANDLER_MODULES.computer(deps),

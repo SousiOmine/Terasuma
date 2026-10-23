@@ -1,13 +1,17 @@
 import { IconExternalLink } from "@tabler/icons-preact";
 import { useEffect, useState } from "preact/hooks";
+import { DISCORD_SERVER_ID } from "../../../shared/tools";
 import { t } from "../../i18n";
 import {
   cancelConnectionRequest,
   connectionRequest,
+  connectionRequestField,
   resetConnectionRequest,
-  saveConnectionRequestToken,
+  saveConnectionRequest,
+  savingConnectionRequest,
 } from "../../state/connection-request";
-import { connections, isLoadingConnections, loadConnections, savingToken } from "../../state/connections";
+import { connections, isLoadingConnections, loadConnections } from "../../state/connections";
+import { discord, isLoadingDiscord, loadDiscord } from "../../state/discord";
 import { showChatError } from "../../state/failure";
 import { Button } from "../../ui/Button";
 import { Field } from "../../ui/Field";
@@ -16,20 +20,24 @@ import { INPUT_CLASS } from "../../ui/styles";
 /**
  * アプリの接続カード。
  *
- * エージェントが computer_connect_app を呼んだとき、チャットの入力欄の上に出る。
- * ユーザーはここでトークンを貼り付けて保存する。トークンはサーバーへ直接送り、
- * モデルの文脈には載らない（コンピュータの環境変数と、サーバー側の app_request だけが使う）。
+ * エージェントが computer_connect_app（GitHub のトークン）か discord_connect（Discord の webhook）を
+ * 呼んだとき、チャットの入力欄の上に出る。ユーザーはここで値を貼り付けて保存する。
+ * 値はサーバーへ直接送り、モデルの文脈には載らない。
  */
 export function ConnectionRequestPanel() {
   const request = connectionRequest.value;
-  const saving = request !== null && savingToken.value === request.provider;
-  const view = connections.value;
+  const field = connectionRequestField.value;
+  const saving = savingConnectionRequest.value;
   const [token, setToken] = useState("");
 
-  // 設定画面を開いていなくても、表示名とトークン欄の説明を出せるようにする。
+  // 設定画面を開いていなくても、表示名と貼り付け欄の説明を出せるようにする。
   useEffect(() => {
-    if (connections.value !== null || isLoadingConnections.value) return;
-    void loadConnections().catch(showChatError);
+    if (connections.value === null && !isLoadingConnections.value) {
+      void loadConnections().catch(showChatError);
+    }
+    if (discord.value === null && !isLoadingDiscord.value) {
+      void loadDiscord().catch(showChatError);
+    }
   }, []);
 
   // 新しいカードが出たら、入力欄を空に戻す。
@@ -39,14 +47,13 @@ export function ConnectionRequestPanel() {
 
   if (request === null) return null;
 
-  const provider = view?.providers.find((entry) => entry.id === request.provider) ?? null;
-  const app = provider?.name ?? request.provider;
+  const app = appNameOf(request.provider);
 
   const save = (): void => {
     const trimmed = token.trim();
     if (trimmed.length === 0) return;
 
-    void saveConnectionRequestToken(trimmed)
+    void saveConnectionRequest(trimmed)
       .then(() => setToken(""))
       .catch(showChatError);
   };
@@ -75,18 +82,18 @@ export function ConnectionRequestPanel() {
             </button>
           </div>
         </>
-      ) : provider === null ? (
+      ) : field === null ? (
         <p class="mt-3 text-xs text-secondary">{t("common.loading")}</p>
       ) : (
         <>
-          <Field label={provider.token.label} description={provider.token.description}>
+          <Field label={field.label} description={field.description}>
             <div class="flex items-center gap-2">
               <input
                 class={`${INPUT_CLASS} min-w-0 flex-1`}
                 type="password"
                 value={token}
-                placeholder={provider.token.placeholder}
-                aria-label={provider.token.label}
+                placeholder={field.placeholder}
+                aria-label={field.label}
                 autocomplete="off"
                 autocapitalize="off"
                 spellcheck={false}
@@ -105,15 +112,17 @@ export function ConnectionRequestPanel() {
           </Field>
 
           <div class="flex flex-wrap items-center gap-3">
-            <a
-              href={provider.setupUrl}
-              target="_blank"
-              rel="noreferrer noopener"
-              class="inline-flex items-center gap-1 text-xs text-secondary underline underline-offset-2"
-            >
-              <IconExternalLink size={12} stroke={1.6} class="shrink-0" />
-              {t("settings.connections.openSetup")}
-            </a>
+            {field.setupUrl !== null && (
+              <a
+                href={field.setupUrl}
+                target="_blank"
+                rel="noreferrer noopener"
+                class="inline-flex items-center gap-1 text-xs text-secondary underline underline-offset-2"
+              >
+                <IconExternalLink size={12} stroke={1.6} class="shrink-0" />
+                {t(request.provider === DISCORD_SERVER_ID ? "settings.discord.setup" : "settings.connections.openSetup")}
+              </a>
+            )}
             <button
               type="button"
               disabled={saving}
@@ -129,4 +138,11 @@ export function ConnectionRequestPanel() {
       )}
     </section>
   );
+}
+
+/** カードの見出しに出すアプリの名前。Discord は接続の一覧に無いので、ここで決める。 */
+function appNameOf(provider: string): string {
+  if (provider === DISCORD_SERVER_ID) return "Discord";
+
+  return connections.value?.providers.find((entry) => entry.id === provider)?.name ?? provider;
 }

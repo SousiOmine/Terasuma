@@ -2,6 +2,8 @@ import { recordOf } from "../../shared/guards";
 import {
   ASK_USER_TOOL_NAME,
   CONNECT_APP_TOOL_NAME,
+  DISCORD_CONNECT_TOOL_NAME,
+  DISCORD_SERVER_ID,
   SET_ENV_TOOL_NAME,
   TOOL_CALL_TOOL,
   TOOL_SERVER_ID,
@@ -79,6 +81,18 @@ export function interpretEvent(event: ChatEvent): ChatEventEffect | null {
           kind: "connection-request-start",
           callId: event.part.id,
           provider,
+          reason: typeof reason === "string" && reason.trim().length > 0 ? reason : null,
+        };
+      }
+
+      // Discord は webhook URL を貼る。どのアプリかはツール名で決まる。
+      const discord = toolCallArgs(event.part, DISCORD_CONNECT_TOOL_NAME);
+      if (discord !== null) {
+        const reason = discord["reason"];
+        return {
+          kind: "connection-request-start",
+          callId: event.part.id,
+          provider: DISCORD_SERVER_ID,
           reason: typeof reason === "string" && reason.trim().length > 0 ? reason : null,
         };
       }

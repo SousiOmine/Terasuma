@@ -1,6 +1,7 @@
 import type { AppConfig } from "../../../config";
 import type { ModelSettings } from "../../data/settings";
 import type { ConnectionToolsetProvider } from "../../connections/tools";
+import type { DiscordToolsetProvider } from "../../discord/tools";
 import type { ImageStore } from "../../computer/images";
 import type { CatalogSnapshot } from "../../provider/catalog";
 import type { ReplyLanguage } from "../../../shared/language";
@@ -112,8 +113,10 @@ export function createEngine(options: {
   history: HistoryToolsetProvider;
   /** Web 検索とページ取得のツール。 */
   webSearch: WebSearchToolsetProvider;
-  /** アプリの接続（OAuth）のツール。 */
+  /** アプリの接続（トークン）のツール。 */
   connections: ConnectionToolsetProvider;
+  /** Discord の webhook（送信先は Tera ごと）のツール。 */
+  discord: DiscordToolsetProvider;
   /** コンテナのファイルとシェルのツール。ターンごとに変わらないので、そのまま渡す。 */
   coding: CodingToolset;
   /** 撮った画像の置き場。履歴から画像を読み直してモデルへ渡す。 */
@@ -134,6 +137,7 @@ export function createEngine(options: {
     history: options.history,
     webSearch: options.webSearch,
     connections: options.connections,
+    discord: options.discord,
     coding: options.coding,
     images: options.images,
     catalog: options.catalog,

@@ -1,6 +1,6 @@
 import { describeError } from "../../shared/errors";
 import { sendRequest } from "../http/client";
-import { authorizationHeader, type ConnectionProvider } from "./providers";
+import type { ConnectionProvider } from "./providers";
 
 /**
  * 保存したトークンで、接続中のアカウントを読む。
@@ -21,7 +21,7 @@ async function requestAccount(provider: ConnectionProvider, accessToken: string)
   const outcome = await sendRequest(
     fetch,
     url.toString(),
-    { headers: { ...provider.api.headers, Authorization: authorizationHeader(provider, accessToken) } },
+    { headers: { ...provider.api.headers, Authorization: `Bearer ${accessToken}` } },
     { timeoutMs: HTTP_TIMEOUT_MS },
   );
 

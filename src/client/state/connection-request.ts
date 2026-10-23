@@ -1,16 +1,19 @@
-import { signal } from "@preact/signals";
-import { cancelConnectionWait, saveConnectionToken, savingToken } from "./connections";
+import { computed, signal } from "@preact/signals";
+import { DISCORD_SERVER_ID } from "../../shared/tools";
+import { t } from "../i18n";
+import { cancelConnectionWait, connections, saveConnectionToken, savingToken } from "./connections";
+import { cancelDiscordWait, discord, saveWebhook, savingDiscord, WEBHOOK_PLACEHOLDER } from "./discord";
 
 /**
  * チャットの接続カード。
  *
- * エージェントが computer_connect_app を呼んだときに始まり、トークンの保存が終わるまで続く。
- * トークンはサーバーへ直接送り、モデルの文脈には載せない。
- * 待つのはトークンの保存だけなので、状態は「入力待ち」と「失敗」だけになる。
+ * エージェントが computer_connect_app（GitHub）か discord_connect（Discord）を呼んだときに始まり、
+ * 値の保存が終わるまで続く。値はサーバーへ直接送り、モデルの文脈には載らない。
+ * Discord の送信先は Tera ごとに 1 つなので、カードを出した時点の Tera を覚えておく。
  */
 
 export type ConnectionRequestPhase =
-  /** トークンの入力を待っている。 */
+  /** 値の入力を待っている。 */
   | "waiting"
   /** 接続できなかった。 */
   | "failed";
@@ -18,10 +21,12 @@ export type ConnectionRequestPhase =
 export type ConnectionRequest = {
   /** カードを出したツール呼び出しの id。結果と突き合わせる。 */
   callId: string;
-  /** 接続するアプリの id（"github"）。 */
+  /** 接続するアプリの id（"github" か "discord"）。 */
   provider: string;
   /** モデルが書いた理由。無ければ null。 */
   reason: string | null;
+  /** Discord の webhook を保存する先の Tera。GitHub では null。 */
+  teraId: string | null;
   phase: ConnectionRequestPhase;
 };
 
@@ -31,9 +36,14 @@ export const connectionRequest = signal<ConnectionRequest | null>(null);
 let requestCallId: string | null = null;
 
 /** カードを出す。 */
-export function beginConnectionRequest(callId: string, provider: string, reason: string | null): void {
+export function beginConnectionRequest(
+  callId: string,
+  provider: string,
+  reason: string | null,
+  teraId: string | null,
+): void {
   requestCallId = callId;
-  connectionRequest.value = { callId, provider, reason, phase: "waiting" };
+  connectionRequest.value = { callId, provider, reason, teraId, phase: "waiting" };
 }
 
 /**
@@ -59,18 +69,84 @@ export function resetConnectionRequest(): void {
   connectionRequest.value = null;
 }
 
-/** カードのトークンを保存する。サーバーが確かめてから保存する。 */
-export async function saveConnectionRequestToken(token: string): Promise<void> {
-  const request = connectionRequest.value;
-  if (request === null || savingToken.value === request.provider) return;
+/** カードに出す、貼り付け欄の見た目。 */
+export type ConnectionRequestField = {
+  label: string;
+  description: string;
+  placeholder: string;
+  /** 作り方のページ。無ければ null。 */
+  setupUrl: string | null;
+};
 
-  await saveConnectionToken(request.provider, token);
+/** カードの貼り付け欄。アプリが分かるまでは null（読み込み中）。 */
+export const connectionRequestField = computed<ConnectionRequestField | null>(() => {
+  const request = connectionRequest.value;
+  if (request === null) return null;
+
+  if (request.provider === DISCORD_SERVER_ID) {
+    return {
+      label: t("settings.discord.field.label"),
+      description: t("settings.discord.field.description"),
+      placeholder: WEBHOOK_PLACEHOLDER,
+      setupUrl: discord.value?.setupUrl ?? null,
+    };
+  }
+
+  const provider = connections.value?.providers.find((entry) => entry.id === request.provider) ?? null;
+  if (provider === null) return null;
+
+  return {
+    label: provider.token.label,
+    description: provider.token.description,
+    placeholder: provider.token.placeholder,
+    setupUrl: provider.setupUrl,
+  };
+});
+
+/** いまのカードが、値を保存している最中か。 */
+export const savingConnectionRequest = computed<boolean>(() => {
+  const request = connectionRequest.value;
+  if (request === null) return false;
+
+  if (request.provider === DISCORD_SERVER_ID) {
+    return request.teraId !== null && savingDiscord.value === request.teraId;
+  }
+  return savingToken.value === request.provider;
+});
+
+/** カードの値を保存する。サーバーが確かめてから保存する。 */
+export async function saveConnectionRequest(value: string): Promise<void> {
+  const request = connectionRequest.value;
+  if (request === null) return;
+
+  if (request.provider === DISCORD_SERVER_ID) {
+    const teraId = request.teraId;
+    if (teraId === null) throw new Error("The Tera for this Discord webhook is not known.");
+    if (savingDiscord.value === teraId) return;
+
+    await saveWebhook(teraId, value);
+    return;
+  }
+
+  if (savingToken.value === request.provider) return;
+  await saveConnectionToken(request.provider, value);
 }
 
 /** 接続をやめる。サーバーの待ちも止める。 */
 export async function cancelConnectionRequest(): Promise<void> {
   const request = connectionRequest.value;
-  if (request === null || savingToken.value === request.provider) return;
+  if (request === null) return;
+
+  if (request.provider === DISCORD_SERVER_ID) {
+    const teraId = request.teraId;
+    if (teraId === null || savingDiscord.value === teraId) return;
+
+    await cancelDiscordWait(teraId);
+    resetConnectionRequest();
+    return;
+  }
+
+  if (savingToken.value === request.provider) return;
 
   await cancelConnectionWait(request.provider);
   resetConnectionRequest();

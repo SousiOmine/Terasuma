@@ -2,46 +2,31 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createConnections, type ConnectionsManager } from "../src/server/connections/manager";
-import type { ConnectionProvider } from "../src/server/connections/providers";
-import { createSettingsStore, type SettingsStore } from "../src/server/data/settings";
 import { ConnectionNotFound } from "../src/server/errors";
 import { withTempDir } from "./harness";
-import {
-  fakeBotProvider,
-  fakeProvider,
-  startFakeConnectionServer,
-  type FakeConnectionServer,
-} from "./fixtures/connection-server";
+import { fakeProvider, startFakeConnectionServer, type FakeConnectionServer } from "./fixtures/connection-server";
 
 /**
  * アプリの接続（トークン）。
  * トークンは偽の API サーバーで検証し、待ちは setToken で解く。
+ * Discord は Tera ごとの webhook なので、ここではなく tests/discord.test.ts が確かめる。
  */
 
 type Context = {
   manager: ConnectionsManager;
-  settings: SettingsStore;
   dir: string;
   server: FakeConnectionServer;
 };
 
-/** 偽の接続先と、一時ディレクトリの設定・トークン置き場を用意する。 */
-async function withConnections(
-  run: (context: Context) => Promise<void>,
-  extraProviders: (server: FakeConnectionServer) => ConnectionProvider[] = () => [],
-): Promise<void> {
+/** 偽の接続先と、一時ディレクトリのトークン置き場を用意する。 */
+async function withConnections(run: (context: Context) => Promise<void>): Promise<void> {
   const server = startFakeConnectionServer();
   try {
     await withTempDir("terasuma-connections-", async (dir) => {
-      const settings = createSettingsStore(join(dir, "config.json"));
-      const manager = createConnections({
-        settings,
-        dataDir: join(dir, "data"),
-        providers: [fakeProvider(server), ...extraProviders(server)],
-      });
+      const manager = createConnections({ dataDir: join(dir, "data"), providers: [fakeProvider(server)] });
 
       try {
-        await run({ manager, settings, dir, server });
+        await run({ manager, dir, server });
       } finally {
         manager.close();
       }
@@ -76,8 +61,6 @@ describe("アプリの接続", () => {
       expect(view.providers[0]).toMatchObject({
         connected: true,
         account: server.account,
-        clientId: null,
-        needsClientId: false,
         detail: null,
       });
 
@@ -176,39 +159,6 @@ describe("アプリの接続", () => {
   test("知らない接続 id は失敗する", async () => {
     await withConnections(async ({ manager }) => {
       expect(() => manager.provider("unknown")).toThrow(ConnectionNotFound);
-    });
-  });
-});
-
-describe("Application ID（Discord）", () => {
-  /** bot プロバイダ（Discord）を足して走らせる。 */
-  function withBotConnections(run: (context: Context) => Promise<void>): Promise<void> {
-    return withConnections(run, (server) => [fakeBotProvider(server)]);
-  }
-
-  test("保存した Application ID から招待リンクを組み立てる", async () => {
-    await withBotConnections(async ({ manager, settings, server }) => {
-      settings.setConnectionClientId("discord", "app-1");
-
-      const provider = manager.view().providers.find((entry) => entry.id === "discord");
-      const expected = new URL(`${server.origin}/authorize`);
-      expected.searchParams.set("client_id", "app-1");
-      expected.searchParams.set("scope", "bot");
-      expected.searchParams.set("permissions", "68608");
-
-      expect(provider?.needsClientId).toBe(true);
-      expect(provider?.clientId).toBe("app-1");
-      expect(provider?.inviteUrl).toBe(expected.toString());
-    });
-  });
-
-  test("Application ID を変えても、保存済みのトークンは残る", async () => {
-    await withBotConnections(async ({ manager, server }) => {
-      await manager.setToken("discord", server.botToken);
-      manager.setClientId("discord", "app-2");
-
-      expect(manager.token("discord")).toBe(server.botToken);
-      expect(manager.view().providers.find((entry) => entry.id === "discord")?.clientId).toBe("app-2");
     });
   });
 });
