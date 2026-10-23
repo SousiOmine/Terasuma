@@ -158,7 +158,8 @@ GitHub のリポジトリや API を使うときは、`設定 > コネクタ` �
 
 トークンは `~/.local/share/terasuma/connectors/github.json`（0600）に保存される。
 接続すると、コンピュータのコマンドで `GH_TOKEN` と `GITHUB_TOKEN` が使える。
-git は `git -c http.extraHeader="Authorization: Bearer $GH_TOKEN" clone ...` のように使う。
+git は `git -c credential.helper='!f() { echo username=x-access-token; echo "password=$GH_TOKEN"; }; f' clone ...` のように使う。
+URL にトークンを埋めると `git remote -v` の出力に現れ、会話の記録に残る。
 `gh` コマンドはコンピュータのイメージに入っていない。API はエージェントの `app_request` から叩ける。
 
 有効期限が切れると、`app_request` は 401 を返す。

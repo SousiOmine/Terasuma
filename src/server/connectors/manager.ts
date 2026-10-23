@@ -97,7 +97,7 @@ export function createConnectors(options: ConnectorsOptions): ConnectorsManager 
 
     return [
       `${who} is connected.`,
-      `Commands in the computer can use $${envName}; do not print the token.`,
+      `Commands in the computer can use $${envName}; do not put the token in a URL or print it.`,
       provider.usage,
     ].join(" ");
   }

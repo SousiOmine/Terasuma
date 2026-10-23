@@ -248,6 +248,8 @@ MCP サーバーの redirect 方式（`server/mcp/oauth.ts`）とはここが違
 コネクタが得たトークンは、コンピュータのコマンドへ環境変数として渡す（GitHub は `GH_TOKEN` / `GITHUB_TOKEN`）。
 同じ名前が `config.json` の `env` にある場合は、コネクタの値を優先する（接続し直した結果を使うため）。
 モデルは値を直接見ないが、コンテナの中で `echo $GH_TOKEN` を実行すれば読める（`computer_set_env` と同じ性質）。
+git の認証は `git -c credential.helper='!f() { echo username=x-access-token; echo "password=$GH_TOKEN"; }; f'` で渡す。
+URL にトークンを埋めると `git remote -v` の出力に現れ、その出力はツール結果として会話の記録に残る。
 
 エージェントは `computer_connect_app` でトークンの保存を待ち、`app_request` で接続済みアプリの API を叩く。
 どちらもツール一覧には載せず、`tool_search` で見つけて `tool_call` で実行する。

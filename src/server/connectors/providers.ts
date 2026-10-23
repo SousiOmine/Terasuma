@@ -63,7 +63,7 @@ const GITHUB: ConnectorProvider = {
   permissions: ["repo", "read:user"],
   env: ["GH_TOKEN", "GITHUB_TOKEN"],
   usage:
-    'For git over HTTPS, pass -c http.extraHeader="Authorization: Bearer $GH_TOKEN". ' +
+    `For git over HTTPS, pass -c credential.helper='!f() { echo username=x-access-token; echo "password=$GH_TOKEN"; }; f'. ` +
     "For the API, use app_request (for example GET /user).",
   api: {
     baseUrl: "https://api.github.com",
