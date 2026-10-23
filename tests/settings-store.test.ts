@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { readSettingsFile } from "../src/server/data/settings-schema";
+import { readSettingsFile } from "../src/server/data/settings";
 import { withTempDir } from "./harness";
 import { withTempSettings } from "./support";
 

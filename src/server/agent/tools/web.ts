@@ -6,6 +6,7 @@
  */
 
 import type { ToolSet } from "ai";
+import type { WebSearchToolsetProvider } from "../contracts";
 import { tool } from "ai";
 import { z } from "zod";
 import { describeError } from "../../../shared/errors";
@@ -28,11 +29,6 @@ const MAX_SEARCH_RESULT_CHARS = 20_000;
 
 /** モデルへ渡すツール。キーは "web_search" と "web_fetch"。 */
 export type WebSearchToolset = ToolSet;
-
-/** ツールの供給元。設定は呼び出しのたびに読み直す。 */
-export type WebSearchToolsetProvider = {
-  toolset(): WebSearchToolset;
-};
 
 export function createWebSearchToolset(options: { manager: WebSearchManager }): WebSearchToolsetProvider {
   return {

@@ -1,7 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { resolveAppPaths } from "./paths";
-import { readSettingsFile, type EngineKind } from "./server/data/settings-schema";
+import { readSettingsFile, type EngineKind } from "./server/data/settings";
 
 /**
  * 起動に使う設定。設定ファイル（config.json）の読み取りはサーバ側の

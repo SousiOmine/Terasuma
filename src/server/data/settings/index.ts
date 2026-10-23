@@ -1,18 +1,17 @@
-import type { ModelId } from "../../shared/model";
-import {
-  readSettingsFile,
-  toModelSettings,
-  writeSettingsFile,
-  type ConnectionsSettings,
-  type EnvSettings,
-  type FileSettings,
-  type McpServerSettings,
-  type McpServersSettings,
-  type ModelSettings,
-  type ProviderSettings,
-  type StoredWebSearchSettings,
-  type WebSearchProviderSettings,
-} from "./settings-schema";
+import type { ModelId } from "../../../shared/model";
+import { readSettingsFile, toModelSettings } from "./read";
+import { writeSettingsFile } from "./write";
+import type {
+  ConnectionsSettings,
+  EnvSettings,
+  FileSettings,
+  McpServerSettings,
+  McpServersSettings,
+  ModelSettings,
+  ProviderSettings,
+  StoredWebSearchSettings,
+  WebSearchProviderSettings,
+} from "./types";
 
 /**
  * モデルとプロバイダ、MCP サーバーの設定。
@@ -265,3 +264,43 @@ export function createSettingsStore(configPath: string): SettingsStore {
     },
   };
 }
+
+// 設定ファイルの形と検証も、この入口から使えるようにする（呼び出し側は data/settings だけを見る）。
+export {
+  normalizeHttpUrl,
+  normalizeProvider,
+  normalizeWebSearchProvider,
+  readConnectionEntry,
+  readMcpServerEntry,
+  readSettingsFile,
+  readWebSearchProviderEntry,
+  toModelSettings,
+} from "./read";
+export { writeSettingsFile } from "./write";
+export {
+  mcpServerSettingsFromForm,
+  parseProviderCredentials,
+  providerSettingsFromForm,
+  webSearchProviderSettingsFromForm,
+} from "./form";
+export { describeMcpServerIdProblem } from "./types";
+export type {
+  ConnectionSettings,
+  ConnectionsSettings,
+  EngineKind,
+  EnvSettings,
+  FileSettings,
+  McpHttpServerSettings,
+  McpServerSettings,
+  McpServersSettings,
+  McpStdioServerSettings,
+  ModelOptionSettings,
+  ModelOptionsSettings,
+  ModelSettings,
+  ProviderSettings,
+  ProvidersSettings,
+  StoredWebSearchSettings,
+  WebSearchProviderSettings,
+  WebSearchProvidersSettings,
+  WebSearchSettings,
+} from "./types";

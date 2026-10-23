@@ -5,8 +5,8 @@ import { isModelId, type ModelId } from "../../shared/model";
 import type { McpServerForm, ProviderCredentials, WebSearchProviderForm } from "../../shared/types";
 import type { UploadFile } from "../computer/uploads";
 import { readUploadedFiles } from "../computer/uploads";
-import { mcpServerSettingsFromForm, parseProviderCredentials } from "../data/settings-form";
-import type { McpServerSettings, ProviderSettings } from "../data/settings-schema";
+import { mcpServerSettingsFromForm, parseProviderCredentials } from "../data/settings";
+import type { McpServerSettings, ProviderSettings } from "../data/settings";
 import { ValidationError } from "../errors";
 
 /**
@@ -128,7 +128,9 @@ export async function readWebSearchForm(req: { json(): Promise<unknown> }): Prom
  * 画面から来た Application ID を読む。null は「設定を消す」。
  * 空の文字列も「消す」として扱う（入力欄を空にしたときの見た目と揃える）。
  */
-export async function readConnectionClientIdForm(req: { json(): Promise<unknown> }): Promise<{ clientId: string | null }> {
+export async function readConnectionClientIdForm(req: {
+  json(): Promise<unknown>;
+}): Promise<{ clientId: string | null }> {
   const body = await readJsonBody(req);
   const clientId = readOptionalString(body, "clientId");
   if (clientId === undefined) throw new ValidationError("clientId must be a string or null");

@@ -1,7 +1,7 @@
 import { modelProvider, type ModelId } from "../../shared/model";
-import type { ModelSettings } from "../data/settings-schema";
+import type { ModelSettings } from "../data/settings";
 import { catalogProvider, type CatalogSnapshot } from "./catalog";
-import { catalogRoute, type ProviderSpec } from "./kinds";
+import { catalogRoute, providerSpec, type ProviderSpec } from "./kinds";
 
 /**
  * 設定とカタログから、モデルの呼び出し方（URL・資格・パッケージ・思考強度）を決める。
@@ -50,7 +50,7 @@ export function resolveModel(settings: ModelSettings, snapshot: CatalogSnapshot 
         id: model,
         baseUrl: provider.baseUrl,
         apiKey: provider.apiKey ?? null,
-        provider: { id: providerId, kind: "openai-compatible", optionKey: providerId },
+        provider: providerSpec("openai-compatible", providerId),
         reasoningEffort,
       },
     };

@@ -3,7 +3,7 @@ import { tool } from "ai";
 import { z } from "zod";
 import { ENV_NAME_PATTERN, isReservedEnvName } from "../../../shared/env";
 import type { ContainerManager, ShellResult } from "../../computer/container";
-import type { ComputerToolsetProvider } from "../engine";
+import type { ComputerToolsetProvider } from "../contracts";
 import type { EnvRequests } from "../../computer/env";
 import type { Handover } from "../../computer/handover";
 import type { ImageStore } from "../../computer/images";

@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { McpServer, createMcpHandler } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import { CONFIG_FILE_NAME } from "../src/config";
-import type { McpServerSettings, McpServersSettings } from "../src/server/data/settings-schema";
+import type { McpServerSettings, McpServersSettings } from "../src/server/data/settings";
 import { McpServerNotFound, createMcpManager, type McpManager } from "../src/server/mcp/manager";
 import { createImageStore, type ImageStore } from "../src/server/computer/images";
 import { createSettingsStore } from "../src/server/data/settings";

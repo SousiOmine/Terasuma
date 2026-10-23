@@ -4,19 +4,18 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { tool } from "ai";
 import { z } from "zod";
-import type { ModelSettings } from "../src/server/data/settings-schema";
+import type { ModelSettings } from "../src/server/data/settings";
 import { createCodingToolset, type CodingToolset } from "../src/server/agent/tools/coding";
 import { createComputerTools } from "../src/server/agent/tools/computer";
 import type { ContainerManager } from "../src/server/computer/container";
-import {
-  createAiSdkEngine,
-  type ComputerToolsetProvider,
-  type EngineEvent,
-  type AttachmentToolsetProvider,
-  type HistoryToolsetProvider,
-  type SettingsReader,
-  type ToolsetProvider,
-} from "../src/server/agent/engine";
+import { createAiSdkEngine } from "../src/server/agent/engine/sdk";
+import type { EngineEvent, SettingsReader } from "../src/server/agent/engine";
+import type {
+  AttachmentToolsetProvider,
+  ComputerToolsetProvider,
+  HistoryToolsetProvider,
+  ToolsetProvider,
+} from "../src/server/agent/contracts";
 import { createAttachmentTools } from "../src/server/agent/tools/attachments";
 import { createHistoryToolset } from "../src/server/agent/tools/history";
 import { createFileStore } from "../src/server/computer/files";
@@ -893,7 +892,7 @@ describe("失敗", () => {
 
 describe("チャットの UI", () => {
   test("chat_ui はマークアップを検証し、呼び出しと結果がターンへ流れる", async () => {
-    const markup = '<Card><Text>確認</Text><Choice><Option>a</Option><Option>b</Option></Choice></Card>';
+    const markup = "<Card><Text>確認</Text><Choice><Option>a</Option><Option>b</Option></Choice></Card>";
     const fake = startScriptedProvider([{ tool: "chat_ui", args: JSON.stringify({ markup }) }, { text: "どうぞ" }]);
 
     try {

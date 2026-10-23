@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { CONFIG_FILE_NAME } from "../src/config";
-import type { FileSettings } from "../src/server/data/settings-schema";
+import type { FileSettings } from "../src/server/data/settings";
 import { parseCatalog, type Catalog, type CatalogSnapshot } from "../src/server/provider/catalog";
 import {
   ProviderRequestError,

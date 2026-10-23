@@ -8,8 +8,8 @@
 import { describeError } from "../../../shared/errors";
 import type { WebSearchProviderForm } from "../../../shared/types";
 import { SettingsWriteError, ValidationError, WebSearchProviderExists, WebSearchProviderNotFound } from "../../errors";
-import { webSearchProviderSettingsFromForm } from "../../data/settings-form";
-import type { WebSearchProviderSettings } from "../../data/settings-schema";
+import { webSearchProviderSettingsFromForm } from "../../data/settings";
+import type { WebSearchProviderSettings } from "../../data/settings";
 import { isWebSearchProviderId } from "../../websearch/index";
 import { readJsonBody, readWebSearchForm } from "../body";
 import { json } from "../respond";

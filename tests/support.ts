@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CONFIG_FILE_NAME } from "../src/config";
-import type { FileSettings } from "../src/server/data/settings-schema";
+import type { FileSettings } from "../src/server/data/settings";
 import type {
   CommandBytesResult,
   CommandByteRunner,
@@ -17,7 +17,7 @@ import type {
   ComputerToolsetProvider,
   HistoryToolsetProvider,
   WebSearchToolsetProvider,
-} from "../src/server/agent/engine";
+} from "../src/server/agent/contracts";
 import type { LoadedSkill, Skill, SkillFileStore } from "../src/server/agent/skill-types";
 import type { ImageStore } from "../src/server/computer/images";
 import type { McpManager } from "../src/server/mcp/manager";

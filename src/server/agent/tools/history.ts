@@ -6,7 +6,7 @@ import { z } from "zod";
 import { HISTORY_SEARCH_TOOL_NAME, TOOL_CALL_TOOL, TOOL_SERVER_ID, toolNameFor } from "../../../shared/tools";
 import type { ChatMessage, MessagePart } from "../../../shared/types";
 import type { Store } from "../../data/store";
-import type { HistoryToolsetProvider } from "../engine";
+import type { HistoryToolsetProvider } from "../contracts";
 
 /**
  * 過去の対話履歴を検索する内蔵ツール（history_search）。

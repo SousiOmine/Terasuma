@@ -8,7 +8,7 @@ import {
 } from "@modelcontextprotocol/client";
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
 import { jsonSchema, tool, type JSONSchema7, type ToolSet } from "ai";
-import type { McpHttpServerSettings, McpServerSettings, McpServersSettings } from "../data/settings-schema";
+import type { McpHttpServerSettings, McpServerSettings, McpServersSettings } from "../data/settings";
 import { toolNameFor } from "../../shared/tools";
 import { AppError } from "../errors";
 import type { ImageRef, McpAuthorizationView, McpServerStatusView, McpTestView } from "../../shared/types";

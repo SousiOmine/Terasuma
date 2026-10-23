@@ -1,5 +1,5 @@
-import type { ProviderSettings } from "../../data/settings-schema";
-import type { McpServerSettings } from "../../data/settings-schema";
+import type { ProviderSettings } from "../../data/settings";
+import type { McpServerSettings } from "../../data/settings";
 import type { SettingsStore } from "../../data/settings";
 import type { Store } from "../../data/store";
 import type { AgentEngine } from "../../agent/engine";

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentEngine, EngineInput, EngineStream } from "../src/server/agent/engine";
-import { createMockEngine } from "../src/server/agent/engine";
+import { createMockEngine } from "../src/server/agent/engine/mock";
 import { userContentForModel } from "../src/server/agent/model-content";
 import type { ContainerManager } from "../src/server/computer/container";
 import type { Catalog } from "../src/server/provider/catalog";
@@ -548,12 +548,7 @@ describe("チャット API", () => {
 
       // 保存した記録には、ツールの呼び出しと結果も並びのまま残る。
       const saved = harness.store.listMessagesPage(DEFAULT_TERA_ID, { limit: 2, before: null });
-      expect(saved.messages[1]?.parts?.map((part) => part.type)).toEqual([
-        "text",
-        "tool-call",
-        "tool-result",
-        "text",
-      ]);
+      expect(saved.messages[1]?.parts?.map((part) => part.type)).toEqual(["text", "tool-call", "tool-result", "text"]);
 
       // 読み直しても、画面へは表示用の部分だけが戻る。
       const messages = await harness.messages(DEFAULT_TERA_ID);

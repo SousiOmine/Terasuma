@@ -1,116 +1,12 @@
-import { isRecord } from "../../shared/guards";
-import { isEnvName } from "../../shared/env";
-import { readPrivateJson, writePrivateJson } from "./secret-file";
-import { isProviderId, mcpServerIdProblem, RESERVED_MCP_SERVER_IDS, type McpServerIdProblem } from "../../shared/ids";
-import { isModelId, type ModelId } from "../../shared/model";
-import { isWebSearchProviderId, WEB_SEARCH_PROVIDER_IDS } from "../websearch/index";
-
+import { isEnvName } from "../../../shared/env";
+import { isRecord } from "../../../shared/guards";
+import { isProviderId, mcpServerIdProblem } from "../../../shared/ids";
+import { isModelId } from "../../../shared/model";
+import { isWebSearchProviderId, WEB_SEARCH_PROVIDER_IDS } from "../../websearch/index";
+import { readPrivateJson } from "../secret-file";
 /**
- * config.json の形と、その読み書き。
- *
- * 設定ファイルは唯一の保存先なので、ここで「読める形か」「書ける形か」を決める。
- * 実行時の設定（ポートやディレクトリ）は config.ts、画面からの入力の整形は
- * settings-form.ts が受け持つ。このファイルは JSON と型の対応だけを持つ。
+ * 各セクションに書ける項目。綴り違いは起動時に落とす。
  */
-
-/** 使う LLM 実装。mock は開発・テスト専用で、既定には決してならない。 */
-export type EngineKind = "ai-sdk" | "mock";
-
-/**
- * プロバイダ 1 件の設定。
- * カタログのプロバイダは apiKey だけを持ち、OpenAI 互換の独自エンドポイントは baseUrl（と label）も持つ。
- * baseUrl があるかどうかが「独自エンドポイントかどうか」の印になる。
- */
-export type ProviderSettings = {
-  apiKey?: string;
-  baseUrl?: string;
-  label?: string;
-};
-
-/** モデル 1 件ごとの設定。 */
-export type ModelOptionSettings = {
-  /** 思考強度。未設定なら渡さない（プロバイダの既定に任せる）。 */
-  reasoningEffort?: string;
-};
-
-/** モデル id → 設定。並び順は設定ファイルに書かれた順のまま保つ。 */
-type ModelOptionsSettings = Record<string, ModelOptionSettings>;
-
-/** プロバイダ id → 設定。並び順は設定ファイルに書かれた順のまま保つ。 */
-export type ProvidersSettings = Record<string, ProviderSettings>;
-
-/**
- * コンピュータ（デスクトップコンテナ）のコマンドへ渡す環境変数。名前 → 値。
- *
- * 値はエージェントにも画面にも渡さない。設定画面には名前だけを出す。
- * 保存先は設定ファイルなので、API キーと同じく平文で置かれる（書き込み時に 0600 にする）。
- */
-export type EnvSettings = Record<string, string>;
-
-/**
- * 接続 1 件の設定。Application ID だけを保存する（Discord の招待リンクに使う）。
- *
- * トークンは設定ファイルではなく、データディレクトリの別のファイル（0600）に置く。
- * Application ID は秘密ではないが、利用者ごとに違うので設定として持つ。
- */
-export type ConnectionSettings = {
-  clientId: string;
-};
-
-/** 接続 id → 設定。並び順は設定ファイルに書かれた順のまま保つ。 */
-export type ConnectionsSettings = Record<string, ConnectionSettings>;
-
-/** この端末で動かす MCP サーバー（stdio）。コマンドを起動して標準入出力で話す。 */
-export type McpStdioServerSettings = {
-  type: "stdio";
-  /** 起動するコマンド。PATH が通った名前か、実行ファイルの絶対パス。 */
-  command: string;
-  args?: string[];
-  /** 子プロセスに足す環境変数。 */
-  env?: Record<string, string>;
-};
-
-/**
- * HTTP で話す MCP サーバー。
- * OAuth が要るかどうかは設定に書かない（サーバーが認可を求めたときに始める）。
- */
-export type McpHttpServerSettings = {
-  type: "http";
-  url: string;
-};
-
-/**
- * MCP サーバー 1 件の設定。
- * type を明示させ、command と url のどちらがあるかで種類を推測しない
- * （取り違えると起動時に分かりにくい失敗になるため）。
- */
-export type McpServerSettings = McpStdioServerSettings | McpHttpServerSettings;
-
-/** MCP サーバー id → 設定。並び順は設定ファイルに書かれた順のまま保つ。 */
-export type McpServersSettings = Record<string, McpServerSettings>;
-
-/** 検索プロバイダ 1 件の設定。 */
-export type WebSearchProviderSettings = {
-  apiKey: string;
-};
-
-/** 検索プロバイダ id → 設定。並び順は設定ファイルに書かれた順のまま保つ。 */
-export type WebSearchProvidersSettings = Record<string, WebSearchProviderSettings>;
-
-/**
- * Web 検索の設定。
- * default は登録済みプロバイダの id。省略した場合は未設定（検索ツールを渡さない）。
- */
-export type WebSearchSettings = {
-  default?: string;
-  providers: WebSearchProvidersSettings;
-};
-
-/** 実行時に使う Web 検索の設定。未設定を null で表す。 */
-export type StoredWebSearchSettings = {
-  default: string | null;
-  providers: WebSearchProvidersSettings;
-};
 
 /** MCP サーバー 1 件に書ける項目。 */
 const MCP_SERVER_KEYS = ["type", "command", "args", "env", "url"] as const;
@@ -130,47 +26,34 @@ const PROVIDER_KEYS = ["apiKey", "baseUrl", "label"] as const;
 /** モデル 1 件に書ける項目。 */
 const MODEL_OPTION_KEYS = ["reasoningEffort"] as const;
 
-const FILE_KEYS = [
-  "model",
-  "providers",
-  "modelOptions",
-  "connections",
-  "mcpServers",
-  "webSearch",
-  "env",
-  "port",
-] as const;
-type FileKey = (typeof FILE_KEYS)[number];
+import {
+  FILE_KEYS,
+  describeMcpServerIdProblem,
+  type ConnectionSettings,
+  type ConnectionsSettings,
+  type EnvSettings,
+  type FileKey,
+  type FileSettings,
+  type McpHttpServerSettings,
+  type McpServerSettings,
+  type McpServersSettings,
+  type McpStdioServerSettings,
+  type ModelOptionSettings,
+  type ModelOptionsSettings,
+  type ModelSettings,
+  type ProviderSettings,
+  type ProvidersSettings,
+  type WebSearchProviderSettings,
+  type WebSearchProvidersSettings,
+  type WebSearchSettings,
+} from "./types";
 
-/** config.json に書ける設定。書かなかった項目は既定値になる。 */
-export type FileSettings = Partial<{
-  model: ModelId;
-  providers: ProvidersSettings;
-  modelOptions: ModelOptionsSettings;
-  connections: ConnectionsSettings;
-  mcpServers: McpServersSettings;
-  webSearch: WebSearchSettings;
-  env: EnvSettings;
-  port: number;
-}>;
-
-/** 実行時に使うモデル設定。config.json のうち、設定画面から変えられる部分。 */
-export type ModelSettings = {
-  /** 既定のモデル。未設定なら null。 */
-  model: ModelId | null;
-  providers: ProvidersSettings;
-  /** モデルごとの設定（思考強度など）。 */
-  modelOptions: ModelOptionsSettings;
-};
-
-/** MCP サーバー id を受け付けられない理由を、設定ファイルの文言にする。 */
-export function describeMcpServerIdProblem(value: string, problem: McpServerIdProblem): string {
-  if (problem === "reserved") {
-    const prefixes = RESERVED_MCP_SERVER_IDS.map((id) => `${id}_`).join(" / ");
-    return `${JSON.stringify(value)} は Terasuma の内蔵ツール（${prefixes}）と同じ名前になるため使えません`;
-  }
-  return `${JSON.stringify(value)} は英小文字・数字・ハイフンで指定してください`;
-}
+/**
+ * 設定ファイルの読み取りと、その検証。
+ *
+ * config.json は唯一の保存先なので、ここで「読める形か」を決める。
+ * 壊れた設定のまま起動しないよう、読めない値はその場で失敗させる。
+ */
 
 /** 設定ファイルから、実行時に使うモデル設定だけを取り出す。 */
 export function toModelSettings(file: FileSettings): ModelSettings {
@@ -237,29 +120,6 @@ export function readSettingsFile(path: string): FileSettings {
   }
 
   return settings;
-}
-
-/**
- * 設定ファイルを書き換える。設定画面からの変更と、手で編集した内容の取り込みに使う。
- * 書き込みの途中で落ちても元のファイルが壊れないよう、一時ファイル経由で置き換える。
- * プロバイダの API キーとコンピュータの環境変数が入るので、他の利用者から読めないよう 0600 にする。
- */
-export function writeSettingsFile(path: string, settings: FileSettings): void {
-  writePrivateJson(path, orderedSettings(settings));
-}
-
-/** 設定ファイルに書く内容。項目の並びは常に同じにして、差分を読みやすくする。 */
-function orderedSettings(settings: FileSettings): Record<string, unknown> {
-  const ordered: Record<string, unknown> = {};
-  if (settings.model !== undefined) ordered["model"] = settings.model;
-  if (settings.providers !== undefined) ordered["providers"] = settings.providers;
-  if (settings.modelOptions !== undefined) ordered["modelOptions"] = settings.modelOptions;
-  if (settings.connections !== undefined) ordered["connections"] = settings.connections;
-  if (settings.webSearch !== undefined) ordered["webSearch"] = settings.webSearch;
-  if (settings.mcpServers !== undefined) ordered["mcpServers"] = settings.mcpServers;
-  if (settings.env !== undefined) ordered["env"] = settings.env;
-  if (settings.port !== undefined) ordered["port"] = settings.port;
-  return ordered;
 }
 
 /**

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { ModelSettings } from "../src/server/data/settings-schema";
+import type { ModelSettings } from "../src/server/data/settings";
 import { resolveModel, type ModelResolution } from "../src/server/provider/routing";
 import { parseCatalog, type CatalogSnapshot } from "../src/server/provider/catalog";
 

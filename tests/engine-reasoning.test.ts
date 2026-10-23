@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import type { ModelSettings } from "../src/server/data/settings-schema";
-import { createAiSdkEngine, type SettingsReader } from "../src/server/agent/engine";
+import type { ModelSettings } from "../src/server/data/settings";
+import { createAiSdkEngine } from "../src/server/agent/engine/sdk";
+import type { SettingsReader } from "../src/server/agent/engine";
 import type { ChatMessage } from "../src/shared/types";
 import {
   createAttachmentsStub,

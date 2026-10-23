@@ -3,7 +3,7 @@ import { isModelId, modelParts, modelProvider } from "../../../shared/model";
 import { findEndpointPreset } from "../../../shared/providers";
 import type { CatalogProviderView, ProviderCheckResult, ReasoningView } from "../../../shared/types";
 import { selectableEfforts } from "../../provider/reasoning";
-import type { ProviderSettings } from "../../data/settings-schema";
+import type { ProviderSettings } from "../../data/settings";
 import { AppError, CatalogUnavailableError, SettingsWriteError, ValidationError } from "../../errors";
 import { catalogModel, catalogModels, catalogProvider, type CatalogSnapshot } from "../../provider/catalog";
 import { type ConnectionTarget, connectionTarget } from "../../provider/connection";

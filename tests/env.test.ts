@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createEnvRequests } from "../src/server/computer/env";
-import { readSettingsFile } from "../src/server/data/settings-schema";
+import { readSettingsFile } from "../src/server/data/settings";
 import { withTempSettings } from "./support";
 
 /**

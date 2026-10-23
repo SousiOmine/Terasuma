@@ -1,0 +1,49 @@
+import type { ToolSet } from "ai";
+import type { SentAttachment } from "../../shared/types";
+import type { McpToolset } from "../mcp/manager";
+import type { AttachmentToolset } from "./tools/attachments";
+import type { ComputerToolset } from "./tools/computer";
+import type { HistoryToolset } from "./tools/history";
+
+/**
+ * エンジンがツール一式を受け取るための型。
+ *
+ * ツールの実装（tools/*）と、それらを組み立てるエンジン（engine/）の間に置く。
+ * ツール側はこの型だけを知り、エンジンを知らない。
+ */
+
+/** モデルへ渡すツールの供給元。接続を持たないテストでもここを差し替えれば済む。 */
+export type ToolsetProvider = {
+  toolset(): Promise<McpToolset>;
+};
+
+/**
+ * コンテナのツールの供給元。ターンの対象の Tera を渡す。
+ */
+export type ComputerToolsetProvider = {
+  toolset(input: { teraId: string }): Promise<ComputerToolset>;
+};
+
+/**
+ * 画像やファイルをチャットへ添付するツールの供給元。
+ * 添付の口はターンごとに差し替わるので、呼び出しのたびに渡す。
+ */
+export type AttachmentToolsetProvider = {
+  toolset(input: { attach: (attachments: SentAttachment[]) => void }): AttachmentToolset;
+};
+
+/**
+ * 過去の対話履歴を検索するツールの供給元。
+ * 引く履歴はターンの対象の Tera のものなので、ターンごとに teraId を渡す。
+ */
+export type HistoryToolsetProvider = {
+  toolset(input: { teraId: string }): HistoryToolset;
+};
+
+/**
+ * Web 検索とページ取得のツールの供給元。
+ * 既定の検索プロバイダが未設定なら、空のツール一式を返す。
+ */
+export type WebSearchToolsetProvider = {
+  toolset(): ToolSet;
+};

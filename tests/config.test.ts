@@ -3,13 +3,8 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CONFIG_FILE_NAME, DEFAULT_PORT, loadConfig } from "../src/config";
-import { mcpServerSettingsFromForm, providerSettingsFromForm } from "../src/server/data/settings-form";
-import {
-  normalizeProvider,
-  readSettingsFile,
-  toModelSettings,
-  writeSettingsFile,
-} from "../src/server/data/settings-schema";
+import { mcpServerSettingsFromForm, providerSettingsFromForm } from "../src/server/data/settings";
+import { normalizeProvider, readSettingsFile, toModelSettings, writeSettingsFile } from "../src/server/data/settings";
 import { isProviderId } from "../src/shared/ids";
 
 /** 一時ディレクトリを設定ディレクトリとデータディレクトリの両方に見立てて loadConfig を呼ぶ。 */

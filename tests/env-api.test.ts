@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { CONFIG_FILE_NAME } from "../src/config";
 import type { ComputerEnvView } from "../src/shared/types";
-import { readSettingsFile } from "../src/server/data/settings-schema";
+import { readSettingsFile } from "../src/server/data/settings";
 import { withServer } from "./harness";
 
 /**

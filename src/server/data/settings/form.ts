@@ -1,15 +1,13 @@
-import { mcpServerIdProblem } from "../../shared/ids";
-import { trimOrNull } from "../../shared/strings";
-import type { McpServerForm, ProviderCredentials, WebSearchProviderForm } from "../../shared/types";
+import { mcpServerIdProblem } from "../../../shared/ids";
+import { trimOrNull } from "../../../shared/strings";
+import type { McpServerForm, ProviderCredentials, WebSearchProviderForm } from "../../../shared/types";
+import { normalizeProvider, normalizeWebSearchProvider, readMcpServerEntry } from "./read";
 import {
   describeMcpServerIdProblem,
-  normalizeProvider,
-  normalizeWebSearchProvider,
-  readMcpServerEntry,
   type McpServerSettings,
   type ProviderSettings,
   type WebSearchProviderSettings,
-} from "./settings-schema";
+} from "./types";
 
 /**
  * 画面（HTTP）から来た入力を、config.json に書ける形へ直す。
