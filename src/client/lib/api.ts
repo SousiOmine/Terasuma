@@ -25,9 +25,6 @@ import type {
 
 import { ApiError, fetchOrThrow, jsonRequest, request } from "./http";
 
-export type { ClientErrorCode } from "./http";
-export { ApiError } from "./http";
-
 /** モデルとプロバイダの設定。 */
 const MODEL_PATH = "/api/model";
 

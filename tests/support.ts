@@ -345,7 +345,8 @@ export function createPodmanStub(initial: PodmanStubBehaviour = {}): {
         return result(0, "terasuma\n");
 
       case "exec": {
-        const exec = initial.exec ?? { code: 0, stdout: "", stderr: "" };
+        // 起動時の契約確認（DISPLAY・uid・gid・作業ディレクトリ）が通る既定値。
+        const exec = initial.exec ?? { code: 0, stdout: ":99\n1000\n1000\n/home/agent\nok", stderr: "" };
         return {
           code: exec.code,
           stdout: exec.stdout,

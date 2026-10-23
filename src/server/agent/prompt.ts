@@ -128,6 +128,8 @@ export function toModelMessages(
   /** 今日の日付を決める時刻（epoch ミリ秒）。テストで固定するために渡す。 */
   now: number,
 ): ModelMessage[] {
+  // 同じターンの中で同じ画像を何度も読まない（履歴には同じ画像が何度も現れる）。
+  const reader = memoizeImages(images);
   const messages: ModelMessage[] = [];
 
   // 要約は先頭に 1 件だけ置く。要約が変わらない限り、この前置きは前のターンと一致する。
@@ -155,10 +157,10 @@ export function toModelMessages(
     // ツールの結果に画像を置けないプロバイダのために、結果の直後に続ける画像を集める。
     // 置けるプロバイダでは、結果そのものに画像が入るので、ここには何も残らない。
     const pending: PendingImages[] = [];
-    const results = toToolResults(parts, images, options.toolResultImages, pending);
+    const results = toToolResults(parts, reader, options.toolResultImages, pending);
     if (results.length > 0) messages.push({ role: "tool", content: results });
 
-    const imageMessage = pending.length === 0 ? null : imagesMessage(pending, images);
+    const imageMessage = pending.length === 0 ? null : imagesMessage(pending, reader);
     if (imageMessage !== null) messages.push(imageMessage);
   }
 
@@ -194,6 +196,19 @@ export function turnTail(language: ReplyLanguage, now: number): string {
   const weekday = WEEKDAYS[new Date(now).getDay()] ?? "";
 
   return `${replyLanguageInstruction(language)}\nToday is ${formatLocalDate(now)} (${weekday}).`;
+}
+
+/** 同じターンの中で、同じ画像を 2 度読まない。 */
+function memoizeImages(images: ImageReader): ImageReader {
+  const cache = new Map<string, Uint8Array | null>();
+
+  return {
+    read(ref) {
+      const key = `${ref.sha256}:${ref.mime}`;
+      if (!cache.has(key)) cache.set(key, images.read(ref));
+      return cache.get(key) ?? null;
+    },
+  };
 }
 
 /** 結果の直後に user メッセージとして渡す画像。どの呼び出しの画像かを本文で示す。 */

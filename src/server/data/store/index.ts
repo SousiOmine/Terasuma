@@ -29,6 +29,7 @@ export type {
   MessageLog,
   MessagePageQuery,
   MessagePageResult,
+  PendingStats,
   Store,
   TeraDirectory,
   TeraIdentity,
@@ -157,6 +158,15 @@ export function createStore(dbPath: string, options: CreateStoreOptions = {}): S
 
     appendMessage(input) {
       return append(input);
+    },
+
+    readPendingStats(teraId, afterSeq) {
+      const row = q.selectPendingStats.get(teraId, afterSeq);
+      return {
+        count: row?.count ?? 0,
+        lastCreatedAt: row?.last_created_at ?? null,
+        chars: row?.chars ?? 0,
+      };
     },
 
     close() {

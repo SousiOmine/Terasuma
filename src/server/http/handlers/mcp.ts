@@ -132,7 +132,7 @@ export function mcpHandlers(deps: Pick<ApiDeps, "settings" | "mcp">) {
 
       return authorizationPage(200, "認可が完了しました", [
         "このタブを閉じて、Terasuma の画面に戻ってください。",
-        "Authorization is complete. Close this tab and return to Terasma.",
+        "Authorization is complete. Close this tab and return to Terasuma.",
       ]);
     },
   };

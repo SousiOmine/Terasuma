@@ -1,4 +1,7 @@
 #!/bin/sh
+# ここに書く DISPLAY（:99）と VNC のポート（6080）は
+# src/server/computer/contract.ts と container/desktop.Containerfile にも書かれている。
+# 起動時に Terasuma が実際の値を確かめ、ずれていれば起動を失敗させる。
 set -e
 export DISPLAY=:99
 

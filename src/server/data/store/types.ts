@@ -99,6 +99,15 @@ export type MessagePageResult = {
   hasMore: boolean;
 };
 
+/** まだ畳んでいない履歴の、軽い統計。JSON を読まずに、圧縮の要否をざっくり見る。 */
+export type PendingStats = {
+  count: number;
+  /** 最後のメッセージの時刻。1 件も無ければ null。 */
+  lastCreatedAt: number | null;
+  /** 本文と部品の文字数の合計。トークンの目安に使う。 */
+  chars: number;
+};
+
 /** 履歴の追記と読み出し。 */
 export type MessageLog = {
   /**
@@ -115,6 +124,8 @@ export type MessageLog = {
   listMessagesBetween(teraId: string, range: { since: number | null; until: number | null }): ChatMessage[];
   /** 履歴の末尾に追記する。Tera の行が先に存在している必要がある。 */
   appendMessage(input: AppendMessageInput): ChatMessage;
+  /** seq より後の履歴の統計。全行を開かずに、件数・最後の時刻・文字数を返す。 */
+  readPendingStats(teraId: string, afterSeq: number): PendingStats;
 };
 
 /** 過去のやり取りを畳んだ要約。 */

@@ -3,7 +3,7 @@ import type { McpServerForm, McpServerView, McpTestView } from "../../../shared/
 import { useInFlight } from "../../hooks/useInFlight";
 import { t } from "../../i18n";
 import { type ErrorState, toErrorState } from "../../lib/errors";
-import { AUTHORIZATION_POLL_MS, AUTHORIZATION_TIMEOUT_MS, saveMcpServer, testMcpServer } from "../../state/mcp";
+import { saveMcpServer, testMcpServer, waitForTestAuthorization } from "../../state/mcp";
 import { Button } from "../../ui/Button";
 import { ErrorNotice } from "../../ui/ErrorNotice";
 import { Field } from "../../ui/Field";
@@ -138,29 +138,28 @@ export function McpServerDialog({
 
   /**
    * 認可が終わるまで、接続の確認を繰り返す。
-   * 認可はブラウザの別タブで進むため、こちらからは状態を尋ねるしかない。
+   * 待ち方（間隔・上限・中断）は state/mcp.ts が持つ。
    */
   async function waitForAuthorization(form: McpServerForm, signature: string, current: number): Promise<void> {
-    const deadline = Date.now() + AUTHORIZATION_TIMEOUT_MS;
+    const outcome = await waitForTestAuthorization({
+      form,
+      cancelled: () => run.current !== current,
+      onProbe: (status) => {
+        if (run.current === current) setAuthorizing(status.authorizationUrl);
+      },
+    });
 
-    while (run.current === current && Date.now() < deadline) {
-      await new Promise((resolve) => setTimeout(resolve, AUTHORIZATION_POLL_MS));
+    if (outcome.kind === "cancelled") return;
+
+    if (outcome.kind === "value") {
+      apply(outcome.value, form, signature, current);
+      return;
+    }
+    if (outcome.kind === "error") {
       if (run.current !== current) return;
-
-      try {
-        const result = await testMcpServer(form);
-        if (run.current !== current) return;
-        if (result.state !== "authorizing" && result.state !== "authorization_required") {
-          apply(result, form, signature, current);
-          return;
-        }
-        setAuthorizing(result.authorizationUrl);
-      } catch (failure) {
-        if (run.current !== current) return;
-        setError(toErrorState(failure));
-        setAuthorizing(null);
-        return;
-      }
+      setError(toErrorState(outcome.error));
+      setAuthorizing(null);
+      return;
     }
 
     if (run.current !== current) return;

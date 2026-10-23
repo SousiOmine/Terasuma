@@ -396,3 +396,17 @@ describe("画面の撮影", () => {
     });
   });
 });
+
+describe("コンテナの契約", () => {
+  test("イメージの中の値がずれていたら、起動したことにせず理由を出す", async () => {
+    await withManager(
+      {
+        running: true,
+        exec: { code: 0, stdout: ":100\n1000\n1000\n/home/agent\nok", stderr: "" },
+      },
+      async ({ container }) => {
+        await expect(container.start()).rejects.toThrow(/DISPLAY=:100/);
+      },
+    );
+  });
+});

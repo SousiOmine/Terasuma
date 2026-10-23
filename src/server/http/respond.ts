@@ -33,7 +33,7 @@ export function errorResponse(error: unknown): Response {
 }
 
 /** ハンドラ 1 つを、例外を応答に変える形で包む。 */
-export function handle<Args extends unknown[]>(
+function handle<Args extends unknown[]>(
   handler: (...args: Args) => Response | Promise<Response>,
 ): (...args: Args) => Promise<Response> {
   return async (...args) => {

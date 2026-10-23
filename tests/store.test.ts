@@ -716,3 +716,26 @@ describe("listMessagesBetween", () => {
     ).toEqual(["既定へ"]);
   });
 });
+
+describe("未圧縮の履歴の統計", () => {
+  test("件数・最後の時刻・文字数を、JSON を開かずに返す", () => {
+    const store = makeStore();
+    store.appendMessage({ id: "m1", teraId: DEFAULT_TERA_ID, role: "user", content: "abc" });
+    store.appendMessage({
+      id: "m2",
+      teraId: DEFAULT_TERA_ID,
+      role: "assistant",
+      content: "",
+      parts: [{ type: "text", text: "hello", at: 1 }],
+    });
+
+    const all = store.readPendingStats(DEFAULT_TERA_ID, 0);
+    expect(all.count).toBe(2);
+    expect(all.lastCreatedAt).not.toBeNull();
+    // content "abc" と parts の JSON の長さ。
+    expect(all.chars).toBeGreaterThan(3);
+
+    expect(store.readPendingStats(DEFAULT_TERA_ID, 1).count).toBe(1);
+    expect(store.readPendingStats(DEFAULT_TERA_ID, 2)).toEqual({ count: 0, lastCreatedAt: null, chars: 0 });
+  });
+});

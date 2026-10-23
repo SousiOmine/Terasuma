@@ -45,7 +45,10 @@ export type RunCommandOptions = {
   /** 残すバイト数の上限。バイト列を返す実行だけが使う。省くと 32MB。 */
   maxOutputBytes?: number;
   timeoutMs: number;
-  /** 実行するディレクトリ。省くとこのプロセスの作業ディレクトリ。 */
+  /**
+   * 実行するディレクトリ。省くとこのプロセスの作業ディレクトリ。
+   * 本番では使わない（コンテナの中の場所は podman exec の --workdir が決める）。テストで差し替えるための口。
+   */
   cwd?: string;
   /** ターンの停止などで打ち切るための signal。 */
   signal?: AbortSignal;

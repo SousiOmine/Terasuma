@@ -40,7 +40,11 @@ export async function fetchOrThrow(path: string, init?: RequestInit): Promise<Re
   return response;
 }
 
-/** JSON を読む呼び出し。応答の形の検証は境界（schema）で行う。 */
+/**
+ * JSON を読む呼び出し。
+ * 応答の形はサーバとの契約（shared/api）が決める。ここでは JSON として読むだけにする
+ * （画面が読む直前に形を疑うのは、契約が壊れたときの原因を分かりにくくするため）。
+ */
 export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetchOrThrow(path, init);
   return (await response.json()) as T;

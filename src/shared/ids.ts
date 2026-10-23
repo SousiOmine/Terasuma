@@ -49,8 +49,3 @@ export function mcpServerIdProblem(value: string): McpServerIdProblem | null {
   if (!ID_PATTERN.test(value)) return "invalid";
   return null;
 }
-
-/** MCP サーバー id として使えるかどうか。 */
-export function isValidMcpServerId(value: string): boolean {
-  return mcpServerIdProblem(value) === null;
-}

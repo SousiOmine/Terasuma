@@ -48,6 +48,15 @@ export function prepareQueries(db: Database) {
        AND (? IS NULL OR created_at < ?)
      ORDER BY seq ASC`,
   );
+  // 圧縮の要否を、全行を JSON として開かずに見るための統計。
+  const selectPendingStats = db.query<
+    { count: number; last_created_at: number | null; chars: number | null },
+    [string, number]
+  >(
+    `SELECT COUNT(*) AS count, MAX(created_at) AS last_created_at,
+            SUM(LENGTH(content) + COALESCE(LENGTH(parts), 0)) AS chars
+     FROM messages WHERE tera_id = ? AND seq > ?`,
+  );
   const insertMessage = db.query<
     { seq: number },
     [
@@ -108,6 +117,7 @@ export function prepareQueries(db: Database) {
     selectMessagePage,
     selectMessagesSince,
     selectMessagesBetween,
+    selectPendingStats,
     insertMessage,
     selectCompaction,
     upsertCompaction,

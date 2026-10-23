@@ -3,7 +3,8 @@ import { MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS_TOTAL_BYTES } fr
 import { formatBytes } from "../../shared/text";
 import type { ChatAttachment } from "../../shared/api/message";
 import { ValidationError } from "../errors";
-import { WORKDIR_IN_CONTAINER, type ContainerManager } from "./container";
+import type { ContainerManager } from "./container";
+import { WORKDIR_IN_CONTAINER } from "./contract";
 
 /**
  * チャットへ添付されたファイルを、エージェントが操作するコンテナの中へ置く。

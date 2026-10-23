@@ -10,7 +10,7 @@ import {
 } from "./compaction-text";
 import type { AgentEngine } from "./engine";
 import type { TeraContext } from "./prompt";
-import { contextTokens, estimateMessageTokens } from "./tokens";
+import { contextTokens, estimateMessageTokens, estimateTokens } from "./tokens";
 
 /**
  * 過去の対話の圧縮（Compaction）。
@@ -117,18 +117,22 @@ export function createCompaction(options: CreateCompactionOptions): Compaction {
     cancel(teraId);
 
     const state = store.readCompaction(teraId);
-    const pending = store.listMessagesSince(teraId, state.throughSeq);
-    if (pending.length === 0) return;
+    // 件数・最終時刻・文字数だけを SQL で見る（全履歴の JSON を開かない）。
+    const stats = store.readPendingStats(teraId, state.throughSeq);
+    if (stats.count === 0 || stats.lastCreatedAt === null) return;
 
-    if (contextTokens(state, pending) > threshold()) {
-      void update(teraId);
-      return;
+    // トークンの目安は文字数から。閾値に近いときだけ、正確に数えるために全履歴を読む。
+    const rough = estimateTokens(state.summary) + Math.ceil(stats.chars / 2) + stats.count * 16;
+    if (rough > threshold() * 0.7) {
+      const pending = store.listMessagesSince(teraId, state.throughSeq);
+      if (contextTokens(state, pending) > threshold()) {
+        void update(teraId);
+        return;
+      }
     }
 
     // それ以外は、最後のやり取りから 3 時間たつまで待つ。
-    const last = pending[pending.length - 1];
-    if (last === undefined) return;
-    const at = last.createdAt + IDLE_MS;
+    const at = stats.lastCreatedAt + IDLE_MS;
     timers.set(
       teraId,
       setTimeout(

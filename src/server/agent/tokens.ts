@@ -51,7 +51,7 @@ export function estimateMessageTokens(message: ChatMessage): number {
 }
 
 /** メッセージの並びのトークン数の目安。 */
-export function sumTokens(messages: readonly ChatMessage[]): number {
+function sumTokens(messages: readonly ChatMessage[]): number {
   return messages.reduce((total, message) => total + estimateMessageTokens(message), 0);
 }
 

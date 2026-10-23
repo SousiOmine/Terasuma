@@ -3,7 +3,7 @@ import type { McpServerForm, McpServerStatusView, McpTestView } from "../../shar
 import * as api from "../lib/api";
 import { createErrorSignal } from "../lib/errors";
 import { createResource } from "./resource";
-import { pollUntil } from "../lib/polling";
+import { pollUntil, type PollOutcome } from "../lib/polling";
 
 /** サーバーから読んだ MCP サーバーの一覧。まだ読めていないときは null。 */
 const serversResource = createResource(api.fetchMcpServers);
@@ -86,6 +86,25 @@ export async function startAuthorization(serverId: string): Promise<string | nul
 export async function cancelAuthorization(serverId: string): Promise<void> {
   mcpServers.value = await api.cancelMcpAuthorization(serverId);
   stopAuthorizing();
+}
+
+/**
+ * 保存前の確認で、認可が終わるまで尋ね続ける。
+ * ダイアログは「待つ・尋ねる・終わりを見る」を書かず、ここへ委ねる。
+ */
+export async function waitForTestAuthorization(input: {
+  form: McpServerForm;
+  cancelled: () => boolean;
+  onProbe: (status: McpTestView) => void;
+}): Promise<PollOutcome<McpTestView>> {
+  return pollUntil({
+    intervalMs: AUTHORIZATION_POLL_MS,
+    timeoutMs: AUTHORIZATION_TIMEOUT_MS,
+    cancelled: input.cancelled,
+    probe: () => testMcpServer(input.form),
+    done: (status) => status.state !== "authorizing" && status.state !== "authorization_required",
+    onProbe: input.onProbe,
+  });
 }
 
 /**

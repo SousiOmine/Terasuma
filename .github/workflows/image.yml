@@ -3,6 +3,8 @@ name: image
 on:
   push:
     branches: [master]
+  # PR でも型検査・lint・テスト・ビルドを通す（壊れたものを master へ入れない）。
+  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -21,7 +23,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.3
+          bun-version-file: .bun-version
       - run: bun install --frozen-lockfile
       - run: bun run check
       # Tailwind のプラグイン指定は bunfig.toml（開発）と scripts/build.ts（本番）の
@@ -30,6 +32,8 @@ jobs:
 
   publish:
     needs: check
+    # PR では公開しない（検査だけ）。
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -48,10 +52,13 @@ jobs:
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
             type=sha,format=short
+      - id: bun
+        run: echo "version=$(cat .bun-version)" >> "$GITHUB_OUTPUT"
       - uses: docker/build-push-action@v6
         with:
           context: .
           file: Containerfile
+          build-args: BUN_VERSION=${{ steps.bun.outputs.version }}
           platforms: linux/amd64
           push: true
           tags: ${{ steps.meta.outputs.tags }}

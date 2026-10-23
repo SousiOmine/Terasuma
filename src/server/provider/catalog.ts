@@ -2,10 +2,12 @@
  * models.dev（https://models.dev）のカタログ。
  *
  * 設定画面に並べるプロバイダとモデルの一覧はここから取る。取得は 1 回だけ行い、
- * メモリとディスク（データディレクトリ）に持って、TTL を過ぎたら取り直す。
- * 応答は 5MB を超えるため、クライアントへは必要な範囲だけを API で返す。
+ * メモリとディスク（データディレクトリ）に持つ。
+ * snapshot() はメモリの値を返し、load({ fresh: true }) だけが TTL を見て取り直す
+ * （チャットの呼び出しで通信を待たせないため）。応答は 5MB を超えるので、
+ * クライアントへは必要な範囲だけを API で返す。
  */
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { modelParts, type ModelId } from "../../shared/model";
 import { sendRequest, type FetchLike } from "../http/client";
@@ -154,10 +156,10 @@ export function createCatalog(options: {
     }
   }
 
-  function writeFileCache(data: unknown, fetchedAt: number): void {
+  async function writeFileCache(data: unknown, fetchedAt: number): Promise<void> {
     try {
       mkdirSync(dirname(cachePath), { recursive: true });
-      writeFileSync(cachePath, `${JSON.stringify({ fetchedAt, data } satisfies CatalogFile)}\n`, "utf8");
+      await Bun.write(cachePath, `${JSON.stringify({ fetchedAt, data } satisfies CatalogFile)}\n`);
     } catch {
       // 書けなくてもメモリのカタログで動く。次回の起動で取り直すだけ。
     }
@@ -191,7 +193,7 @@ export function createCatalog(options: {
 
     const fetchedAt = now();
     const snapshot = parseCatalog(raw, fetchedAt);
-    writeFileCache(raw, fetchedAt);
+    await writeFileCache(raw, fetchedAt);
     return store(snapshot);
   }
 

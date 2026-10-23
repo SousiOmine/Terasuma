@@ -3,7 +3,7 @@
  *
  * OAuth の認可のように、ブラウザの別タブで進む処理は、こちらから状態を尋ねるしかない。
  * 「待つ → 尋ねる → 終わったか見る → 中断されたか見る」という形は
- * MCP の設定画面と追加ダイアログの 2 か所で同じになるので、ここに 1 つだけ置く。
+ * MCP の設定画面と追加ダイアログで同じになるので、ここに 1 つだけ置く。
  */
 
 /** 尋ね続けた結果。 */
@@ -22,6 +22,8 @@ export type PollOptions<T> = {
   probe: () => Promise<T>;
   /** これ以上待つ必要が無いかどうか。 */
   done: (value: T) => boolean;
+  /** 尋ねるたびに、分かった値を受け取る（待っている間の表示を更新する）。 */
+  onProbe?: (value: T) => void;
   /** 待つのをやめる条件（画面が閉じた、別の操作が始まったなど）。 */
   cancelled: () => boolean;
   /** 時刻と待ち。テストで差し替える。 */
@@ -41,6 +43,7 @@ export async function pollUntil<T>(options: PollOptions<T>): Promise<PollOutcome
     try {
       const value = await options.probe();
       if (options.cancelled()) return { kind: "cancelled" };
+      options.onProbe?.(value);
       if (options.done(value)) return { kind: "value", value };
     } catch (error) {
       return { kind: "error", error };

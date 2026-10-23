@@ -5,6 +5,13 @@ import type { ContainerStatusView } from "../../shared/api/settings";
 import { AppError } from "../errors";
 import { runCommand, runCommandBytes, type CommandByteRunner, type CommandResult, type CommandRunner } from "./command";
 import { podmanExec } from "./podman";
+import {
+  CONTAINER_DISPLAY,
+  CONTAINER_GID,
+  CONTAINER_UID,
+  VNC_PORT_IN_CONTAINER,
+  WORKDIR_IN_CONTAINER,
+} from "./contract";
 
 /**
  * podman で動かす Debian コンテナの面倒を見る。
@@ -22,9 +29,6 @@ import { podmanExec } from "./podman";
 export const CONTAINER_NAME = "terasuma";
 export const IMAGE_NAME = "terasuma-container";
 
-/** エージェントが作業する場所。ホストのデータディレクトリの下がマウントされる。 */
-export const WORKDIR_IN_CONTAINER = "/home/agent";
-
 /**
  * エージェントが作ったスキルの置き場（コンテナ内）。
  * Agent Skills のユーザー領域の慣例（~/.agents/skills）に合わせる。
@@ -39,18 +43,11 @@ export function containerHomeDir(dataDir: string): string {
   return join(dataDir, HOME_DIR_NAME);
 }
 
-/** コンテナの中で noVNC が待ち受けているポート。 */
-const VNC_PORT_IN_CONTAINER = 6080;
-
-/** podman に付ける印。Terasuma が作ったコンテナだと分かるようにする。 */
-const MANAGED_LABEL = "terasuma.managed=1";
-
 /**
- * コンテナの中の uid / gid。Containerfile が作る agent ユーザーに合わせる。
- * keep-id でホストのユーザーへ対応させないと、マウントしたフォルダに書き込めない。
+ * podman に付ける印。Terasuma が作ったコンテナだと分かるようにする。
+ * 名前が変わったときや、手で作ったコンテナと見分けるために使う。
  */
-const CONTAINER_UID = 1000;
-const CONTAINER_GID = 1000;
+const MANAGED_LABEL = "terasuma.managed=1";
 
 const VERSION_TIMEOUT_MS = 10_000;
 const INSPECT_TIMEOUT_MS = 30_000;
@@ -296,18 +293,66 @@ export function createContainerManager(options: ContainerManagerOptions): Contai
 
     switch (before.state) {
       case "podman_missing":
+        return before;
       case "running":
+        await verifyContract();
         return before;
       case "image_missing":
         await buildImage();
         await createContainer();
+        await verifyContract();
         return refreshStatus();
       case "container_missing":
         await createContainer();
+        await verifyContract();
         return refreshStatus();
       case "stopped":
         await startContainer();
+        await verifyContract();
         return refreshStatus();
+    }
+  }
+
+  /**
+   * イメージの中の契約値（DISPLAY・uid・gid・作業ディレクトリ）を確かめる。
+   * Containerfile と entry.sh の値がこことずれたら、起動したことにする前に止める。
+   */
+  async function verifyContract(): Promise<void> {
+    const result = await run(
+      podmanExec({
+        container: CONTAINER_NAME,
+        workdir: WORKDIR_IN_CONTAINER,
+        command: [
+          "sh",
+          "-c",
+          'printf "%s\\n" "$DISPLAY"; id -u; id -g; pwd; test -d "$1" && echo ok',
+          "sh",
+          WORKDIR_IN_CONTAINER,
+        ],
+      }),
+      { timeoutMs: INSPECT_TIMEOUT_MS },
+    );
+
+    if (result.code !== 0) {
+      throw new ContainerError(
+        "container_start_failed",
+        `コンテナの契約を確かめられませんでした: ${result.stderr.trim() || `exit code ${result.code}`}`,
+      );
+    }
+
+    const [display, uid, gid, workdir, dirOk] = result.stdout.trim().split("\n");
+    const problems: string[] = [];
+    if (display !== CONTAINER_DISPLAY) problems.push(`DISPLAY=${display ?? "(none)"}`);
+    if (uid !== String(CONTAINER_UID)) problems.push(`uid=${uid ?? "(none)"}`);
+    if (gid !== String(CONTAINER_GID)) problems.push(`gid=${gid ?? "(none)"}`);
+    if (workdir !== WORKDIR_IN_CONTAINER) problems.push(`workdir=${workdir ?? "(none)"}`);
+    if (dirOk !== "ok") problems.push(`${WORKDIR_IN_CONTAINER} がありません`);
+
+    if (problems.length > 0) {
+      throw new ContainerError(
+        "container_start_failed",
+        `コンテナの契約がイメージと食い違っています（${problems.join(", ")}）。イメージを作り直してください`,
+      );
     }
   }
 

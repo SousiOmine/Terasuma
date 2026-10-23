@@ -79,7 +79,7 @@ bun run test:live  # 実際のプロバイダに繋ぐ確認（API キーと pod
 - 属性値はダブルクォート。`ordered` / `multiple` / `required` / `dashed` は値なしで書く。
 - テキスト中の `<` `>` `&` は `&lt;` `&gt;` `&amp;` と書く（実体参照はこの 5 つだけ）。
 - `Choice` か `Form` は 1 枚に 1 つまで。
-- 解釈は `shared/ui-markup.ts` が持ち、サーバの検証（ツール）と画面の描画で同じ関数を使う。
+- 解釈は `shared/ui-markup/`（limits / types / reader / build）が持ち、サーバの検証（ツール）と画面の描画で同じ関数を使う。
 - 押した選択肢は、待ちではなく新しいユーザー発言として送る。応答中は押せない。
 - フローチャートの位置は `client/ui/flow-layout.ts` が決める。DOM を使わないので、テストで重なりを確かめられる。
 - 表のセルや図のノード数には上限がある（`UI_MARKUP_LIMITS`）。マークアップ全体は 20,000 文字まで。
@@ -184,23 +184,29 @@ MCP サーバーの redirect 方式（`server/mcp/oauth.ts`）とはここが違
 ```
 src/
   index.ts            起動と停止
-  app.ts              依存の組み立て（合成ルート）
-  server/http         ルートとハンドラ（Bun 依存はここだけ）
-  server/agent        ターン・プロンプト・圧縮・ツール
+  app.ts              依存の組み立て（合成ルート。overrides で一部だけ差し替えられる）
+  server/http         ルート表・ハンドラ・SSE・外部 HTTP の共通処理
+  server/agent        ターン・プロンプト・圧縮・ツール（engine/ に分かれる）
   server/provider     種別表・呼び出し・カタログ・疎通確認
-  server/mcp          MCP の接続と OAuth
+  server/mcp          MCP の接続（connection / transport / tools）と OAuth
   server/connections  アプリの接続（トークン保存・検証・ツール）
-  server/computer     podman・画像・引き受け
-  server/data         設定と会話の永続化
+  server/computer     podman・画像・引き受け・契約値
+  server/data         設定と会話の永続化（store/ と settings/ に分かれる）
+  server/wait         中断で片付く待ち
   client/lib          通信・失敗・待ち
-  client/state        signal の状態
-  client/ui           見た目の部品
-  client/features     画面ごとの実装
-  shared              client/server 共通（ほかに依存しない）
+  client/state        signal の状態（resource.ts が読み込みの共通形）
+  client/ui           見た目の部品（SecretInput・SectionHeader・ResourceList など）
+  client/features     画面ごとの実装（通信は state 経由）
+  shared/api          client/server で共有する API の型（message・settings・error）
+  shared              client/server 共通の純関数（ほかに依存しない）
 ```
 
 依存の向きは `tests/architecture.test.ts` が機械的に検査する。
 新しい層を足すときは、このテストに規則を 1 行足す。
+
+コンテナの契約値（DISPLAY、uid、gid、作業ディレクトリ、VNC のポート）は
+`server/computer/contract.ts` を正典にする。イメージを作り直したときに値がずれていないかは、
+コンテナの起動時に確かめ、ずれていれば起動を失敗させる。
 
 ## 画面の幅
 
