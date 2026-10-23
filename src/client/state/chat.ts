@@ -29,6 +29,11 @@ export type LiveTurn = {
 
 export const liveTurn = signal<LiveTurn | null>(null);
 export const isStreaming = signal(false);
+/**
+ * 発言を送った回数。画面はこれが増えるたびに、末尾へスクロールを寄せる。
+ * 上へ遡って読んでいる途中でも、送った発言を見失わないようにするため。
+ */
+export const sentMessageCount = signal(0);
 /** 停止を頼んで、ターンが止まるのを待っている。 */
 export const isStopping = signal(false);
 export const isLoadingMessages = signal(false);
@@ -145,6 +150,9 @@ async function readOlderPage(teraId: string, before: number, generation: number)
 export async function sendMessage(rawContent: string, files: readonly File[]): Promise<void> {
   const content = rawContent.trim();
   if (content.length === 0 && files.length === 0) return;
+
+  // 送信は利用者の意思なので、上へ遡って読んでいても末尾へ戻す。
+  sentMessageCount.value += 1;
 
   // 引き受けている間の入力は、新しい発言ではなくツールの戻り値になる。
   // 新しい発言として扱うと、ターンが 2 つ重なって会話の並びが崩れる。

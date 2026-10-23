@@ -46,7 +46,7 @@ export function EnvRequestPanel() {
   };
 
   return (
-    <section class="rounded-[20px] border border-stroke bg-surface-alt p-4">
+    <section class="tera-rise-in rounded-[20px] border border-stroke bg-surface-alt p-4">
       <p class="text-[13px] font-medium">{t("chat.env.title")}</p>
       <p class="mt-1 break-all font-mono text-xs text-secondary">{name}</p>
       {description !== null && <p class="mt-2 whitespace-pre-wrap text-xs leading-5 text-secondary">{description}</p>}

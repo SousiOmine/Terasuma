@@ -67,7 +67,7 @@ export function Modal({ title, subtitle, size = "sm", onClose, footer, children 
   return (
     <div class="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4">
       {/* 背景のクリックで閉じる。 */}
-      <div class="absolute inset-0 bg-black/35 backdrop-blur-md" aria-hidden="true" onClick={onClose} />
+      <div class="tera-fade-in absolute inset-0 bg-black/35 backdrop-blur-md" aria-hidden="true" onClick={onClose} />
 
       <div
         ref={dialogRef}
@@ -76,7 +76,7 @@ export function Modal({ title, subtitle, size = "sm", onClose, footer, children 
         aria-label={title}
         tabIndex={-1}
         onKeyDown={handleKeyDown}
-        class={`relative flex max-h-[92dvh] w-full flex-col rounded-[28px] border border-stroke bg-surface shadow-[var(--app-shadow-16)] outline-none sm:max-h-[85vh] ${
+        class={`tera-pop-in relative flex max-h-[92dvh] w-full flex-col rounded-[28px] border border-stroke bg-surface shadow-[var(--app-shadow-16)] outline-none sm:max-h-[85vh] ${
           size === "lg" ? "max-w-lg" : "max-w-sm"
         }`}
       >

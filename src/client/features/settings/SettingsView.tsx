@@ -27,7 +27,7 @@ export function SettingsView() {
   const category = settingsCategory.value;
 
   return (
-    <div class="flex h-full flex-col bg-[var(--app-canvas)]">
+    <div class="tera-fade-in flex h-full flex-col bg-[var(--app-canvas)]">
       <header class="flex h-16 shrink-0 items-center gap-3 px-3 sm:px-5">
         <button
           type="button"
@@ -70,12 +70,17 @@ export function SettingsView() {
         </nav>
 
         <section class="min-h-0 min-w-0 flex-1 overflow-y-auto bg-surface px-4 py-6 md:m-3 md:ml-0 md:rounded-[30px] md:border md:border-stroke md:px-10 md:py-10 md:shadow-[var(--app-shadow-panel)]">
-          {category === "general" && <GeneralSettings />}
-          {category === "model" && <ModelSettingsView />}
-          {category === "providers" && <ProviderSettingsView />}
-          {category === "connections" && <ConnectionsSettingsView />}
-          {category === "container" && <ContainerSettingsView />}
-          {category === "advanced" && <McpSettingsView />}
+          {/* カテゴリを切り替えたら、本文だけを短く入れ替える（外枠は動かさない）。
+              ここに transform を残すと、中で開くダイアログの fixed の基準が変わってしまうため、
+              移動は付けず、濃さの変化だけにする。 */}
+          <div key={category} class="tera-fade-in">
+            {category === "general" && <GeneralSettings />}
+            {category === "model" && <ModelSettingsView />}
+            {category === "providers" && <ProviderSettingsView />}
+            {category === "connections" && <ConnectionsSettingsView />}
+            {category === "container" && <ContainerSettingsView />}
+            {category === "advanced" && <McpSettingsView />}
+          </div>
         </section>
       </div>
     </div>

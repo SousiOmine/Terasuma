@@ -20,7 +20,7 @@ import { INPUT_CLASS } from "../../ui/styles";
 export function UiCard({ view, disabled }: { view: UiView | null; disabled: boolean }) {
   if (view === null) {
     return (
-      <section class="rounded-[20px] border border-stroke bg-surface-alt p-4">
+      <section class="tera-rise-in rounded-[20px] border border-stroke bg-surface-alt p-4">
         <p class="text-xs leading-5 text-secondary">{t("chat.ui.invalid")}</p>
       </section>
     );
@@ -29,7 +29,7 @@ export function UiCard({ view, disabled }: { view: UiView | null; disabled: bool
   const awaitingTurn = disabled && interactiveBlock(view) !== null;
 
   return (
-    <section class="rounded-[20px] border border-stroke bg-surface-alt p-4">
+    <section class="tera-rise-in rounded-[20px] border border-stroke bg-surface-alt p-4">
       {view.title !== null && <h3 class="mb-2 text-[13px] font-medium text-primary">{view.title}</h3>}
 
       <div class="flex flex-col gap-3">
@@ -113,7 +113,7 @@ function TableBlock({ rows }: { rows: readonly (readonly string[])[] }) {
 }
 
 const OPTION_CLASS =
-  "rounded-[14px] border px-3 py-2 text-left transition disabled:cursor-not-allowed disabled:opacity-50";
+  "rounded-[14px] border px-3 py-2 text-left transition disabled:cursor-not-allowed disabled:opacity-50 active:scale-[0.99]";
 const OPTION_ON_CLASS = "border-[var(--app-accent)] bg-[var(--app-accent-soft)]";
 const OPTION_OFF_CLASS = "border-stroke bg-surface hover:bg-soft";
 

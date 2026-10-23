@@ -53,7 +53,7 @@ export function ChatView() {
   const envWaiting = envRequestActive.value;
   // アプリの接続待ち。同じく入力欄の上にカードを出す。
   const connectionWaiting = connectionRequest.value !== null;
-  const { scrollRef, handleScroll } = useOlderPages({ items, streaming });
+  const { scrollRef, contentRef, handleScroll } = useOlderPages({ items, streaming });
 
   // 見出しは相手（Tera）の名前。いまは既定の 1 体しか居ないので、常に同じ名前になる。
   const title = activeTera.value?.name ?? "";
@@ -124,7 +124,7 @@ export function ChatView() {
         {showEmpty ? (
           <EmptyState />
         ) : (
-          <div class="mx-auto flex w-full max-w-3xl flex-col gap-4 px-4 py-8 sm:px-6">
+          <div ref={contentRef} class="mx-auto flex w-full max-w-3xl flex-col gap-4 px-4 py-8 sm:px-6">
             {isLoadingOlderMessages.value && (
               <p class="text-center text-[11px] text-tertiary">{t("chat.history.loadingOlder")}</p>
             )}
@@ -194,7 +194,7 @@ function renderItem(item: ChatItem, streaming: boolean) {
   switch (item.kind) {
     case "date":
       return (
-        <div key={item.key} class="flex justify-center py-1.5">
+        <div key={item.key} class="tera-fade-in flex justify-center py-1.5">
           <span class="text-[11px] font-medium tracking-[0.06em] text-tertiary">{item.label}</span>
         </div>
       );

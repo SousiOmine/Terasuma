@@ -128,7 +128,7 @@ export function ComputerPane() {
   if (!open) return null;
 
   return (
-    <aside class="fixed inset-0 z-30 flex flex-col p-0 md:static md:z-auto md:w-[42%] md:min-w-80 md:shrink-0 md:p-3">
+    <aside class="tera-pane-in fixed inset-0 z-30 flex flex-col p-0 md:static md:z-auto md:w-[42%] md:min-w-80 md:shrink-0 md:p-3">
       <section class="flex min-h-0 flex-1 flex-col overflow-hidden bg-surface md:rounded-[30px] md:border md:border-stroke md:shadow-[var(--app-shadow-panel)]">
         <header class="flex h-16 shrink-0 items-center gap-3 px-4">
           <h2 class="min-w-0 flex-1 truncate text-[15px] font-semibold tracking-[-0.01em]">
@@ -151,7 +151,7 @@ export function ComputerPane() {
         </header>
 
         {active && (
-          <div class="mx-3 mt-3 shrink-0 rounded-[16px] bg-[var(--app-accent-soft)] px-4 py-3">
+          <div class="tera-rise-in mx-3 mt-3 shrink-0 rounded-[16px] bg-[var(--app-accent-soft)] px-4 py-3">
             <p class="text-xs leading-relaxed whitespace-pre-wrap text-primary">
               {question ?? t("chat.computer.yourTurn")}
             </p>

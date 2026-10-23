@@ -56,7 +56,7 @@ export function ConnectionRequestPanel() {
   };
 
   return (
-    <section class="rounded-[20px] border border-stroke bg-surface-alt p-4">
+    <section class="tera-rise-in rounded-[20px] border border-stroke bg-surface-alt p-4">
       <p class="text-[13px] font-medium">{t("chat.connection.title", { app })}</p>
       {request.reason !== null && (
         <p class="mt-1 whitespace-pre-wrap text-xs leading-5 text-secondary">{request.reason}</p>

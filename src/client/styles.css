@@ -5,6 +5,11 @@
   --font-sans: var(--app-font-sans);
   --font-mono: var(--app-font-mono);
 
+  /* Tailwind の transition の既定を、下の動きのトークンに揃える。
+     場所ごとに duration や曲線を書き足さず、ここ 1 か所で決める。 */
+  --default-transition-duration: var(--app-duration);
+  --default-transition-timing-function: var(--app-ease);
+
   /* 色は styles.css の --app-* を正典にし、Tailwind のユーティリティ名をここで当てる。
      bg-surface / text-secondary / border-stroke のように書けるので、任意値の [] を増やさない。 */
   --color-primary: var(--app-text);
@@ -72,6 +77,13 @@
     "Hiragino Sans", "Yu Gothic UI", sans-serif;
   --app-font-mono:
     "JetBrains Mono", ui-monospace, "SFMono-Regular", "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+  /* 動きの基準。画面の切り替えはこの長さと曲線だけを使い、場所ごとに増やさない。 */
+  --app-duration-fast: 120ms;
+  --app-duration: 180ms;
+  --app-duration-slow: 260ms;
+  --app-ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --app-ease-emphasized: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -427,6 +439,73 @@ input.tera-md-check {
 @media (prefers-reduced-motion: no-preference) {
   .tera-rise {
     animation: tera-rise 0.5s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+  }
+}
+
+/*
+ * 画面の一部が現れるときの動き。
+ *
+ * 吹き出し・カード・パネル・ダイアログは、いきなり差し替えず、短い移動と濃さの変化で見せる。
+ * 動かすのは transform と opacity だけにする（配置を変えないので、スクロール位置を崩さない）。
+ * 端末が動きを減らす設定なら、何も付けない（アニメーションの宣言自体を出さない）。
+ */
+@keyframes tera-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes tera-rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes tera-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes tera-pane-in {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .tera-fade-in {
+    animation: tera-fade-in var(--app-duration) var(--app-ease) backwards;
+  }
+
+  .tera-rise-in {
+    animation: tera-rise-in var(--app-duration) var(--app-ease) backwards;
+  }
+
+  .tera-pop-in {
+    animation: tera-pop-in var(--app-duration-slow) var(--app-ease-emphasized) backwards;
+  }
+
+  .tera-pane-in {
+    animation: tera-pane-in var(--app-duration-slow) var(--app-ease-emphasized) backwards;
   }
 }
 

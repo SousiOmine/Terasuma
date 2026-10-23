@@ -41,7 +41,7 @@ function ImageAttachment({ file, onRemove }: { file: File; onRemove: () => void 
   const removeLabel = t("composer.attach.remove", { name: file.name });
 
   return (
-    <div class="w-20">
+    <div class="tera-pop-in w-20">
       <div class="relative h-20 w-20 overflow-hidden rounded-[14px] border border-stroke bg-soft">
         {url !== null && <img src={url} alt={file.name} title={file.name} class="h-full w-full object-cover" />}
         <button
@@ -66,7 +66,7 @@ function FileAttachment({ file, onRemove }: { file: File; onRemove: () => void }
   const removeLabel = t("composer.attach.remove", { name: file.name });
 
   return (
-    <span class="inline-flex max-w-full items-center gap-1.5 rounded-full bg-soft py-1.5 pl-2.5 pr-1.5 text-xs">
+    <span class="tera-pop-in inline-flex max-w-full items-center gap-1.5 rounded-full bg-soft py-1.5 pl-2.5 pr-1.5 text-xs">
       <IconFile size={14} stroke={1.9} class="shrink-0 text-secondary" />
       <span class="max-w-[220px] truncate" title={file.name}>
         {file.name}

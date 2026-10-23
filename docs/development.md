@@ -86,10 +86,19 @@ bun run test:live  # 実際のプロバイダに繋ぐ確認（API キーと pod
 - ツール呼び出しの引数は履歴に残るので、圧縮の要約に見せるときは 600 文字で切り詰める
   （`server/agent/compaction-text.ts`）。
 
+## 画面の動き
+
+面が現れるときの動きは、`client/styles.css` の `tera-fade-in` / `tera-rise-in` / `tera-pop-in` / `tera-pane-in` を使う。
+長さと曲線は `--app-duration*` / `--app-ease*` を正典にし、Tailwind の `transition` の既定もここへ揃えてある。
+動かすのは transform と opacity だけにする（配置を変えず、スクロール位置を崩さないため）。
+`prefers-reduced-motion` が有効な端末では、アニメーションを付けない。
+
 ## 履歴の読み込み
 
 画面は一度に 20 件だけ読む。上端に近づくと、その前の 20 件を自動で読む。
 読み込みの間も、読んでいた位置が動かないようにスクロールを調整する。
+発言を送ったときは、上へ遡って読んでいても末尾へ戻す（送った発言を見失わないようにするため）。
+送信時の移動だけを滑らかにし、それ以降の追従は即座に合わせる。
 
 `GET /api/teras/:id/messages` は問い合わせでページを指定する。
 

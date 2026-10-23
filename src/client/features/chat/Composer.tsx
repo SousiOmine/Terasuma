@@ -1,5 +1,5 @@
 import { IconPaperclip, IconPlayerStopFilled, IconSend } from "@tabler/icons-preact";
-import { useEffect, useRef, useState } from "preact/hooks";
+import { useLayoutEffect, useRef, useState } from "preact/hooks";
 import { MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS_TOTAL_BYTES } from "../../../shared/attachments";
 import { formatBytes } from "../../../shared/text";
 import { isSendKey } from "../../lib/composer-keys";
@@ -35,7 +35,8 @@ export function Composer() {
   };
 
   // 入力に合わせて高さを伸ばす。CSS だけでは全ブラウザで揃わないため、実際の高さを測って設定する。
-  useEffect(() => {
+  // 描画の前に合わせる（あとから高さが変わると、入力のたびに画面が一跳ねする）。
+  useLayoutEffect(() => {
     const node = textareaRef.current;
     if (node === null) return;
     node.style.height = "auto";
@@ -136,7 +137,7 @@ export function Composer() {
                 onClick={() => fileInputRef.current?.click()}
                 title={t("composer.attach")}
                 aria-label={t("composer.attach")}
-                class="mb-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-secondary transition hover:bg-soft hover:text-primary md:h-9 md:w-9"
+                class="mb-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-secondary transition hover:bg-soft hover:text-primary active:scale-95 md:h-9 md:w-9"
               >
                 <IconPaperclip size={18} stroke={1.7} />
               </button>
@@ -168,7 +169,7 @@ export function Composer() {
                 disabled={stopping}
                 title={t(stopping ? "composer.stopping" : "composer.stop")}
                 aria-label={t(stopping ? "composer.stopping" : "composer.stop")}
-                class="mb-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-soft text-secondary transition hover:bg-[var(--app-soft-strong)] hover:text-primary disabled:opacity-50 md:h-9 md:w-9"
+                class="tera-pop-in mb-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-soft text-secondary transition hover:bg-[var(--app-soft-strong)] hover:text-primary active:scale-95 disabled:opacity-50 md:h-9 md:w-9"
               >
                 <IconPlayerStopFilled size={14} />
               </button>
@@ -180,7 +181,7 @@ export function Composer() {
               disabled={!canSend || stopping}
               title={t("composer.send")}
               aria-label={t("composer.send")}
-              class="mb-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--app-accent-fill)] text-[var(--app-on-accent)] shadow-[var(--app-shadow-2)] transition hover:bg-[var(--app-accent-hover)] disabled:opacity-30 md:h-9 md:w-9"
+              class="mb-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--app-accent-fill)] text-[var(--app-on-accent)] shadow-[var(--app-shadow-2)] transition hover:bg-[var(--app-accent-hover)] active:scale-95 disabled:opacity-30 md:h-9 md:w-9"
             >
               <IconSend size={17} stroke={1.8} />
             </button>

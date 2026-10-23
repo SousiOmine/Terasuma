@@ -24,7 +24,7 @@ export function UserMessageBubble({ message, time }: { message: ChatMessageView;
   if (message.content.length === 0 && files.length === 0) return null;
 
   return (
-    <div class="flex flex-col items-end gap-1">
+    <div class="tera-rise-in flex flex-col items-end gap-1">
       <div class="max-w-[85%] rounded-[24px] bg-soft px-4 py-2.5 text-[15px] leading-[1.7] text-primary">
         {message.content.length > 0 && <Markdown content={message.content} />}
         {files.length > 0 && (
@@ -53,7 +53,7 @@ export function AgentMessageBubble({ part }: { part: TextPart | AttachmentPart }
   const files = part.type === "attachment" ? part.attachments.filter((attachment) => attachment.image === null) : [];
 
   return (
-    <div class="flex min-w-0 flex-col gap-2 text-[15px] leading-[1.75] text-primary">
+    <div class="tera-rise-in flex min-w-0 flex-col gap-2 text-[15px] leading-[1.75] text-primary">
       {part.type === "text" && <Markdown content={part.text} />}
       {images.length > 0 && <ImageGrid images={images} />}
       {files.length > 0 && <FileList files={files} />}
@@ -134,7 +134,7 @@ function FileList({ files }: { files: readonly SentAttachment[] }) {
 /** システムの注記。発言ではないので、中央に小さく置く。 */
 export function NoticeLine({ part }: { part: NoticePart }) {
   return (
-    <div class="flex justify-center py-1">
+    <div class="tera-fade-in flex justify-center py-1">
       <p class="max-w-[85%] text-center text-[11px] leading-relaxed text-tertiary">{part.text}</p>
     </div>
   );
@@ -143,7 +143,7 @@ export function NoticeLine({ part }: { part: NoticePart }) {
 /** エージェントが動いている間の印。本文は少しずつ出さないので、点だけを出す。 */
 export function TypingBubble() {
   return (
-    <div class="flex items-center gap-3" role="status" aria-label={t("chat.typing")}>
+    <div class="tera-fade-in flex items-center gap-3" role="status" aria-label={t("chat.typing")}>
       <ChatAvatar size={24} />
       <div class="flex items-center gap-1.5 py-1.5">
         <span class="tera-typing-dot h-1.5 w-1.5 rounded-full bg-[var(--app-text-tertiary)]" />

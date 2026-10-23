@@ -34,7 +34,7 @@ export function Sidebar() {
       {/* ドロワーの外側。タップで閉じる。 */}
       {open && (
         <div
-          class="fixed inset-0 z-40 bg-black/35 backdrop-blur-sm md:hidden"
+          class="tera-fade-in fixed inset-0 z-40 bg-black/35 backdrop-blur-sm md:hidden"
           aria-hidden="true"
           onClick={closeSidebar}
         />
