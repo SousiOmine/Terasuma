@@ -58,6 +58,8 @@ export function ComputerPane() {
   const targetRef = useRef<HTMLDivElement>(null);
   const clientRef = useRef<RfbClient | null>(null);
   const [connection, setConnection] = useState<ConnectionState>("connecting");
+  /** 再接続の回数。変えると下の effect が片付けてから繋ぎ直す。 */
+  const [attempt, setAttempt] = useState(0);
   /** 引き受け中に送る返事。全画面で開く狭い画面では、チャットの入力欄に触れない。 */
   const [answer, setAnswer] = useState("");
   const [sending, setSending] = useState(false);
@@ -75,23 +77,29 @@ export function ComputerPane() {
     setConnection("connecting");
 
     void (async () => {
-      const module = (await import(/* @vite-ignore */ NOVNC_MODULE_URL)) as { default: RfbConstructor };
-      if (disposed) return;
+      try {
+        const module = (await import(/* @vite-ignore */ NOVNC_MODULE_URL)) as { default: RfbConstructor };
+        if (disposed) return;
 
-      const protocol = location.protocol === "https:" ? "wss" : "ws";
-      client = new module.default(target, `${protocol}://${location.host}/api/computer/vnc`);
-      client.viewOnly = computerViewOnly.value;
-      client.scaleViewport = true;
-      // 画面が入りきらない部分（接続中など）は、下のカードの背景をそのまま見せる。
-      // 既定の黒を敷くと、画面が出るまでの間だけ黒い帯になる。
-      client.background = "transparent";
-      client.addEventListener("connect", () => {
-        if (!disposed) setConnection("connected");
-      });
-      client.addEventListener("disconnect", () => {
-        if (!disposed) setConnection("disconnected");
-      });
-      clientRef.current = client;
+        const protocol = location.protocol === "https:" ? "wss" : "ws";
+        client = new module.default(target, `${protocol}://${location.host}/api/computer/vnc`);
+        client.viewOnly = computerViewOnly.value;
+        client.scaleViewport = true;
+        // 画面が入りきらない部分（接続中など）は、下のカードの背景をそのまま見せる。
+        // 既定の黒を敷くと、画面が出るまでの間だけ黒い帯になる。
+        client.background = "transparent";
+        client.addEventListener("connect", () => {
+          if (!disposed) setConnection("connected");
+        });
+        client.addEventListener("disconnect", () => {
+          if (!disposed) setConnection("disconnected");
+        });
+        clientRef.current = client;
+      } catch (error) {
+        if (disposed) return;
+        console.error(error);
+        setConnection("disconnected");
+      }
     })();
 
     return () => {
@@ -99,7 +107,7 @@ export function ComputerPane() {
       clientRef.current = null;
       client?.disconnect();
     };
-  }, [open, running]);
+  }, [open, running, attempt]);
 
   // 操作できるかどうかは、繋ぎ直さずに切り替える（引き受けの開始と終了で切り替わる）。
   useEffect(() => {
@@ -226,9 +234,20 @@ export function ComputerPane() {
             <div class="relative m-auto h-full w-full md:h-auto md:aspect-[16/10]">
               <div ref={targetRef} class="h-full w-full" />
               {connection !== "connected" && (
-                <p class="absolute inset-0 flex items-center justify-center text-xs text-secondary">
-                  {t(connection === "connecting" ? "chat.computer.connecting" : "chat.computer.disconnected")}
-                </p>
+                <div class="absolute inset-0 flex flex-col items-center justify-center text-xs text-secondary">
+                  <p>
+                    {t(connection === "connecting" ? "chat.computer.connecting" : "chat.computer.disconnected")}
+                  </p>
+                  {connection === "disconnected" && (
+                    <button
+                      type="button"
+                      onClick={() => setAttempt((count) => count + 1)}
+                      class="mt-3 rounded-full bg-[var(--app-accent-fill)] px-3 py-1.5 text-xs font-medium text-[var(--app-on-accent)] transition hover:bg-[var(--app-accent-hover)]"
+                    >
+                      {t("chat.computer.reconnect")}
+                    </button>
+                  )}
+                </div>
               )}
             </div>
           ) : (

@@ -80,6 +80,7 @@ export const en = {
   "chat.computer.notRunning": "The computer is not running, so the screen can not be shown.",
   "chat.computer.connecting": "Connecting…",
   "chat.computer.disconnected": "Could not connect to the screen.",
+  "chat.computer.reconnect": "Reconnect",
   "chat.computer.yourTurn": "Your turn",
   "chat.computer.done": "I finished",
   "chat.computer.answer": "Type a reply",

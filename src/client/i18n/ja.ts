@@ -79,6 +79,7 @@ export const ja: Record<MessageKey, string> = {
   "chat.computer.notRunning": "コンピュータが動いていないため、画面を表示できません。",
   "chat.computer.connecting": "接続しています…",
   "chat.computer.disconnected": "画面に接続できませんでした。",
+  "chat.computer.reconnect": "再接続",
   "chat.computer.yourTurn": "操作してください",
   "chat.computer.done": "操作を完了した",
   "chat.computer.answer": "返事を入力",
