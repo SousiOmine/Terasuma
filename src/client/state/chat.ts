@@ -5,6 +5,7 @@ import { locale } from "../i18n";
 import * as api from "../lib/api";
 import { ApiError } from "../lib/http";
 import { interpretEvent } from "./chat-events";
+import { openConversationSubscription } from "./chat-subscription";
 import { beginConnectorRequest, endConnectorRequest, resetConnectorRequest } from "./connector-request";
 import { beginEnvRequest, endEnvRequest, resetEnvRequest } from "./env-request";
 import { clearChatError, showChatError } from "./failure";
@@ -50,13 +51,6 @@ export const isLoadingOlderMessages = signal(false);
 
 /** 1 回に読む履歴の件数。初回も、上端で古い履歴を足すときも同じ。 */
 const MESSAGES_PAGE_SIZE = 20;
-
-/**
- * 購読が切れたときに、繋ぎ直すまでの待ち。試すたびに倍にし、上限で止める。
- * 画面には理由を出さない。履歴は読めているので、繋がれば内容は揃う。
- */
-const RESUBSCRIBE_DELAY_MS = 500;
-const RESUBSCRIBE_MAX_DELAY_MS = 5_000;
 
 /** 応答が終わりの合図なしに切れたときに、自動でやり直す回数。 */
 const STREAM_RETRY_LIMIT = 1;
@@ -144,45 +138,15 @@ export async function openTera(id: string): Promise<void> {
 function openSubscription(teraId: string, generation: number): void {
   closeSubscription();
 
-  const controller = new AbortController();
-  subscription = controller;
-  void followConversation(teraId, generation, controller);
+  subscription = openConversationSubscription(teraId, generation, {
+    isActive: (value) => value === messagesGeneration,
+    onEvent: (id, event) => applyConversationEvent(id, event),
+  });
 }
 
 function closeSubscription(): void {
   subscription?.abort();
   subscription = null;
-}
-
-/**
- * 購読を張り、切れたら繋ぎ直す。
- * 届いたイベントは、ほかの画面で起きたターンの出来事として、そのまま状態へ反映する。
- */
-async function followConversation(teraId: string, generation: number, controller: AbortController): Promise<void> {
-  let attempt = 0;
-
-  while (!controller.signal.aborted && generation === messagesGeneration) {
-    try {
-      for await (const event of api.streamConversation(teraId, controller.signal)) {
-        // 1 つでも届いたら、次に切れたときはすぐ繋ぎ直す。
-        attempt = 0;
-        applyConversationEvent(teraId, event);
-      }
-    } catch (error) {
-      if (controller.signal.aborted) return;
-      // 消えた Tera を購読し続けても意味が無いので、繋ぎ直さずにやめる。
-      if (error instanceof ApiError && error.code === "tera_not_found") return;
-    }
-
-    if (controller.signal.aborted || generation !== messagesGeneration) return;
-    await delay(Math.min(RESUBSCRIBE_DELAY_MS * 2 ** attempt, RESUBSCRIBE_MAX_DELAY_MS));
-    attempt += 1;
-  }
-}
-
-/** 待ってから、次の繋ぎ直しを試す。 */
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /** ほかの画面で起きたことを、この画面の状態へ反映する。 */
