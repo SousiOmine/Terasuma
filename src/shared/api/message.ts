@@ -54,8 +54,6 @@ export type NoticePart = {
 };
 
 /** 画面に出す部品。 */
-export type VisiblePart = TextPart | AttachmentPart | NoticePart;
-
 /**
  * 1 ターン分の記録を組み立てている部品。
  *

@@ -1,6 +1,6 @@
 import type { ReplyLanguage } from "../../shared/language";
 import type { DiscordWebhooksView } from "../../shared/api/discord";
-import { CLIENT_HEADER, type ConversationEvent } from "../../shared/api/events";
+import type { ConversationEvent } from "../../shared/api/events";
 import type { ModelId } from "../../shared/model";
 import { decodeChatEvents, decodeConversationEvents } from "../../shared/sse";
 import type { ChatEvent, ChatMessageView, MessagePage, Tera } from "../../shared/api/message";
@@ -58,22 +58,6 @@ const HANDOVER_PATH = "/api/computer/handover";
 /** コンピュータのコマンドへ渡す環境変数。 */
 const COMPUTER_ENV_PATH = "/api/computer/env";
 
-/**
- * この画面（タブ）の id。読み込みごとに作り、会話の要求すべてに付ける。
- * サーバは、この画面が購読している流れへ、この画面の送信を二重に流さない。
- *
- * crypto.randomUUID は安全な接続（HTTPS か localhost）でしか使えないため、
- * 画面を見分けるだけのこの値は、どこでも使える getRandomValues で作る。
- */
-const clientId = Array.from(crypto.getRandomValues(new Uint8Array(12)), (byte) =>
-  byte.toString(16).padStart(2, "0"),
-).join("");
-
-/** この画面の id を添えたヘッダ。 */
-function clientHeaders(): HeadersInit {
-  return { [CLIENT_HEADER]: clientId };
-}
-
 /** 画面に並べる Tera の一覧。 */
 export async function listTeras(): Promise<readonly Tera[]> {
   const body = await request<{ teras: Tera[] }>("/api/teras");
@@ -124,7 +108,6 @@ export async function* streamTurn(
     response = await fetchOrThrow(messagesPath(teraId), {
       method: "POST",
       body: form,
-      headers: clientHeaders(),
       signal,
     });
   } catch (error) {
@@ -153,7 +136,6 @@ export async function* retryTurn(
     response = await fetchOrThrow(`${teraPath(teraId)}/retry`, {
       method: "POST",
       body: form,
-      headers: clientHeaders(),
       signal,
     });
   } catch (error) {
@@ -173,7 +155,7 @@ export async function* retryTurn(
 export async function* streamConversation(teraId: string, signal: AbortSignal): AsyncGenerator<ConversationEvent> {
   let response: Response;
   try {
-    response = await fetchOrThrow(`${teraPath(teraId)}/events`, { headers: clientHeaders(), signal });
+    response = await fetchOrThrow(`${teraPath(teraId)}/events`, { signal });
   } catch (error) {
     if (signal.aborted) return;
     throw error;
@@ -226,7 +208,6 @@ export async function steerTurn(
     const body = await request<{ message: ChatMessageView }>(`${teraPath(teraId)}/steer`, {
       method: "POST",
       body: messageForm(content, files),
-      headers: clientHeaders(),
     });
     return body.message;
   } catch (error) {
@@ -349,6 +330,11 @@ export async function checkMcpServer(serverId: string): Promise<McpServerStatusV
 /** 追加の前に、入力された設定で繋がるかを確かめる。サーバーが認可を求めれば、開く URL が返る。 */
 export async function testMcpServer(form: McpServerForm): Promise<McpTestView> {
   return request<McpTestView>(MCP_TEST_PATH, jsonRequest("POST", form));
+}
+
+/** 保存前の確認で待っている認可をやめる（同じ設定をやり直せるようにする）。 */
+export async function cancelMcpTest(serverId: string): Promise<void> {
+  await fetchOrThrow(`${MCP_TEST_PATH}/${encodeURIComponent(serverId)}`, { method: "DELETE" });
 }
 
 /** OAuth の認可を始める。開く URL が返る（すでに認可済みなら null）。 */
@@ -528,6 +514,12 @@ export async function deleteComputerEnv(name: string): Promise<readonly string[]
 /** コンテナのいまの状態（podman に問い合わせた結果）。 */
 export async function fetchContainer(): Promise<ContainerStatusView> {
   return request<ContainerStatusView>(CONTAINER_PATH);
+}
+
+/** 画面の WebSocket を開くための、この起動でだけ使えるトークン。 */
+export async function fetchVncToken(): Promise<string> {
+  const body = await request<{ token: string }>(`${CONTAINER_PATH}/vnc-token`);
+  return body.token;
 }
 
 /** コンテナを起動する。イメージが無ければ作り、コンテナが無ければ作るところまで行う。 */

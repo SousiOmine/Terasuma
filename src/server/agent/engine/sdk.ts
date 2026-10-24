@@ -112,7 +112,6 @@ export function createAiSdkEngine(options: AiSdkEngineOptions): AgentEngine {
   }
 
   return {
-    name: "ai-sdk",
     async stream({ context, signal, teraId, replyLanguage, attach, takeSteering }) {
       const model = resolve();
 

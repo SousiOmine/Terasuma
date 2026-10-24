@@ -5,7 +5,7 @@
  * 取得 API を持たないものは fetchPage を実装しなくてよい（直接取得が使われる）。
  */
 
-import { DEFAULT_FETCH_CHARS, MAX_FETCH_CHARS, MAX_SEARCH_LIMIT } from "../constants";
+import { DEFAULT_FETCH_CHARS, MAX_FETCH_CHARS } from "../constants";
 import { fetchDirect } from "../direct-fetch";
 import { truncateText } from "../text";
 import type {
@@ -17,6 +17,7 @@ import type {
 } from "../types";
 import { brave } from "./brave";
 import { exa } from "./exa";
+import { numberLimit } from "./helpers";
 import { perplexity } from "./perplexity";
 import { tavily } from "./tavily";
 import { tinyfish } from "./tinyfish";
@@ -71,7 +72,7 @@ export function createSearchProvider(options: CreateSearchProviderOptions): Sear
     supportsFetch: adapter.supportsFetch,
 
     search(request) {
-      return adapter.search(context, { ...request, limit: clampLimit(request.limit) });
+      return adapter.search(context, { ...request, limit: numberLimit(request.limit) });
     },
 
     async fetchPage(request) {
@@ -85,10 +86,6 @@ export function createSearchProvider(options: CreateSearchProviderOptions): Sear
       return { ...response, text: truncateText(response.text, maxChars) };
     },
   };
-}
-
-function clampLimit(value: number): number {
-  return Math.min(Math.max(Math.trunc(value), 1), MAX_SEARCH_LIMIT);
 }
 
 function clampChars(value: number): number {

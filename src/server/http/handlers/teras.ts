@@ -1,16 +1,15 @@
 import { resolveModel } from "../../provider/routing";
 import { saveUploads } from "../../computer/uploads";
 import { ensureTeraWorkspace, removeTeraWorkspace } from "../../computer/workspaces";
-import { createConversationBroadcast } from "../../agent/broadcast";
 import { toMessageView } from "../../agent/message-view";
-import { createTurns } from "../../agent/turns";
 import { AppError, ConflictError, ValidationError } from "../../errors";
 import type { ConversationEvent } from "../../../shared/api/events";
 import { encodeChatEvent, encodeConversationEvent } from "../../../shared/sse";
 import { readRetryForm, readSteerForm, readTurnForm } from "../body";
 import { json, noContent } from "../respond";
+import { requireClientId } from "../client-id";
 import { createSseResponse } from "../sse";
-import { type ApiDeps, type ApiRequest, requireClientId, requireTera } from "./shared";
+import { type ApiDeps, type ApiRequest, requireTera } from "./shared";
 
 /** 履歴を 1 回に返す上限。画面はこれより小さい 20 件ずつ読む。 */
 const MAX_MESSAGE_PAGE = 100;
@@ -36,14 +35,9 @@ export function terasHandlers(
     | "broadcast"
   >,
 ) {
-  const { store, settings, container, compaction, discord, dataDir } = deps;
-
-  // 同じ Tera で利用者のターンが重なると、履歴の並びと引き受けの待ちが壊れる。
-  // 「実行中かどうか」はターンの側が持つ（HTTP 層へ Set を渡さない）。
-  // ルーチンも同じターンを使うので、外から渡されたものがあればそれを使う。
-  const turns = deps.turns ?? createTurns(deps);
-  // 同じ Tera を開いているほかの画面への配り口。送った画面自身には配らない。
-  const broadcast = deps.broadcast ?? createConversationBroadcast();
+  // ターンの実行状態と配り口は、ルーチンと同じ実体を app.ts から受け取る。
+  // ここで作り直すと、実行中の印と購読の宛先が 2 つに分かれてしまう。
+  const { store, settings, container, compaction, discord, dataDir, turns, broadcast } = deps;
 
   return {
     /** 画面に並べる Tera の一覧。既定の Tera と、エージェントが作った Tera。 */

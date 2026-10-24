@@ -32,7 +32,12 @@ import { OAUTH_CALLBACK_PATH } from "./server/mcp/oauth";
 import { CATALOG_FILE_NAME, createCatalog, modelContextTokens, type Catalog } from "./server/provider/catalog";
 import { createRoutineScheduler, type RoutineScheduler } from "./server/routine/scheduler";
 import { createRoutineToolset } from "./server/routine/tools";
-import type { ConnectionChecker, ProviderModelLister } from "./server/provider/connection";
+import {
+  createConnectionChecker,
+  createModelLister,
+  type ConnectionChecker,
+  type ProviderModelLister,
+} from "./server/provider/connection";
 
 /**
  * 依存を組み立てて、動くアプリを 1 つ作る（合成ルート）。
@@ -254,25 +259,28 @@ export function startApp(config: AppConfig, overrides: AppOverrides = {}): App {
 
   const { server, portChanged } = startServer({
     config,
-    store,
-    engine,
-    compaction,
-    catalog,
-    settings,
-    turns,
-    broadcast,
-    mcp,
-    connectors,
-    discord,
-    routines,
-    webSearch: webSearchManager,
-    container,
-    images,
-    files,
-    handover,
-    envRequests,
-    ...(overrides.checkConnection === undefined ? {} : { checkConnection: overrides.checkConnection }),
-    ...(overrides.listModels === undefined ? {} : { listModels: overrides.listModels }),
+    deps: {
+      store,
+      engine,
+      settings,
+      mcp,
+      connectors,
+      discord,
+      webSearch: webSearchManager,
+      routines,
+      container,
+      images,
+      files,
+      handover,
+      envRequests,
+      compaction,
+      turns,
+      broadcast,
+      catalog,
+      checkConnection: overrides.checkConnection ?? createConnectionChecker(),
+      listModels: overrides.listModels ?? createModelLister(),
+      dataDir: config.dataDir,
+    },
   });
   boundPort = server.port ?? null;
 

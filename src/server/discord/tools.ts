@@ -77,11 +77,7 @@ export function createDiscordToolset(options: { discord: DiscordWebhooks }): Dis
             "The channel may have other people in it, so ask the user before posting long or private text.",
           ].join(" "),
           inputSchema: z.object({
-            content: z
-              .string()
-              .max(MAX_CONTENT_CHARS)
-              .optional()
-              .describe("Message text (up to 2000 characters)"),
+            content: z.string().max(MAX_CONTENT_CHARS).optional().describe("Message text (up to 2000 characters)"),
             username: z
               .string()
               .max(MAX_USERNAME_CHARS)

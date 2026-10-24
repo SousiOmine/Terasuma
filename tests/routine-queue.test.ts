@@ -67,7 +67,6 @@ function gatedEngine(): AgentEngine & { started: Promise<void>; release(): void 
   });
 
   return {
-    name: "gated",
     started,
     release,
     async stream({ signal }) {
@@ -145,14 +144,14 @@ function userMessages(store: Store) {
 const userInput = { content: "利用者の発言", attachments: null, language: "ja" } as const;
 
 describe("ルーチンの順番待ち", () => {
-  test(
-    "利用者のターンが走っている間に時刻が来ても、終わってから走る",
-    async () => {
-      const start = new Date(2024, 0, 1, 9, 0, 0, 0).getTime();
-      let current = start;
-      const engine = gatedEngine();
+  test("利用者のターンが走っている間に時刻が来ても、終わってから走る", async () => {
+    const start = new Date(2024, 0, 1, 9, 0, 0, 0).getTime();
+    let current = start;
+    const engine = gatedEngine();
 
-      await withScheduler({ settings: TEST_SETTINGS, now: () => current, engine }, async ({ store, turns, scheduler, close }) => {
+    await withScheduler(
+      { settings: TEST_SETTINGS, now: () => current, engine },
+      async ({ store, turns, scheduler, close }) => {
         try {
           const id = dueRoutine(store, "待つルーチン", start + 60_000);
 
@@ -181,44 +180,39 @@ describe("ルーチンの順番待ち", () => {
         } finally {
           close();
         }
-      });
-    },
-    10_000,
-  );
+      },
+    );
+  }, 10_000);
 
-  test(
-    "同じ時刻に 2 件あっても、1 本ずつ順番に両方走る",
-    async () => {
-      const now = new Date(2024, 0, 1, 9, 0, 0, 0).getTime();
+  test("同じ時刻に 2 件あっても、1 本ずつ順番に両方走る", async () => {
+    const now = new Date(2024, 0, 1, 9, 0, 0, 0).getTime();
 
-      await withScheduler({ settings: TEST_SETTINGS, now: () => now }, async ({ store, close }) => {
-        try {
-          const first = dueRoutine(store, "1 件目", now);
-          const second = dueRoutine(store, "2 件目", now);
+    await withScheduler({ settings: TEST_SETTINGS, now: () => now }, async ({ store, close }) => {
+      try {
+        const first = dueRoutine(store, "1 件目", now);
+        const second = dueRoutine(store, "2 件目", now);
 
-          await waitFor(
-            () => store.readRoutine(first)?.lastStatus === "ok" && store.readRoutine(second)?.lastStatus === "ok",
-            5_000,
-          );
+        await waitFor(
+          () => store.readRoutine(first)?.lastStatus === "ok" && store.readRoutine(second)?.lastStatus === "ok",
+          5_000,
+        );
 
-          const users = userMessages(store);
-          expect(users.map((message) => message.content).sort()).toEqual(["1 件目 の指示", "2 件目 の指示"]);
-        } finally {
-          close();
-        }
-      });
-    },
-    10_000,
-  );
+        const users = userMessages(store);
+        expect(users.map((message) => message.content).sort()).toEqual(["1 件目 の指示", "2 件目 の指示"]);
+      } finally {
+        close();
+      }
+    });
+  }, 10_000);
 
-  test(
-    "順番待ちのうちに止めると、走らずに stopped になる",
-    async () => {
-      const start = new Date(2024, 0, 1, 9, 0, 0, 0).getTime();
-      let current = start;
-      const engine = gatedEngine();
+  test("順番待ちのうちに止めると、走らずに stopped になる", async () => {
+    const start = new Date(2024, 0, 1, 9, 0, 0, 0).getTime();
+    let current = start;
+    const engine = gatedEngine();
 
-      await withScheduler({ settings: TEST_SETTINGS, now: () => current, engine }, async ({ store, turns, scheduler, close }) => {
+    await withScheduler(
+      { settings: TEST_SETTINGS, now: () => current, engine },
+      async ({ store, turns, scheduler, close }) => {
         try {
           const id = dueRoutine(store, "待って止める", start + 60_000);
 
@@ -241,32 +235,27 @@ describe("ルーチンの順番待ち", () => {
         } finally {
           close();
         }
-      });
-    },
-    10_000,
-  );
+      },
+    );
+  }, 10_000);
 
-  test(
-    "走っている間に止めると stopped になる",
-    async () => {
-      const now = new Date(2024, 0, 1, 9, 0, 0, 0).getTime();
-      const engine = gatedEngine();
+  test("走っている間に止めると stopped になる", async () => {
+    const now = new Date(2024, 0, 1, 9, 0, 0, 0).getTime();
+    const engine = gatedEngine();
 
-      await withScheduler({ settings: TEST_SETTINGS, now: () => now, engine }, async ({ store, scheduler, close }) => {
-        try {
-          const id = dueRoutine(store, "走って止める", now);
-          await engine.started;
-          await waitFor(() => scheduler.isRunning(id));
+    await withScheduler({ settings: TEST_SETTINGS, now: () => now, engine }, async ({ store, scheduler, close }) => {
+      try {
+        const id = dueRoutine(store, "走って止める", now);
+        await engine.started;
+        await waitFor(() => scheduler.isRunning(id));
 
-          scheduler.stop(id);
-          await waitFor(() => store.readRoutine(id)?.lastStatus === "stopped");
-          expect(store.readRoutine(id)?.lastDetail).toBeNull();
-          expect(scheduler.isRunning(id)).toBe(false);
-        } finally {
-          close();
-        }
-      });
-    },
-    10_000,
-  );
+        scheduler.stop(id);
+        await waitFor(() => store.readRoutine(id)?.lastStatus === "stopped");
+        expect(store.readRoutine(id)?.lastDetail).toBeNull();
+        expect(scheduler.isRunning(id)).toBe(false);
+      } finally {
+        close();
+      }
+    });
+  }, 10_000);
 });

@@ -55,7 +55,7 @@ export const en = {
   "chat.image.open": "Open {name}",
   "chat.markdown.task": "Task",
   "chat.history.loadingOlder": "Loading earlier messages…",
-  "chat.routineOrigin": "Routine \"{name}\"",
+  "chat.routineOrigin": 'Routine "{name}"',
 
   "chat.ui.invalid": "This card could not be displayed",
   "chat.ui.submit": "Send",
@@ -117,8 +117,7 @@ export const en = {
     "The assistants that own a conversation. Deleting one removes its conversation, identity, Discord webhook and working folder.",
   "settings.teras.id": "Workspace folder: {id}",
   "settings.teras.routines.description": "Routines that let this Tera start on its own at set times.",
-  "settings.teras.routines.empty":
-    "None yet. Ask in chat, for example “every morning at 8”, to create one.",
+  "settings.teras.routines.empty": "None yet. Ask in chat, for example “every morning at 8”, to create one.",
   "settings.language.label": "Language",
   "settings.language.description": "Language used in the interface and in the agent's replies.",
 

@@ -1,5 +1,5 @@
 import { describeError } from "../../shared/errors";
-import type { ChatEvent, Tera } from "../../shared/api/message";
+import type { ChatEvent } from "../../shared/api/message";
 import type { RoutineStatus } from "../../shared/api/routine";
 import type { ConversationBroadcast } from "../agent/broadcast";
 import type { Turns } from "../agent/turns";
@@ -31,14 +31,6 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/** ルーチンを走らせるのに必要な保存先。Tera の確認もできる。 */
-type SchedulerStore = RoutineStore & {
-  listTeras(): readonly Tera[];
-  // 実装によって名前が違うので、どちらでも受けられるようにしておく。
-  readTera?(id: string): Tera | null;
-  getTera?(id: string): Tera | null;
-};
-
 export type RoutineScheduler = {
   /** タイマーを張る。起動 60 秒後に 1 回、そのあと 30 秒ごとに、走らせるべきものを走らせる。 */
   start(): void;
@@ -53,7 +45,7 @@ export type RoutineScheduler = {
 };
 
 export function createRoutineScheduler(options: {
-  store: SchedulerStore;
+  store: RoutineStore;
   turns: Turns;
   broadcast: ConversationBroadcast;
   settings: SettingsStore;
@@ -207,8 +199,7 @@ export function createRoutineScheduler(options: {
       if (routine === null) return;
 
       const origin = turns.runningOrigin(routine.teraId);
-      const isRunningNow =
-        origin !== null && origin.kind === "routine" && origin.routineId === routineId;
+      const isRunningNow = origin !== null && origin.kind === "routine" && origin.routineId === routineId;
 
       if (isRunningNow) {
         // 走っている。止めたことを覚えてから、ターンを止める（結果は stopped で書く）。

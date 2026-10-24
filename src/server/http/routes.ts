@@ -83,6 +83,10 @@ export function createRoutes(api: WithErrorHandling<ApiHandlers>, screen: Screen
     "/api/mcp/test": {
       POST: api.testMcpServer,
     },
+    // 保存前の確認で待っている認可をやめる（同じ設定をやり直せるようにする）。
+    "/api/mcp/test/:id": {
+      DELETE: api.cancelMcpTest,
+    },
     "/api/mcp/servers/:id": {
       PATCH: api.updateMcpServer,
       DELETE: api.removeMcpServer,
@@ -153,9 +157,9 @@ export function createRoutes(api: WithErrorHandling<ApiHandlers>, screen: Screen
     "/api/container/reset": {
       POST: api.resetContainer,
     },
-    // 画面の中継。noVNC の HTML と JS をコンテナから取ってきて返す。
-    "/api/computer/screen/*": {
-      GET: api.relayScreen,
+    // 画面の WebSocket を開くためのトークン。noVNC の JS はアプリのバンドルに同梱する。
+    "/api/computer/vnc-token": {
+      GET: api.readVncToken,
     },
     // 画面の操作。ブラウザと、コンテナの中の x11vnc を繋ぐ。
     // 引き受け（画面を渡している間）の返事。

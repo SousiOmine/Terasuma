@@ -47,5 +47,4 @@ export function createApiHandlers(deps: ApiDeps) {
   };
 }
 
-export type { ApiDeps, ApiRequest, ScreenRelayRequest } from "./shared";
-export { SCREEN_RELAY_PREFIX } from "./shared";
+export type { ApiDeps, ApiRequest } from "./shared";

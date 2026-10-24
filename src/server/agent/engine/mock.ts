@@ -13,7 +13,6 @@ export function createMockEngine(options: { chunkSize?: number; delayMs?: number
   const delayMs = options.delayMs ?? 12;
 
   return {
-    name: "mock",
     stream({ context, signal, replyLanguage }) {
       const lastUser = [...context.messages].reverse().find((message) => message.role === "user");
       const userTurns = context.messages.filter((message) => message.role === "user").length;

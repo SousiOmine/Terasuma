@@ -76,10 +76,7 @@ export function prepareQueries(db: Database) {
             SUM(LENGTH(content) + COALESCE(LENGTH(parts), 0)) AS chars
      FROM messages WHERE tera_id = ? AND seq > ?`,
   );
-  const updateMessageParts = db.query<
-    unknown,
-    [string, number | null, number | null, number | null, string]
-  >(
+  const updateMessageParts = db.query<unknown, [string, number | null, number | null, number | null, string]>(
     `UPDATE messages
         SET parts = ?, input_tokens = ?, output_tokens = ?, cached_input_tokens = ?
       WHERE id = ?`,
@@ -122,36 +119,31 @@ export function prepareQueries(db: Database) {
   const selectRoutineByName = db.query<RoutineRow, [string, string]>(
     `SELECT ${ROUTINE_COLUMNS} FROM routines WHERE tera_id = ? AND name = ?`,
   );
-  const insertRoutine = db.query<unknown, [
-    string,
-    string,
-    string,
-    string,
-    string,
-    number,
-    number | null,
-    number | null,
-    string | null,
-    string | null,
-    number,
-    number,
-  ]>(
+  const insertRoutine = db.query<
+    unknown,
+    [
+      string,
+      string,
+      string,
+      string,
+      string,
+      number,
+      number | null,
+      number | null,
+      string | null,
+      string | null,
+      number,
+      number,
+    ]
+  >(
     `INSERT INTO routines (${ROUTINE_COLUMNS})
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   );
   // 更新は、いまの行と突き合わせた完全な行をアプリ側で組み立ててから書く。
-  const updateRoutineRow = db.query<unknown, [
-    string,
-    string,
-    string,
-    number,
-    number | null,
-    number | null,
-    string | null,
-    string | null,
-    number,
-    string,
-  ]>(
+  const updateRoutineRow = db.query<
+    unknown,
+    [string, string, string, number, number | null, number | null, string | null, string | null, number, string]
+  >(
     `UPDATE routines
         SET name = ?, prompt = ?, schedule = ?, enabled = ?, next_run_at = ?, last_run_at = ?,
             last_status = ?, last_detail = ?, updated_at = ?
@@ -237,5 +229,3 @@ export function prepareQueries(db: Database) {
     switchIdentity,
   };
 }
-
-export type Queries = ReturnType<typeof prepareQueries>;

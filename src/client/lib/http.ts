@@ -1,5 +1,6 @@
 import { describeError } from "../../shared/errors";
 import { API_ERROR_CODES, type ApiErrorCode } from "../../shared/api/error";
+import { CLIENT_HEADER } from "../../shared/api/events";
 
 /**
  * HTTP の入り口。
@@ -10,6 +11,19 @@ import { API_ERROR_CODES, type ApiErrorCode } from "../../shared/api/error";
 
 /** サーバが返すコードに、クライアント側だけで発生するコードを足したもの。 */
 export type ClientErrorCode = ApiErrorCode | "network" | "input" | "mcp_unreachable" | "stream_ended";
+
+/**
+ * この画面（タブ）の id。読み込みごとに作り、すべての要求に付ける。
+ * サーバは、この画面が購読している流れへ、この画面の送信を二重に流さない。
+ * 変更系の API では CSRF の門にもなる（独自ヘッダを付けた cross-origin の要求は
+ * プリフライトで止まる）。
+ *
+ * crypto.randomUUID は安全な接続（HTTPS か localhost）でしか使えないため、
+ * 画面を見分けるだけのこの値は、どこでも使える getRandomValues で作る。
+ */
+const clientId = Array.from(crypto.getRandomValues(new Uint8Array(12)), (byte) =>
+  byte.toString(16).padStart(2, "0"),
+).join("");
 
 export class ApiError extends Error {
   readonly code: ClientErrorCode;
@@ -28,9 +42,14 @@ export class ApiError extends Error {
  * 中断（利用者の「停止」）は失敗ではないので、そのまま投げて呼び出し側に任せる。
  */
 export async function fetchOrThrow(path: string, init?: RequestInit): Promise<Response> {
+  // 変更系の API は、画面の id を付けた要求だけを受け付ける（CSRF の門）。
+  // WebSocket はヘッダを付けられないので、画面のトークンで別に守る。
+  const headers = new Headers(init?.headers);
+  headers.set(CLIENT_HEADER, clientId);
+
   let response: Response;
   try {
-    response = await fetch(path, init);
+    response = await fetch(path, { ...init, headers });
   } catch (error) {
     if (init?.signal?.aborted === true) throw error;
     throw new ApiError("network", describeError(error));

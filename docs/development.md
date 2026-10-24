@@ -30,7 +30,7 @@ bun run start:dist
 ## 検査
 
 ```sh
-bun run check      # 型・lint・テスト
+bun run check      # 型・整形・lint・テスト
 bun run fmt        # 整形（Biome）
 bun run test       # テストだけ
 bun run test:live  # 実際のプロバイダに繋ぐ確認（API キーと podman が要る）
@@ -224,10 +224,16 @@ Tera ごとの作業場、identity、スキルの一覧で組み立てる。
 ## Web 検索とページ取得
 
 `web_fetch` は http と https だけを取得する。加えて、localhost とプライベートアドレス
-（127/8、10/8、172.16/12、192.168/16、169.254/16、::1）は取得しない。
+（127/8、10/8、172.16/12、192.168/16、169.254/16、::1、fc00::/7、fe80::/10）は取得しない。
 リダイレクトは自分で追い、飛び先も同じ規則で確かめる（最大 5 回）。
+IPv4 を埋め込んだ IPv6（`::ffff:127.0.0.1`、URL の正規化後は `[::ffff:7f00:1]`）と
+NAT64（`64:ff9b::/96`）も、埋め込まれた IPv4 を見て同じ規則で断る。
 これは、エージェントが Terasuma 自身の API やローカルのサービスを読んで、
-その内容を外へ出さないため。DNS リバインディングや IPv6 の特殊な形までは塞いでいない。
+その内容を外へ出さないため。DNS の解決結果までは見ないので、名前が後から
+private な IP を指す場合までは塞げない。
+
+取得した本文は、`Content-Length` が無い（chunked の）応答でも、
+読みながら 5 MB を数えて止める。上限を超えた応答を最後までメモリへ載せない。
 
 ## ツールの結果の大きさ
 
@@ -364,6 +370,26 @@ Discord はトークンではなく、Tera ごとの **webhook URL** で送る�
   `POST /api/teras/:id/steer`・`GET /api/teras/:id/events` のすべてに付ける（無ければ 400）。
 - 配り口はプロセスの中だけに持つ（`server/agent/broadcast.ts`）。再起動で購読は切れるが、
   繋ぎ直したときの `sync` から揃う。
+
+変更系の API は、`x-terasuma-client` をすべて必須にする（`server/http/client-id.ts`）。
+独自ヘッダを付けた cross-origin の要求はプリフライトで止まるので、他サイトのフォームから
+状態を変えられない。画面は `fetchOrThrow` がすべての要求に付ける。
+
+## 画面の WebSocket
+
+コンピュータの画面は、右ペインの noVNC から `/api/computer/vnc` の WebSocket で見る。
+WebSocket はブラウザが独自ヘッダを付けられず、CORS の制約も受けないので、
+起動ごとのトークンで守る。
+
+- `GET /api/computer/vnc-token` が、その起動でだけ使えるトークンを返す（`no-store`）。
+  この GET は cross-origin から読めないので、トークンを知っている画面だけが中継を開ける。
+- `/api/computer/vnc?token=...` は、トークンが一致しなければ 401。一致すれば、
+  コンテナの websockify へ繋ぐ。
+- noVNC の JS は `@novnc/novnc` としてアプリのバンドルに同梱する。コンテナから配ると、
+  コンテナの中のファイルを書き換えるだけで Terasuma のオリジンでコードが動いてしまう。
+  コンテナ側は websockify だけを動かし、`--web` で noVNC の静的ファイルは配らない。
+- 画面を開くまで noVNC を読まないよう、`import("@novnc/novnc")` を別チャンクに分ける
+  （`scripts/build.ts` の `splitting`）。
 
 ## 構成
 

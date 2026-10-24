@@ -55,6 +55,11 @@ export type McpManager = {
   authorize(serverId: string): Promise<McpAuthorizationView>;
   /** 待っている認可を取り消す。次に接続を確かめたときの結果に戻る。 */
   cancelAuthorization(serverId: string): void;
+  /**
+   * 保存前の確認で待っている認可をやめる。
+   * 画面を閉じたときや待ちがタイムアウトしたときに呼ぶ（同じ設定をやり直せるようにする）。
+   */
+  cancelTest(serverId: string): void;
   /** コールバックで受け取ったコードをトークンに交換する。 */
   completeAuthorization(state: string, callback: AuthorizationCallback): Promise<{ serverId: string }>;
   /** 接続と子プロセスを片付ける。 */
@@ -79,6 +84,12 @@ const OAUTH_DIR_NAME = "mcp-oauth";
 
 /** 1 サーバー分の探索の打ち切り。繋がらないサーバーで画面を待たせ続けない。 */
 const DISCOVERY_TIMEOUT_MS = 15_000;
+
+/**
+ * 保存前の認可待ちを、これ以上は使い回さない時間。
+ * 画面の待ち（5 分）より長く取り、取り残された待ちは次の確認でやり直す。
+ */
+const TEST_AUTHORIZATION_TTL_MS = 10 * 60 * 1000;
 
 /**
  * MCP サーバーとの接続を持つ。
@@ -111,7 +122,7 @@ export function createMcpManager(options: McpManagerOptions): McpManager {
   /** 認可を待っているサーバー（id → 認可画面の URL）。 */
   const pending = new Map<string, string>();
   /** 保存前の確認で認可を待っているサーバー（id → 確かめている設定と、認可画面の URL）。 */
-  const pendingTests = new Map<string, { server: McpServerSettings; url: string }>();
+  const pendingTests = new Map<string, { server: McpServerSettings; url: string; at: number }>();
 
   function storageFor(serverId: string): OAuthStorage {
     return createFileOAuthStorage(join(options.dataDir, OAUTH_DIR_NAME, `${serverId}.json`));
@@ -142,10 +153,6 @@ export function createMcpManager(options: McpManagerOptions): McpManager {
     }
   }
 
-  /**
-   * 設定に対応する状態に揃える。設定が変わっていれば、前の接続を閉じて状態を捨てる。
-   * 接続そのものは refresh() が作る。
-   */
   /** 設定が変わっていれば、変わったサーバーだけ繋ぎ直す（他の接続はそのまま使う）。 */
   async function syncSettings(servers: McpServersSettings): Promise<void> {
     const key = JSON.stringify(servers);
@@ -314,7 +321,8 @@ export function createMcpManager(options: McpManagerOptions): McpManager {
     async test(serverId, server) {
       const waiting = pendingTests.get(serverId);
       if (waiting !== undefined) {
-        if (sameServer(waiting.server, server)) {
+        // 取り残された待ちは、古くなっていたらやり直す（画面を閉じただけでは消えないため）。
+        if (sameServer(waiting.server, server) && Date.now() - waiting.at < TEST_AUTHORIZATION_TTL_MS) {
           return { state: "authorizing", tools: [], detail: null, authorizationUrl: waiting.url };
         }
         // 別の接続先を確かめるのだから、待っていた認可は捨てる。
@@ -337,7 +345,7 @@ export function createMcpManager(options: McpManagerOptions): McpManager {
         const authorizationUrl = material.oauth?.takeAuthorizationUrl() ?? null;
         if (authorizationUrl !== null) {
           // コールバックを受けたときに、まだ設定に無い接続先でも終わらせられるように控える。
-          pendingTests.set(serverId, { server, url: authorizationUrl });
+          pendingTests.set(serverId, { server, url: authorizationUrl, at: Date.now() });
           return { state: "authorization_required", tools: [], detail: null, authorizationUrl };
         }
 
@@ -377,6 +385,10 @@ export function createMcpManager(options: McpManagerOptions): McpManager {
 
     cancelAuthorization(serverId) {
       pending.delete(serverId);
+    },
+
+    cancelTest(serverId) {
+      pendingTests.delete(serverId);
     },
 
     async completeAuthorization(state, callback) {

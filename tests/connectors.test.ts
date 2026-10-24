@@ -2,11 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
 import { join, posix } from "node:path";
 import { WORKDIR_IN_CONTAINER } from "../src/server/computer/contract";
-import {
-  createConnectors,
-  type ConnectorScriptResult,
-  type ConnectorsManager,
-} from "../src/server/connectors/manager";
+import { createConnectors, type ConnectorScriptResult, type ConnectorsManager } from "../src/server/connectors/manager";
 import type { PiRuntime } from "../src/server/connectors/pi";
 import { ConnectorNotFound } from "../src/server/errors";
 import { withTempDir } from "./harness";
@@ -206,7 +202,9 @@ function successCheck(): ConnectorScriptResult {
 }
 
 /** コンピュータの読み書きと実行を、メモリ上で真似る。 */
-function fakePiRuntime(options: { check?: ConnectorScriptResult; chmod?: ConnectorScriptResult } = {}): FakeProgramRuntime {
+function fakePiRuntime(
+  options: { check?: ConnectorScriptResult; chmod?: ConnectorScriptResult } = {},
+): FakeProgramRuntime {
   const files = new Map<string, string>();
   const writes: { path: string; text: string }[] = [];
   const scripts: string[] = [];

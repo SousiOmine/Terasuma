@@ -29,7 +29,6 @@ export const clearSettingsError = failure.clear;
 /** models.dev のカタログ。まだ読めていないときは null。 */
 const catalogResource = createResource(api.fetchCatalog);
 export const catalogProviders = catalogResource.data;
-export const isLoadingCatalog = catalogResource.loading;
 
 /**
  * 既定のモデルの思考強度。
@@ -70,7 +69,6 @@ export const refreshModelSettings = settingsResource.refresh;
 /** カタログを読む（まだ読めていなければ）。 */
 export const loadCatalog = catalogResource.load;
 /** カタログを読み直す。 */
-export const refreshCatalog = catalogResource.refresh;
 
 /** 既定のモデルの思考強度と、選べる値を読む。 */
 export async function loadReasoning(): Promise<void> {

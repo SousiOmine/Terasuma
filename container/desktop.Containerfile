@@ -4,7 +4,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 # git と tmux は、エージェントがコンテナの中でそのまま作業に使うので最初から入れておく。
 RUN apt-get update && apt-get install -y --no-install-recommends \
       xvfb x11-utils x11vnc openbox xdotool scrot imagemagick \
-      novnc websockify socat \
+      websockify socat \
       xterm fonts-noto-cjk dbus-x11 \
       chromium \
       sudo curl ca-certificates \
@@ -12,9 +12,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
  && rm -rf /var/lib/apt/lists/*
 
 # pi（pi-coding-agent）は、エージェントがコンテナの中で使うコーディングエージェント。
-# pi 1.x は Node.js 22.19 以上を要求する。Debian の nodejs は 18 で、しかも novnc が
-# 依存で /usr/bin/node に入れてくる。そこで nodejs.org の公式ビルドを /usr/local
-# （/usr/bin より先に PATH が通る）に置き、apt のリポジトリを増やさずに済ませる。
+# pi 1.x は Node.js 22.19 以上を要求する。Debian の nodejs は 18 なので、
+# nodejs.org の公式ビルドを /usr/local（/usr/bin より先に PATH が通る）に置き、
+# apt のリポジトリを増やさずに済ませる。
 # 版は再現できるよう固定する。上げるときは、ここの 2 つの版を書き換えてイメージを作り直す。
 RUN set -eu; \
     case "$(dpkg --print-architecture)" in \

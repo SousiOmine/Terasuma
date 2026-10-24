@@ -50,7 +50,3 @@ export function isRetryableErrorCode(code: string): boolean {
 }
 
 /** 失敗の応答の形。detail は理由の 1 文で、無ければ null。 */
-export type ApiErrorBody = {
-  code: ApiErrorCode;
-  detail: string | null;
-};

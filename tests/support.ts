@@ -54,6 +54,7 @@ export function createMcpStub(): McpManager {
     toolset: async () => ({}),
     authorize: async () => ({ url: null }),
     cancelAuthorization: () => undefined,
+    cancelTest: () => undefined,
     completeAuthorization: async () => ({ serverId: "stub" }),
     close: async () => undefined,
   };

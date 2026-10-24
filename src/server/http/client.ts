@@ -1,5 +1,3 @@
-import { describeError } from "../../shared/errors";
-
 /**
  * 外部の HTTP API への問い合わせ。
  *
@@ -95,6 +93,3 @@ function oneLine(text: string, limit: number): string {
 }
 
 /** 通信そのものができなかった理由を、短い 1 文にする。 */
-export function describeNetworkError(error: unknown): string {
-  return describeError(error);
-}

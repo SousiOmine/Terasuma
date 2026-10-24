@@ -68,11 +68,7 @@ export function DiscordConnectorCard() {
         }
         lines={[
           t("settings.discord.description"),
-          ...(view === null
-            ? [t("common.loading")]
-            : view.teras.length === 0
-              ? [t("settings.discord.empty")]
-              : []),
+          ...(view === null ? [t("common.loading")] : view.teras.length === 0 ? [t("settings.discord.empty")] : []),
         ]}
       >
         {view !== null && view.teras.length > 0 && (

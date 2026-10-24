@@ -1,11 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { parseWebhookUrl, sendWebhookMessage, verifyWebhook } from "../src/server/discord/webhook";
-import {
-  createFakeDiscordFetch,
-  WEBHOOK_CHANNEL_ID,
-  WEBHOOK_NAME,
-  WEBHOOK_URL,
-} from "./fixtures/discord-fetch";
+import { createFakeDiscordFetch, WEBHOOK_CHANNEL_ID, WEBHOOK_NAME, WEBHOOK_URL } from "./fixtures/discord-fetch";
 
 /**
  * Discord の webhook URL の検証と、API の読み替え。
@@ -20,9 +15,7 @@ describe("webhook URL", () => {
       WEBHOOK_URL,
     );
     // discordapp.com も受けるが、送信先は discord.com に揃える。
-    expect(parseWebhookUrl("https://discordapp.com/api/webhooks/1/tok")).toBe(
-      "https://discord.com/api/webhooks/1/tok",
-    );
+    expect(parseWebhookUrl("https://discordapp.com/api/webhooks/1/tok")).toBe("https://discord.com/api/webhooks/1/tok");
   });
 
   test("Discord の webhook ではない URL は断る", () => {
@@ -92,26 +85,26 @@ describe("webhook への送信", () => {
     const fake = createFakeDiscordFetch();
     fake.respond(Response.json({ retry_after: 4.2, global: false }, { status: 429 }));
 
-    expect(
-      sendWebhookMessage(WEBHOOK_URL, { content: "x", username: null, embeds: null }, fake.fetch),
-    ).rejects.toThrow(/5 second/);
+    expect(sendWebhookMessage(WEBHOOK_URL, { content: "x", username: null, embeds: null }, fake.fetch)).rejects.toThrow(
+      /5 second/,
+    );
   });
 
   test("400 は、Discord が返した理由を伝える", async () => {
     const fake = createFakeDiscordFetch();
     fake.respond(Response.json({ message: "Invalid Form Body" }, { status: 400 }));
 
-    expect(
-      sendWebhookMessage(WEBHOOK_URL, { content: "x", username: null, embeds: null }, fake.fetch),
-    ).rejects.toThrow(/Invalid Form Body/);
+    expect(sendWebhookMessage(WEBHOOK_URL, { content: "x", username: null, embeds: null }, fake.fetch)).rejects.toThrow(
+      /Invalid Form Body/,
+    );
   });
 
   test("401 は、URL を保存し直すよう促す", async () => {
     const fake = createFakeDiscordFetch();
     fake.respond(new Response("unauthorized", { status: 401 }));
 
-    expect(
-      sendWebhookMessage(WEBHOOK_URL, { content: "x", username: null, embeds: null }, fake.fetch),
-    ).rejects.toThrow(/save a new URL/);
+    expect(sendWebhookMessage(WEBHOOK_URL, { content: "x", username: null, embeds: null }, fake.fetch)).rejects.toThrow(
+      /save a new URL/,
+    );
   });
 });

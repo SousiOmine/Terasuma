@@ -14,7 +14,6 @@ import { createResource } from "./resource";
 /** サーバから読んだコンテナの状態。まだ読めていないときは null。 */
 const statusResource = createResource(api.fetchContainer);
 export const containerStatus = statusResource.data;
-export const isLoadingContainer = statusResource.loading;
 
 /** 設定画面から実行できる操作。 */
 export type ContainerOperation = "start" | "reset";
@@ -38,7 +37,6 @@ export const computerEnv = envResource.data;
 /** 設定されている環境変数の名前を読む（まだ読めていなければ）。 */
 export const loadComputerEnv = envResource.load;
 /** 名前の一覧を読み直す。 */
-export const refreshComputerEnv = envResource.refresh;
 
 /** 環境変数を消す。サーバが返した、残っている名前の一覧をそのまま置く。 */
 export async function removeComputerEnv(name: string): Promise<void> {
@@ -48,7 +46,6 @@ export async function removeComputerEnv(name: string): Promise<void> {
 /** 状態を読む（まだ読めていなければ）。 */
 export const loadContainer = statusResource.load;
 /** 状態を読み直す（操作の後や、読み込み直しボタン）。 */
-export const refreshContainer = statusResource.refresh;
 
 export async function startContainer(): Promise<void> {
   await run("start", api.startContainer);
@@ -56,6 +53,11 @@ export async function startContainer(): Promise<void> {
 
 export async function resetContainer(wipeHome: boolean): Promise<void> {
   await run("reset", () => api.resetContainer(wipeHome));
+}
+
+/** 画面の WebSocket を開くための、この起動でだけ使えるトークン。 */
+export async function fetchVncToken(): Promise<string> {
+  return api.fetchVncToken();
 }
 
 /**

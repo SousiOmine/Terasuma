@@ -119,7 +119,10 @@ describe("伸びている応答の前後", () => {
   });
 
   test("liveSeq が null なら全部 before", () => {
-    const messages = [{ ...user("u1", "前", DAY1), seq: 1 }, { ...user("u2", "後ろ", DAY1), seq: 2 }];
+    const messages = [
+      { ...user("u1", "前", DAY1), seq: 1 },
+      { ...user("u2", "後ろ", DAY1), seq: 2 },
+    ];
 
     const { before, after } = splitAroundLive(messages, null);
 

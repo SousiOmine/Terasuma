@@ -95,15 +95,7 @@ export type StoredWebSearchSettings = {
   providers: WebSearchProvidersSettings;
 };
 
-export const FILE_KEYS = [
-  "model",
-  "providers",
-  "modelOptions",
-  "mcpServers",
-  "webSearch",
-  "env",
-  "port",
-] as const;
+export const FILE_KEYS = ["model", "providers", "modelOptions", "mcpServers", "webSearch", "env", "port"] as const;
 export type FileKey = (typeof FILE_KEYS)[number];
 
 /** config.json に書ける設定。書かなかった項目は既定値になる。 */

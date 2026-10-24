@@ -57,10 +57,7 @@ describe("Discord の webhook の API", () => {
 
   test("webhook を保存すると、接続済みとして返す", async () => {
     await withDiscordServer(async (harness, fake) => {
-      const response = await harness.request(
-        "/api/discord/default",
-        jsonRequest("PUT", { url: `  ${WEBHOOK_URL}  ` }),
-      );
+      const response = await harness.request("/api/discord/default", jsonRequest("PUT", { url: `  ${WEBHOOK_URL}  ` }));
 
       expect(response.status).toBe(200);
       expect(((await response.json()) as DiscordWebhooksView).teras[0]).toMatchObject({

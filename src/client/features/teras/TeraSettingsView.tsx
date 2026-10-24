@@ -196,19 +196,12 @@ function RoutineRow({ routine, onDelete }: { routine: RoutineView; onDelete: () 
           <button
             type="button"
             disabled={saving}
-            onClick={() =>
-              void (routine.running ? stopRun(routine.id) : runNow(routine.id)).catch(showRoutinesError)
-            }
+            onClick={() => void (routine.running ? stopRun(routine.id) : runNow(routine.id)).catch(showRoutinesError)}
             class={`${CARD_ACTION_CLASS} disabled:opacity-50`}
           >
             {t(routine.running ? "routine.stop" : "routine.run")}
           </button>
-          <button
-            type="button"
-            disabled={saving}
-            onClick={onDelete}
-            class={`${CARD_ACTION_CLASS} disabled:opacity-50`}
-          >
+          <button type="button" disabled={saving} onClick={onDelete} class={`${CARD_ACTION_CLASS} disabled:opacity-50`}>
             {t("common.delete")}
           </button>
         </div>

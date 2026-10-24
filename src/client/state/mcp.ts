@@ -32,11 +32,18 @@ export const AUTHORIZATION_TIMEOUT_MS = 5 * 60 * 1_000;
 /** 設定画面を開いたときに読む（まだ読めていなければ）。 */
 export const loadMcpServers = serversResource.load;
 /** 一覧を読み直す。 */
-export const refreshMcpServers = serversResource.refresh;
 
 /** 保存する前に、入力された設定で繋がるか確かめる。設定には書かない。 */
 export async function testMcpServer(form: McpServerForm): Promise<McpTestView> {
   return api.testMcpServer(form);
+}
+
+/**
+ * 保存前の確認で待っている認可をやめる。
+ * ダイアログを閉じたときと、待ちがタイムアウトしたときに呼ぶ。
+ */
+export async function cancelMcpTest(serverId: string): Promise<void> {
+  await api.cancelMcpTest(serverId);
 }
 
 /** 追加・変更。保存した後の全体が返るので、そのまま状態に置く。 */

@@ -26,7 +26,14 @@ export type CollapsibleCardProps = {
  * 見出し（名前・状態・短い説明）だけを出し、押したときだけ中身を出す。既定は閉じている。
  * 開閉はカードごとに持ち、一覧を読み直しても（同じ key なら）そのまま保たれる。
  */
-export function CollapsibleCard({ title, badge, lines = [], action, defaultOpen = false, children }: CollapsibleCardProps) {
+export function CollapsibleCard({
+  title,
+  badge,
+  lines = [],
+  action,
+  defaultOpen = false,
+  children,
+}: CollapsibleCardProps) {
   const [open, setOpen] = useState(defaultOpen);
 
   return (

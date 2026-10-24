@@ -3,7 +3,7 @@ import type { McpServerForm, McpServerView, McpTestView } from "../../../shared/
 import { useInFlight } from "../../hooks/useInFlight";
 import { t } from "../../i18n";
 import { type ErrorState, toErrorState } from "../../lib/errors";
-import { saveMcpServer, testMcpServer, waitForTestAuthorization } from "../../state/mcp";
+import { cancelMcpTest, saveMcpServer, testMcpServer, waitForTestAuthorization } from "../../state/mcp";
 import { Button } from "../../ui/Button";
 import { ErrorNotice } from "../../ui/ErrorNotice";
 import { Field } from "../../ui/Field";
@@ -59,6 +59,9 @@ export function McpServerDialog({
   const run = useRef(0);
   /** 一度開いた認可画面。同じタブを開き直さないための控え。 */
   const opened = useRef<string | null>(null);
+  /** いまの id。ダイアログを閉じたとき、待っている認可を片付けるのに使う。 */
+  const currentId = useRef(id);
+  currentId.current = id;
 
   const inputs: McpFormFields = { id, type, command, args, env, url };
   /** 入力そのもの。確かめた結果が今の入力に対するものかを比べるのにも使う。 */
@@ -69,10 +72,26 @@ export function McpServerDialog({
 
   useEffect(
     () => () => {
+      // 閉じたら、走っている確認の結果は捨てる。
       run.current += 1;
+
+      // 保存前の確認で認可を待っていたら、サーバ側の待ちも片付ける。
+      // 残すと、同じ設定でやり直しても古い URL が返り続ける。
+      if (currentId.current.length > 0) {
+        void cancelMcpTest(currentId.current).catch(() => undefined);
+      }
     },
     [],
   );
+
+  // id を書き換えたら、前の id で待っていた認可を片付ける。
+  const previousId = useRef(id);
+  useEffect(() => {
+    if (previousId.current !== id && previousId.current.length > 0) {
+      void cancelMcpTest(previousId.current).catch(() => undefined);
+    }
+    previousId.current = id;
+  }, [id]);
 
   /** 入力が変わったら、確かめた結果と待っている認可は捨てる（別の接続先を確かめることになるため）。 */
   const change = <T,>(set: (value: T) => void, value: T): void => {
@@ -163,6 +182,9 @@ export function McpServerDialog({
     }
 
     if (run.current !== current) return;
+
+    // 待つのをやめたら、サーバ側もやり直せる状態に戻す。
+    void cancelMcpTest(form.id).catch(() => undefined);
     setError({ code: "mcp_unreachable", detail: t("settings.mcp.form.authorizationTimeout") });
     setAuthorizing(null);
   }

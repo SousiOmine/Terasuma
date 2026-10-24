@@ -107,8 +107,7 @@ function TableBlock({ rows }: { rows: readonly (readonly string[])[] }) {
   );
 }
 
-const OPTION_CLASS =
-  "rounded-[14px] border px-3 py-2 text-left transition active:scale-[0.99]";
+const OPTION_CLASS = "rounded-[14px] border px-3 py-2 text-left transition active:scale-[0.99]";
 const OPTION_ON_CLASS = "border-[var(--app-accent)] bg-[var(--app-accent-soft)]";
 const OPTION_OFF_CLASS = "border-stroke bg-surface hover:bg-soft";
 
@@ -196,12 +195,7 @@ function FormBlock({ block }: { block: UiFormBlock }) {
       }}
     >
       {block.fields.map((field, index) => (
-        <FieldView
-          key={index}
-          field={field}
-          value={values[index]}
-          onChange={(value) => setValue(index, value)}
-        />
+        <FieldView key={index} field={field} value={values[index]} onChange={(value) => setValue(index, value)} />
       ))}
 
       <button

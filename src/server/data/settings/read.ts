@@ -4,25 +4,6 @@ import { isProviderId, mcpServerIdProblem } from "../../../shared/ids";
 import { isModelId } from "../../../shared/model";
 import { isWebSearchProviderId, WEB_SEARCH_PROVIDER_IDS } from "../../websearch/index";
 import { readPrivateJson } from "../secret-file";
-/**
- * 各セクションに書ける項目。綴り違いは起動時に落とす。
- */
-
-/** MCP サーバー 1 件に書ける項目。 */
-const MCP_SERVER_KEYS = ["type", "command", "args", "env", "url"] as const;
-
-/** Web 検索の設定に書ける項目。 */
-const WEB_SEARCH_KEYS = ["default", "providers"] as const;
-
-/** 検索プロバイダ 1 件に書ける項目。 */
-const WEB_SEARCH_PROVIDER_KEYS = ["apiKey"] as const;
-
-/** プロバイダ 1 件に書ける項目。 */
-const PROVIDER_KEYS = ["apiKey", "baseUrl", "label"] as const;
-
-/** モデル 1 件に書ける項目。 */
-const MODEL_OPTION_KEYS = ["reasoningEffort"] as const;
-
 import {
   FILE_KEYS,
   describeMcpServerIdProblem,
@@ -49,6 +30,23 @@ import {
  * config.json は唯一の保存先なので、ここで「読める形か」を決める。
  * 壊れた設定のまま起動しないよう、読めない値はその場で失敗させる。
  */
+
+/** 各セクションに書ける項目。綴り違いは起動時に落とす。 */
+
+/** MCP サーバー 1 件に書ける項目。 */
+const MCP_SERVER_KEYS = ["type", "command", "args", "env", "url"] as const;
+
+/** Web 検索の設定に書ける項目。 */
+const WEB_SEARCH_KEYS = ["default", "providers"] as const;
+
+/** 検索プロバイダ 1 件に書ける項目。 */
+const WEB_SEARCH_PROVIDER_KEYS = ["apiKey"] as const;
+
+/** プロバイダ 1 件に書ける項目。 */
+const PROVIDER_KEYS = ["apiKey", "baseUrl", "label"] as const;
+
+/** モデル 1 件に書ける項目。 */
+const MODEL_OPTION_KEYS = ["reasoningEffort"] as const;
 
 /** 設定ファイルから、実行時に使うモデル設定だけを取り出す。 */
 export function toModelSettings(file: FileSettings): ModelSettings {

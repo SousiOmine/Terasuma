@@ -1,6 +1,7 @@
 import type { FileStore } from "../../computer/files";
 import type { ImageStore } from "../../computer/images";
 import { ResourceNotFoundError } from "../../errors";
+import { SECURITY_HEADERS } from "../security";
 import type { ApiRequest } from "./shared";
 
 /**
@@ -22,6 +23,7 @@ export function mediaHandlers(deps: { images: ImageStore; files: FileStore }) {
 
       return new Response(new Uint8Array(image.data), {
         headers: {
+          ...SECURITY_HEADERS,
           "Content-Type": image.mime,
           "Cache-Control": CACHE_CONTROL,
         },
@@ -35,6 +37,7 @@ export function mediaHandlers(deps: { images: ImageStore; files: FileStore }) {
 
       return new Response(new Uint8Array(file.data), {
         headers: {
+          ...SECURITY_HEADERS,
           "Content-Type": file.mime,
           // 日本語のファイル名もそのままダウンロード名になる。
           "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(file.name)}`,

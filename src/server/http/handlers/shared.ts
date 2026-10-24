@@ -19,8 +19,7 @@ import type { WebSearchManager } from "../../websearch-manager";
 import type { RoutineScheduler } from "../../routine/scheduler";
 import type { Catalog } from "../../provider/catalog";
 import type { ConnectionChecker, ProviderModelLister } from "../../provider/connection";
-import { AppError, ValidationError } from "../../errors";
-import { CLIENT_HEADER } from "../../../shared/api/events";
+import { AppError } from "../../errors";
 
 /**
  * ハンドラが共有する型と、前提を確かめる小さな関数。
@@ -35,18 +34,6 @@ export type ApiRequest<Params extends Record<string, string> = Record<string, ne
   headers: Headers;
   text(): Promise<string>;
   formData(): Promise<FormData>;
-};
-
-/**
- * 画面の中継のルート。http/server.ts のルート定義（"/api/computer/screen/*"）と同じパスにする。
- * 中継先へ渡すパスは、この接頭辞を落として作る。
- */
-export const SCREEN_RELAY_PREFIX = "/api/computer/screen/";
-
-/** 画面の中継のリクエスト。 */
-export type ScreenRelayRequest = {
-  url: string;
-  signal: AbortSignal;
 };
 
 /** ハンドラが使う依存の全体。 */
@@ -77,10 +64,10 @@ export type ApiDeps = {
   envRequests: EnvRequests;
   /** 過去の対話の圧縮。ターンの前に走っている分を待ち、ターンの後に次を決める。 */
   compaction: Compaction;
-  /** ターンの実行状態。ルーチンと共有するため、外から渡せる。 */
-  turns?: Turns;
-  /** 同じ Tera を開いている画面への配り口。ルーチンと共有するため、外から渡せる。 */
-  broadcast?: ConversationBroadcast;
+  /** ターンの実行状態。ルーチンと同じ実体を渡す。 */
+  turns: Turns;
+  /** 同じ Tera を開いている画面への配り口。ルーチンと同じ実体を渡す。 */
+  broadcast: ConversationBroadcast;
   /** models.dev のカタログ。プロバイダとモデルの一覧はここから取る。 */
   catalog: Catalog;
   /** プロバイダへ接続できるかを確かめる。 */
@@ -89,26 +76,13 @@ export type ApiDeps = {
   listModels: ProviderModelLister;
   /** データディレクトリ。Tera の作業フォルダを消すときに使う。 */
   dataDir: string;
+  /** 画面の WebSocket を開くための、起動ごとのトークン。 */
+  vncToken: string;
 };
 
 /** Tera が無ければ 404。あれば何もしない。 */
 export function requireTera(store: Store, id: string): void {
   if (store.getTera(id) === null) throw new AppError("tera_not_found", 404, `Tera ${id} はありません`);
-}
-
-/**
- * 要求した画面（タブ）の id を読む。
- *
- * 送った画面は、送信の応答としてターンの出来事を受け取っている。購読へも同じものを配ると
- * 二重になるので、サーバはこの id の購読を飛ばす。id は画面が 1 回の読み込みごとに作り、
- * 会話の要求すべてに付ける（付いていなければ、どの購読を飛ばせばよいか決められない）。
- */
-export function requireClientId(headers: Headers): string {
-  const clientId = headers.get(CLIENT_HEADER)?.trim() ?? "";
-  if (clientId.length === 0) {
-    throw new ValidationError(`${CLIENT_HEADER} ヘッダに、画面の id を指定してください`);
-  }
-  return clientId;
 }
 
 /** プロバイダが設定されていなければ 404。 */

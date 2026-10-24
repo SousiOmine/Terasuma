@@ -1,9 +1,5 @@
 import { isRecord } from "../../shared/guards";
-import {
-  MAX_EVERY_MINUTES,
-  MIN_EVERY_MINUTES,
-  type RoutineSchedule,
-} from "../../shared/api/routine";
+import { MAX_EVERY_MINUTES, MIN_EVERY_MINUTES, type RoutineSchedule } from "../../shared/api/routine";
 
 /**
  * ルーチンの実行時刻。

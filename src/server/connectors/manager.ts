@@ -6,7 +6,7 @@ import { CONNECTOR_PROVIDERS, type ConnectorProvider, type ProgramProviderChoice
 import { checkPi, setupPi, type PiRuntime, type PiStatus } from "./pi";
 import { createProgramStore, type ProgramStore } from "./program-store";
 import { createTokenStore, type TokenStore } from "./token-store";
-import { createPendingRegistry } from "../wait/pending";
+import { createWaiterQueue } from "../wait/waiters";
 
 /**
  * コネクタの状態。
@@ -21,12 +21,6 @@ import { createPendingRegistry } from "../wait/pending";
  *
  * Discord はここではなく、Tera ごとの webhook を server/discord が受け持つ。
  */
-
-/** トークンの保存か、program の設定を待っているツール 1 つ。 */
-type Waiter = {
-  resolve(text: string): void;
-  reject(error: unknown): void;
-};
 
 // コンピュータの中で走らせた結果の型は pi.ts が持つ（manager → pi の一方向にする）。
 export type { ConnectorScriptResult } from "./pi";
@@ -49,10 +43,7 @@ export type ConnectorsManager = {
    * program コネクタの設定を書いて確かめる。キーが無ければ、いまの設定を確かめるだけ。
    * 確かめられたら、このアプリの待ちをすべて解く。
    */
-  connect(
-    id: string,
-    input?: { provider?: string; apiKey?: string; model?: string },
-  ): Promise<ConnectorsView>;
+  connect(id: string, input?: { provider?: string; apiKey?: string; model?: string }): Promise<ConnectorsView>;
   /** トークンの保存を待っているツールを、取り消しの理由で失敗させる。 */
   cancelWait(id: string): void;
   /** 保存されているトークンと確認結果を消す。 */
@@ -90,7 +81,7 @@ export function createConnectors(options: ConnectorsOptions): ConnectorsManager 
   const providers = options.providers ?? CONNECTOR_PROVIDERS;
 
   /** トークンの保存か確認を待っているツール（プロバイダ id → 待ち）。同じ id を複数のツールが待てる。 */
-  const pending = createPendingRegistry<string, Waiter>({ multiple: true });
+  const waiting = createWaiterQueue<string>();
   /** プロバイダ id → トークンの置き場。 */
   const tokenStores = new Map<string, TokenStore>();
   /** プロバイダ id → program の確認結果の置き場。 */
@@ -137,24 +128,6 @@ export function createConnectors(options: ConnectorsOptions): ConnectorsManager 
     ].join(" ");
   }
 
-  /** 待っているツールを、成功の文で解く。 */
-  function resolveWaiters(id: string, text: string): void {
-    for (const entry of pending.takeAll(id)) entry.pending.resolve(text);
-  }
-
-  /** 待っているツールを、理由を付けて失敗させる。 */
-  function rejectWaiters(id: string, error: unknown): void {
-    for (const entry of pending.takeAll(id)) entry.pending.reject(error);
-  }
-
-  /** トークンが保存されるまで待つ。ターンの中断で待ちを外す。 */
-  function waitForToken(id: string, signal: AbortSignal): Promise<string> {
-    return new Promise<string>((resolve, reject) => {
-      const entry = pending.register(id, { resolve, reject }, signal, () => reject(new Error(WAIT_ENDED)));
-      if (entry === null) reject(new Error(WAIT_ENDED));
-    });
-  }
-
   /** program コネクタの設定を書き、実際に呼んで確かめる。 */
   async function setupProgram(
     provider: Extract<ConnectorProvider, { kind: "program" }>,
@@ -182,7 +155,7 @@ export function createConnectors(options: ConnectorsOptions): ConnectorsManager 
       model: status.model,
       checkedAt: Date.now(),
     });
-    resolveWaiters(provider.id, connectedText(provider, status.status));
+    waiting.resolveAll(provider.id, connectedText(provider, status.status));
     return status;
   }
 
@@ -272,7 +245,7 @@ export function createConnectors(options: ConnectorsOptions): ConnectorsManager 
       // 間違ったトークンを保存すると、次のコマンドで初めて 401 になる。ここで確かめる。
       const account = await verifyAccount(provider, token);
       tokenStore(id).save({ accessToken: token, account, obtainedAt: Date.now() });
-      resolveWaiters(id, connectedText(provider, account));
+      waiting.resolveAll(id, connectedText(provider, account));
       return view();
     },
 
@@ -288,12 +261,12 @@ export function createConnectors(options: ConnectorsOptions): ConnectorsManager 
 
     cancelWait(id) {
       requireProvider(id);
-      rejectWaiters(id, new Error("The user cancelled the connector setup."));
+      waiting.rejectAll(id, new Error("The user cancelled the connector setup."));
     },
 
     disconnect(id) {
       requireProvider(id);
-      rejectWaiters(id, new Error("The connector was disconnected."));
+      waiting.rejectAll(id, new Error("The connector was disconnected."));
       tokenStore(id).clear();
       programStore(id).clear();
       return view();
@@ -307,7 +280,7 @@ export function createConnectors(options: ConnectorsOptions): ConnectorsManager 
         if (saved.kind === "record") return connectedText(provider, saved.record.status);
 
         // キーが要るので、トークンと同じくカードで設定されるまで待つ。
-        return waitForToken(id, signal);
+        return waiting.wait(id, signal, WAIT_ENDED);
       }
 
       const saved = tokenStore(id).read();
@@ -316,7 +289,7 @@ export function createConnectors(options: ConnectorsOptions): ConnectorsManager 
       }
       if (saved.kind === "token") return connectedText(provider, saved.token.account);
 
-      return waitForToken(id, signal);
+      return waiting.wait(id, signal, WAIT_ENDED);
     },
 
     token(id) {
@@ -341,9 +314,7 @@ export function createConnectors(options: ConnectorsOptions): ConnectorsManager 
     },
 
     close() {
-      for (const id of [...pending.keys()]) {
-        rejectWaiters(id, new Error("Terasuma is shutting down; the connector setup was cancelled."));
-      }
+      waiting.close("Terasuma is shutting down; the connector setup was cancelled.");
     },
   };
 }
@@ -359,4 +330,3 @@ function requireProviderChoice(
   }
   return choice;
 }
-

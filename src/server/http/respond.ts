@@ -1,6 +1,8 @@
 import { describeError } from "../../shared/errors";
 import type { ApiErrorCode } from "../../shared/api/error";
 import { AppError } from "../errors";
+import { requireClientForMutation } from "./client-id";
+import { SECURITY_HEADERS } from "./security";
 
 /**
  * HTTP の応答を作る。失敗の変換も、ハンドラの包み方もここに集める。
@@ -9,12 +11,12 @@ import { AppError } from "../errors";
 
 /** JSON の応答。 */
 export function json(body: unknown, status = 200): Response {
-  return Response.json(body, { status });
+  return Response.json(body, { status, headers: SECURITY_HEADERS });
 }
 
 /** 本文を持たない成功（204）。 */
 export function noContent(): Response {
-  return new Response(null, { status: 204 });
+  return new Response(null, { status: 204, headers: SECURITY_HEADERS });
 }
 
 /** 画面が文言を選べる形の失敗。 */
@@ -38,6 +40,8 @@ function handle<Args extends unknown[]>(
 ): (...args: Args) => Promise<Response> {
   return async (...args) => {
     try {
+      // 変更系は、画面の id を付けた要求だけを受け付ける（CSRF の門）。
+      requireClientForMutation(args[0]);
       return await handler(...args);
     } catch (error) {
       return errorResponse(error);

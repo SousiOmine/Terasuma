@@ -13,7 +13,7 @@
     "typecheck": "bunx tsc --noEmit",
     "fmt": "biome format --write .",
     "lint": "biome lint .",
-    "check": "bun run typecheck && bun run lint && bun test"
+    "check": "bun run typecheck && biome check . && bun test"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.84",
@@ -28,6 +28,7 @@
     "@ai-sdk/togetherai": "^3.0.75",
     "@ai-sdk/xai": "^5.0.26",
     "@modelcontextprotocol/client": "2.2.0",
+    "@novnc/novnc": "1.7.0",
     "@openrouter/ai-sdk-provider": "^3.1.0",
     "@preact/signals": "^2.11.3",
     "@tabler/icons-preact": "^3.49.0",

@@ -22,7 +22,7 @@ import { readStoredImages, toolResultOutput, type StoredImages } from "./tool-ou
  * スキルの一覧はターンの開始時に組み立てるので、スキルが変わらない限り前のターンと一致する。
  * スキルが増減したときだけ、そのターンから先頭が変わる。
  * ターンの途中でスキルが増えた場合は system プロンプトを組み直さず、
- * 次のモデル呼び出しの前に user メッセージで知らせる（engine.ts）。
+ * 次のモデル呼び出しの前に user メッセージで知らせる（engine/sdk.ts）。
  * identity は圧縮が要約を書き換えたときだけ切り替わる（compaction.ts）。
  * 要約も同じ瞬間に変わるので、その間はプロンプトキャッシュが当たり続ける。
  * 日時のような毎回変わる情報は、履歴の末尾（最後の user メッセージの後ろ）に置く。
@@ -114,13 +114,7 @@ export type TeraContext = {
  * その間は前のターンと頭から一致し、プロンプトキャッシュが当たり続ける。
  */
 export function summaryText(summary: string): string {
-  return [
-    "Earlier conversation was compacted into this summary:",
-    "",
-    "<summary>",
-    summary,
-    "</summary>",
-  ].join("\n");
+  return ["Earlier conversation was compacted into this summary:", "", "<summary>", summary, "</summary>"].join("\n");
 }
 
 /** assistant の content（本文だけ、または本文とツール呼び出しの並び）。 */

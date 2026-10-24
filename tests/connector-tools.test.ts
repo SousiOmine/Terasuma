@@ -5,7 +5,12 @@ import type { ToolSet } from "ai";
 import { createConnectors, type ConnectorsManager } from "../src/server/connectors/manager";
 import { createConnectorTools } from "../src/server/connectors/tools";
 import { withTempDir } from "./harness";
-import { fakeProgramProvider, fakeProvider, startFakeConnectorServer, type FakeConnectorServer } from "./fixtures/connector-server";
+import {
+  fakeProgramProvider,
+  fakeProvider,
+  startFakeConnectorServer,
+  type FakeConnectorServer,
+} from "./fixtures/connector-server";
 
 /**
  * コネクタのツール（app_connect_<id> / app_request）。
@@ -104,9 +109,7 @@ describe("コネクタのツール", () => {
 
   test("API を持たない program コネクタには、app_request を使わないよう伝える", async () => {
     await withTools(async ({ tools }) => {
-      const error = await rejectionOf(
-        callTool(tools, "app_request", { provider: "pi", method: "GET", path: "/user" }),
-      );
+      const error = await rejectionOf(callTool(tools, "app_request", { provider: "pi", method: "GET", path: "/user" }));
 
       expect(error).toContain("has no API");
       expect(error).not.toContain("pi-coding");

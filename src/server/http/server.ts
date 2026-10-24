@@ -1,75 +1,21 @@
 import type { Server } from "bun";
-import { join } from "node:path";
+import { randomBytes } from "node:crypto";
 import type { AppConfig } from "../../config";
-import type { ContainerManager } from "../computer/container";
-import type { EnvRequests } from "../computer/env";
-import type { FileStore } from "../computer/files";
-import type { ImageStore } from "../computer/images";
 import { MAX_REQUEST_BODY_BYTES } from "../computer/uploads";
-import type { AgentEngine } from "../agent/engine";
-import type { ConversationBroadcast } from "../agent/broadcast";
-import type { Turns } from "../agent/turns";
-import type { Handover } from "../computer/handover";
 import { describeError } from "../../shared/errors";
 import { jsonError, withErrorHandling } from "./respond";
-import type { ConnectorsManager } from "../connectors/manager";
-import type { DiscordWebhooks } from "../discord/manager";
-import type { McpManager } from "../mcp/manager";
-import type { WebSearchManager } from "../websearch-manager";
-import type { Compaction } from "../agent/compaction";
-import { CATALOG_FILE_NAME, createCatalog, type Catalog } from "../provider/catalog";
-import type { RoutineScheduler } from "../routine/scheduler";
-import {
-  createConnectionChecker,
-  createModelLister,
-  type ConnectionChecker,
-  type ProviderModelLister,
-} from "../provider/connection";
-import { createApiHandlers } from "./handlers";
-import type { SettingsStore } from "../data/settings";
-import type { Store } from "../data/store";
+import { createApiHandlers, type ApiDeps } from "./handlers";
 import { createRoutes } from "./routes";
 import { routeProblem } from "./route-problem";
 import { createScreenSocket, type ScreenSocketData } from "./screen-socket";
 
+/**
+ * 起動に必要なもの。依存は app.ts が組み立てたものをそのまま受け取る。
+ * ここで作るのは、起動するまで決まらない VNC のトークンだけにする。
+ */
 export type ServerOptions = {
   config: AppConfig;
-  store: Store;
-  engine: AgentEngine;
-  /** モデルとプロバイダの設定。 */
-  settings: SettingsStore;
-  /** MCP サーバーとの接続。OAuth のコールバックもここを通る。 */
-  mcp: McpManager;
-  /** コネクタ（トークン）。設定画面とチャットのカードからの操作もここを通る。 */
-  connectors: ConnectorsManager;
-  /** Discord の webhook（送信先は Tera ごと）。設定画面とチャットのカードからの操作もここを通る。 */
-  discord: DiscordWebhooks;
-  /** Web 検索の設定と接続確認。設定画面からの操作もここを通る。 */
-  webSearch: WebSearchManager;
-  /** スケジュールされた実行（ルーチン）。一覧・有効/無効・削除・いま実行・停止がここを通る。 */
-  routines: RoutineScheduler;
-  /** podman で動かすコンテナ。設定画面からの操作もここを通る。 */
-  container: ContainerManager;
-  /** エージェントが送った画像。画面へ返す。 */
-  images: ImageStore;
-  /** エージェントが送ったファイル。画面へ返す。 */
-  files: FileStore;
-  /** ユーザーへ画面を渡す待ち。 */
-  handover: Handover;
-  /** 環境変数の入力待ち。チャットで入力された値を設定へ書く。 */
-  envRequests: EnvRequests;
-  /** 過去の対話の圧縮（古いやり取りの畳み方）。テストで差し替える。 */
-  compaction: Compaction;
-  /** ターンの実行状態。ルーチンと共有するため、外から渡せる。 */
-  turns?: Turns;
-  /** 同じ Tera を開いている画面への配り口。ルーチンと共有するため、外から渡せる。 */
-  broadcast?: ConversationBroadcast;
-  /** models.dev のカタログ。テストで差し替える。 */
-  catalog?: Catalog;
-  /** プロバイダへ接続できるかの確認。テストで差し替える。 */
-  checkConnection?: ConnectionChecker;
-  /** 独自エンドポイントのモデル一覧。テストで差し替える。 */
-  listModels?: ProviderModelLister;
+  deps: Omit<ApiDeps, "vncToken">;
 };
 
 /** 起動したサーバと、ポートをどう確保したか。 */
@@ -89,52 +35,18 @@ const ANY_FREE_PORT = 0;
 /**
  * HTTP サーバを起動する。設定したポートが埋まっていたら、空いているポートを OS に選ばせて起動する。
  *
- * ルートの対応は routes.ts が持つ。ここは依存を組み立てて、Bun.serve に渡すだけにする。
+ * ルートの対応は routes.ts が持つ。ここは依存を受け取って、Bun.serve に渡すだけにする。
  */
 export function startServer(options: ServerOptions): StartedServer {
-  const {
-    config,
-    store,
-    engine,
-    compaction,
-    settings,
-    mcp,
-    connectors,
-    discord,
-    webSearch,
-    routines,
-    container,
-    images,
-    files,
-    handover,
-    envRequests,
-  } = options;
+  const { config, deps } = options;
+
+  // 画面の WebSocket は、この起動でだけ使えるトークンで開く。
+  // WebSocket は CORS の制約を受けないので、トークンが無いと他サイトから画面を操作できてしまう。
+  const vncToken = randomBytes(32).toString("hex");
+
   // 各ハンドラの例外は、ここで 1 度だけ応答に変える（ハンドラ側に try/catch を書かない）。
-  const api = withErrorHandling(
-    createApiHandlers({
-      store,
-      engine,
-      settings,
-      mcp,
-      connectors,
-      discord,
-      webSearch,
-      routines,
-      container,
-      images,
-      files,
-      handover,
-      envRequests,
-      compaction,
-      turns: options.turns,
-      broadcast: options.broadcast,
-      catalog: options.catalog ?? createCatalog({ cachePath: join(config.dataDir, CATALOG_FILE_NAME) }),
-      checkConnection: options.checkConnection ?? createConnectionChecker(),
-      listModels: options.listModels ?? createModelLister(),
-      dataDir: config.dataDir,
-    }),
-  );
-  const screen = createScreenSocket(container);
+  const api = withErrorHandling(createApiHandlers({ ...deps, vncToken }));
+  const screen = createScreenSocket(deps.container, vncToken);
   const routes = createRoutes(api, screen);
 
   const serve = (port: number) =>

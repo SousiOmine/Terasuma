@@ -1,3 +1,5 @@
+import { SECURITY_HEADERS } from "./security";
+
 /**
  * 1 本のイベント列を SSE として流す。
  *
@@ -95,6 +97,7 @@ export function createSseResponse<T>(
 
   return new Response(body, {
     headers: {
+      ...SECURITY_HEADERS,
       "Content-Type": "text/event-stream; charset=utf-8",
       "Cache-Control": "no-cache, no-transform",
       "X-Accel-Buffering": "no",

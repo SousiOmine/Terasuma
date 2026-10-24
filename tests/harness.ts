@@ -2,6 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { CONFIG_FILE_NAME, type AppConfig } from "../src/config";
+import { CLIENT_HEADER } from "../src/shared/api/events";
 import { readSettingsFile, type FileSettings } from "../src/server/data/settings";
 import type { ContainerManager } from "../src/server/computer/container";
 import { createMockEngine } from "../src/server/agent/engine/mock";
@@ -10,11 +11,18 @@ import { createFileStore, type FileStore } from "../src/server/computer/files";
 import { createEnvRequests, type EnvRequests } from "../src/server/computer/env";
 import { createHandover, type Handover } from "../src/server/computer/handover";
 import { createImageStore, type ImageStore } from "../src/server/computer/images";
+import { createConversationBroadcast } from "../src/server/agent/broadcast";
+import { createTurns } from "../src/server/agent/turns";
 import type { McpManager } from "../src/server/mcp/manager";
 import type { WebSearchManager } from "../src/server/websearch-manager";
 import type { RoutineScheduler } from "../src/server/routine/scheduler";
-import type { Catalog } from "../src/server/provider/catalog";
-import type { ConnectionChecker, ProviderModelLister } from "../src/server/provider/connection";
+import { CATALOG_FILE_NAME, createCatalog, type Catalog } from "../src/server/provider/catalog";
+import {
+  createConnectionChecker,
+  createModelLister,
+  type ConnectionChecker,
+  type ProviderModelLister,
+} from "../src/server/provider/connection";
 import { startServer, type StartedServer } from "../src/server/http/server";
 import { createSettingsStore, type SettingsStore } from "../src/server/data/settings";
 import { createStore, type Store } from "../src/server/data/store";
@@ -118,6 +126,7 @@ export async function withServer<T>(
 
   const settings = createSettingsStore(settingsPath);
   const store = options.store ?? createStore(":memory:");
+  const engine = options.engine ?? fastMock();
   const compaction = createCompactionStub(store);
   const handover = options.handover ?? createHandover();
   const envRequests = options.envRequests ?? createEnvRequests({ settings });
@@ -153,23 +162,28 @@ export async function withServer<T>(
   try {
     started = startServer({
       config,
-      store,
-      engine: options.engine ?? fastMock(),
-      compaction,
-      settings,
-      mcp: options.mcp ?? createMcpStub(),
-      connectors,
-      discord,
-      routines,
-      webSearch: options.webSearch ?? createWebSearchStub(),
-      container,
-      images,
-      files,
-      handover,
-      envRequests,
-      catalog: options.catalog,
-      checkConnection: options.checkConnection,
-      listModels: options.listModels,
+      deps: {
+        store,
+        engine,
+        settings,
+        mcp: options.mcp ?? createMcpStub(),
+        connectors,
+        discord,
+        routines,
+        webSearch: options.webSearch ?? createWebSearchStub(),
+        container,
+        images,
+        files,
+        handover,
+        envRequests,
+        compaction,
+        turns: createTurns({ store, engine, compaction }),
+        broadcast: createConversationBroadcast(),
+        catalog: options.catalog ?? createCatalog({ cachePath: join(dir, CATALOG_FILE_NAME) }),
+        checkConnection: options.checkConnection ?? createConnectionChecker(),
+        listModels: options.listModels ?? createModelLister(),
+        dataDir: dir,
+      },
     });
   } catch (error) {
     compaction.close();
@@ -192,7 +206,7 @@ export async function withServer<T>(
     files,
     handover,
     envRequests,
-    request: (path, init) => fetch(new URL(path, started.server.url), init),
+    request: (path, init) => fetch(new URL(path, started.server.url), withClientHeader(init)),
     file: () => readSettingsFile(settingsPath),
   };
 
@@ -217,6 +231,16 @@ export function fastMock(): AgentEngine {
 export function portOf(server: { port?: number }): number {
   if (server.port === undefined) throw new Error("サーバのポートが取れていない");
   return server.port;
+}
+
+/**
+ * 変更系の API は画面の id を要求する。テストでは、明示が無ければ固定の id を付ける。
+ * ヘッダを明示したテストは、その指定をそのまま使う。
+ */
+function withClientHeader(init?: RequestInit): RequestInit {
+  const headers = new Headers(init?.headers);
+  if (!headers.has(CLIENT_HEADER)) headers.set(CLIENT_HEADER, "test-client");
+  return { ...init, headers };
 }
 
 /** JSON を返す応答。fetch の差し替えで使う。 */

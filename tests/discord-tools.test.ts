@@ -72,15 +72,12 @@ describe("Discord のツール", () => {
     await withTools(async ({ tools }) => {
       const registry = await createToolRegistry(tools);
 
-      expect(registry.search("discord", 10).map((match) => match.name)).toEqual([
-        "discord_connect",
-        "discord_send",
-      ]);
+      expect(registry.search("discord", 10).map((match) => match.name)).toEqual(["discord_connect", "discord_send"]);
 
       // 2000 文字を超える本文は、送る前に断る。
-      await expect(
-        registry.call("discord_send", { content: "x".repeat(2001) }, { toolCallId: "c1" }),
-      ).rejects.toThrow(/Invalid arguments/);
+      await expect(registry.call("discord_send", { content: "x".repeat(2001) }, { toolCallId: "c1" })).rejects.toThrow(
+        /Invalid arguments/,
+      );
     });
   });
 
@@ -98,9 +95,7 @@ describe("Discord のツール", () => {
       await discord.set(DEFAULT_TERA_ID, WEBHOOK_URL);
       expect(await waiting).toContain("Discord is connected");
 
-      expect(
-        await callTool(tools, "discord_connect", { reason: "もう一度" }, context),
-      ).toContain("is connected");
+      expect(await callTool(tools, "discord_connect", { reason: "もう一度" }, context)).toContain("is connected");
     });
   });
 

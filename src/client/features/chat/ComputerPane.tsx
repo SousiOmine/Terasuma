@@ -1,7 +1,7 @@
 import { IconSend, IconX } from "@tabler/icons-preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { sendMessage } from "../../state/chat";
-import { containerStatus } from "../../state/container";
+import { containerStatus, fetchVncToken } from "../../state/container";
 import { envRequestActive } from "../../state/env-request";
 import { chatError, clearChatError } from "../../state/failure";
 import { t } from "../../i18n";
@@ -42,9 +42,6 @@ type RfbConstructor = new (
   options?: { credentials?: { password?: string } },
 ) => RfbClient;
 
-/** noVNC の入り口。実行時にコンテナから読む（バンドラに解決させない）。 */
-const NOVNC_MODULE_URL = "/api/computer/screen/core/rfb.js";
-
 /** 接続の様子。画面が出るまでの間も何か出しておく（真っ黒なままだと壊れて見える）。 */
 type ConnectionState = "connecting" | "connected" | "disconnected";
 
@@ -78,11 +75,17 @@ export function ComputerPane() {
 
     void (async () => {
       try {
-        const module = (await import(/* @vite-ignore */ NOVNC_MODULE_URL)) as { default: RfbConstructor };
+        // noVNC はアプリのバンドルに同梱する（コンテナから配ると、コンテナの書き換えが
+        // Terasuma のオリジンで実行されてしまう）。
+        const [module, token] = await Promise.all([
+          import("@novnc/novnc") as Promise<{ default: RfbConstructor }>,
+          fetchVncToken(),
+        ]);
         if (disposed) return;
 
         const protocol = location.protocol === "https:" ? "wss" : "ws";
-        client = new module.default(target, `${protocol}://${location.host}/api/computer/vnc`);
+        const url = `${protocol}://${location.host}/api/computer/vnc?token=${encodeURIComponent(token)}`;
+        client = new module.default(target, url);
         client.viewOnly = computerViewOnly.value;
         client.scaleViewport = true;
         // 画面が入りきらない部分（接続中など）は、下のカードの背景をそのまま見せる。
@@ -235,9 +238,7 @@ export function ComputerPane() {
               <div ref={targetRef} class="h-full w-full" />
               {connection !== "connected" && (
                 <div class="absolute inset-0 flex flex-col items-center justify-center text-xs text-secondary">
-                  <p>
-                    {t(connection === "connecting" ? "chat.computer.connecting" : "chat.computer.disconnected")}
-                  </p>
+                  <p>{t(connection === "connecting" ? "chat.computer.connecting" : "chat.computer.disconnected")}</p>
                   {connection === "disconnected" && (
                     <button
                       type="button"

@@ -5,12 +5,10 @@ import type {
   ChatAttachment,
   ChatAttachmentView,
   ChatEvent,
-  ChatMessage,
   ChatMessageView,
   ImageRef,
   MessagePart,
   SentAttachment,
-  TokenUsage,
 } from "./api/message";
 
 /**
@@ -27,12 +25,6 @@ function isString(value: unknown): value is string {
 
 function isNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
-}
-
-function isUsage(value: unknown): value is TokenUsage {
-  return (
-    isRecord(value) && isNumber(value.inputTokens) && isNumber(value.outputTokens) && isNumber(value.cachedInputTokens)
-  );
 }
 
 function isImageRef(value: unknown): value is ImageRef {
@@ -91,24 +83,6 @@ export function isMessagePart(value: unknown): value is MessagePart {
     default:
       return false;
   }
-}
-
-/** 1 件のメッセージ。 */
-export function isChatMessage(value: unknown): value is ChatMessage {
-  if (!isRecord(value)) return false;
-
-  return (
-    isString(value.id) &&
-    isString(value.teraId) &&
-    isNumber(value.seq) &&
-    (value.role === "user" || value.role === "assistant") &&
-    isString(value.content) &&
-    (value.attachments === null || (Array.isArray(value.attachments) && value.attachments.every(isChatAttachment))) &&
-    (value.parts === null || (Array.isArray(value.parts) && value.parts.every(isMessagePart))) &&
-    (value.origin === null || isString(value.origin)) &&
-    isNumber(value.createdAt) &&
-    (value.usage === null || isUsage(value.usage))
-  );
 }
 
 /** 画面へ返す 1 件のメッセージ。usage を持たない。 */

@@ -2,7 +2,7 @@ import { describeError } from "../../../shared/errors";
 import type { McpAuthorizationView } from "../../../shared/api/settings";
 import { AppError, ValidationError } from "../../errors";
 import { readMcpForm } from "../body";
-import { json } from "../respond";
+import { json, noContent } from "../respond";
 import { authorizationPage, toMcpView } from "../views";
 import { type ApiDeps, type ApiRequest, requireMcpServer } from "./shared";
 import { settingsWriter } from "./settings";
@@ -50,6 +50,15 @@ export function mcpHandlers(deps: Pick<ApiDeps, "settings" | "mcp">) {
     async testMcpServer(req: ApiRequest): Promise<Response> {
       const parsed = await readMcpForm(req);
       return json(await deps.mcp.test(parsed.id, parsed.server));
+    },
+
+    /**
+     * 保存前の確認で待っている認可をやめる。
+     * まだ設定に無い id でも呼べる（追加ダイアログを閉じたときにも使う）。
+     */
+    cancelMcpTest(req: ApiRequest<{ id: string }>): Response {
+      deps.mcp.cancelTest(req.params.id);
+      return noContent();
     },
 
     /** MCP サーバーの設定を変える。接続は次に確かめたときから新しい設定になる。 */

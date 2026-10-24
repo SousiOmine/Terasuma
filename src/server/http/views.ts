@@ -2,6 +2,7 @@ import type { McpServersSettings, ModelSettings, StoredWebSearchSettings } from 
 import type { McpServersView, ModelSettingsView, WebSearchSettingsView } from "../../shared/api/settings";
 import type { McpManager } from "../mcp/manager";
 import { isWebSearchProviderId, providerInfo, WEB_SEARCH_PROVIDERS } from "../websearch/index";
+import { SECURITY_HEADERS } from "./security";
 
 /**
  * 保存されている設定を、画面へ返す形に整える。
@@ -79,7 +80,10 @@ ${paragraphs}
 </main>
 </body></html>`;
 
-  return new Response(html, { status, headers: { "Content-Type": "text/html; charset=utf-8" } });
+  return new Response(html, {
+    status,
+    headers: { ...SECURITY_HEADERS, "Content-Type": "text/html; charset=utf-8" },
+  });
 }
 
 export const HTML_ESCAPES: Record<string, string> = {

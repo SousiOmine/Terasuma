@@ -244,11 +244,7 @@ export type TeraIdentityStore = {
   applyIdentity(teraId: string): boolean;
 };
 
-export type Store = TeraDirectory &
-  MessageLog &
-  CompactionStore &
-  TeraIdentityStore &
-  RoutineStore & { close(): void };
+export type Store = TeraDirectory & MessageLog & CompactionStore & TeraIdentityStore & RoutineStore & { close(): void };
 
 export type CreateStoreOptions = {
   /** テストで時刻を固定するために差し替える。 */

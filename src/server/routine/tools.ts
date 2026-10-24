@@ -1,4 +1,3 @@
-import type { ToolSet } from "ai";
 import { tool } from "ai";
 import { z } from "zod";
 import {
@@ -9,7 +8,6 @@ import {
   ROUTINES_PER_TERA_MAX,
   type RoutineSchedule,
 } from "../../shared/api/routine";
-import type { Tera } from "../../shared/api/message";
 import { formatLocalDate } from "../../shared/text";
 import {
   ROUTINE_CREATE_TOOL_NAME,
@@ -19,6 +17,7 @@ import {
   ROUTINE_UPDATE_TOOL_NAME,
 } from "../../shared/tools";
 import type { RoutineRecord, RoutineStore } from "../data/store";
+import type { RoutineToolset, RoutineToolsetProvider } from "../agent/contracts";
 import { nextRunAt, scheduleProblem } from "./schedule";
 import type { RoutineScheduler } from "./scheduler";
 
@@ -32,22 +31,8 @@ import type { RoutineScheduler } from "./scheduler";
  * 扱うルーチンはターンの Tera で決まるので、ツール一式はターンごとに組む。
  */
 
-/** モデルへ渡すツール。キーは "routine_create" など。 */
-export type RoutineToolset = ToolSet;
-
-/** ツールの供給元。扱うルーチンはターンの Tera のものなので、ターンごとに teraId を渡す。 */
-export type RoutineToolsetProvider = {
-  toolset(input: { teraId: string }): RoutineToolset;
-};
-
-/** ルーチンの保存先。Tera の確認は、実装によって名前が違うのでどちらでも受けられるようにする。 */
-type RoutineToolStore = RoutineStore & {
-  readTera?(id: string): Tera | null;
-  getTera?(id: string): Tera | null;
-};
-
 export function createRoutineToolset(options: {
-  store: RoutineToolStore;
+  store: RoutineStore;
   routines: RoutineScheduler;
 }): RoutineToolsetProvider {
   return {
@@ -96,7 +81,7 @@ type UpdateInput = {
 type IdInput = { id: string };
 
 function createRoutineTools(options: {
-  store: RoutineToolStore;
+  store: RoutineStore;
   routines: RoutineScheduler;
   teraId: string;
 }): RoutineToolset {

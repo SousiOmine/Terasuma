@@ -28,9 +28,6 @@ import type { WebSearchManager } from "../../websearch-manager";
 /** 検索結果の本文全体の上限（文字数）。1 件ずつの抜粋では、結果が増えたときに膨らむ。 */
 const MAX_SEARCH_RESULT_CHARS = 20_000;
 
-/** モデルへ渡すツール。キーは "web_search" と "web_fetch"。 */
-export type WebSearchToolset = ToolSet;
-
 export function createWebSearchToolset(options: { manager: WebSearchManager }): WebSearchToolsetProvider {
   return {
     toolset() {

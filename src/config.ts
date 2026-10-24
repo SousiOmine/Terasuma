@@ -5,7 +5,7 @@ import { readSettingsFile, type EngineKind } from "./server/data/settings";
 
 /**
  * 起動に使う設定。設定ファイル（config.json）の読み取りはサーバ側の
- * data/settings-schema.ts が受け持つ。ここには「どのディレクトリで、どのポートで、
+ * server/data/settings/read.ts が受け持つ。ここには「どのディレクトリで、どのポートで、
  * どの実装で動くか」だけを置く。
  */
 

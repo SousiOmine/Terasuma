@@ -6,7 +6,6 @@ import type { CodingToolset } from "./tools/coding";
 import type { ComputerToolset } from "./tools/computer";
 import type { HistoryToolset } from "./tools/history";
 import type { TeraToolset } from "./tools/tera";
-import type { RoutineToolset } from "../routine/tools";
 
 /**
  * エンジンがツール一式を受け取るための型。
@@ -55,6 +54,9 @@ export type AttachmentToolsetProvider = {
 export type HistoryToolsetProvider = {
   toolset(input: { teraId: string }): HistoryToolset;
 };
+
+/** スケジュールされた実行（ルーチン）のツール一式。 */
+export type RoutineToolset = ToolSet;
 
 /**
  * スケジュールされた実行（ルーチン）のツールの供給元。

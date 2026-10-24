@@ -160,6 +160,41 @@ describe("取得先の制限", () => {
     }
   });
 
+  test("IPv4 を埋め込んだ IPv6 も取得しない", async () => {
+    // URL は ::ffff:127.0.0.1 を [::ffff:7f00:1] に正規化する。16 bit ずつ読まないと素通りする。
+    for (const url of [
+      "http://[::ffff:127.0.0.1]/",
+      "http://[::ffff:7f00:1]/",
+      "http://[::ffff:0:0]/",
+      "http://[::7f00:1]/",
+      "http://[::ffff:192.168.1.1]/",
+      "http://[64:ff9b::7f00:1]/",
+    ]) {
+      const error = await rejection(fetchDirect(respondingFetch(htmlResponse("x")), { url }));
+      expect(error.code).toBe("invalid");
+    }
+  });
+
+  test("Content-Length の無い大きな応答は、読み切らずに止める", async () => {
+    let pulled = 0;
+    const chunk = new Uint8Array(1024 * 1024);
+    const response = new Response(
+      new ReadableStream<Uint8Array>({
+        pull(controller) {
+          pulled += 1;
+          controller.enqueue(chunk);
+        },
+      }),
+      { headers: { "Content-Type": "text/plain" } },
+    );
+
+    const error = await rejection(fetchDirect(respondingFetch(response), { url: "https://example.com/big" }));
+
+    expect(error.code).toBe("unavailable");
+    // 5 MB の上限を超えた時点で reader を止める（無限に読まない）。
+    expect(pulled).toBeLessThan(20);
+  });
+
   test("リダイレクトの飛び先も同じ規則で確かめる", async () => {
     const error = await rejection(
       fetchDirect(

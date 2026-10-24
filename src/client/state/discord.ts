@@ -31,7 +31,6 @@ export const savingDiscord = signal(false);
 /** 設定画面を開いたときに読む（まだ読めていなければ）。 */
 export const loadDiscord = resource.load;
 /** 一覧を読み直す。 */
-export const refreshDiscord = resource.refresh;
 
 /** 入力された URL をまとめて保存する。1 つ失敗しても残りは試し、失敗した分をまとめて投げる。 */
 export async function saveWebhooks(entries: readonly { teraId: string; url: string }[]): Promise<void> {

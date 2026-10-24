@@ -1,4 +1,5 @@
 import type { Server, WebSocketHandler } from "bun";
+import { timingSafeEqual } from "node:crypto";
 import type { ContainerManager } from "../computer/container";
 import { jsonError } from "./respond";
 
@@ -21,9 +22,15 @@ export type ScreenSocket = {
   websocket: WebSocketHandler<ScreenSocketData>;
 };
 
-export function createScreenSocket(container: ContainerManager): ScreenSocket {
+export function createScreenSocket(container: ContainerManager, vncToken: string): ScreenSocket {
   return {
     async upgrade(req, server) {
+      // WebSocket は CORS の制約を受けない。トークンを知らない画面（他サイト）は開けない。
+      const provided = new URL(req.url).searchParams.get("token");
+      if (!sameToken(provided, vncToken)) {
+        return jsonError(401, "invalid_request", "画面のトークンが違います");
+      }
+
       const status = await container.status();
       if (status.state !== "running" || status.vncPort === null) {
         return jsonError(409, "container_not_running", "コンピュータが動いていないため、画面を表示できません");
@@ -69,4 +76,10 @@ export function createScreenSocket(container: ContainerManager): ScreenSocket {
       },
     },
   };
+}
+
+/** トークンを定数時間で比べる（長さが違えば、その時点で違う）。 */
+function sameToken(provided: string | null, expected: string): boolean {
+  if (provided === null || provided.length !== expected.length) return false;
+  return timingSafeEqual(Buffer.from(provided, "utf8"), Buffer.from(expected, "utf8"));
 }

@@ -1,10 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { posix } from "node:path";
 import { WORKDIR_IN_CONTAINER } from "../src/server/computer/contract";
-import {
-  createConnectors,
-  type ConnectorScriptResult,
-} from "../src/server/connectors/manager";
+import { createConnectors, type ConnectorScriptResult } from "../src/server/connectors/manager";
 import type { PiRuntime } from "../src/server/connectors/pi";
 import type { ConnectorsView } from "../src/shared/api/settings";
 import { type ServerHarness, withServer } from "./harness";

@@ -4,7 +4,7 @@ import type { DiscordWebhookTeraView, DiscordWebhooksView } from "../../shared/a
 import type { TeraDirectory } from "../data/store";
 import { readPrivateJson, writePrivateJson } from "../data/secret-file";
 import type { FetchLike } from "../http/client";
-import { createPendingRegistry } from "../wait/pending";
+import { createWaiterQueue } from "../wait/waiters";
 import {
   parseWebhookUrl,
   sendWebhookMessage,
@@ -41,12 +41,6 @@ type WebhookState =
   | { kind: "none" }
   | { kind: "webhook"; webhook: StoredWebhook }
   | { kind: "unreadable"; detail: string };
-
-/** webhook の保存を待っているツール 1 つ。 */
-type Waiter = {
-  resolve(text: string): void;
-  reject(error: unknown): void;
-};
 
 export type DiscordWebhooks = {
   /** 設定画面に出す、Tera ごとの状態。 */
@@ -90,7 +84,7 @@ export function createDiscordWebhooks(options: DiscordWebhooksOptions): DiscordW
   const fetchImpl = options.fetch ?? fetch;
 
   /** webhook の保存を待っているツール（Tera id → 待ち）。同じ Tera を複数のツールが待てる。 */
-  const pending = createPendingRegistry<string, Waiter>({ multiple: true });
+  const waiting = createWaiterQueue<string>();
 
   function pathOf(teraId: string): string {
     // 置き場は Tera の一覧にある id だけから作る（URL から来た文字列を、そのままファイル名にしない）。
@@ -123,22 +117,6 @@ export function createDiscordWebhooks(options: DiscordWebhooksOptions): DiscordW
       "Find discord_send with tool_search and call it to post (the discord skill describes the limits).",
       "A webhook can only post; mentions do not notify anyone.",
     ].join(" ");
-  }
-
-  function resolveWaiters(teraId: string, text: string): void {
-    for (const entry of pending.takeAll(teraId)) entry.pending.resolve(text);
-  }
-
-  function rejectWaiters(teraId: string, error: unknown): void {
-    for (const entry of pending.takeAll(teraId)) entry.pending.reject(error);
-  }
-
-  /** webhook が保存されるまで待つ。ターンの中断で待ちを外す。 */
-  function waitForWebhook(teraId: string, signal: AbortSignal): Promise<string> {
-    return new Promise<string>((resolve, reject) => {
-      const entry = pending.register(teraId, { resolve, reject }, signal, () => reject(new Error(WAIT_ENDED)));
-      if (entry === null) reject(new Error(WAIT_ENDED));
-    });
   }
 
   function view(): DiscordWebhooksView {
@@ -177,12 +155,12 @@ export function createDiscordWebhooks(options: DiscordWebhooksOptions): DiscordW
         savedAt: Date.now(),
       };
       writePrivateJson(path, stored, { createDirectory: true });
-      resolveWaiters(teraId, connectedText(stored));
+      waiting.resolveAll(teraId, connectedText(stored));
       return view();
     },
 
     clear(teraId) {
-      rejectWaiters(teraId, new Error("The Discord webhook was removed."));
+      waiting.rejectAll(teraId, new Error("The Discord webhook was removed."));
       rmSync(pathOf(teraId), { force: true });
       return view();
     },
@@ -197,11 +175,11 @@ export function createDiscordWebhooks(options: DiscordWebhooksOptions): DiscordW
       }
       if (state.kind === "webhook") return connectedText(state.webhook);
 
-      return waitForWebhook(teraId, signal);
+      return waiting.wait(teraId, signal, WAIT_ENDED);
     },
 
     cancelWait(teraId) {
-      rejectWaiters(teraId, new Error("The user cancelled the Discord webhook request."));
+      waiting.rejectAll(teraId, new Error("The user cancelled the Discord webhook request."));
     },
 
     async send(teraId, message, signal) {
@@ -222,9 +200,7 @@ export function createDiscordWebhooks(options: DiscordWebhooksOptions): DiscordW
     },
 
     close() {
-      for (const teraId of [...pending.keys()]) {
-        rejectWaiters(teraId, new Error("Terasuma is shutting down; the Discord webhook request was cancelled."));
-      }
+      waiting.close("Terasuma is shutting down; the Discord webhook request was cancelled.");
     },
   };
 }

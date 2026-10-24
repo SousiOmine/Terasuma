@@ -197,7 +197,6 @@ function failingEvent(events: ChatEvent[]): { code: ApiErrorCode; detail: string
 function createRecordingEngine(inner: AgentEngine): AgentEngine & { inputs: EngineInput[] } {
   const inputs: EngineInput[] = [];
   return {
-    name: `recording(${inner.name})`,
     inputs,
     stream(input) {
       inputs.push(input);
@@ -212,7 +211,6 @@ function createRecordingEngine(inner: AgentEngine): AgentEngine & { inputs: Engi
 /** 失敗の伝わり方を確かめるためのエンジン。 */
 function createFailingEngine(mode: "immediate" | "mid-stream"): AgentEngine {
   return {
-    name: `failing(${mode})`,
     stream(): Promise<EngineStream> {
       if (mode === "immediate") return Promise.reject(new Error("モデルに接続できなかった"));
 
@@ -235,7 +233,6 @@ function createFlakyEngine(failures: number): AgentEngine & { calls: number; fai
   const state = { calls: 0, failures };
 
   return {
-    name: `flaky(${failures})`,
     get calls() {
       return state.calls;
     },
@@ -277,7 +274,6 @@ function createToolEngine(): AgentEngine {
   } as const;
 
   return {
-    name: "tool-engine",
     stream(): Promise<EngineStream> {
       return Promise.resolve({
         events: (async function* () {
@@ -298,7 +294,6 @@ function createToolEngine(): AgentEngine {
 /** メッセージを少しずつ送り続けるエンジン。途中で切ったときの保存を見る。 */
 function createSlowMessageEngine(): AgentEngine {
   return {
-    name: "slow-messages",
     stream(input): Promise<EngineStream> {
       return Promise.resolve({
         events: (async function* () {
@@ -320,7 +315,6 @@ function createSlowMessageEngine(): AgentEngine {
 /** 1 件送ったあと、停止されるまで待つエンジン。 */
 function createStoppableEngine(): AgentEngine {
   return {
-    name: "stoppable",
     stream(input): Promise<EngineStream> {
       return Promise.resolve({
         events: (async function* () {
@@ -345,7 +339,6 @@ function createStoppableEngine(): AgentEngine {
 /** 途中で届いた発言を待ち、届いたら受け取った内容を本文にして返すエンジン。 */
 function createSteeringEngine(): AgentEngine {
   return {
-    name: "steering",
     stream(input): Promise<EngineStream> {
       return Promise.resolve({
         events: (async function* () {
@@ -386,7 +379,6 @@ function createDeferredEndEngine(): AgentEngine & { started: Promise<void>; rele
   let calls = 0;
 
   return {
-    name: "deferred-end",
     started,
     release,
     stream(input): Promise<EngineStream> {
@@ -432,7 +424,6 @@ function createPassiveEngine(): AgentEngine & { started: Promise<void>; release:
   let calls = 0;
 
   return {
-    name: "passive",
     started,
     release,
     stream(input): Promise<EngineStream> {
@@ -984,7 +975,6 @@ describe("チャット API", () => {
   test("ステップの上限で打ち切られたら、画面に注記を残す", async () => {
     /** 上限で打ち切られたターンを流すエンジン。 */
     const limitEngine: AgentEngine = {
-      name: "limit",
       stream: async () => ({
         events: (async function* () {
           yield { type: "text-delta", delta: "画面を確認しています。" } as const;
@@ -1121,7 +1111,6 @@ describe("チャット API", () => {
 
   test("本文だけで終わったターンも、その本文を画面に届ける", async () => {
     const textOnly: AgentEngine = {
-      name: "text-only",
       stream: async () => ({
         events: (async function* () {
           yield { type: "text-delta", delta: "本文だけの返事" } as const;
@@ -1147,7 +1136,6 @@ describe("チャット API", () => {
 
   test("何も書かずに終わったターンは、黙って終わらせずに失敗させる", async () => {
     const silent: AgentEngine = {
-      name: "silent",
       stream: async () => ({
         events: (async function* () {})(),
         usage: Promise.resolve(null),
@@ -1191,7 +1179,6 @@ describe("チャット API", () => {
     } as const;
 
     const withAttachment: AgentEngine = {
-      name: "attachment",
       stream: async (input) => ({
         events: (async function* () {
           yield { type: "text-delta", delta: "画面です。" } as const;
@@ -1245,7 +1232,6 @@ describe("チャット API", () => {
     } as const;
 
     const withUi: AgentEngine = {
-      name: "ui",
       stream: async () => ({
         events: (async function* () {
           yield { type: "tool-call", part: call } as const;
@@ -1296,7 +1282,11 @@ describe("チャット API", () => {
         const messages = await harness.messages(DEFAULT_TERA_ID);
         const assistant = messages[1];
         if (messages.length !== 2 || assistant === undefined) return false;
-        return textParts(assistant).map((part) => part.text).join("") === full;
+        return (
+          textParts(assistant)
+            .map((part) => part.text)
+            .join("") === full
+        );
       }, 5_000);
 
       const [user, assistant] = await harness.messages(DEFAULT_TERA_ID);

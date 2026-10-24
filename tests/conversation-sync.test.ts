@@ -172,7 +172,6 @@ function gatedEngine(): AgentEngine & { started: Promise<void>; release(): void 
   });
 
   return {
-    name: "gated",
     started,
     release,
     async stream({ signal }) {
@@ -360,14 +359,25 @@ describe("会話の購読", () => {
       form.append("content", "こんにちは");
       form.append("language", "ja");
 
-      const sending = await harness.request(`/api/teras/${TERA}/messages`, { method: "POST", body: form });
+      // ハーネスは既定で画面の id を付けるので、空の id を明示して「無い」状態を作る。
+      const emptyClient = { [CLIENT_HEADER]: "" };
+
+      const sending = await harness.request(`/api/teras/${TERA}/messages`, {
+        method: "POST",
+        body: form,
+        headers: emptyClient,
+      });
       expect(sending.status).toBe(400);
       expect(((await sending.json()) as { code: string }).code).toBe("invalid_request");
 
-      const steering = await harness.request(`/api/teras/${TERA}/steer`, { method: "POST", body: form });
+      const steering = await harness.request(`/api/teras/${TERA}/steer`, {
+        method: "POST",
+        body: form,
+        headers: emptyClient,
+      });
       expect(steering.status).toBe(400);
 
-      const events = await harness.request(`/api/teras/${TERA}/events`);
+      const events = await harness.request(`/api/teras/${TERA}/events`, { headers: emptyClient });
       expect(events.status).toBe(400);
 
       // 断った送信は、履歴にもターンにも残らない。

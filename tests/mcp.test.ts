@@ -319,6 +319,26 @@ describe("保存する前の接続の確認", () => {
     }
   });
 
+  test("保存前の認可は、取り消せば新しい URL でやり直せる", async () => {
+    const as = startFakeOAuthServer({ mcp: mcpHandler("http") });
+    try {
+      const server: McpServerSettings = { type: "http", url: `${as.issuer}/mcp` };
+
+      await withManager({}, async (manager) => {
+        const started = await manager.test("remote", server);
+        expect(started.state).toBe("authorization_required");
+
+        manager.cancelTest("remote");
+
+        const retried = await manager.test("remote", server);
+        expect(retried.state).toBe("authorization_required");
+        expect(retried.authorizationUrl).not.toBe(started.authorizationUrl);
+      });
+    } finally {
+      await as.server.stop(true);
+    }
+  });
+
   test("保存前の確認で始めた認可は、コールバックで終わらせて、そのまま繋がる", async () => {
     const as = startFakeOAuthServer({ mcp: mcpHandler("http") });
     try {

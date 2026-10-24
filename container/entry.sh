@@ -43,7 +43,8 @@ CHROMIUM_PID=$!
 x11vnc -display :99 -forever -shared -nopw -localhost -rfbport 5900 -quiet &
 X11VNC_PID=$!
 
-websockify --web /usr/share/novnc 6080 127.0.0.1:5900 &
+# noVNC の JS は Terasuma のバンドルに同梱しているので、ここでは VNC の WebSocket だけを中継する。
+websockify 6080 127.0.0.1:5900 &
 WEBSOCKIFY_PID=$!
 
 # 停止は SIGTERM で来る。wait は子プロセスへシグナルを渡さないので、ここで止める。

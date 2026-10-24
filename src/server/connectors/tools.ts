@@ -113,9 +113,7 @@ export function createConnectorTools(options: { connectors: ConnectorsManager })
       execute: async ({ provider, method, path, body }: AppRequestInput, context: ToolContext) => {
         const definition = providerOf(connectors, provider, appList);
         if (definition.kind !== "token") {
-          throw new Error(
-            `${definition.name} has no API. Run it inside the computer instead.`,
-          );
+          throw new Error(`${definition.name} has no API. Run it inside the computer instead.`);
         }
 
         const token = connectors.token(provider);

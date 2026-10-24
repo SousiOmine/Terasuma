@@ -6,6 +6,7 @@ import type { SettingsStore } from "../../data/settings";
 import { ConflictError, ValidationError } from "../../errors";
 import { readJsonBody } from "../body";
 import { json, noContent } from "../respond";
+import { SECURITY_HEADERS } from "../security";
 import type { ApiDeps, ApiRequest } from "./shared";
 
 /** 環境変数の一覧を、画面へ返す形にする。値は返さない。 */
@@ -20,8 +21,24 @@ function envView(settings: SettingsStore): ComputerEnvView {
  * （一覧は名前だけ。値は返さない）、待っている環境変数の入力。
  * VNC の WebSocket 中継は screen-socket.ts が持つ（Bun の upgrade が要るため）。
  */
-export function computerHandlers(deps: Pick<ApiDeps, "settings" | "handover" | "envRequests">) {
+export function computerHandlers(deps: Pick<ApiDeps, "settings" | "handover" | "envRequests" | "vncToken">) {
   return {
+    /**
+     * 画面の WebSocket を開くためのトークン。
+     * WebSocket はブラウザが独自ヘッダを付けられず、同一オリジンの制約も受けない。
+     * この GET は cross-origin から読めない（CORS の応答ヘッダを付けない）ので、
+     * トークンを知っている画面だけが中継を開ける。
+     */
+    readVncToken(): Response {
+      return new Response(JSON.stringify({ token: deps.vncToken }), {
+        headers: {
+          ...SECURITY_HEADERS,
+          "Content-Type": "application/json; charset=utf-8",
+          "Cache-Control": "no-store",
+        },
+      });
+    },
+
     /**
      * 引き受け（画面を渡している間）の返事。
      * チャットに書いた文か、「操作を完了した」を、待っているツールの戻り値にする。

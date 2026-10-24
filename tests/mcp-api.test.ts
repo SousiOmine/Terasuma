@@ -39,6 +39,9 @@ function createManagerStub() {
     cancelAuthorization: (id) => {
       calls.cancelled.push(id);
     },
+    cancelTest: (id) => {
+      calls.cancelled.push(id);
+    },
     completeAuthorization: async (_state, callback) => {
       calls.completed.push(callback);
       if (completionFailure !== null) throw new Error(completionFailure);
@@ -256,6 +259,15 @@ describe("MCP サーバーの API", () => {
       expect((await send({ id: "Bad Name", type: "http", url: "https://mcp.example.test/mcp" })).status).toBe(400);
       expect((await send({ id: "remote", type: "http", url: "file:///tmp/x" })).status).toBe(400);
       expect((await send({ id: "remote", type: "stdio", url: "https://mcp.example.test/mcp" })).status).toBe(400);
+    });
+  });
+
+  test("保存前の確認で待っている認可も取り消せる", async () => {
+    await withMcpServer({}, async (harness, stub) => {
+      const response = await harness.request("/api/mcp/test/remote", { method: "DELETE" });
+
+      expect(response.status).toBe(204);
+      expect(stub.calls.cancelled).toEqual(["remote"]);
     });
   });
 

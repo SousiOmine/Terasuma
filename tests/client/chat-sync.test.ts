@@ -56,7 +56,6 @@ function gatedEngine(): AgentEngine & { started: Promise<void>; release(): void 
   });
 
   return {
-    name: "gated",
     started,
     release,
     async stream({ signal, takeSteering }) {

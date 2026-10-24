@@ -30,7 +30,6 @@ export const connecting = signal<string | null>(null);
 /** 設定画面を開いたときに読む（まだ読めていなければ）。 */
 export const loadConnectors = connectorsResource.load;
 /** 一覧を読み直す。 */
-export const refreshConnectors = connectorsResource.refresh;
 
 /** トークンを保存する。受け付けられなければ、サーバーが理由を返す。 */
 export async function saveConnectorToken(id: string, token: string): Promise<void> {

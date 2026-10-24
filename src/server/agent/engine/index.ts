@@ -1,25 +1,10 @@
 import type { AppConfig } from "../../../config";
 import type { ModelSettings } from "../../data/settings";
-import type { ConnectorToolsetProvider } from "../../connectors/tools";
-import type { DiscordToolsetProvider } from "../../discord/tools";
-import type { ImageStore } from "../../computer/images";
 import type { CatalogSnapshot } from "../../provider/catalog";
 import type { ReplyLanguage } from "../../../shared/language";
 import type { ChatMessage, MessagePart, SentAttachment, TokenUsage } from "../../../shared/api/message";
-import type {
-  AttachmentToolsetProvider,
-  CodingToolsetProvider,
-  ComputerToolsetProvider,
-  HistoryToolsetProvider,
-  RoutineToolsetProvider,
-  TeraToolsetProvider,
-  ToolsetProvider,
-  WebSearchToolsetProvider,
-} from "../contracts";
 import type { TeraContext } from "../prompt";
-import type { IdentityStore } from "../identity";
-import type { Skill, SkillFileStore } from "../skill-types";
-import { createAiSdkEngine } from "./sdk";
+import { createAiSdkEngine, type AiSdkEngineOptions } from "./sdk";
 import { createMockEngine } from "./mock";
 
 /**
@@ -90,7 +75,6 @@ export type CompleteInput = {
  * （承認フローの追加、プロファイルごとのエージェント切り替え）はここを実装し直すだけで済む。
  */
 export interface AgentEngine {
-  readonly name: string;
   stream(input: EngineInput): Promise<EngineStream>;
   /** ツールを使わない 1 回の生成。過去の対話の要約に使う。 */
   complete(input: CompleteInput): Promise<string>;
@@ -106,55 +90,14 @@ export type CatalogReader = {
   snapshot(): CatalogSnapshot | null;
 };
 
-export function createEngine(options: {
-  config: AppConfig;
-  settings: SettingsReader;
-  mcp: ToolsetProvider;
-  computer: ComputerToolsetProvider;
-  /** 画像やファイルをチャットへ添付するツール。 */
-  attachments: AttachmentToolsetProvider;
-  /** 過去の対話履歴を検索するツール。 */
-  history: HistoryToolsetProvider;
-  /** Web 検索とページ取得のツール。 */
-  webSearch: WebSearchToolsetProvider;
-  /** コネクタ（トークン）のツール。 */
-  connectors: ConnectorToolsetProvider;
-  /** Discord の webhook（送信先は Tera ごと）のツール。 */
-  discord: DiscordToolsetProvider;
-  /** スケジュールされた実行（ルーチン）のツール。扱うルーチンは Tera ごと。 */
-  routine: RoutineToolsetProvider;
-  /** 新しい Tera を作るツール。作る先（作業フォルダの親）はアプリが決める。 */
-  tera: TeraToolsetProvider;
-  /** コンテナのファイルとシェルのツール。相対パスと bash の cwd が Tera ごとに違うので、ターンごとに組む。 */
-  coding: CodingToolsetProvider;
-  /** 撮った画像の置き場。履歴から画像を読み直してモデルへ渡す。 */
-  images: ImageStore;
-  /** models.dev のカタログ。プロバイダの呼び出し方を決めるのに使う。 */
-  catalog: CatalogReader;
-  /** エージェントが作ったスキルの置き場。 */
-  skills: SkillFileStore;
-  /** Tera の identity の読み書き。system プロンプトに載せる版と、書いた版を持つ。 */
-  identity: IdentityStore;
-  /** 接続状態などで変わる、組み込みの追加スキル。呼び出しのたびに評価する。 */
-  extraSkills?: () => readonly Skill[];
-}): AgentEngine {
+/** エンジンを組み立てるのに必要なもの。AI SDK の実装が要るものに、使う実装の種別を足す。 */
+export type CreateEngineOptions = AiSdkEngineOptions & { config: AppConfig };
+
+/**
+ * 設定された実装でエンジンを作る。モックは開発・テスト専用で、既定にはならない。
+ * 依存の一覧は AiSdkEngineOptions が正典なので、ここでは転記しない。
+ */
+export function createEngine(options: CreateEngineOptions): AgentEngine {
   if (options.config.engine === "mock") return createMockEngine();
-  return createAiSdkEngine({
-    settings: options.settings,
-    mcp: options.mcp,
-    computer: options.computer,
-    attachments: options.attachments,
-    history: options.history,
-    webSearch: options.webSearch,
-    connectors: options.connectors,
-    discord: options.discord,
-    routine: options.routine,
-    tera: options.tera,
-    coding: options.coding,
-    images: options.images,
-    catalog: options.catalog,
-    skills: options.skills,
-    identity: options.identity,
-    extraSkills: options.extraSkills,
-  });
+  return createAiSdkEngine(options);
 }

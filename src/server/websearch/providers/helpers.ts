@@ -42,7 +42,3 @@ export function snippetOf(value: string, maxChars = MAX_SNIPPET_CHARS): string {
 }
 
 /** ハイライトの配列を 1 つの抜粋にする。 */
-export function snippetsOf(value: unknown): string {
-  if (!Array.isArray(value)) return "";
-  return value.filter((item): item is string => typeof item === "string").join(" ");
-}

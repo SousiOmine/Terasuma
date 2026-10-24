@@ -200,9 +200,9 @@ describe("Discord の webhook", () => {
 
   test("未接続なら送らずに、接続の仕方を返す", async () => {
     await withDiscord(async ({ discord, fake }) => {
-      expect(
-        await rejectionOf(discord.send(DEFAULT_TERA_ID, { content: "x", username: null, embeds: null })),
-      ).toMatch(/discord_connect/);
+      expect(await rejectionOf(discord.send(DEFAULT_TERA_ID, { content: "x", username: null, embeds: null }))).toMatch(
+        /discord_connect/,
+      );
       expect(fake.requests).toEqual([]);
     });
   });
