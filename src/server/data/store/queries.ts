@@ -1,5 +1,5 @@
 import type { Database } from "bun:sqlite";
-import type { MessageRow, TeraRow } from "./rows";
+import type { MessageRow, RoutineRow, TeraRow } from "./rows";
 
 /**
  * プリペアドステートメント。
@@ -10,7 +10,12 @@ import type { MessageRow, TeraRow } from "./rows";
 
 /** メッセージ 1 行の列。SELECT の並びを 1 か所に揃える。 */
 const MESSAGE_COLUMNS =
-  "id, tera_id, seq, role, content, attachments, parts, created_at, input_tokens, output_tokens, cached_input_tokens";
+  "id, tera_id, seq, role, content, attachments, parts, origin, created_at, input_tokens, output_tokens, cached_input_tokens";
+
+/** ルーチン 1 行の列。SELECT ごとに並びがずれないよう、ここにまとめる。 */
+const ROUTINE_COLUMNS =
+  "id, tera_id, name, prompt, schedule, enabled, next_run_at, last_run_at, last_status, last_detail, created_at, updated_at";
+const ROUTINE_COLUMNS_WITH_TERA = `r.${ROUTINE_COLUMNS.replaceAll(", ", ", r.")}`;
 
 export function prepareQueries(db: Database) {
   const selectTera = db.query<TeraRow, [string]>("SELECT id, name, created_at, updated_at FROM teras WHERE id = ?");
@@ -91,6 +96,7 @@ export function prepareQueries(db: Database) {
       string,
       string | null,
       string | null,
+      string | null,
       number,
       number | null,
       number | null,
@@ -99,8 +105,67 @@ export function prepareQueries(db: Database) {
   >(
     `INSERT INTO messages
        (${MESSAGE_COLUMNS})
-     VALUES (?, ?, (SELECT COALESCE(MAX(seq), 0) + 1 FROM messages WHERE tera_id = ?), ?, ?, ?, ?, ?, ?, ?, ?)
+     VALUES (?, ?, (SELECT COALESCE(MAX(seq), 0) + 1 FROM messages WHERE tera_id = ?), ?, ?, ?, ?, ?, ?, ?, ?, ?)
      RETURNING seq`,
+  );
+
+  // 一覧は Tera の並び（更新の新しい順）に合わせ、その中は作成順にする。
+  const selectRoutines = db.query<RoutineRow, []>(
+    `SELECT ${ROUTINE_COLUMNS_WITH_TERA}
+       FROM routines r JOIN teras t ON t.id = r.tera_id
+      ORDER BY t.updated_at DESC, t.created_at DESC, r.created_at ASC, r.rowid ASC`,
+  );
+  const selectRoutinesOf = db.query<RoutineRow, [string]>(
+    `SELECT ${ROUTINE_COLUMNS} FROM routines WHERE tera_id = ? ORDER BY created_at ASC, rowid ASC`,
+  );
+  const selectRoutineById = db.query<RoutineRow, [string]>(`SELECT ${ROUTINE_COLUMNS} FROM routines WHERE id = ?`);
+  const selectRoutineByName = db.query<RoutineRow, [string, string]>(
+    `SELECT ${ROUTINE_COLUMNS} FROM routines WHERE tera_id = ? AND name = ?`,
+  );
+  const insertRoutine = db.query<unknown, [
+    string,
+    string,
+    string,
+    string,
+    string,
+    number,
+    number | null,
+    number | null,
+    string | null,
+    string | null,
+    number,
+    number,
+  ]>(
+    `INSERT INTO routines (${ROUTINE_COLUMNS})
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  );
+  // 更新は、いまの行と突き合わせた完全な行をアプリ側で組み立ててから書く。
+  const updateRoutineRow = db.query<unknown, [
+    string,
+    string,
+    string,
+    number,
+    number | null,
+    number | null,
+    string | null,
+    string | null,
+    number,
+    string,
+  ]>(
+    `UPDATE routines
+        SET name = ?, prompt = ?, schedule = ?, enabled = ?, next_run_at = ?, last_run_at = ?,
+            last_status = ?, last_detail = ?, updated_at = ?
+      WHERE id = ?`,
+  );
+  const updateRoutineRun = db.query<unknown, [number, string, string | null, number | null, string]>(
+    `UPDATE routines SET last_run_at = ?, last_status = ?, last_detail = ?, next_run_at = ? WHERE id = ?`,
+  );
+  const deleteRoutineById = db.query<unknown, [string]>("DELETE FROM routines WHERE id = ?");
+  const selectDueRoutines = db.query<RoutineRow, [number]>(
+    `SELECT ${ROUTINE_COLUMNS}
+       FROM routines
+      WHERE enabled = 1 AND next_run_at IS NOT NULL AND next_run_at <= ?
+      ORDER BY next_run_at ASC, created_at ASC, rowid ASC`,
   );
 
   const selectCompaction = db.query<
@@ -154,6 +219,15 @@ export function prepareQueries(db: Database) {
     selectMessageById,
     deleteMessageById,
     insertMessage,
+    selectRoutines,
+    selectRoutinesOf,
+    selectRoutineById,
+    selectRoutineByName,
+    insertRoutine,
+    updateRoutineRow,
+    updateRoutineRun,
+    deleteRoutineById,
+    selectDueRoutines,
     selectCompaction,
     upsertCompaction,
     selectIdentity,

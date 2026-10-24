@@ -22,15 +22,28 @@ type MessagesRequest = ApiRequest<{ id: string }> & { url: string };
  * Tera（会話の持ち主）と、その 1 本の履歴。
  */
 export function terasHandlers(
-  deps: Pick<ApiDeps, "store" | "engine" | "settings" | "container" | "catalog" | "compaction" | "discord" | "dataDir">,
+  deps: Pick<
+    ApiDeps,
+    | "store"
+    | "engine"
+    | "settings"
+    | "container"
+    | "catalog"
+    | "compaction"
+    | "discord"
+    | "dataDir"
+    | "turns"
+    | "broadcast"
+  >,
 ) {
   const { store, settings, container, compaction, discord, dataDir } = deps;
 
-  // 同じ Tera でターンが重なると、履歴の並びと引き受けの待ちが壊れる。
+  // 同じ Tera で利用者のターンが重なると、履歴の並びと引き受けの待ちが壊れる。
   // 「実行中かどうか」はターンの側が持つ（HTTP 層へ Set を渡さない）。
-  const turns = createTurns(deps);
+  // ルーチンも同じターンを使うので、外から渡されたものがあればそれを使う。
+  const turns = deps.turns ?? createTurns(deps);
   // 同じ Tera を開いているほかの画面への配り口。送った画面自身には配らない。
-  const broadcast = createConversationBroadcast();
+  const broadcast = deps.broadcast ?? createConversationBroadcast();
 
   return {
     /** 画面に並べる Tera の一覧。既定の Tera と、エージェントが作った Tera。 */

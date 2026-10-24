@@ -333,6 +333,19 @@ Discord はトークンではなく、Tera ごとの **webhook URL** で送る�
 以前の Bot トークン（`connections/discord.json`、`DISCORD_BOT_TOKEN`、`app_request` での Discord API）は廃止した。
 `config.json` の `connections`（Application ID）も廃止した。残っていると、未知の項目として起動に失敗するので削除する。
 
+## ルーチン（スケジュール実行）
+
+ルーチンは、Tera が決まった時刻に、保存した指示で自分のターンを 1 回だけ走らせるもの（`server/routine/`）。
+
+- 保存先は `routines` テーブル。ルーチンが保存した発言には `messages.origin` にルーチン名が入る。
+- スケジュールは 3 種類（毎日 / 毎週 / N 分ごと）。時刻はサーバのローカル時刻で、30 秒ごとに見る。
+- 実行は Tera のターンの 1 本の枠を使う。重なったときはスキップせず、枠が空くまで順番に待つ。
+  走っている間の利用者の発言は、そのターンへの追加の発言（steering）になる。
+- 時間の打ち切りはしない。止めるのは画面の停止（ルーチンは `POST /api/routines/:id/stop`、チャットは停止ボタン）。
+- 作るのはエージェント（`routine_create` ほか 5 つ、`tool_search` の向こう側）。手順はスキル `routine` が持つ。
+- 管理は 設定 > Tera（Tera ごとのカード）と、サイドバーの Tera の右クリック →「ルーチン」。
+- 同時実行の待ちは 2 秒ごとの見回し（`SLOT_POLL_MS`）。
+
 ## ほかの画面との同期
 
 同じ Tera を開いている画面どうしは、購読で揃う。画面は会話を開いている間、

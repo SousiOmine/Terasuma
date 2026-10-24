@@ -5,10 +5,10 @@ import type { Database } from "bun:sqlite";
  *
  * 形を変えたら SCHEMA_VERSION を上げ、migrations.ts に移行を足す。
  * 新しいテーブルは CREATE TABLE IF NOT EXISTS が作るので、移行の関数は要らない
- * （v5 で tera_identity を足した）。
+ * （v5 で tera_identity、v6 で routines と messages.origin を足した）。
  */
 
-export const SCHEMA_VERSION = 5;
+export const SCHEMA_VERSION = 6;
 
 export function createSchema(db: Database): void {
   db.exec(`
@@ -27,6 +27,7 @@ export function createSchema(db: Database): void {
         content             TEXT NOT NULL,
         attachments         TEXT,
         parts               TEXT,
+        origin              TEXT,
         created_at          INTEGER NOT NULL,
         input_tokens        INTEGER,
         output_tokens       INTEGER,
@@ -50,5 +51,22 @@ export function createSchema(db: Database): void {
         content TEXT NOT NULL,
         applied TEXT NOT NULL
       );
+
+      CREATE TABLE IF NOT EXISTS routines (
+        id          TEXT PRIMARY KEY,
+        tera_id     TEXT NOT NULL REFERENCES teras (id) ON DELETE CASCADE,
+        name        TEXT NOT NULL,
+        prompt      TEXT NOT NULL,
+        schedule    TEXT NOT NULL,
+        enabled     INTEGER NOT NULL,
+        next_run_at INTEGER,
+        last_run_at INTEGER,
+        last_status TEXT,
+        last_detail TEXT,
+        created_at  INTEGER NOT NULL,
+        updated_at  INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_routines_due ON routines (enabled, next_run_at);
+      CREATE INDEX IF NOT EXISTS idx_routines_tera ON routines (tera_id, created_at);
     `);
 }

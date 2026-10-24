@@ -3,7 +3,9 @@ import type { McpServerSettings } from "../../data/settings";
 import type { SettingsStore } from "../../data/settings";
 import type { Store } from "../../data/store";
 import type { AgentEngine } from "../../agent/engine";
+import type { ConversationBroadcast } from "../../agent/broadcast";
 import type { Compaction } from "../../agent/compaction";
+import type { Turns } from "../../agent/turns";
 import type { ContainerManager } from "../../computer/container";
 import type { EnvRequests } from "../../computer/env";
 import type { FileStore } from "../../computer/files";
@@ -14,6 +16,7 @@ import type { ConnectorsManager } from "../../connectors/manager";
 import type { DiscordWebhooks } from "../../discord/manager";
 import { McpServerNotFound } from "../../mcp/manager";
 import type { WebSearchManager } from "../../websearch-manager";
+import type { RoutineScheduler } from "../../routine/scheduler";
 import type { Catalog } from "../../provider/catalog";
 import type { ConnectionChecker, ProviderModelLister } from "../../provider/connection";
 import { AppError, ValidationError } from "../../errors";
@@ -60,6 +63,8 @@ export type ApiDeps = {
   discord: DiscordWebhooks;
   /** Web 検索の設定と接続確認。設定画面からの操作もここを通す。 */
   webSearch: WebSearchManager;
+  /** スケジュールされた実行（ルーチン）。一覧・有効/無効・削除・いま実行・停止がここを通る。 */
+  routines: RoutineScheduler;
   /** podman で動かすコンテナ。設定画面からの起動とリセットもここを通す。 */
   container: ContainerManager;
   /** エージェントが送った画像。画面へ返す。 */
@@ -72,6 +77,10 @@ export type ApiDeps = {
   envRequests: EnvRequests;
   /** 過去の対話の圧縮。ターンの前に走っている分を待ち、ターンの後に次を決める。 */
   compaction: Compaction;
+  /** ターンの実行状態。ルーチンと共有するため、外から渡せる。 */
+  turns?: Turns;
+  /** 同じ Tera を開いている画面への配り口。ルーチンと共有するため、外から渡せる。 */
+  broadcast?: ConversationBroadcast;
   /** models.dev のカタログ。プロバイダとモデルの一覧はここから取る。 */
   catalog: Catalog;
   /** プロバイダへ接続できるかを確かめる。 */

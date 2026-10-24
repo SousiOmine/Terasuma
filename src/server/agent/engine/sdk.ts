@@ -10,6 +10,7 @@ import type {
   CodingToolsetProvider,
   ComputerToolsetProvider,
   HistoryToolsetProvider,
+  RoutineToolsetProvider,
   TeraToolsetProvider,
   ToolsetProvider,
   WebSearchToolsetProvider,
@@ -59,6 +60,8 @@ export type AiSdkEngineOptions = {
   connectors: ConnectorToolsetProvider;
   /** Discord の webhook（送信先は Tera ごと）のツール。 */
   discord: DiscordToolsetProvider;
+  /** スケジュールされた実行（ルーチン）のツール。扱うルーチンは Tera ごと。 */
+  routine: RoutineToolsetProvider;
   /** 新しい Tera を作るツール。 */
   tera: TeraToolsetProvider;
   /** コンテナのファイルとシェルのツール。相対パスと bash の cwd が Tera ごとに違うので、ターンごとに組む。 */
@@ -84,6 +87,7 @@ export function createAiSdkEngine(options: AiSdkEngineOptions): AgentEngine {
     webSearch,
     connectors,
     discord,
+    routine,
     tera,
     coding,
     images,
@@ -151,8 +155,10 @@ export function createAiSdkEngine(options: AiSdkEngineOptions): AgentEngine {
       const [mcpTools, computerTools] = await Promise.all([mcp.toolset(), computer.toolset({ teraId })]);
       // コネクタのツール（app_connect_<id> と app_request）も、検索してから実行する。
       // Discord のツールは送信先が Tera ごとに決まるので、このターンの Tera で組む。
+      // ルーチンのツールも、触れるルーチンがこのターンの Tera のものに限られるので、ここで組む。
       // 新しい Tera を作るツールも、作る先（作業フォルダの親）がアプリで決まるのでここで組む。
       const discordTools = discord.toolset({ teraId });
+      const routineTools = routine.toolset({ teraId });
       const teraTools = tera.toolset();
       const registry = await createToolRegistry({
         ...mcpTools,
@@ -160,6 +166,7 @@ export function createAiSdkEngine(options: AiSdkEngineOptions): AgentEngine {
         ...connectors.toolset(),
         ...discordTools,
         ...teraTools,
+        ...routineTools,
       });
 
       // コンテナのツール（read / write / edit / bash）は、この Tera の作業フォルダを基準にする。

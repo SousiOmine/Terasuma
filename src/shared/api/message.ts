@@ -143,6 +143,11 @@ export type ChatMessage = {
    * 画面へ渡すときは、表示に使う部分だけに絞る（server/agent/message-view.ts）。
    */
   parts: MessagePart[] | null;
+  /**
+   * この発言を生んだルーチンの名前。利用者が打った発言なら null。
+   * 画面は「ルーチン『名前』」のように出して、自分の発言と区別する。
+   */
+  origin: string | null;
   /** epoch ミリ秒 */
   createdAt: number;
   usage: TokenUsage | null;
@@ -169,6 +174,11 @@ export type ChatMessageView = {
   attachments: ChatAttachmentView[] | null;
   /** 表示に使う部品だけ（本文・添付・注記・chat_ui の呼び出し）。 */
   parts: MessagePart[] | null;
+  /**
+   * この発言を生んだルーチンの名前。利用者が打った発言なら null。
+   * 画面は「ルーチン『名前』」のように出して、自分の発言と区別する。
+   */
+  origin: string | null;
   createdAt: number;
 };
 

@@ -23,6 +23,30 @@ export const en = {
   "tera.deleteWithName": "Delete {name}",
   "tera.menu": "{name} actions",
 
+  "routine.title": "Routines",
+  "routine.badge": "{count} routine(s)",
+  "routine.schedule.daily": "Every day at {time}",
+  "routine.schedule.weekly": "Every {days} at {time}",
+  "routine.schedule.every": "Every {minutes} min",
+  "routine.weekday.1": "Mon",
+  "routine.weekday.2": "Tue",
+  "routine.weekday.3": "Wed",
+  "routine.weekday.4": "Thu",
+  "routine.weekday.5": "Fri",
+  "routine.weekday.6": "Sat",
+  "routine.weekday.7": "Sun",
+  "routine.status.ok": "Succeeded",
+  "routine.status.error": "Failed",
+  "routine.status.stopped": "Stopped",
+  "routine.status.running": "Running",
+  "routine.next": "Next {at}",
+  "routine.enable": "Enable",
+  "routine.disable": "Disable",
+  "routine.run": "Run now",
+  "routine.stop": "Stop",
+  "routine.deleteTitle": "Delete this routine?",
+  "routine.deleteMessage": "This routine will be removed and will no longer run at its scheduled time.",
+
   "chat.empty.title": "What can I help you with?",
   "chat.empty.description": "Look things up, organize files, and use the screen. It all happens inside this computer.",
   "chat.typing": "Typing…",
@@ -31,6 +55,7 @@ export const en = {
   "chat.image.open": "Open {name}",
   "chat.markdown.task": "Task",
   "chat.history.loadingOlder": "Loading earlier messages…",
+  "chat.routineOrigin": "Routine \"{name}\"",
 
   "chat.ui.invalid": "This card could not be displayed",
   "chat.ui.submit": "Send",
@@ -90,6 +115,9 @@ export const en = {
   "settings.teras.description":
     "The assistants that own a conversation. Deleting one removes its conversation, identity, Discord webhook and working folder.",
   "settings.teras.id": "Workspace folder: {id}",
+  "settings.teras.routines.description": "Routines that let this Tera start on its own at set times.",
+  "settings.teras.routines.empty":
+    "None yet. Ask in chat, for example “every morning at 8”, to create one.",
   "settings.language.label": "Language",
   "settings.language.description": "Language used in the interface and in the agent's replies.",
 

@@ -15,6 +15,7 @@ const message: ChatMessage = {
   content: "",
   attachments: null,
   parts: [{ type: "text", text: "こんにちは", at: 1 }],
+  origin: null,
   createdAt: 1,
   usage: null,
 };

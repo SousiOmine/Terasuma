@@ -441,6 +441,51 @@ export const TERA_CREATE_SKILL: Skill = {
 };
 
 /**
+ * スケジュールされた実行（ルーチン）のスキル。
+ *
+ * ツールは tool_search の向こう側にあるので、名前と引数の形をここに書いておく。
+ * 実行の仕方（何をどこへ届けるか）は、ルーチンを作るときの指示に書くものなので、ここには書かない。
+ */
+const ROUTINE_CONTENT = `# Routines: work that runs on a schedule
+
+A routine saves an instruction and runs it as this Tera's own turn at a fixed local time
+or interval.
+
+## When to use it
+
+- The user asks for work "every morning at 8", "every 30 minutes", "on Friday evening", or
+  with any other time or repeat. Do not create a routine the user did not ask for.
+
+## Creating
+
+Ask for what you do not already have: a name, when (daily, weekly, or every N minutes),
+and what to do; if the user already said them, do not ask again.
+
+routine_create takes name (1-60 characters), prompt (up to 4000 characters), and schedule:
+
+- {"kind":"daily","time":"08:30"}
+- {"kind":"weekly","days":[1,5],"time":"18:00"} (1 = Monday … 7 = Sunday)
+- {"kind":"every","minutes":30} (5-1440)
+
+The prompt is sent as the user's message when the routine runs.
+
+## Managing
+
+routine_list shows id, schedule, next run and last result. routine_update changes or
+disables one. routine_delete removes it: confirm with the user first. A Tera can have at
+most 50 routines.
+`;
+
+export const ROUTINE_SKILL: Skill = {
+  name: "routine",
+  description:
+    "Scheduled work (routines) that runs at a set local time or interval: when to create " +
+    "one, what the user needs to decide first, the schedule forms, and how to list, change, " +
+    "delete or run it.",
+  content: ROUTINE_CONTENT,
+};
+
+/**
  * pi（pi-coding-agent）にコードを書かせるためのスキル。
  *
  * pi はコンピュータの中の CLI で、tmux 越しに呼ぶ。接続している間だけ一覧に載せ、
@@ -555,6 +600,7 @@ export const BUILTIN_SKILLS: readonly Skill[] = [
   SKILL_CREATE_SKILL,
   DISCORD_SKILL,
   TERA_CREATE_SKILL,
+  ROUTINE_SKILL,
 ];
 
 /**
@@ -570,10 +616,7 @@ export function skillCatalogText(skills: readonly Skill[]): string {
  * 一覧と本文は呼び出しのたびに引き直すので、作成や更新はすぐに見える。
  * extra は接続状態などで変わるスキル（pi-coding など）を、呼ぶたびに評価して足す。
  */
-export function createSkillLibrary(
-  store: SkillFileStore,
-  extra: () => readonly Skill[] = () => [],
-): SkillLibrary {
+export function createSkillLibrary(store: SkillFileStore, extra: () => readonly Skill[] = () => []): SkillLibrary {
   function available(): readonly Skill[] {
     return [...BUILTIN_SKILLS, ...extra()];
   }

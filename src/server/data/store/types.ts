@@ -6,6 +6,7 @@ import type {
   Tera,
   TokenUsage,
 } from "../../../shared/api/message";
+import type { RoutineSchedule, RoutineStatus } from "../../../shared/api/routine";
 
 /**
  * 保存する前の形と、読み書きの口。
@@ -43,6 +44,41 @@ export type AppendMessageInput = {
   /** ツール呼び出しを含むときだけ渡す。含まないメッセージは null。 */
   parts?: MessagePart[] | null;
   usage?: TokenUsage | null;
+  /** この発言を生んだルーチンの名前。利用者が打った発言なら null。 */
+  origin?: string | null;
+};
+
+/** ドメインのルーチン。保存されているスケジュールは、読み戻した形で持つ。 */
+export type RoutineRecord = {
+  id: string;
+  teraId: string;
+  name: string;
+  prompt: string;
+  schedule: RoutineSchedule;
+  enabled: boolean;
+  nextRunAt: number | null;
+  lastRunAt: number | null;
+  lastStatus: RoutineStatus | null;
+  lastDetail: string | null;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type CreateRoutineInput = {
+  teraId: string;
+  name: string;
+  prompt: string;
+  schedule: RoutineSchedule;
+  enabled: boolean;
+};
+
+/** 渡された項目だけ書き換える。undefined は「変えない」、nextRunAt の null は「消す」。 */
+export type UpdateRoutineInput = {
+  name?: string;
+  prompt?: string;
+  schedule?: RoutineSchedule;
+  enabled?: boolean;
+  nextRunAt?: number | null;
 };
 
 /** 履歴を読むページ。before は「この seq より前」を表し、null なら最新から読む。 */
@@ -167,6 +203,27 @@ export type MessageLog = {
   readPendingStats(teraId: string, afterSeq: number): PendingStats;
 };
 
+/** スケジュールされた実行（ルーチン）の保存。 */
+export type RoutineStore = {
+  /** すべてのルーチン（Tera の並び順、その中は作成順）。 */
+  listRoutines(): RoutineRecord[];
+  /** その Tera のルーチン（作成順）。 */
+  listRoutinesOf(teraId: string): RoutineRecord[];
+  readRoutine(id: string): RoutineRecord | null;
+  /** 同じ Tera で同じ名前があれば null（作らない）。 */
+  createRoutine(input: CreateRoutineInput): RoutineRecord | null;
+  /** 渡された項目だけ書き換える。無い id は null。 */
+  updateRoutine(id: string, patch: UpdateRoutineInput): RoutineRecord | null;
+  deleteRoutine(id: string): boolean;
+  /** 実行の結果を書く。nextRunAt も一緒に進める。 */
+  recordRoutineRun(
+    id: string,
+    result: { lastRunAt: number; lastStatus: RoutineStatus; lastDetail: string | null; nextRunAt: number | null },
+  ): void;
+  /** いま走らせるべきルーチン（enabled かつ next_run_at <= now）。 */
+  dueRoutines(now: number): RoutineRecord[];
+};
+
 /** 過去のやり取りを畳んだ要約。 */
 export type CompactionStore = {
   readCompaction(teraId: string): CompactionState;
@@ -187,7 +244,11 @@ export type TeraIdentityStore = {
   applyIdentity(teraId: string): boolean;
 };
 
-export type Store = TeraDirectory & MessageLog & CompactionStore & TeraIdentityStore & { close(): void };
+export type Store = TeraDirectory &
+  MessageLog &
+  CompactionStore &
+  TeraIdentityStore &
+  RoutineStore & { close(): void };
 
 export type CreateStoreOptions = {
   /** テストで時刻を固定するために差し替える。 */

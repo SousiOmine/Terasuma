@@ -7,6 +7,8 @@ import type { FileStore } from "../computer/files";
 import type { ImageStore } from "../computer/images";
 import { MAX_REQUEST_BODY_BYTES } from "../computer/uploads";
 import type { AgentEngine } from "../agent/engine";
+import type { ConversationBroadcast } from "../agent/broadcast";
+import type { Turns } from "../agent/turns";
 import type { Handover } from "../computer/handover";
 import { describeError } from "../../shared/errors";
 import { jsonError, withErrorHandling } from "./respond";
@@ -16,6 +18,7 @@ import type { McpManager } from "../mcp/manager";
 import type { WebSearchManager } from "../websearch-manager";
 import type { Compaction } from "../agent/compaction";
 import { CATALOG_FILE_NAME, createCatalog, type Catalog } from "../provider/catalog";
+import type { RoutineScheduler } from "../routine/scheduler";
 import {
   createConnectionChecker,
   createModelLister,
@@ -43,6 +46,8 @@ export type ServerOptions = {
   discord: DiscordWebhooks;
   /** Web 検索の設定と接続確認。設定画面からの操作もここを通る。 */
   webSearch: WebSearchManager;
+  /** スケジュールされた実行（ルーチン）。一覧・有効/無効・削除・いま実行・停止がここを通る。 */
+  routines: RoutineScheduler;
   /** podman で動かすコンテナ。設定画面からの操作もここを通る。 */
   container: ContainerManager;
   /** エージェントが送った画像。画面へ返す。 */
@@ -55,6 +60,10 @@ export type ServerOptions = {
   envRequests: EnvRequests;
   /** 過去の対話の圧縮（古いやり取りの畳み方）。テストで差し替える。 */
   compaction: Compaction;
+  /** ターンの実行状態。ルーチンと共有するため、外から渡せる。 */
+  turns?: Turns;
+  /** 同じ Tera を開いている画面への配り口。ルーチンと共有するため、外から渡せる。 */
+  broadcast?: ConversationBroadcast;
   /** models.dev のカタログ。テストで差し替える。 */
   catalog?: Catalog;
   /** プロバイダへ接続できるかの確認。テストで差し替える。 */
@@ -93,6 +102,7 @@ export function startServer(options: ServerOptions): StartedServer {
     connectors,
     discord,
     webSearch,
+    routines,
     container,
     images,
     files,
@@ -109,12 +119,15 @@ export function startServer(options: ServerOptions): StartedServer {
       connectors,
       discord,
       webSearch,
+      routines,
       container,
       images,
       files,
       handover,
       envRequests,
       compaction,
+      turns: options.turns,
+      broadcast: options.broadcast,
       catalog: options.catalog ?? createCatalog({ cachePath: join(config.dataDir, CATALOG_FILE_NAME) }),
       checkConnection: options.checkConnection ?? createConnectionChecker(),
       listModels: options.listModels ?? createModelLister(),

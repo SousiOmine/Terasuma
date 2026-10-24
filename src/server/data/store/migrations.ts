@@ -219,7 +219,7 @@ function tableExists(db: Database, name: string): boolean {
 
 /**
  * メッセージの列を、いまの形に合わせる。
- * attachments は v2 で増えた。既存のメッセージには添付の記録が無いので、null のままにする。
+ * attachments は v2、origin は v6 で増えた。既存のメッセージには記録が無いので、null のままにする。
  */
 function ensureMessageColumns(db: Database): void {
   const columns = db.query<{ name: string }, []>("PRAGMA table_info(messages)").all();
@@ -228,6 +228,9 @@ function ensureMessageColumns(db: Database): void {
   const names = new Set(columns.map((column) => column.name));
   if (!names.has("attachments")) {
     db.exec("ALTER TABLE messages ADD COLUMN attachments TEXT");
+  }
+  if (!names.has("origin")) {
+    db.exec("ALTER TABLE messages ADD COLUMN origin TEXT");
   }
 }
 

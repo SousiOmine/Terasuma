@@ -161,6 +161,17 @@ export async function readDiscordWebhookForm(req: JsonRequest): Promise<{ url: s
 }
 
 /**
+ * ルーチンの有効/無効の切り替え。受け付けるのは enabled（真偽値）だけ。
+ * 本文にほかの項目があっても読まない（名前・指示・スケジュールはチャットのツールから変える）。
+ */
+export async function readRoutineToggleForm(req: JsonRequest): Promise<{ enabled: boolean }> {
+  const body = await readJsonBody(req);
+  const enabled = body?.["enabled"];
+  if (typeof enabled !== "boolean") throw new ValidationError("enabled must be a boolean");
+  return { enabled };
+}
+
+/**
  * program コネクタの設定を読む。本文は省略できる（キーが無ければ、いまの設定を確かめるだけ）。
  * 値は前後の空白を落とし、無い項目は undefined にする。
  */

@@ -1,9 +1,11 @@
 import { join } from "node:path";
 import type { AppConfig } from "./config";
 import type { AttachmentToolsetProvider, CodingToolsetProvider } from "./server/agent/contracts";
+import { createConversationBroadcast } from "./server/agent/broadcast";
 import { createCompaction, type Compaction } from "./server/agent/compaction";
 import { createEngine, type AgentEngine } from "./server/agent/engine";
 import { createSkillFileStore } from "./server/agent/skill-files";
+import { createTurns } from "./server/agent/turns";
 import { PI_CODING_SKILL } from "./server/agent/skills";
 import { createCodingToolset } from "./server/agent/tools/coding";
 import { createComputerToolset } from "./server/agent/tools/computer";
@@ -28,6 +30,8 @@ import { startServer, type StartedServer } from "./server/http/server";
 import { createMcpManager, type McpManager } from "./server/mcp/manager";
 import { OAUTH_CALLBACK_PATH } from "./server/mcp/oauth";
 import { CATALOG_FILE_NAME, createCatalog, modelContextTokens, type Catalog } from "./server/provider/catalog";
+import { createRoutineScheduler, type RoutineScheduler } from "./server/routine/scheduler";
+import { createRoutineToolset } from "./server/routine/tools";
 import type { ConnectionChecker, ProviderModelLister } from "./server/provider/connection";
 
 /**
@@ -56,6 +60,8 @@ export type App = {
   container: ContainerManager;
   /** Web 検索の設定と接続確認。設定画面からの操作もここを通す。 */
   webSearch: WebSearchManager;
+  /** スケジュールされた実行（ルーチン）。 */
+  routines: RoutineScheduler;
   /** 接続・予約・DB を畳んでから終わる。 */
   shutdown(): Promise<void>;
 };
@@ -190,6 +196,18 @@ export function startApp(config: AppConfig, overrides: AppOverrides = {}): App {
   const webSearchManager = overrides.webSearch ?? createWebSearchManager({ settings });
   const webSearch = createWebSearchToolset({ manager: webSearchManager });
 
+  // ルーチンのスケジューラは、ターンと圧縮がそろってから作る（エンジン → 圧縮 → ターン → スケジューラ）。
+  // ルーチンのツールはターンが始まるときにしか呼ばれないので、ここでは実体を後から入れる口を渡す。
+  let scheduler: RoutineScheduler | null = null;
+  const routineSchedule: RoutineScheduler = {
+    start: () => scheduler?.start(),
+    close: () => scheduler?.close(),
+    runNow: (id) => scheduler?.runNow(id) ?? Promise.resolve(),
+    isRunning: (id) => scheduler?.isRunning(id) ?? false,
+    stop: (id) => scheduler?.stop(id),
+  };
+  const routineToolset = createRoutineToolset({ store, routines: routineSchedule });
+
   // 畳むかどうかは、モデルの文脈長（カタログ）から決める。
   // 起動後にカタログを読んでおくので、設定画面を開かなくても文脈長が分かる。
   // エンジンも、プロバイダの呼び出し方を決めるのにカタログを使う。
@@ -206,6 +224,7 @@ export function startApp(config: AppConfig, overrides: AppOverrides = {}): App {
       webSearch,
       connectors: createConnectorToolset(connectors),
       discord: createDiscordToolset({ discord }),
+      routine: routineToolset,
       tera: teraToolset,
       coding,
       images,
@@ -224,6 +243,15 @@ export function startApp(config: AppConfig, overrides: AppOverrides = {}): App {
     contextLimit: () => modelContextTokens(catalog.snapshot(), settings.read().model),
   });
 
+  // ターンの実行状態と、ほかの画面へ出来事を配る口。ルーチンも同じものを使うので、
+  // HTTP のハンドラを組み立てる前にここで作り、startServer へ渡す。
+  const turns = createTurns({ store, engine, compaction });
+  const broadcast = createConversationBroadcast();
+
+  // ルーチンのスケジューラ。HTTP のハンドラとツールが同じ実体を使うので、startServer より前に作る。
+  const routines = createRoutineScheduler({ store, turns, broadcast, settings, catalog });
+  scheduler = routines;
+
   const { server, portChanged } = startServer({
     config,
     store,
@@ -231,9 +259,12 @@ export function startApp(config: AppConfig, overrides: AppOverrides = {}): App {
     compaction,
     catalog,
     settings,
+    turns,
+    broadcast,
     mcp,
     connectors,
     discord,
+    routines,
     webSearch: webSearchManager,
     container,
     images,
@@ -244,6 +275,9 @@ export function startApp(config: AppConfig, overrides: AppOverrides = {}): App {
     ...(overrides.listModels === undefined ? {} : { listModels: overrides.listModels }),
   });
   boundPort = server.port ?? null;
+
+  // ルーチンは、サーバが待ち受けを始めてから動かす（起動直後の読み込みと重ねない）。
+  routines.start();
 
   return {
     config,
@@ -258,8 +292,11 @@ export function startApp(config: AppConfig, overrides: AppOverrides = {}): App {
     discord,
     container,
     webSearch: webSearchManager,
+    routines,
 
     async shutdown() {
+      // ルーチンのタイマーを止めてから、ほかの接続を畳む。
+      routines.close();
       // 畳まないと、MCP サーバーの接続と SQLite の WAL、圧縮の予約がそのまま残る。
       await server.stop(true);
       connectors.close();

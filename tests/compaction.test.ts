@@ -749,6 +749,7 @@ describe("トークンの目安", () => {
       role: "assistant",
       content: "",
       attachments: null,
+      origin: null,
       parts: [
         // 画面にだけ出す添付と注記は、モデルへ渡さないので数えない。
         {

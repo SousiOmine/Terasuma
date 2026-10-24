@@ -20,6 +20,8 @@ import type { Store } from "../data/store";
 /**
  * 1 ターン分の流れと、同じ Tera でターンが重ならないための門。
  *
+ * ルーチンのターンも同じ 1 本の枠を使う（重ねない）。
+ *
  * 保存 → モデル呼び出し → 保存、の順で進み、履歴は常に追記だけになる。
  * 「実行中かどうか」はこのモジュールの中だけで持ち、HTTP 層へ Set を渡さない。
  *
@@ -38,6 +40,13 @@ export type TurnDeps = {
   /** 過去の対話の圧縮。ターンの前に走っている分を待ち、ターンの後に次を決める。 */
   compaction: Compaction;
 };
+
+/** ターンを始めたきっかけ。 */
+export type TurnOrigin =
+  /** 利用者が送った。 */
+  | { kind: "user" }
+  /** ルーチンの実行。 */
+  | { kind: "routine"; routineId: string; routineName: string };
 
 /** 1 ターンの入力。 */
 export type TurnInput = {
@@ -62,9 +71,15 @@ export type Turns = {
    * 終わったら（止められた場合も）実行中の印は必ず外れる。
    * startUserMessage が false なら、最初の区切りでユーザー発言を保存しない（再試行用）。
    */
-  begin(teraId: string, input: TurnInput, options?: { startUserMessage?: boolean }): AsyncIterable<ChatEvent> | null;
+  begin(
+    teraId: string,
+    input: TurnInput,
+    options?: { startUserMessage?: boolean; origin?: TurnOrigin },
+  ): AsyncIterable<ChatEvent> | null;
   /** 応答を生成しているターンがあるかどうか。 */
   isRunning(teraId: string): boolean;
+  /** いま走っているターンを始めたきっかけ。走っていなければ null。 */
+  runningOrigin(teraId: string): TurnOrigin | null;
   /**
    * この Tera のターンが登録されているかどうか（停止を押して、片付けている途中も含む）。
    * Tera を消す前に確かめる。止めたターンは、終わるまで履歴を書き足すため。
@@ -116,6 +131,8 @@ type RunningTurn = {
   stopped: boolean;
   /** 保存したが、まだモデルへ渡していない発言（届いた順）。 */
   pending: ChatMessage[];
+  /** このターンを始めたきっかけ。保存する発言の origin を決める。 */
+  origin: TurnOrigin;
 };
 
 export function createTurns(deps: TurnDeps): Turns {
@@ -126,10 +143,12 @@ export function createTurns(deps: TurnDeps): Turns {
 
   return {
     begin(teraId, input, options) {
+      const origin: TurnOrigin = options?.origin ?? { kind: "user" };
+
       // 画面は 1 つのターンしか始めないが、別のタブから同じ Tera を開けるため、ここでも断る。
       if (running.has(teraId)) return null;
 
-      const turn: RunningTurn = { controller: new AbortController(), stopped: false, pending: [] };
+      const turn: RunningTurn = { controller: new AbortController(), stopped: false, pending: [], origin };
       running.set(teraId, turn);
       return runTurn(deps, teraId, input, turn, running, options?.startUserMessage ?? true);
     },
@@ -137,6 +156,10 @@ export function createTurns(deps: TurnDeps): Turns {
     isRunning(teraId) {
       const turn = running.get(teraId);
       return turn !== undefined && !turn.stopped;
+    },
+
+    runningOrigin(teraId) {
+      return running.get(teraId)?.origin ?? null;
     },
 
     hasTurn(teraId) {
@@ -154,6 +177,7 @@ export function createTurns(deps: TurnDeps): Turns {
         role: "user",
         content: input.content,
         attachments: input.attachments,
+        origin: null,
       });
       turn.pending.push(message);
       return message;
@@ -227,6 +251,8 @@ async function* turnEvents(
       role: "user",
       content,
       attachments,
+      // ルーチンが始めたターンは、画面で自分の発言と区別できるように名前を残す。
+      origin: turn.origin.kind === "routine" ? turn.origin.routineName : null,
     });
     yield { type: "user-message", message: toMessageView(userMessage) };
   }

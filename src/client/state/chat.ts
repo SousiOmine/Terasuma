@@ -503,6 +503,7 @@ function settleLiveTurn(teraId: string): void {
     content: "",
     attachments: null,
     parts: [...live.parts],
+    origin: null,
     createdAt: live.createdAt,
   });
 }

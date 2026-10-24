@@ -8,6 +8,7 @@ import {
   CONNECTORS_SKILL,
   DISCORD_SKILL,
   PI_CODING_SKILL,
+  ROUTINE_SKILL,
   SKILL_CREATE_SKILL,
   TERA_CREATE_SKILL,
   createSkillLibrary,
@@ -70,7 +71,7 @@ function skillManageTools(initial: readonly { name: string; description: string;
 }
 
 describe("スキルのカタログ", () => {
-  test("computer-use と connectors と skill-create と discord と tera-create が説明つきで載る", () => {
+  test("computer-use と connectors と skill-create と discord と tera-create と routine が説明つきで載る", () => {
     const catalog = skillCatalogText(BUILTIN_SKILLS);
 
     expect(catalog).toContain("- computer-use: ");
@@ -83,12 +84,15 @@ describe("スキルのカタログ", () => {
     expect(catalog).toContain(DISCORD_SKILL.description);
     expect(catalog).toContain("- tera-create: ");
     expect(catalog).toContain(TERA_CREATE_SKILL.description);
+    expect(catalog).toContain("- routine: ");
+    expect(catalog).toContain(ROUTINE_SKILL.description);
     expect(BUILTIN_SKILLS.map((skill) => skill.name)).toEqual([
       "computer-use",
       "connectors",
       "skill-create",
       "discord",
       "tera-create",
+      "routine",
     ]);
   });
 });
@@ -189,7 +193,7 @@ describe("skill ツール", () => {
     await expect(
       definition.execute({ name: "nope" } as never, { toolCallId: "call-1", messages: [] } as never),
     ).rejects.toThrow(
-      'Unknown skill "nope". Available skills: computer-use, connectors, skill-create, discord, tera-create',
+      'Unknown skill "nope". Available skills: computer-use, connectors, skill-create, discord, tera-create, routine',
     );
   });
 
@@ -383,6 +387,20 @@ describe("discord の本文", () => {
     expect(content).toContain("Mentions do not notify");
     expect(content).toContain("can only post");
     expect(content).toContain("bot token");
+  });
+});
+
+describe("routine の本文", () => {
+  test("聞くことと、スケジュールの形と、扱うツールを書いている", () => {
+    const content = ROUTINE_SKILL.content;
+
+    expect(content).toContain("routine_create");
+    expect(content).toContain("routine_list");
+    expect(content).toContain("routine_delete");
+    expect(content).toContain('{"kind":"daily","time":"08:30"}');
+    // 実行の仕方（誰に見せるか、どこへ届けるか）は、ルーチンを作るときの指示に書くもの。
+    // 手順書には置かない。
+    expect(content).not.toContain("Nobody is watching");
   });
 });
 

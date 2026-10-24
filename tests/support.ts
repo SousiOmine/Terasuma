@@ -15,6 +15,7 @@ import type {
   CodingToolsetProvider,
   ComputerToolsetProvider,
   HistoryToolsetProvider,
+  RoutineToolsetProvider,
   TeraToolsetProvider,
   WebSearchToolsetProvider,
 } from "../src/server/agent/contracts";
@@ -25,6 +26,7 @@ import type { McpManager } from "../src/server/mcp/manager";
 import type { ConnectorToolsetProvider } from "../src/server/connectors/tools";
 import type { ConnectorsManager } from "../src/server/connectors/manager";
 import type { DiscordToolsetProvider } from "../src/server/discord/tools";
+import type { RoutineScheduler } from "../src/server/routine/scheduler";
 import type { WebSearchManager } from "../src/server/websearch-manager";
 import { createSettingsStore, type SettingsStore } from "../src/server/data/settings";
 import { createStore, type Store, type TeraIdentity } from "../src/server/data/store";
@@ -203,6 +205,36 @@ export function createDiscordToolsStub(): DiscordToolsetProvider {
 /** 新しい Tera を作るツールを渡さないテストのための差し替え（エンジン用）。 */
 export function createTeraToolsStub(): TeraToolsetProvider {
   return { toolset: () => ({}) };
+}
+
+/** ルーチンのツールを渡さないテストのための差し替え（エンジン用）。 */
+export function createRoutineToolsStub(): RoutineToolsetProvider {
+  return { toolset: () => ({}) };
+}
+
+/** ルーチンのスケジューラを、走らせずに呼び出しだけ記録する差し替え（HTTP のテスト用）。 */
+export function createRoutineSchedulerStub(): RoutineScheduler & {
+  calls: string[];
+  running: Set<string>;
+} {
+  const calls: string[] = [];
+  const running = new Set<string>();
+
+  return {
+    calls,
+    running,
+    start: () => undefined,
+    close: () => undefined,
+    async runNow(id) {
+      calls.push(`run:${id}`);
+      running.add(id);
+    },
+    isRunning: (id) => running.has(id),
+    stop: (id) => {
+      calls.push(`stop:${id}`);
+      running.delete(id);
+    },
+  };
 }
 
 /**

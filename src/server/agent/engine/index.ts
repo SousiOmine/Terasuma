@@ -11,6 +11,7 @@ import type {
   CodingToolsetProvider,
   ComputerToolsetProvider,
   HistoryToolsetProvider,
+  RoutineToolsetProvider,
   TeraToolsetProvider,
   ToolsetProvider,
   WebSearchToolsetProvider,
@@ -120,6 +121,8 @@ export function createEngine(options: {
   connectors: ConnectorToolsetProvider;
   /** Discord の webhook（送信先は Tera ごと）のツール。 */
   discord: DiscordToolsetProvider;
+  /** スケジュールされた実行（ルーチン）のツール。扱うルーチンは Tera ごと。 */
+  routine: RoutineToolsetProvider;
   /** 新しい Tera を作るツール。作る先（作業フォルダの親）はアプリが決める。 */
   tera: TeraToolsetProvider;
   /** コンテナのファイルとシェルのツール。相対パスと bash の cwd が Tera ごとに違うので、ターンごとに組む。 */
@@ -145,6 +148,7 @@ export function createEngine(options: {
     webSearch: options.webSearch,
     connectors: options.connectors,
     discord: options.discord,
+    routine: options.routine,
     tera: options.tera,
     coding: options.coding,
     images: options.images,

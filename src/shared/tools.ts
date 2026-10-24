@@ -111,6 +111,42 @@ export const TERA_CREATE_TOOL = "create";
 /** モデルへ渡すときの、新しい Tera を作るツールの名前。 */
 export const TERA_CREATE_TOOL_NAME = `${TERA_SERVER_ID}${TOOL_NAME_SEPARATOR}${TERA_CREATE_TOOL}`;
 
+/**
+ * スケジュールされた実行（ルーチン）の内蔵ツールのサーバー id。
+ * ツール名は "routine_create" などになるので、MCP サーバーの id としては予約する。
+ */
+export const ROUTINE_SERVER_ID = "routine";
+
+/** ルーチンを作るツール名（サーバー id を付けない形）。 */
+export const ROUTINE_CREATE_TOOL = "create";
+
+/** モデルへ渡すときの、ルーチンを作るツールの名前。 */
+export const ROUTINE_CREATE_TOOL_NAME = `${ROUTINE_SERVER_ID}${TOOL_NAME_SEPARATOR}${ROUTINE_CREATE_TOOL}`;
+
+/** ルーチンの一覧を返すツール名（サーバー id を付けない形）。 */
+export const ROUTINE_LIST_TOOL = "list";
+
+/** モデルへ渡すときの、ルーチンの一覧を返すツールの名前。 */
+export const ROUTINE_LIST_TOOL_NAME = `${ROUTINE_SERVER_ID}${TOOL_NAME_SEPARATOR}${ROUTINE_LIST_TOOL}`;
+
+/** ルーチンを更新するツール名（サーバー id を付けない形）。 */
+export const ROUTINE_UPDATE_TOOL = "update";
+
+/** モデルへ渡すときの、ルーチンを更新するツールの名前。 */
+export const ROUTINE_UPDATE_TOOL_NAME = `${ROUTINE_SERVER_ID}${TOOL_NAME_SEPARATOR}${ROUTINE_UPDATE_TOOL}`;
+
+/** ルーチンを削除するツール名（サーバー id を付けない形）。 */
+export const ROUTINE_DELETE_TOOL = "delete";
+
+/** モデルへ渡すときの、ルーチンを削除するツールの名前。 */
+export const ROUTINE_DELETE_TOOL_NAME = `${ROUTINE_SERVER_ID}${TOOL_NAME_SEPARATOR}${ROUTINE_DELETE_TOOL}`;
+
+/** ルーチンをいま実行するツール名（サーバー id を付けない形）。 */
+export const ROUTINE_RUN_TOOL = "run";
+
+/** モデルへ渡すときの、ルーチンをいま実行するツールの名前。 */
+export const ROUTINE_RUN_TOOL_NAME = `${ROUTINE_SERVER_ID}${TOOL_NAME_SEPARATOR}${ROUTINE_RUN_TOOL}`;
+
 /** 画面をユーザーへ渡すツール名（サーバー id を付けない形）。 */
 export const ASK_USER_TOOL = "ask_user";
 

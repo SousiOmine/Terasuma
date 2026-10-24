@@ -122,6 +122,11 @@ export function createRoutes(api: WithErrorHandling<ApiHandlers>, screen: Screen
     "/api/discord/:teraId/wait": {
       DELETE: api.cancelDiscordWait,
     },
+    // スケジュールされた実行（ルーチン）。設定画面の一覧と、有効/無効・削除・いま実行・停止。
+    "/api/routines": { GET: api.readRoutines },
+    "/api/routines/:id": { PATCH: api.updateRoutine, DELETE: api.deleteRoutine },
+    "/api/routines/:id/run": { POST: api.runRoutine },
+    "/api/routines/:id/stop": { POST: api.stopRoutine },
     // Web 検索のプロバイダ。保存前の確認は接続先へ 1 回検索を投げる。
     "/api/websearch": {
       GET: api.readWebSearch,

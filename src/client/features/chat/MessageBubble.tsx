@@ -1,4 +1,4 @@
-import { IconDownload, IconFile } from "@tabler/icons-preact";
+import { IconDownload, IconFile, IconRepeat } from "@tabler/icons-preact";
 import { formatBytes } from "../../../shared/text";
 import type {
   AttachmentPart,
@@ -25,6 +25,12 @@ export function UserMessageBubble({ message, time }: { message: ChatMessageView;
 
   return (
     <div class="tera-rise-in flex flex-col items-end gap-1">
+      {message.origin !== null && (
+        <span class="flex items-center gap-1 pr-1 text-[11px] text-tertiary">
+          <IconRepeat size={12} stroke={1.7} class="shrink-0" />
+          {t("chat.routineOrigin", { name: message.origin })}
+        </span>
+      )}
       <div class="max-w-[85%] rounded-[24px] bg-soft px-4 py-2.5 text-[15px] leading-[1.7] text-primary">
         {message.content.length > 0 && <Markdown content={message.content} />}
         {files.length > 0 && (

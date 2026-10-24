@@ -10,7 +10,17 @@ import type { ChatEvent, ChatMessageView } from "../src/shared/api/message";
 
 /** 保存済みの発言 1 件。 */
 function message(id: string): ChatMessageView {
-  return { id, teraId: "t1", seq: 1, role: "user", content: id, attachments: null, parts: null, createdAt: 1 };
+  return {
+    id,
+    teraId: "t1",
+    seq: 1,
+    role: "user",
+    content: id,
+    attachments: null,
+    parts: null,
+    origin: null,
+    createdAt: 1,
+  };
 }
 
 const started: ChatEvent = { type: "assistant-start", id: "a1", createdAt: 2, seq: 2 };
@@ -25,6 +35,7 @@ const done: ChatEvent = {
     content: "",
     attachments: null,
     parts: [{ type: "text", text: "こんにちは", at: 3 }],
+    origin: null,
     createdAt: 2,
   },
 };

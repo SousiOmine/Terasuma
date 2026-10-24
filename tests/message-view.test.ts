@@ -18,6 +18,7 @@ function message(parts: MessagePart[]): ChatMessage {
     content: "",
     attachments: null,
     parts,
+    origin: null,
     createdAt: 1,
     usage: { inputTokens: 1, outputTokens: 2, cachedInputTokens: 0 },
   };
@@ -69,6 +70,7 @@ describe("toMessageView", () => {
       content: "こんにちは",
       attachments: null,
       parts: null,
+      origin: null,
       createdAt: 1,
       usage: null,
     };

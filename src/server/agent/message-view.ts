@@ -18,6 +18,7 @@ export function toMessageView(message: ChatMessage): ChatMessageView {
     // 添付のパスはコンテナの中の場所。画面は名前と大きさだけを使う。
     attachments: message.attachments === null ? null : message.attachments.map(({ name, size }) => ({ name, size })),
     parts: message.parts === null ? null : message.parts.filter(isDisplayPart),
+    origin: message.origin,
     createdAt: message.createdAt,
   };
 }

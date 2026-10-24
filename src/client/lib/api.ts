@@ -4,6 +4,7 @@ import { CLIENT_HEADER, type ConversationEvent } from "../../shared/api/events";
 import type { ModelId } from "../../shared/model";
 import { decodeChatEvents, decodeConversationEvents } from "../../shared/sse";
 import type { ChatEvent, ChatMessageView, MessagePage, Tera } from "../../shared/api/message";
+import type { RoutinesView } from "../../shared/api/routine";
 import type {
   AddProviderForm,
   CatalogProviderView,
@@ -41,6 +42,9 @@ const CONNECTORS_PATH = "/api/connectors";
 
 /** Discord の webhook（Tera ごと）。 */
 const DISCORD_PATH = "/api/discord";
+
+/** スケジュールされた実行（ルーチン）。 */
+const ROUTINES_PATH = "/api/routines";
 
 /** Web 検索の設定。 */
 const WEB_SEARCH_PATH = "/api/websearch";
@@ -420,6 +424,35 @@ export async function cancelDiscordWait(teraId: string): Promise<DiscordWebhooks
 
 function discordPath(teraId: string): string {
   return `${DISCORD_PATH}/${encodeURIComponent(teraId)}`;
+}
+
+/** スケジュールされた実行（ルーチン）の一覧。 */
+export async function fetchRoutines(): Promise<RoutinesView> {
+  return request<RoutinesView>(ROUTINES_PATH);
+}
+
+/** 有効・無効を切り替える。 */
+export async function setRoutineEnabled(id: string, enabled: boolean): Promise<RoutinesView> {
+  return request<RoutinesView>(routinePath(id), jsonRequest("PATCH", { enabled }));
+}
+
+/** ルーチンを消す。 */
+export async function deleteRoutine(id: string): Promise<RoutinesView> {
+  return request<RoutinesView>(routinePath(id), { method: "DELETE" });
+}
+
+/** いま 1 回走らせる（開始だけ）。 */
+export async function runRoutine(id: string): Promise<RoutinesView> {
+  return request<RoutinesView>(`${routinePath(id)}/run`, { method: "POST" });
+}
+
+/** 走っているルーチンを止める。 */
+export async function stopRoutine(id: string): Promise<RoutinesView> {
+  return request<RoutinesView>(`${routinePath(id)}/stop`, { method: "POST" });
+}
+
+function routinePath(id: string): string {
+  return `${ROUTINES_PATH}/${encodeURIComponent(id)}`;
 }
 
 /** Web 検索の設定（既定のプロバイダと、登録済みのプロバイダ）。 */

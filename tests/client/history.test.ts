@@ -4,7 +4,17 @@ import type { ChatMessageView, MessagePage } from "../../src/shared/api/message"
 
 /** 保存済みの発言。 */
 function saved(id: string, seq: number): ChatMessageView {
-  return { id, teraId: "t1", seq, role: "user", content: id, attachments: null, parts: null, createdAt: seq };
+  return {
+    id,
+    teraId: "t1",
+    seq,
+    role: "user",
+    content: id,
+    attachments: null,
+    parts: null,
+    origin: null,
+    createdAt: seq,
+  };
 }
 
 /** 連番が分からないまま置いておく発言（送信の応答が途中で切れたとき）。 */
@@ -17,6 +27,7 @@ function unsaved(id: string): ChatMessageView {
     content: "",
     attachments: null,
     parts: [],
+    origin: null,
     createdAt: 99,
   };
 }

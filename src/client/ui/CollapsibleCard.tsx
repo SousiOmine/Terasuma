@@ -13,6 +13,8 @@ export type CollapsibleCardProps = {
   lines?: readonly (string | null)[];
   /** 見出しの右に置く操作（切断）。 */
   action?: ComponentChildren;
+  /** 最初から開いておくか。既定は閉じている。開閉の初期値にだけ使う。 */
+  defaultOpen?: boolean;
   /** 開いたときに出す中身。 */
   children: ComponentChildren;
 };
@@ -24,8 +26,8 @@ export type CollapsibleCardProps = {
  * 見出し（名前・状態・短い説明）だけを出し、押したときだけ中身を出す。既定は閉じている。
  * 開閉はカードごとに持ち、一覧を読み直しても（同じ key なら）そのまま保たれる。
  */
-export function CollapsibleCard({ title, badge, lines = [], action, children }: CollapsibleCardProps) {
-  const [open, setOpen] = useState(false);
+export function CollapsibleCard({ title, badge, lines = [], action, defaultOpen = false, children }: CollapsibleCardProps) {
+  const [open, setOpen] = useState(defaultOpen);
 
   return (
     <div class={CARD_COMPACT_CLASS}>

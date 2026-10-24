@@ -105,6 +105,7 @@ export function isChatMessage(value: unknown): value is ChatMessage {
     isString(value.content) &&
     (value.attachments === null || (Array.isArray(value.attachments) && value.attachments.every(isChatAttachment))) &&
     (value.parts === null || (Array.isArray(value.parts) && value.parts.every(isMessagePart))) &&
+    (value.origin === null || isString(value.origin)) &&
     isNumber(value.createdAt) &&
     (value.usage === null || isUsage(value.usage))
   );
@@ -123,6 +124,7 @@ export function isChatMessageView(value: unknown): value is ChatMessageView {
     (value.attachments === null ||
       (Array.isArray(value.attachments) && value.attachments.every(isChatAttachmentView))) &&
     (value.parts === null || (Array.isArray(value.parts) && value.parts.every(isMessagePart))) &&
+    (value.origin === null || isString(value.origin)) &&
     isNumber(value.createdAt)
   );
 }

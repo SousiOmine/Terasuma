@@ -17,6 +17,7 @@ function assistant(id: string, parts: MessagePart[], at: number): ChatMessage {
     content: "",
     attachments: null,
     parts,
+    origin: null,
     createdAt: at,
     usage: null,
   };
@@ -31,6 +32,7 @@ function user(id: string, text: string, at: number): ChatMessage {
     content: text,
     attachments: null,
     parts: null,
+    origin: null,
     createdAt: at,
     usage: null,
   };

@@ -12,6 +12,7 @@ import { createHandover, type Handover } from "../src/server/computer/handover";
 import { createImageStore, type ImageStore } from "../src/server/computer/images";
 import type { McpManager } from "../src/server/mcp/manager";
 import type { WebSearchManager } from "../src/server/websearch-manager";
+import type { RoutineScheduler } from "../src/server/routine/scheduler";
 import type { Catalog } from "../src/server/provider/catalog";
 import type { ConnectionChecker, ProviderModelLister } from "../src/server/provider/connection";
 import { startServer, type StartedServer } from "../src/server/http/server";
@@ -24,6 +25,7 @@ import {
   createCompactionStub,
   createContainerStub,
   createMcpStub,
+  createRoutineSchedulerStub,
   createWebSearchStub,
 } from "./support";
 
@@ -61,6 +63,8 @@ export type ServerHarnessOptions = {
   discord?: DiscordWebhooks | ((context: { store: Store; dir: string }) => DiscordWebhooks);
   /** Web 検索。省くと「プロバイダ未設定」の差し替えを使う。 */
   webSearch?: WebSearchManager;
+  /** ルーチンのスケジューラ。省くと、走らせずに呼び出しだけ記録する差し替えを使う。 */
+  routines?: RoutineScheduler;
   /** 引き受け。省くと本物を作る。 */
   handover?: Handover;
   /** 環境変数の入力待ち。省くと本物を作る。 */
@@ -86,6 +90,8 @@ export type ServerHarness = {
   settingsPath: string;
   /** Discord の webhook（Tera ごとの保存先）。テストから状態を確かめるときに使う。 */
   discord: DiscordWebhooks;
+  /** ルーチンのスケジューラ（テストから実行の開始や停止を確かめるときに使う）。 */
+  routines: RoutineScheduler;
   /** エージェントが送った画像の置き場（配信のテストで使う）。 */
   images: ImageStore;
   /** エージェントが送ったファイルの置き場（配信のテストで使う）。 */
@@ -124,6 +130,8 @@ export async function withServer<T>(
       ? options.connectors({ settings, dir })
       : (options.connectors ?? createConnectors({ dataDir: dir }));
 
+  const routines = options.routines ?? createRoutineSchedulerStub();
+
   const discord =
     typeof options.discord === "function"
       ? options.discord({ store, dir })
@@ -152,6 +160,7 @@ export async function withServer<T>(
       mcp: options.mcp ?? createMcpStub(),
       connectors,
       discord,
+      routines,
       webSearch: options.webSearch ?? createWebSearchStub(),
       container,
       images,
@@ -178,6 +187,7 @@ export async function withServer<T>(
     settings,
     settingsPath,
     discord,
+    routines,
     images,
     files,
     handover,

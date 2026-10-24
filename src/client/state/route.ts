@@ -13,6 +13,12 @@ export type SettingsCategory = "general" | "teras" | "model" | "providers" | "co
 export const view = signal<View>("chat");
 export const settingsCategory = signal<SettingsCategory>("general");
 
+/**
+ * 設定 > Tera で開いておく Tera。サイドバーの右クリックから来たときに立てる。
+ * 設定を開いたら 1 回だけ使い、カテゴリを変えたら消す。
+ */
+export const focusTeraId = signal<string | null>(null);
+
 /** 設定画面を開く。導線に合わせて、開くカテゴリを指定できる。 */
 export function openSettings(category: SettingsCategory = "general"): void {
   settingsCategory.value = category;
@@ -20,10 +26,12 @@ export function openSettings(category: SettingsCategory = "general"): void {
 }
 
 export function closeSettings(): void {
+  focusTeraId.value = null;
   view.value = "chat";
 }
 
 /** カテゴリだけを切り替える（設定画面の左ペイン）。 */
 export function setSettingsCategory(category: SettingsCategory): void {
+  focusTeraId.value = null;
   settingsCategory.value = category;
 }

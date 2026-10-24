@@ -60,6 +60,7 @@ describe("SSE", () => {
         role: "assistant",
         content: "",
         attachments: null,
+        origin: null,
         parts: [
           {
             type: "text",

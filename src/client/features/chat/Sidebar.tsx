@@ -1,10 +1,10 @@
-import { IconSettings, IconTrash, IconX } from "@tabler/icons-preact";
+import { IconRepeat, IconSettings, IconTrash, IconX } from "@tabler/icons-preact";
 import { useEffect, useState } from "preact/hooks";
 import type { Tera } from "../../../shared/api/message";
 import { useDeleteTarget } from "../../hooks/useDeleteTarget";
 import { t } from "../../i18n";
 import { openTera } from "../../state/chat";
-import { openSettings } from "../../state/route";
+import { focusTeraId, openSettings } from "../../state/route";
 import { activeTeraId, teras } from "../../state/session";
 import { clearTeraError, removeTera, showTeraError, teraError } from "../../state/teras";
 import { closeSidebar, sidebarOpen } from "../../state/sidebar";
@@ -17,7 +17,8 @@ import { ChatAvatar } from "./ChatAvatar";
  * Tera の一覧。会話は Tera ごとに 1 本なので、並ぶのは会話ではなく Tera。
  * 増やすのはエージェントの仕事（tera_create）なので、ここに作るボタンは置いていない。
  * 消すのはユーザーが決めるので、各行のボタンと、行の右クリックのメニューから消せる
- * （設定 > Tera にも同じ導線がある）。
+ * （設定 > Tera にも同じ導線がある）。右クリックのメニューからは、その Tera の
+ * ルーチンの管理（設定 > Tera のカード）も開ける。
  *
  * md 未満では、チャットに重ねて開くドロワーになる。
  * 開閉の状態は state/sidebar.ts が持ち、ヘッダーのメニューボタンから切り替える。
@@ -164,6 +165,15 @@ export function Sidebar() {
           label={t("tera.menu", { name: menu.tera.name })}
           point={menu.point}
           items={[
+            {
+              label: t("routine.title"),
+              icon: <IconRepeat size={15} stroke={1.7} class="shrink-0" />,
+              onSelect: () => {
+                closeSidebar();
+                focusTeraId.value = menu.tera.id;
+                openSettings("teras");
+              },
+            },
             {
               label: t("common.delete"),
               icon: <IconTrash size={15} stroke={1.7} class="shrink-0" />,

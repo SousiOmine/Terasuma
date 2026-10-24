@@ -11,6 +11,7 @@ function message(content: string, attachments: ChatAttachment[] | null): ChatMes
     content,
     attachments,
     parts: null,
+    origin: null,
     createdAt: 1,
     usage: null,
   };
