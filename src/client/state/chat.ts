@@ -58,6 +58,9 @@ const MESSAGES_PAGE_SIZE = 20;
 const RESUBSCRIBE_DELAY_MS = 500;
 const RESUBSCRIBE_MAX_DELAY_MS = 5_000;
 
+/** 応答が終わりの合図なしに切れたときに、自動でやり直す回数。 */
+const STREAM_RETRY_LIMIT = 1;
+
 /** 読み込んだ中で最も古い seq。次に古いページを読むときの before。 */
 let oldestSeq: number | null = null;
 
@@ -382,6 +385,39 @@ export async function sendMessage(rawContent: string, files: readonly File[]): P
 
   clearChatError();
 
+  let outcome = await runTurn(
+    teraId,
+    (signal) => api.streamTurn(teraId, content, locale.value, files, signal),
+    // 自動でやり直せるので、この時点ではまだ失敗として出さない。
+    { reportStreamEnded: false },
+  );
+
+  for (let attempt = 0; attempt < STREAM_RETRY_LIMIT; attempt += 1) {
+    if (outcome.ended || outcome.aborted) return;
+
+    // 静かにやり直す。前の試行の失敗表示が残っていれば消す。
+    clearChatError();
+    outcome = await runTurn(teraId, (signal) => api.retryTurn(teraId, locale.value, signal), {
+      reportStreamEnded: false,
+    });
+  }
+
+  if (!outcome.ended && !outcome.aborted) showChatError(new ApiError("stream_ended"));
+}
+
+/** 画面へ応答を流し、そのターンの後始末まで行う。 */
+type TurnOutcome = {
+  /** 終わりを伝えるイベント（assistant-done / error）を受け取れたか。 */
+  ended: boolean;
+  /** 利用者の停止や画面の切り替えで、こちらから切ったか。 */
+  aborted: boolean;
+};
+
+async function runTurn(
+  teraId: string,
+  request: (signal: AbortSignal) => AsyncGenerator<ChatEvent>,
+  options: { reportStreamEnded?: boolean } = {},
+): Promise<TurnOutcome> {
   const controller = new AbortController();
   let settle = (): void => undefined;
   const done = new Promise<void>((resolve) => {
@@ -396,7 +432,7 @@ export async function sendMessage(rawContent: string, files: readonly File[]): P
   // ターンの終わりを伝えるイベントを受け取れたかどうか。
   let ended = false;
   try {
-    for await (const event of api.streamTurn(teraId, content, locale.value, files, controller.signal)) {
+    for await (const event of request(controller.signal)) {
       applyEvent(event, teraId);
       if (event.type === "assistant-done" || event.type === "error") ended = true;
     }
@@ -419,6 +455,27 @@ export async function sendMessage(rawContent: string, files: readonly File[]): P
     // 読み直して、仮置きを連番の付いた同じ発言へ置き換える。
     if (!ended) void refreshLatest(teraId);
   }
+
+  const outcome = { ended, aborted: controller.signal.aborted };
+
+  // 利用者の停止でも、終わりを伝えるイベントを受け取ったのでもないときは、
+  // 応答が途中で切れたことを画面に出す。
+  if (!outcome.ended && !outcome.aborted && options.reportStreamEnded !== false) {
+    showChatError(new ApiError("stream_ended"));
+  }
+  return outcome;
+}
+
+/**
+ * 最後のユーザー発言へ、もう一度答えてもらう。
+ * 自動のやり直しも効かなかったときに、画面の「再試行」から呼ぶ。
+ */
+export async function retryLastTurn(): Promise<void> {
+  const teraId = activeTeraId.value;
+  if (teraId === null || isStreaming.value) return;
+
+  clearChatError();
+  await runTurn(teraId, (signal) => api.retryTurn(teraId, locale.value, signal));
 }
 
 /** 保存済みの発言を、seq の順に並ぶ位置へ入れる（同じ id があれば置き換える）。 */

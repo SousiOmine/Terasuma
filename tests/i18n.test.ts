@@ -34,7 +34,8 @@ function referencedKeys(): Set<string> {
   }
 
   // 失敗の文言は `error.${code}` で組み立てるので、コードの一覧から足す。
-  for (const code of [...API_ERROR_CODES, "network", "input", "mcp_unreachable"]) keys.add(`error.${code}`);
+  for (const code of [...API_ERROR_CODES, "network", "input", "mcp_unreachable", "stream_ended"])
+    keys.add(`error.${code}`);
 
   return keys;
 }

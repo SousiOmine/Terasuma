@@ -7,7 +7,7 @@ import { createTurns } from "../../agent/turns";
 import { AppError, ConflictError, ValidationError } from "../../errors";
 import type { ConversationEvent } from "../../../shared/api/events";
 import { encodeChatEvent, encodeConversationEvent } from "../../../shared/sse";
-import { readSteerForm, readTurnForm } from "../body";
+import { readRetryForm, readSteerForm, readTurnForm } from "../body";
 import { json, noContent } from "../respond";
 import { createSseResponse } from "../sse";
 import { type ApiDeps, type ApiRequest, requireClientId, requireTera } from "./shared";
@@ -136,12 +136,46 @@ export function terasHandlers(
         content: form.content,
         attachments,
         language: form.language,
-        signal: req.signal,
       });
       if (events === null) {
         throw new ConflictError("turn_in_progress", "この Tera はほかで応答を生成しています");
       }
-      return createSseResponse(broadcast.relay(req.params.id, events, clientId), encodeChatEvent);
+      return createSseResponse(broadcast.relay(req.params.id, events, clientId), encodeChatEvent, {
+        continueOnCancel: true,
+      });
+    },
+
+    /**
+     * 最後のユーザー発言へ、ユーザー発言を増やさずにもう一度答える。
+     * 画面が応答の終わりを受け取れなかったときのやり直しに使う。
+     */
+    async retryTurn(req: ApiRequest<{ id: string }>): Promise<Response> {
+      const teraId = req.params.id;
+      requireTera(store, teraId);
+      const clientId = requireClientId(req.headers);
+
+      const form = await readRetryForm(req);
+
+      // モデルを呼べない状態なら、ターンを始めずに理由を返す（送信と同じ）。
+      const resolution = resolveModel(settings.read(), deps.catalog.snapshot());
+      if (!resolution.ok) throw new AppError("model_not_configured", 400, resolution.detail);
+
+      // 最後のユーザー発言を探す。無ければ、答える先が無い。
+      const page = store.listMessagesPage(teraId, { limit: 50, before: null });
+      const last = [...page.messages].reverse().find((message) => message.role === "user");
+      if (last === undefined) throw new ValidationError("there is no user message to retry");
+
+      const events = turns.begin(
+        teraId,
+        { content: last.content, attachments: last.attachments, language: form.language },
+        { startUserMessage: false },
+      );
+      if (events === null) {
+        throw new ConflictError("turn_in_progress", "この Tera はほかで応答を生成しています");
+      }
+      return createSseResponse(broadcast.relay(teraId, events, clientId), encodeChatEvent, {
+        continueOnCancel: true,
+      });
     },
 
     /**

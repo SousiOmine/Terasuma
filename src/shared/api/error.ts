@@ -44,6 +44,11 @@ export const API_ERROR_CODES = [
 
 export type ApiErrorCode = (typeof API_ERROR_CODES)[number];
 
+/** もう一度試す価値がある失敗か。設定の誤りや入力の誤りは、やり直しても変わらない。 */
+export function isRetryableErrorCode(code: string): boolean {
+  return code === "model_error" || code === "network" || code === "internal_error" || code === "stream_ended";
+}
+
 /** 失敗の応答の形。detail は理由の 1 文で、無ければ null。 */
 export type ApiErrorBody = {
   code: ApiErrorCode;

@@ -117,12 +117,26 @@ describe("pi-coding スキル", () => {
     expect(library.all().map((skill) => skill.name)).toContain("pi-coding");
   });
 
-  test("pi-coding の作業ファイルとセッションは、Tera ごとに分かれる", () => {
-    expect(PI_CODING_SKILL.content).toContain("$HOME/.pi-work/");
-    expect(PI_CODING_SKILL.content).toContain("pi-work-${PWD##*/}");
+  test("pi-coding の作業ファイルとセッションは、仕事ごとの枠に分かれる", () => {
+    const pwd = "${PWD##*/}";
+
+    expect(PI_CODING_SKILL.content).toContain(`$HOME/.pi-work/${pwd}/$slot`);
+    expect(PI_CODING_SKILL.content).toContain(`pi-work-${pwd}-$slot`);
+    expect(PI_CODING_SKILL.content).toContain('-t "=$session"');
+    expect(PI_CODING_SKILL.content).toContain("## While a job runs");
+    expect(PI_CODING_SKILL.content).toContain("Running jobs side by side");
     expect(PI_CODING_SKILL.content).not.toContain("/tmp/pi-prompt.txt");
     expect(PI_CODING_SKILL.content).not.toContain("/tmp/pi-work.log");
-    expect(PI_CODING_SKILL.content).not.toContain("tmux send-keys -t pi-work ");
+    expect(PI_CODING_SKILL.content).not.toContain("Do not run two pi jobs at once");
+  });
+
+  test("pi-coding は、同じリポジトリを並列で触るときに git worktree を分けるよう案内する", () => {
+    const content = PI_CODING_SKILL.content;
+    const section = content.slice(content.indexOf("## Running jobs side by side"));
+
+    expect(content).toContain("## Running jobs side by side");
+    expect(section).toContain("git worktree add -b");
+    expect(content).toContain('git worktree remove "$work/tree"');
   });
 });
 

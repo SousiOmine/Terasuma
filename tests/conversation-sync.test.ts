@@ -318,7 +318,7 @@ describe("会話の購読", () => {
     );
   });
 
-  test("送った画面が途中で離れると、ほかの画面へ終わったことだけを伝える", async () => {
+  test("送った画面が離れても、ターンは続いて終わりまで流れる", async () => {
     const engine = gatedEngine();
     await withServer(
       async (harness) => {
@@ -329,17 +329,20 @@ describe("会話の購読", () => {
         const sending = startTurn(harness, "こんにちは", "sender", controller.signal).catch(() => null);
         await engine.started;
 
-        // 送った画面が離れる（タブを閉じた）。ターンはそこで終わる。
+        // 送った画面が離れる（タブを閉じる、表示する Tera を切り替える）。
         controller.abort();
         await sending;
+
+        // 離れたあとに本文が届いても、ターンは最後まで走る。
+        engine.release();
 
         const seen: string[] = [];
         for (;;) {
           const event = await watcher.take();
           seen.push(event.type);
-          if (event.type === "turn-ended") break;
+          if (event.type === "assistant-done") break;
         }
-        expect(seen).toEqual(["user-message", "assistant-start", "turn-ended"]);
+        expect(seen).toEqual(["user-message", "assistant-start", "assistant-message", "assistant-done"]);
 
         // ターンは終わっているので、次に開いた画面には走っていないと伝える。
         const after = await openEvents(harness, "watcher2");

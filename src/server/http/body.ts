@@ -59,6 +59,21 @@ export async function readTurnForm(req: { formData(): Promise<FormData> }): Prom
 }
 
 /**
+ * 再試行の multipart を読む。返事の言語だけを受け取り、本文とファイルは読まない
+ * （最後のユーザー発言をそのまま使う）。
+ */
+export async function readRetryForm(req: { formData(): Promise<FormData> }): Promise<{ language: ReplyLanguage }> {
+  const form = await readFormData(req);
+
+  const language = form.get("language");
+  if (!isReplyLanguage(language)) {
+    throw new ValidationError('language must be "ja" or "en"');
+  }
+
+  return { language };
+}
+
+/**
  * 応答中の割り込みの multipart を読む。
  * 返事の言語は走っているターンのものを使うので、ここでは読まない。
  */

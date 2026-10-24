@@ -7,6 +7,7 @@ import {
 } from "../src/shared/sse";
 import type { ConversationEvent } from "../src/shared/api/events";
 import type { ChatEvent, TextPart } from "../src/shared/api/message";
+import { createSseResponse } from "../src/server/http/sse";
 
 const part: TextPart = { type: "text", text: "こんにちは", at: 2 };
 
@@ -101,5 +102,53 @@ describe("SSE", () => {
 
   test("購読のイベントとして読めない形は、例外にする", () => {
     expect(() => decodeConversationEvents('data: {"type":"sync","lastSeq":"x"}\n\n')).toThrow();
+  });
+
+  test("continueOnCancel なら、読み手が離れてもイベント列を最後まで読む", async () => {
+    let nextCalls = 0;
+    const source = (async function* () {
+      for (let index = 0; index < 3; index += 1) {
+        nextCalls += 1;
+        yield index;
+      }
+    })();
+
+    const response = createSseResponse(source, (event) => `data: ${event}\n\n`, { continueOnCancel: true });
+    const reader = response.body?.getReader();
+    if (reader === undefined) throw new Error("本文が無い");
+
+    await reader.read();
+    await reader.cancel();
+
+    const deadline = Date.now() + 1_000;
+    while (nextCalls < 3 && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    expect(nextCalls).toBe(3);
+  });
+
+  test("既定では、読み手が離れるとイベント列を閉じ、残りを読まない", async () => {
+    let nextCalls = 0;
+    let returned = false;
+    const source = (async function* () {
+      try {
+        for (let index = 0; index < 3; index += 1) {
+          nextCalls += 1;
+          yield index;
+        }
+      } finally {
+        returned = true;
+      }
+    })();
+
+    const response = createSseResponse(source, (event) => `data: ${event}\n\n`);
+    const reader = response.body?.getReader();
+    if (reader === undefined) throw new Error("本文が無い");
+
+    await reader.read();
+    await reader.cancel();
+
+    expect(returned).toBe(true);
+    expect(nextCalls).toBeLessThan(3);
   });
 });

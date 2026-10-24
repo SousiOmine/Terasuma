@@ -46,7 +46,6 @@ export type TurnInput = {
   /** ユーザーが添付したファイル。無ければ null。 */
   attachments: ChatAttachment[] | null;
   language: ReplyLanguage;
-  signal: AbortSignal;
 };
 
 /** 応答の途中で足す、利用者の発言。 */
@@ -61,8 +60,9 @@ export type Turns = {
   /**
    * ターンを始める。同じ Tera で実行中なら null（重ねて流さない）。
    * 終わったら（止められた場合も）実行中の印は必ず外れる。
+   * startUserMessage が false なら、最初の区切りでユーザー発言を保存しない（再試行用）。
    */
-  begin(teraId: string, input: TurnInput): AsyncIterable<ChatEvent> | null;
+  begin(teraId: string, input: TurnInput, options?: { startUserMessage?: boolean }): AsyncIterable<ChatEvent> | null;
   /** 応答を生成しているターンがあるかどうか。 */
   isRunning(teraId: string): boolean;
   /**
@@ -84,6 +84,31 @@ export type Turns = {
   stop(teraId: string): boolean;
 };
 
+/** 一時的な失敗のときに、やり直すまでの待ち（ミリ秒）。回数はこの配列の長さ。 */
+const RETRY_DELAYS_MS = [1_000, 3_000];
+
+/** signal が立つか、待ち時間が過ぎるまで待つ。 */
+function delay(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    if (signal.aborted) {
+      resolve();
+      return;
+    }
+
+    const onAbort = (): void => {
+      clearTimeout(timer);
+      signal.removeEventListener("abort", onAbort);
+      resolve();
+    };
+    const timer = setTimeout(() => {
+      signal.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
 /** 1 つのターンの実行状態。 */
 type RunningTurn = {
   controller: AbortController;
@@ -100,13 +125,13 @@ export function createTurns(deps: TurnDeps): Turns {
   const running = new Map<string, RunningTurn>();
 
   return {
-    begin(teraId, input) {
+    begin(teraId, input, options) {
       // 画面は 1 つのターンしか始めないが、別のタブから同じ Tera を開けるため、ここでも断る。
       if (running.has(teraId)) return null;
 
       const turn: RunningTurn = { controller: new AbortController(), stopped: false, pending: [] };
       running.set(teraId, turn);
-      return runTurn(deps, teraId, input, turn, running);
+      return runTurn(deps, teraId, input, turn, running, options?.startUserMessage ?? true);
     },
 
     isRunning(teraId) {
@@ -147,7 +172,7 @@ export function createTurns(deps: TurnDeps): Turns {
 
 /**
  * ターン分のイベント列。終わったら、実行中の印を必ず外す。
- * 「停止」やタブの切断でジェネレータが閉じられた場合も、finally は通る。
+ * 停止 API で打ち切った場合も、finally は通る。
  */
 async function* runTurn(
   deps: TurnDeps,
@@ -155,17 +180,13 @@ async function* runTurn(
   input: TurnInput,
   turn: RunningTurn,
   running: Map<string, RunningTurn>,
+  startUserMessage: boolean,
 ): AsyncGenerator<ChatEvent> {
-  // タブが閉じられたときも、ターンを止めて片付ける。
-  const onRequestAbort = (): void => turn.controller.abort();
-  if (input.signal.aborted) turn.controller.abort();
-  else input.signal.addEventListener("abort", onRequestAbort, { once: true });
-
   try {
     // 最初の区切りは、送られた発言から始まる。
     // 途中で届いた発言が残っていたら（最後のモデル呼び出しに間に合わなかった）、
     // 続けてその発言に応答する。届いたのに返事が無いままにしない。
-    let startsTurn = true;
+    let startsTurn = startUserMessage;
     for (;;) {
       const completed = yield* turnEvents(deps, teraId, input, turn, startsTurn);
       startsTurn = false;
@@ -173,7 +194,6 @@ async function* runTurn(
       if (turn.pending.length === 0) break;
     }
   } finally {
-    input.signal.removeEventListener("abort", onRequestAbort);
     running.delete(teraId);
 
     // ターンが終わってから、次に畳む時を決める（要れば今すぐ、要らなければ 3 時間後に予約）。
@@ -269,81 +289,106 @@ async function* turnEvents(
     finalMessage = steps.finish(usage);
   };
 
+  // まだモデルへ渡していない発言は、この区切りの最初のモデル呼び出しから見えるよう、
+  // 文脈の末尾へ移す。保存された位置からは外す（同じ発言を二重に渡さない）。
+  // 続きの区切りでは、前の区切りに間に合わなかった発言がここで末尾に来て、最新の指示として読まれる。
+  // やり直しても失わないよう、取り出しは試行のループの外で 1 回だけ行う。
+  const steering = turn.pending;
+  turn.pending = [];
+
   try {
     // 畳んだ要約と、まだ畳んでいない生の履歴。生の履歴には要約も並べ替えもしない
     // （プロンプトキャッシュが当たり続けるようにするため）。
     const context = await compaction.context(teraId, turn.controller.signal);
 
-    // まだモデルへ渡していない発言は、この区切りの最初のモデル呼び出しから見えるよう、
-    // 文脈の末尾へ移す。保存された位置からは外す（同じ発言を二重に渡さない）。
-    // 続きの区切りでは、前の区切りに間に合わなかった発言がここで末尾に来て、最新の指示として読まれる。
-    const steering = turn.pending;
-    turn.pending = [];
+    let attempts = 0;
+    for (;;) {
+      try {
+        const stream = await engine.stream({
+          context: withSteering(context, steering),
+          signal: turn.controller.signal,
+          teraId,
+          replyLanguage: language,
+          attach,
+          // 区切りの途中で届いた発言は、次のモデル呼び出しの直前に足す。
+          takeSteering: () => {
+            const arrived = turn.pending;
+            turn.pending = [];
+            return arrived;
+          },
+        });
 
-    const stream = await engine.stream({
-      context: withSteering(context, steering),
-      signal: turn.controller.signal,
-      teraId,
-      replyLanguage: language,
-      attach,
-      // 区切りの途中で届いた発言は、次のモデル呼び出しの直前に足す。
-      takeSteering: () => {
-        const arrived = turn.pending;
-        turn.pending = [];
-        return arrived;
-      },
-    });
+        /** 最初の step-start は、ターンの冒頭で開いた行がそのまま受け持つ。 */
+        let seenFirstStep = false;
 
-    /** 最初の step-start は、ターンの冒頭で開いた行がそのまま受け持つ。 */
-    let seenFirstStep = false;
+        for await (const event of stream.events) {
+          // 本文は、次の区切り（ツール呼び出し・結果・注記・終了）で確定する。
+          if (event.type !== "text-delta") flushText();
 
-    for await (const event of stream.events) {
-      // 本文は、次の区切り（ツール呼び出し・結果・注記・終了）で確定する。
-      if (event.type !== "text-delta") flushText();
-
-      // 確定した本文と添付を、次のモデルの出来事より先に流す。
-      while (outgoing.length > 0) {
-        const part = outgoing.shift();
-        if (part !== undefined) yield { type: "assistant-message", id: draft.id, part };
-      }
-
-      switch (event.type) {
-        case "step-start":
-          // AI SDK は最初のステップでも start-step を流す。冒頭で開いた行を使い続ける。
-          if (!seenFirstStep) {
-            seenFirstStep = true;
-            break;
+          // 確定した本文と添付を、次のモデルの出来事より先に流す。
+          while (outgoing.length > 0) {
+            const part = outgoing.shift();
+            if (part !== undefined) yield { type: "assistant-message", id: draft.id, part };
           }
-          // ステップの境目。ここで行を分けるので、この直後に届く追加の発言（steering）は
-          // 必ず前の行より後ろの連番になり、次の行はその下に描かれる。
-          draft = steps.nextStep(null);
-          yield { type: "assistant-start", id: draft.id, createdAt: draft.createdAt, seq: draft.seq };
-          break;
-        case "text-delta":
-          // 本文は画面に出す。区切りが付くまで溜め、まとめて 1 つの吹き出しにする。
-          appendText(event.delta);
-          break;
-        case "tool-call":
-          draft.parts.push(event.part);
-          yield { type: "tool-call", id: draft.id, part: event.part };
-          break;
-        case "tool-result":
-          draft.parts.push(event.part);
-          yield { type: "tool-result", id: draft.id, part: event.part };
-          break;
-        case "step-limit": {
-          // 上限で打ち切られたことを、画面に残す。
-          const part: NoticePart = { type: "notice", text: stepLimitNote(language), at: Date.now() };
-          draft.parts.push(part);
-          yield { type: "notice", id: draft.id, part };
+
+          switch (event.type) {
+            case "step-start":
+              // AI SDK は最初のステップでも start-step を流す。冒頭で開いた行を使い続ける。
+              if (!seenFirstStep) {
+                seenFirstStep = true;
+                break;
+              }
+              // ステップの境目。ここで行を分けるので、この直後に届く追加の発言（steering）は
+              // 必ず前の行より後ろの連番になり、次の行はその下に描かれる。
+              draft = steps.nextStep(null);
+              yield { type: "assistant-start", id: draft.id, createdAt: draft.createdAt, seq: draft.seq };
+              break;
+            case "text-delta":
+              // 本文は画面に出す。区切りが付くまで溜め、まとめて 1 つの吹き出しにする。
+              appendText(event.delta);
+              break;
+            case "tool-call":
+              draft.parts.push(event.part);
+              yield { type: "tool-call", id: draft.id, part: event.part };
+              break;
+            case "tool-result":
+              draft.parts.push(event.part);
+              yield { type: "tool-result", id: draft.id, part: event.part };
+              break;
+            case "step-limit": {
+              // 上限で打ち切られたことを、画面に残す。
+              const part: NoticePart = { type: "notice", text: stepLimitNote(language), at: Date.now() };
+              draft.parts.push(part);
+              yield { type: "notice", id: draft.id, part };
+              break;
+            }
+          }
+        }
+
+        usage = await stream.usage;
+        break;
+      } catch (error) {
+        // 利用者の「停止」は失敗ではない。それ以外の失敗だけを画面へ返す。
+        if (turn.stopped || turn.controller.signal.aborted) break;
+
+        // まだ何も記録していないときだけやり直す。ツールを呼んだ後は、副作用を重ねない。
+        const canRetry = !steps.sawContent() && draft.parts.length === 0 && attempts < RETRY_DELAYS_MS.length;
+        if (!canRetry) {
+          failure = describeError(error);
           break;
         }
+
+        // 画面へ流していない本文を捨てる。残すと、やり直した分と二重に流れる。
+        pendingText = null;
+        outgoing.length = 0;
+
+        await delay(RETRY_DELAYS_MS[attempts] ?? 0, turn.controller.signal);
+        attempts += 1;
+        if (turn.stopped || turn.controller.signal.aborted) break;
       }
     }
-
-    usage = await stream.usage;
   } catch (error) {
-    // 利用者の「停止」やタブの切断は失敗ではない。それ以外の失敗だけを画面へ返す。
+    // 文脈の読み込みなど、モデル呼び出しの外で起きた失敗はやり直さない。
     if (!turn.stopped && !turn.controller.signal.aborted) failure = describeError(error);
   } finally {
     persist();

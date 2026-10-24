@@ -1,11 +1,19 @@
 import { IconLayoutSidebarRight, IconMenu2 } from "@tabler/icons-preact";
 import { useMemo } from "preact/hooks";
 import { t } from "../../i18n";
-import { isLoadingMessages, isLoadingOlderMessages, isStreaming, liveTurn, messages } from "../../state/chat";
+import {
+  isLoadingMessages,
+  isLoadingOlderMessages,
+  isStreaming,
+  liveTurn,
+  messages,
+  retryLastTurn,
+} from "../../state/chat";
 import { connectorRequest } from "../../state/connector-request";
 import { containerStatus } from "../../state/container";
 import { envRequestActive } from "../../state/env-request";
 import { chatError, clearChatError } from "../../state/failure";
+import { isRetryableErrorCode } from "../../../shared/api/error";
 import { computerPaneOpen, handoverActive, toggleComputerPane } from "../../state/handover";
 import { modelProblem } from "../../state/model";
 import { openSettings } from "../../state/route";
@@ -132,7 +140,7 @@ export function ChatView() {
             {isLoadingOlderMessages.value && (
               <p class="text-center text-[11px] text-tertiary">{t("chat.history.loadingOlder")}</p>
             )}
-            {items.map((item) => renderItem(item, streaming))}
+            {items.map((item) => renderItem(item))}
             {streaming && !handover && !envWaiting && <TypingBubble />}
             {loading && <p class="text-center text-sm text-secondary">{t("common.loading")}</p>}
           </div>
@@ -153,6 +161,18 @@ export function ChatView() {
                       class="text-xs font-medium text-primary underline-offset-2 hover:underline"
                     >
                       {t("chat.openSettings")}
+                    </button>
+                  )}
+                  {isRetryableErrorCode(error.code) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        clearChatError();
+                        void retryLastTurn();
+                      }}
+                      class="text-xs font-medium text-primary underline-offset-2 hover:underline"
+                    >
+                      {t("chat.retry")}
                     </button>
                   )}
                   <button
@@ -192,7 +212,7 @@ export function ChatView() {
   );
 }
 
-function renderItem(item: ChatItem, streaming: boolean) {
+function renderItem(item: ChatItem) {
   const tag = localeTag();
 
   switch (item.kind) {
@@ -225,7 +245,7 @@ function renderItem(item: ChatItem, streaming: boolean) {
         <div key={item.key} class="flex items-start gap-3">
           <ChatAvatar size={24} class="mt-0.5" />
           <div class="min-w-0 flex-1">
-            <UiCard view={item.view} disabled={streaming} />
+            <UiCard view={item.view} />
           </div>
         </div>
       );

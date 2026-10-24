@@ -74,6 +74,13 @@ function steerRequest(content: string): RequestInit {
   return { method: "POST", body: form, headers: { [CLIENT_HEADER]: TEST_CLIENT } };
 }
 
+/** 再試行の multipart。本文とファイルは送らず、返事の言語だけを送る。 */
+function retryRequest(language = "ja"): RequestInit {
+  const form = new FormData();
+  form.append("language", language);
+  return { method: "POST", body: form, headers: { [CLIENT_HEADER]: TEST_CLIENT } };
+}
+
 /** 書き込まれたパスと中身を記録する、動いているコンテナの差し替え。 */
 function recordingContainer(): ContainerManager & { writes: { path: string; bytes: Uint8Array }[] } {
   const writes: { path: string; bytes: Uint8Array }[] = [];
@@ -213,6 +220,40 @@ function createFailingEngine(mode: "immediate" | "mid-stream"): AgentEngine {
         events: (async function* () {
           yield { type: "text-delta", delta: "部分" } as const;
           throw new Error("途中で切れた");
+        })(),
+        usage: Promise.resolve(null),
+      });
+    },
+    complete() {
+      return Promise.reject(new Error("テスト用のエンジンでは要約を作れません"));
+    },
+  };
+}
+
+/** 指定した回数だけ失敗し、そのあとは本文を返すエンジン。 */
+function createFlakyEngine(failures: number): AgentEngine & { calls: number; failures: number } {
+  const state = { calls: 0, failures };
+
+  return {
+    name: `flaky(${failures})`,
+    get calls() {
+      return state.calls;
+    },
+    get failures() {
+      return state.failures;
+    },
+    set failures(value: number) {
+      state.failures = value;
+    },
+    stream(): Promise<EngineStream> {
+      state.calls += 1;
+      if (state.calls <= state.failures) {
+        return Promise.reject(new Error(`モデルに接続できなかった（${state.calls} 回目）`));
+      }
+
+      return Promise.resolve({
+        events: (async function* () {
+          yield { type: "text-delta", delta: "復帰しました。" } as const;
         })(),
         usage: Promise.resolve(null),
       });
@@ -979,6 +1020,89 @@ describe("チャット API", () => {
       const messages = await harness.messages(DEFAULT_TERA_ID);
       expect(messages.map((message) => message.role)).toEqual(["user"]);
     });
+  }, 10_000);
+
+  test("モデルが 2 回失敗してから応答したら、本文が届く", async () => {
+    const engine = createFlakyEngine(2);
+
+    await withServer(engine, async (harness) => {
+      const events = await harness.send(DEFAULT_TERA_ID, "やり直して");
+
+      expect(events.some((event) => event.type === "error")).toBe(false);
+      expect(visibleText(events)).toBe("復帰しました。");
+      expect(events.at(-1)?.type).toBe("assistant-done");
+      expect(engine.calls).toBe(3);
+
+      const messages = await harness.messages(DEFAULT_TERA_ID);
+      expect(messages.map((message) => message.role)).toEqual(["user", "assistant"]);
+    });
+  }, 15_000);
+
+  test("モデルが失敗し続けたら、3 回で諦めて error を返す", async () => {
+    const engine = createFlakyEngine(99);
+
+    await withServer(engine, async (harness) => {
+      const events = await harness.send(DEFAULT_TERA_ID, "届かない質問");
+
+      expect(failingEvent(events).code).toBe("model_error");
+      expect(engine.calls).toBe(3);
+
+      // 何も出なかった試行の行は残さない。
+      const messages = await harness.messages(DEFAULT_TERA_ID);
+      expect(messages.map((message) => message.role)).toEqual(["user"]);
+    });
+  }, 15_000);
+
+  test("再試行は、ユーザー発言を増やさずに応答だけを作り直す", async () => {
+    const engine = createFlakyEngine(99);
+
+    await withServer(engine, async (harness) => {
+      const failed = await harness.send(DEFAULT_TERA_ID, "もう一度");
+      expect(failingEvent(failed).code).toBe("model_error");
+
+      // 次の呼び出しからは成功させる。
+      engine.failures = 0;
+      const response = await harness.request(`/api/teras/${DEFAULT_TERA_ID}/retry`, retryRequest());
+      expect(response.status).toBe(200);
+
+      const decoded = decodeChatEvents(await response.text());
+      expect(decoded.rest).toBe("");
+      expect(decoded.events.some((event) => event.type === "user-message")).toBe(false);
+      expect(visibleText(decoded.events)).toBe("復帰しました。");
+      expect(decoded.events.at(-1)?.type).toBe("assistant-done");
+      expect(engine.calls).toBe(4);
+
+      const messages = await harness.messages(DEFAULT_TERA_ID);
+      expect(messages.filter((message) => message.role === "user")).toHaveLength(1);
+      expect(messages.filter((message) => message.role === "assistant")).toHaveLength(1);
+    });
+  }, 15_000);
+
+  test("応答中の再試行は 409", async () => {
+    const engine = createDeferredEndEngine();
+
+    await withServer(engine, async (harness) => {
+      const response = await harness.request(`/api/teras/${DEFAULT_TERA_ID}/messages`, messageRequest("最初の質問"));
+      expect(response.status).toBe(200);
+      const body = response.text();
+
+      await engine.started;
+      const retry = await harness.request(`/api/teras/${DEFAULT_TERA_ID}/retry`, retryRequest());
+      expect(retry.status).toBe(409);
+      expect(((await retry.json()) as { code: string }).code).toBe("turn_in_progress");
+
+      engine.release();
+      await body;
+    });
+  }, 10_000);
+
+  test("ユーザー発言が無い Tera の再試行は 400", async () => {
+    await withServer(fastMock(), async (harness) => {
+      const response = await harness.request(`/api/teras/${DEFAULT_TERA_ID}/retry`, retryRequest());
+
+      expect(response.status).toBe(400);
+      expect(((await response.json()) as { code: string }).code).toBe("invalid_request");
+    });
   });
 
   test("モデルが途中で失敗したら error を返し、そこまでに送ったメッセージは保存する", async () => {
@@ -1149,7 +1273,7 @@ describe("チャット API", () => {
     });
   });
 
-  test("途中で購読をやめても、そこまでに書いた本文は保存される", async () => {
+  test("送信の接続を切っても、ターンは最後まで走って保存される", async () => {
     await withServer(createSlowMessageEngine(), async (harness) => {
       const controller = new AbortController();
       const response = await harness.request(
@@ -1160,18 +1284,20 @@ describe("チャット API", () => {
       const reader = response.body?.getReader();
       if (reader === undefined) throw new Error("本文が無い");
 
-      // 最初のフレームを受け取ってから、少し送らせて切る。
+      // 最初のフレームを受け取ってから、送信の接続を切る（画面を離れる）。
       await reader.read();
-      await new Promise((resolve) => setTimeout(resolve, 80));
       controller.abort();
       await reader.cancel().catch(() => undefined);
 
-      // 応答の行は開始時に予約されるので、中身が書き込まれるまで待つ。
+      const full = Array.from({ length: 50 }, (_, index) => `${index},`).join("");
+
+      // 接続が切れてもターンは続き、50 個すべてが保存される。
       await waitFor(async () => {
         const messages = await harness.messages(DEFAULT_TERA_ID);
         const assistant = messages[1];
-        return messages.length === 2 && assistant !== undefined && textParts(assistant).length > 0;
-      });
+        if (messages.length !== 2 || assistant === undefined) return false;
+        return textParts(assistant).map((part) => part.text).join("") === full;
+      }, 5_000);
 
       const [user, assistant] = await harness.messages(DEFAULT_TERA_ID);
       if (user === undefined || assistant === undefined) throw new Error("保存されていない");
@@ -1181,10 +1307,7 @@ describe("チャット API", () => {
       const saved = textParts(assistant)
         .map((part) => part.text)
         .join("");
-      const full = Array.from({ length: 50 }, (_, index) => `${index},`).join("");
-      expect(saved.length).toBeGreaterThan(0);
-      // 最後まで流したわけではないので、途中で止まったことが分かる。
-      expect(saved.length).toBeLessThan(full.length);
+      expect(saved).toBe(full);
     });
   });
 });

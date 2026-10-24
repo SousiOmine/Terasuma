@@ -40,7 +40,7 @@ export type ConversationBroadcast = {
   subscribe(teraId: string, clientId: string, signal: AbortSignal): AsyncIterable<ConversationEvent>;
   /**
    * 送った画面へ流すイベントを、ほかの画面へも配りながら流す。
-   * 送った画面が途中で離れて終わりを流せなかったときは、ほかの画面へ終わったことだけを配る。
+   * ターンが終わりのイベントを流さずに閉じたときは、ほかの画面へ終わったことだけを配る。
    */
   relay(teraId: string, events: AsyncIterable<ChatEvent>, clientId: string): AsyncGenerator<ChatEvent>;
   /** ターンの外で保存した発言（応答中の割り込み）を、ほかの画面へ配る。 */
@@ -187,7 +187,7 @@ async function* relayTurn(
       yield event;
     }
   } finally {
-    // 送った画面が途中で離れた（タブを閉じた、通信が切れた）。ターンはそこで終わる。
+    // ターンが終わりのイベントを流さずに閉じた。
     // 終わりを伝えるイベントはもう流せないので、ほかの画面には終わったことだけを伝える。
     if (!ended) endTurn();
   }

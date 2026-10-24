@@ -34,7 +34,6 @@ export const ja: Record<MessageKey, string> = {
   "chat.ui.invalid": "このカードを表示できませんでした",
   "chat.ui.submit": "送信",
   "chat.ui.multiple": "複数選べます",
-  "chat.ui.awaitingTurn": "応答が終わると選べます",
   "chat.ui.choose": "選択してください",
   "chat.ui.flow": "フローチャート",
   "chat.ui.yes": "はい",
@@ -43,6 +42,7 @@ export const ja: Record<MessageKey, string> = {
   "chat.model.unset": "使用するモデルが設定されていません。設定からプロバイダを追加してください。",
   "chat.model.providerMissing": "既定のモデルを使うプロバイダがありません。設定で選び直してください。",
   "chat.openSettings": "設定を開く",
+  "chat.retry": "再試行",
   "chat.menu.open": "メニューを開く",
   "chat.menu.close": "メニューを閉じる",
 
@@ -328,6 +328,7 @@ export const ja: Record<MessageKey, string> = {
   "error.settings_write_failed": "設定を保存できませんでした。",
   "error.internal_error": "問題が発生しました。",
   "error.network": "サーバーに接続できません。",
+  "error.stream_ended": "応答が途中で切れました。",
   "error.input": "入力を確認してください。",
   "error.dismiss": "閉じる",
 };

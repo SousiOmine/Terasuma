@@ -35,7 +35,6 @@ export const en = {
   "chat.ui.invalid": "This card could not be displayed",
   "chat.ui.submit": "Send",
   "chat.ui.multiple": "Select any number",
-  "chat.ui.awaitingTurn": "You can choose when the reply finishes",
   "chat.ui.choose": "Choose",
   "chat.ui.flow": "Flowchart",
   "chat.ui.yes": "Yes",
@@ -44,6 +43,7 @@ export const en = {
   "chat.model.unset": "No model is configured. Add a provider in Settings.",
   "chat.model.providerMissing": "The provider for the default model is missing. Choose another model in Settings.",
   "chat.openSettings": "Open Settings",
+  "chat.retry": "Retry",
   "chat.menu.open": "Open menu",
   "chat.menu.close": "Close menu",
 
@@ -331,6 +331,7 @@ export const en = {
   "error.settings_write_failed": "The settings could not be saved.",
   "error.internal_error": "Something went wrong.",
   "error.network": "The server is not reachable.",
+  "error.stream_ended": "The reply was cut off.",
   "error.input": "Check the input.",
   "error.dismiss": "Dismiss",
 } as const;

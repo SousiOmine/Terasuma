@@ -9,7 +9,7 @@ import { API_ERROR_CODES, type ApiErrorCode } from "../../shared/api/error";
  */
 
 /** サーバが返すコードに、クライアント側だけで発生するコードを足したもの。 */
-export type ClientErrorCode = ApiErrorCode | "network" | "input" | "mcp_unreachable";
+export type ClientErrorCode = ApiErrorCode | "network" | "input" | "mcp_unreachable" | "stream_ended";
 
 export class ApiError extends Error {
   readonly code: ClientErrorCode;

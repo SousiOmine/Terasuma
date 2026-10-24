@@ -133,6 +133,35 @@ export async function* streamTurn(
 }
 
 /**
+ * 最後のユーザー発言へ、発言を増やさずにもう一度答えてもらう。
+ * 応答の終わりを受け取れなかったときのやり直しに使う。読み方は送信と同じ。
+ */
+export async function* retryTurn(
+  teraId: string,
+  language: ReplyLanguage,
+  signal: AbortSignal,
+): AsyncGenerator<ChatEvent> {
+  const form = new FormData();
+  form.append("language", language);
+
+  let response: Response;
+  try {
+    response = await fetchOrThrow(`${teraPath(teraId)}/retry`, {
+      method: "POST",
+      body: form,
+      headers: clientHeaders(),
+      signal,
+    });
+  } catch (error) {
+    // 利用者の「停止」や画面の切り替えは失敗ではないので、そのまま終わる。
+    if (signal.aborted) return;
+    throw error;
+  }
+
+  yield* readEvents(response, decodeChatEvents, signal);
+}
+
+/**
  * その Tera の出来事の購読。同じ Tera を開いているほかの画面で起きたターンの内容も、
  * ここからそのまま流れてくる。最初に sync が 1 つ届く（いまの連番と、ターンが走っているか）。
  * 途中で AbortSignal が立った場合は、例外にせずそのまま終了する（画面の切り替え）。

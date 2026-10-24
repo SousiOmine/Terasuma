@@ -1,6 +1,5 @@
 import { useId, useState } from "preact/hooks";
 import type { UiBlock, UiChoiceBlock, UiField, UiFormBlock, UiView } from "../../../shared/ui-markup";
-import { interactiveBlock } from "../../../shared/ui-markup";
 import { t } from "../../i18n";
 import { choiceMessage, formComplete, formMessage } from "../../lib/ui";
 import { sendMessage } from "../../state/chat";
@@ -11,13 +10,13 @@ import { INPUT_CLASS } from "../../ui/styles";
  * Tera が送った UI のカード。
  *
  * 中身は chat_ui のツール呼び出しのマークアップから組み立てた UiView。
- * 選択肢を押すと、そのラベルを新しいユーザー発言として送る（ターンを待たない）。
- * 応答を作っている間は押せない（送っても次のターンとして扱われないため）。
+ * 選択肢を押すと、そのラベルをユーザー発言として送る。応答を作っている間に押したときは、
+ * 走っているターンへの追加の発言（steering）として届き、次のモデル呼び出しから読まれる。
  *
  * マークアップを読めなかったときは、理由を出さずに断りのカードを出す。
  * 直せなかった理由はツールの戻り値としてモデルへ渡っている。
  */
-export function UiCard({ view, disabled }: { view: UiView | null; disabled: boolean }) {
+export function UiCard({ view }: { view: UiView | null }) {
   if (view === null) {
     return (
       <section class="tera-rise-in rounded-[20px] border border-stroke bg-surface-alt p-4">
@@ -26,24 +25,20 @@ export function UiCard({ view, disabled }: { view: UiView | null; disabled: bool
     );
   }
 
-  const awaitingTurn = disabled && interactiveBlock(view) !== null;
-
   return (
     <section class="tera-rise-in rounded-[20px] border border-stroke bg-surface-alt p-4">
       {view.title !== null && <h3 class="mb-2 text-[13px] font-medium text-primary">{view.title}</h3>}
 
       <div class="flex flex-col gap-3">
         {view.blocks.map((block, index) => (
-          <BlockView key={index} block={block} disabled={disabled} />
+          <BlockView key={index} block={block} />
         ))}
       </div>
-
-      {awaitingTurn && <p class="mt-3 text-[11px] leading-5 text-tertiary">{t("chat.ui.awaitingTurn")}</p>}
     </section>
   );
 }
 
-function BlockView({ block, disabled }: { block: UiBlock; disabled: boolean }) {
+function BlockView({ block }: { block: UiBlock }) {
   switch (block.type) {
     case "text":
       return <p class="whitespace-pre-wrap break-words text-[13px] leading-6 text-primary">{block.text}</p>;
@@ -58,10 +53,10 @@ function BlockView({ block, disabled }: { block: UiBlock; disabled: boolean }) {
       return <Flowchart block={block} />;
 
     case "choice":
-      return <ChoiceBlock block={block} disabled={disabled} />;
+      return <ChoiceBlock block={block} />;
 
     case "form":
-      return <FormBlock block={block} disabled={disabled} />;
+      return <FormBlock block={block} />;
   }
 }
 
@@ -113,17 +108,15 @@ function TableBlock({ rows }: { rows: readonly (readonly string[])[] }) {
 }
 
 const OPTION_CLASS =
-  "rounded-[14px] border px-3 py-2 text-left transition disabled:cursor-not-allowed disabled:opacity-50 active:scale-[0.99]";
+  "rounded-[14px] border px-3 py-2 text-left transition active:scale-[0.99]";
 const OPTION_ON_CLASS = "border-[var(--app-accent)] bg-[var(--app-accent-soft)]";
 const OPTION_OFF_CLASS = "border-stroke bg-surface hover:bg-soft";
 
 /** 押すとラベルを発言として送る選択肢。 */
-function ChoiceBlock({ block, disabled }: { block: UiChoiceBlock; disabled: boolean }) {
+function ChoiceBlock({ block }: { block: UiChoiceBlock }) {
   const [selected, setSelected] = useState<readonly number[]>([]);
 
   const toggle = (index: number): void => {
-    if (disabled) return;
-
     // 1 つだけ選ぶときは、押した時点で送る（もう一度確定させない）。
     if (!block.multiple) {
       setSelected([index]);
@@ -137,7 +130,7 @@ function ChoiceBlock({ block, disabled }: { block: UiChoiceBlock; disabled: bool
   };
 
   const submit = (): void => {
-    if (disabled || selected.length === 0) return;
+    if (selected.length === 0) return;
     void sendMessage(choiceMessage(block, selected), []);
   };
 
@@ -153,7 +146,6 @@ function ChoiceBlock({ block, disabled }: { block: UiChoiceBlock; disabled: bool
             <button
               key={index}
               type="button"
-              disabled={disabled}
               aria-pressed={block.multiple ? picked : undefined}
               onClick={() => toggle(index)}
               class={`${OPTION_CLASS} ${picked ? OPTION_ON_CLASS : OPTION_OFF_CLASS}`}
@@ -170,7 +162,7 @@ function ChoiceBlock({ block, disabled }: { block: UiChoiceBlock; disabled: bool
       {block.multiple && (
         <button
           type="button"
-          disabled={disabled || selected.length === 0}
+          disabled={selected.length === 0}
           onClick={submit}
           class="self-start rounded-full bg-[var(--app-accent-fill)] px-4 py-2 text-xs font-medium whitespace-nowrap text-[var(--app-on-accent)] shadow-[var(--app-shadow-2)] transition hover:bg-[var(--app-accent-hover)] disabled:cursor-not-allowed disabled:opacity-30"
         >
@@ -182,7 +174,7 @@ function ChoiceBlock({ block, disabled }: { block: UiChoiceBlock; disabled: bool
 }
 
 /** 入力して送信するフォーム。必須の欄が埋まるまで送れない。 */
-function FormBlock({ block, disabled }: { block: UiFormBlock; disabled: boolean }) {
+function FormBlock({ block }: { block: UiFormBlock }) {
   const [values, setValues] = useState<Readonly<Record<number, string | boolean>>>({});
   const complete = formComplete(block, values);
 
@@ -191,7 +183,7 @@ function FormBlock({ block, disabled }: { block: UiFormBlock; disabled: boolean 
   };
 
   const submit = (): void => {
-    if (disabled || !complete) return;
+    if (!complete) return;
     void sendMessage(formMessage(block, values, { yes: t("chat.ui.yes"), no: t("chat.ui.no") }), []);
   };
 
@@ -207,7 +199,6 @@ function FormBlock({ block, disabled }: { block: UiFormBlock; disabled: boolean 
         <FieldView
           key={index}
           field={field}
-          disabled={disabled}
           value={values[index]}
           onChange={(value) => setValue(index, value)}
         />
@@ -215,7 +206,7 @@ function FormBlock({ block, disabled }: { block: UiFormBlock; disabled: boolean 
 
       <button
         type="submit"
-        disabled={disabled || !complete}
+        disabled={!complete}
         class="self-start rounded-full bg-[var(--app-accent-fill)] px-4 py-2 text-xs font-medium whitespace-nowrap text-[var(--app-on-accent)] shadow-[var(--app-shadow-2)] transition hover:bg-[var(--app-accent-hover)] disabled:cursor-not-allowed disabled:opacity-30"
       >
         {block.submit ?? t("chat.ui.submit")}
@@ -226,12 +217,10 @@ function FormBlock({ block, disabled }: { block: UiFormBlock; disabled: boolean 
 
 function FieldView({
   field,
-  disabled,
   value,
   onChange,
 }: {
   field: UiField;
-  disabled: boolean;
   value: string | boolean | undefined;
   onChange: (value: string | boolean) => void;
 }) {
@@ -245,7 +234,6 @@ function FieldView({
         <input
           type="checkbox"
           checked={value === true}
-          disabled={disabled}
           onChange={(event) => onChange(event.currentTarget.checked)}
           class="h-4 w-4 shrink-0 accent-[var(--app-accent-fill)]"
         />
@@ -266,7 +254,6 @@ function FieldView({
         </span>
         <select
           value={typeof value === "string" ? value : ""}
-          disabled={disabled}
           onChange={(event) => onChange(event.currentTarget.value)}
           class={INPUT_CLASS}
         >
@@ -296,7 +283,6 @@ function FieldView({
           type="number"
           value={text}
           placeholder={field.placeholder ?? undefined}
-          disabled={disabled}
           onInput={(event) => onChange(event.currentTarget.value)}
           class={INPUT_CLASS}
         />
@@ -306,7 +292,6 @@ function FieldView({
           type="text"
           value={text}
           placeholder={field.placeholder ?? undefined}
-          disabled={disabled}
           onInput={(event) => onChange(event.currentTarget.value)}
           class={INPUT_CLASS}
         />

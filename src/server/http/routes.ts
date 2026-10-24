@@ -33,6 +33,10 @@ export function createRoutes(api: WithErrorHandling<ApiHandlers>, screen: Screen
     "/api/teras/:id/steer": {
       POST: api.steerTurn,
     },
+    // 最後のユーザー発言へ、発言を増やさずにもう一度答える。
+    "/api/teras/:id/retry": {
+      POST: api.retryTurn,
+    },
     // 生成中のターンを、ここで打ち切る（それまでの本文や添付は保存される）。
     "/api/teras/:id/stop": {
       POST: api.stopTurn,
