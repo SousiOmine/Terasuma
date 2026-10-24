@@ -10,7 +10,7 @@ import {
   saveConnectorToken,
   savingToken,
 } from "./connectors";
-import { cancelDiscordWait, discord, saveWebhook, savingDiscord, WEBHOOK_PLACEHOLDER } from "./discord";
+import { cancelDiscordWait, discord, saveWebhooks, savingDiscord, WEBHOOK_PLACEHOLDER } from "./discord";
 
 /**
  * チャットのコネクタカード。
@@ -122,7 +122,7 @@ export const savingConnectorRequest = computed<boolean>(() => {
   if (request === null) return false;
 
   if (request.provider === DISCORD_SERVER_ID) {
-    return request.teraId !== null && savingDiscord.value === request.teraId;
+    return request.teraId !== null && savingDiscord.value;
   }
 
   const provider = connectors.value?.providers.find((entry) => entry.id === request.provider) ?? null;
@@ -139,9 +139,9 @@ export async function saveConnectorRequest(value: string): Promise<void> {
   if (request.provider === DISCORD_SERVER_ID) {
     const teraId = request.teraId;
     if (teraId === null) throw new Error("The Tera for this Discord webhook is not known.");
-    if (savingDiscord.value === teraId) return;
+    if (savingDiscord.value) return;
 
-    await saveWebhook(teraId, value);
+    await saveWebhooks([{ teraId, url: value }]);
     return;
   }
 
@@ -169,7 +169,7 @@ export async function cancelConnectorRequest(): Promise<void> {
 
   if (request.provider === DISCORD_SERVER_ID) {
     const teraId = request.teraId;
-    if (teraId === null || savingDiscord.value === teraId) return;
+    if (teraId === null || savingDiscord.value) return;
 
     await cancelDiscordWait(teraId);
     resetConnectorRequest();

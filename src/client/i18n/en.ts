@@ -74,6 +74,7 @@ export const en = {
   "composer.placeholder": "Send a message",
   "composer.placeholder.steering": "Send to the working agent",
   "composer.send": "Send",
+  "composer.sendHint": "Send (Ctrl + Enter)",
   "composer.stop": "Stop",
   "composer.stopping": "Stopping…",
   "composer.attach": "Attach files",
@@ -118,6 +119,7 @@ export const en = {
 
   "settings.discord.description":
     "Save the webhook URL of the channel each Tera posts to. The agent posts there with discord_send.",
+  "settings.discord.badge": "{connected} / {total} connected",
   "settings.discord.field.label": "Webhook URL",
   "settings.discord.field.description":
     "Copy the URL from the channel's settings (Integrations > Webhooks) in Discord and paste it here.",

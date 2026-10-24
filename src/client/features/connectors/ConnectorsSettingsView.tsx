@@ -23,7 +23,7 @@ import { StatusBadge } from "../../ui/StatusBadge";
 import { CollapsibleCard } from "../../ui/CollapsibleCard";
 import { CARD_ACTION_CLASS, INPUT_CLASS } from "../../ui/styles";
 import { ConnectorForm } from "./ConnectorForm";
-import { DiscordWebhooksSection } from "./DiscordWebhooksSection";
+import { DiscordConnectorCard } from "./DiscordConnectorCard";
 import { ProgramSetupForm, type ProgramSetupInput } from "./ProgramSetupForm";
 
 /** 接続状態の文言。i18n のキーは文字列リテラルで持つ（未使用キーの検査に載せるため）。 */
@@ -37,7 +37,7 @@ const STATE_LABELS: Record<"connected" | "disconnected", MessageKey> = {
  *
  * サービスごとにトークンを発行し、貼り付けて保存する。
  * 保存すると、コンピュータの環境変数と app_request が使えるようになる。
- * Discord はトークンではなく webhook を使うので、DiscordWebhooksSection が受け持つ。
+ * Discord はトークンではなく webhook を使うので、1 枚のカードで Tera ごとの欄を持つ DiscordConnectorCard が受け持つ。
  */
 export function ConnectorsSettingsView() {
   const view = connectors.value;
@@ -62,9 +62,8 @@ export function ConnectorsSettingsView() {
             <ConnectorCard key={provider.id} provider={provider} onDisconnect={() => disconnecting.open(provider)} />
           ))
         )}
+        <DiscordConnectorCard />
       </div>
-
-      <DiscordWebhooksSection />
 
       {disconnecting.target !== null && (
         <ConfirmDialog

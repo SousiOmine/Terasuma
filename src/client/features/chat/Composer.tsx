@@ -149,12 +149,11 @@ export function Composer() {
               value={draft}
               placeholder={t(streaming ? "composer.placeholder.steering" : "composer.placeholder")}
               aria-label={t(streaming ? "composer.placeholder.steering" : "composer.placeholder")}
-              enterkeyhint="send"
               class="max-h-40 min-h-9 flex-1 resize-none bg-transparent px-1.5 py-2 text-[15px] leading-6 text-primary outline-none placeholder:text-tertiary"
               onInput={(event) => setDraft(event.currentTarget.value)}
               onPaste={handlePaste}
               onKeyDown={(event) => {
-                // Enter で送信し、Shift + Enter は改行のままにする。
+                // Ctrl + Enter で送信し、Enter は改行のままにする。
                 if (!isSendKey(event)) return;
                 event.preventDefault();
                 submit();
@@ -179,8 +178,8 @@ export function Composer() {
               type="button"
               onClick={submit}
               disabled={!canSend || stopping}
-              title={t("composer.send")}
-              aria-label={t("composer.send")}
+              title={t("composer.sendHint")}
+              aria-label={t("composer.sendHint")}
               class="mb-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--app-accent-fill)] text-[var(--app-on-accent)] shadow-[var(--app-shadow-2)] transition hover:bg-[var(--app-accent-hover)] active:scale-95 disabled:opacity-30 md:h-9 md:w-9"
             >
               <IconSend size={17} stroke={1.8} />

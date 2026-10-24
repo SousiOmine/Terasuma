@@ -8,6 +8,7 @@ import { createResource } from "./resource";
  *
  * webhook URL は秘密なので、画面には戻さない（webhook の名前とチャンネル ID だけ）。
  * 保存したら一覧を置き換える。チャットのカードの待ちは、サーバーが保存で解く。
+ * 設定画面では Tera ごとの欄をまとめて保存する。
  */
 
 /** 貼り付け欄に出す、webhook URL の例。 */
@@ -24,22 +25,32 @@ export const discordError = failure.error;
 export const showDiscordError = failure.show;
 export const clearDiscordError = failure.clear;
 
-/** URL を保存している Tera。操作中の表示に使う。 */
-export const savingDiscord = signal<string | null>(null);
+/** URL を保存している最中か。まとめて保存するので、どの Tera かは持たない。 */
+export const savingDiscord = signal(false);
 
 /** 設定画面を開いたときに読む（まだ読めていなければ）。 */
 export const loadDiscord = resource.load;
 /** 一覧を読み直す。 */
 export const refreshDiscord = resource.refresh;
 
-/** webhook URL を保存する。受け付けられなければ、サーバーが理由を返す。 */
-export async function saveWebhook(teraId: string, url: string): Promise<void> {
-  savingDiscord.value = teraId;
+/** 入力された URL をまとめて保存する。1 つ失敗しても残りは試し、失敗した分をまとめて投げる。 */
+export async function saveWebhooks(entries: readonly { teraId: string; url: string }[]): Promise<void> {
+  savingDiscord.value = true;
+  const failed: string[] = [];
   try {
-    discord.value = await api.saveDiscordWebhook(teraId, url.trim());
+    for (const entry of entries) {
+      try {
+        discord.value = await api.saveDiscordWebhook(entry.teraId, entry.url.trim());
+      } catch (error) {
+        const name = discord.value?.teras.find((tera) => tera.teraId === entry.teraId)?.teraName ?? entry.teraId;
+        failed.push(`${name}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
   } finally {
-    if (savingDiscord.value === teraId) savingDiscord.value = null;
+    savingDiscord.value = false;
   }
+
+  if (failed.length > 0) throw new Error(failed.join(" / "));
 }
 
 /** 保存されている webhook を消す。 */

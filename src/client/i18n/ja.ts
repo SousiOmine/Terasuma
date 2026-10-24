@@ -73,6 +73,7 @@ export const ja: Record<MessageKey, string> = {
   "composer.placeholder": "メッセージを入力",
   "composer.placeholder.steering": "作業中のエージェントへ送る",
   "composer.send": "送信",
+  "composer.sendHint": "送信（Ctrl + Enter）",
   "composer.stop": "停止",
   "composer.stopping": "停止しています…",
   "composer.attach": "ファイルを添付",
@@ -117,6 +118,7 @@ export const ja: Record<MessageKey, string> = {
 
   "settings.discord.description":
     "Tera ごとに、メッセージを送るチャンネルの webhook URL を保存します。エージェントは discord_send でそのチャンネルへ投稿します。",
+  "settings.discord.badge": "{connected} / {total} 接続",
   "settings.discord.field.label": "ウェブフック URL",
   "settings.discord.field.description":
     "Discord のチャンネル設定 > 連携サービス > ウェブフック で URL をコピーし、ここに貼り付けます。",

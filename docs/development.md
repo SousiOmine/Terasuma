@@ -318,6 +318,7 @@ URL にトークンを埋めると `git remote -v` の出力に現れ、その�
 
 Discord はトークンではなく、Tera ごとの **webhook URL** で送る（`server/discord/`）。
 送信先は 1 つのチャンネルで、投稿だけができる。読み取り・編集・リアクションは無い。
+`設定 > コネクタ` の Discord は 1 枚のカードで、Tera ごとの欄を持つ。
 
 - 保存先: `~/.local/share/terasuma/discord/<teraId>.json`（ディレクトリ 0700、ファイル 0600）
 - 保存の前に `GET <webhook>` で webhook を読み、名前とチャンネル ID を確かめる（受け付けられない URL は保存しない）
