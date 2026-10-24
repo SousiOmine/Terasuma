@@ -18,7 +18,7 @@ import { Composer } from "./Composer";
 import { ConnectorRequestPanel } from "./ConnectorRequestPanel";
 import { EnvRequestPanel } from "./EnvRequestPanel";
 import { AgentMessageBubble, NoticeLine, TypingBubble, UserMessageBubble } from "./MessageBubble";
-import { buildItems, formatTime, localeTag, type ChatItem } from "./timeline";
+import { buildItems, formatTime, localeTag, splitAroundLive, type ChatItem } from "./timeline";
 import { UiCard } from "./UiCard";
 import { useOlderPages } from "./useOlderPages";
 
@@ -31,14 +31,18 @@ import { useOlderPages } from "./useOlderPages";
 
 export function ChatView() {
   const tag = localeTag();
-  // 保存済みの履歴と、届いている途中のターンを別々に組み立てる。
+  // 保存済みの履歴を、伸びている応答の seq で前と後ろに分ける。
+  // 応答中に届いた追加の発言（後ろ）は、応答より下に置く。
   // ターンが伸びても、保存済みの履歴を毎回組み直さない。
-  const saved = useMemo(() => buildItems(messages.value, null, tag), [messages.value, tag]);
-  const live = useMemo(
-    () => buildItems([], liveTurn.value, tag, saved.lastDay).items,
-    [liveTurn.value, saved.lastDay, tag],
+  const live = liveTurn.value;
+  const split = useMemo(() => splitAroundLive(messages.value, live?.seq ?? null), [messages.value, live?.seq]);
+  const head = useMemo(() => buildItems(split.before, null, tag), [split.before, tag]);
+  const middle = useMemo(() => buildItems([], live, tag, head.lastDay), [live, head.lastDay, tag]);
+  const tail = useMemo(
+    () => buildItems(split.after, null, tag, middle.lastDay).items,
+    [split.after, middle.lastDay, tag],
   );
-  const items = useMemo(() => [...saved.items, ...live], [saved, live]);
+  const items = useMemo(() => [...head.items, ...middle.items, ...tail], [head, middle, tail]);
   const streaming = isStreaming.value;
   const loading = isLoadingMessages.value;
   const error = chatError.value;

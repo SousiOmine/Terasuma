@@ -1,7 +1,7 @@
 import { recordOf } from "../../shared/guards";
 import {
   ASK_USER_TOOL_NAME,
-  CONNECT_APP_TOOL_NAME,
+  connectAppIdOf,
   DISCORD_CONNECT_TOOL_NAME,
   DISCORD_SERVER_ID,
   SET_ENV_TOOL_NAME,
@@ -29,7 +29,7 @@ import { chatUiPartOf } from "../lib/ui";
 
 export type ChatEventEffect =
   | { kind: "message"; message: ChatMessageView }
-  | { kind: "assistant-start"; id: string; createdAt: number }
+  | { kind: "assistant-start"; id: string; createdAt: number; seq: number }
   | { kind: "assistant-part"; id: string; part: TextPart | AttachmentPart | NoticePart }
   /** chat_ui の呼び出し。カードを画面に置く。 */
   | { kind: "chat-ui"; part: Extract<MessagePart, { type: "tool-call" }> }
@@ -54,7 +54,7 @@ export function interpretEvent(event: ChatEvent): ChatEventEffect | null {
     case "assistant-done":
       return { kind: "message", message: event.message };
     case "assistant-start":
-      return { kind: "assistant-start", id: event.id, createdAt: event.createdAt };
+      return { kind: "assistant-start", id: event.id, createdAt: event.createdAt, seq: event.seq };
     case "assistant-message":
     case "notice":
       // 本文・添付・注記。届いた単位のまま、その場で画面へ足す。
@@ -74,17 +74,14 @@ export function interpretEvent(event: ChatEvent): ChatEventEffect | null {
         };
       }
 
-      const connect = toolCallArgs(event.part, CONNECT_APP_TOOL_NAME);
-      if (connect !== null) {
-        const provider = connect["provider"];
-        // どのアプリか分からないとカードを出せないので、その場合は何もしない。
-        if (typeof provider !== "string" || provider.length === 0) return null;
-
-        const reason = connect["reason"];
+      const called = toolCallName(event.part);
+      const appId = called === null ? null : connectAppIdOf(called);
+      if (appId !== null) {
+        const reason = recordOf(recordOf(event.part.args)?.["args"])?.["reason"];
         return {
           kind: "connector-request-start",
           callId: event.part.id,
-          provider,
+          provider: appId,
           reason: typeof reason === "string" && reason.trim().length > 0 ? reason : null,
         };
       }
@@ -130,7 +127,7 @@ export function interpretEvent(event: ChatEvent): ChatEventEffect | null {
 /**
  * tool_call 越しに呼ばれた、指定したツールの引数。そのツールの呼び出しでなければ null。
  * 事前にツール一覧へ載せないツール（computer_ask_user、computer_set_env、
- * computer_connect_app、discord_connect、tera_create）は、tool_call 越しに呼ばれる。
+ * app_connect_<id>、discord_connect、tera_create）は、tool_call 越しに呼ばれる。
  */
 function toolCallArgs(
   part: { server: string; tool: string; args: unknown },
@@ -141,4 +138,12 @@ function toolCallArgs(
   const outer = recordOf(part.args);
   if (outer?.["name"] !== name) return null;
   return recordOf(outer["args"]) ?? {};
+}
+
+/** tool_call 越しに呼ばれたツールの名前。tool_call でなければ null。 */
+function toolCallName(part: { server: string; tool: string; args: unknown }): string | null {
+  if (part.server !== TOOL_SERVER_ID || part.tool !== TOOL_CALL_TOOL) return null;
+
+  const name = recordOf(part.args)?.["name"];
+  return typeof name === "string" && name.length > 0 ? name : null;
 }

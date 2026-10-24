@@ -29,6 +29,23 @@ export type ChatItem =
   | { kind: "notice"; key: string; part: NoticePart };
 
 /**
+ * 保存済みの履歴を、伸びている応答（liveTurn）の seq で前後に分ける。
+ * 応答の行は生成の開始時に予約されるので、その seq より後ろの保存済み発言
+ * （応答中に届いた追加の発言）は、応答より下に置く。
+ * 応答そのものの行（seq が同じ）は、どちらにも入れない（liveTurn が描く）。
+ */
+export function splitAroundLive(
+  messages: readonly ChatMessageView[],
+  liveSeq: number | null,
+): { before: ChatMessageView[]; after: ChatMessageView[] } {
+  if (liveSeq === null) return { before: [...messages], after: [] };
+  return {
+    before: messages.filter((message) => message.seq < liveSeq),
+    after: messages.filter((message) => message.seq > liveSeq),
+  };
+}
+
+/**
  * 保存された会話と、届いている途中のターンを、画面の並びへ開く。
  *
  * assistant のメッセージは parts の text・attachment・notice と、chat_ui のカードを出す。

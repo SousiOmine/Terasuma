@@ -24,6 +24,9 @@ export const clearConnectorsError = failure.clear;
 /** トークンを保存しているコネクタ。操作中の表示に使う。 */
 export const savingToken = signal<string | null>(null);
 
+/** program コネクタを確かめている最中の id。操作中の表示に使う。 */
+export const connecting = signal<string | null>(null);
+
 /** 設定画面を開いたときに読む（まだ読めていなければ）。 */
 export const loadConnectors = connectorsResource.load;
 /** 一覧を読み直す。 */
@@ -36,6 +39,16 @@ export async function saveConnectorToken(id: string, token: string): Promise<voi
     connectors.value = await api.saveConnectorToken(id, token.trim());
   } finally {
     if (savingToken.value === id) savingToken.value = null;
+  }
+}
+
+/** program コネクタの設定を書いて確かめる。確かめられなければ、サーバーが理由を返す。 */
+export async function connectConnector(id: string, input: api.ConnectorSetupInput = {}): Promise<void> {
+  connecting.value = id;
+  try {
+    connectors.value = await api.connectConnector(id, input);
+  } finally {
+    if (connecting.value === id) connecting.value = null;
   }
 }
 

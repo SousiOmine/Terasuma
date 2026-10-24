@@ -9,7 +9,7 @@ import { beginConnectorRequest, endConnectorRequest, resetConnectorRequest } fro
 import { beginEnvRequest, endEnvRequest, resetEnvRequest } from "./env-request";
 import { clearChatError, showChatError } from "./failure";
 import { answerHandover, beginHandover, endHandover, handoverActive } from "./handover";
-import { mergeLatestPage, mergeSaved, newestSavedSeq, UNSAVED_SEQ } from "./history";
+import { mergeLatestPage, mergeSaved, newestSavedSeq } from "./history";
 import { activeTeraId, refreshTeras } from "./session";
 
 /**
@@ -29,6 +29,7 @@ export const messages = signal<readonly ChatMessageView[]>([]);
 export type LiveTurn = {
   id: string;
   createdAt: number;
+  seq: number;
   parts: readonly MessagePart[];
 };
 
@@ -200,7 +201,7 @@ function applyConversationEvent(teraId: string, event: ConversationEvent): void 
     return;
   }
 
-  applyEvent(event);
+  applyEvent(event, teraId);
 
   // ほかの画面のターンが始まった。ここから終わりまで、応答中として扱う。
   if (current === null && (event.type === "user-message" || event.type === "assistant-start")) {
@@ -396,7 +397,7 @@ export async function sendMessage(rawContent: string, files: readonly File[]): P
   let ended = false;
   try {
     for await (const event of api.streamTurn(teraId, content, locale.value, files, controller.signal)) {
-      applyEvent(event);
+      applyEvent(event, teraId);
       if (event.type === "assistant-done" || event.type === "error") ended = true;
     }
   } catch (error) {
@@ -429,8 +430,7 @@ function upsertSaved(message: ChatMessageView): void {
  * assistant-done を受け取れなかったターンを、画面に残す。
  *
  * サーバはそれまでの本文や添付を必ず保存しているので、読み直せば同じ内容が履歴から出る。
- * ここでは読み直すまでの間、同じ id のローカルのメッセージとして置いておく。
- * 保存された連番は読み直したときに付く（画面は配列の順に並べるので、ここでは使わない）。
+ * ここでは読み直すまでの間、同じ id・同じ seq の保存済みの発言として置いておく。
  */
 function settleLiveTurn(teraId: string): void {
   const live = liveTurn.value;
@@ -438,19 +438,16 @@ function settleLiveTurn(teraId: string): void {
   if (live === null || live.parts.length === 0) return;
   if (activeTeraId.value !== teraId) return;
 
-  messages.value = [
-    ...messages.value,
-    {
-      id: live.id,
-      teraId,
-      seq: UNSAVED_SEQ,
-      role: "assistant",
-      content: "",
-      attachments: null,
-      parts: [...live.parts],
-      createdAt: live.createdAt,
-    },
-  ];
+  upsertSaved({
+    id: live.id,
+    teraId,
+    seq: live.seq,
+    role: "assistant",
+    content: "",
+    attachments: null,
+    parts: [...live.parts],
+    createdAt: live.createdAt,
+  });
 }
 
 /**
@@ -472,7 +469,7 @@ export async function stopStreaming(): Promise<void> {
 }
 
 /** イベントを状態へ反映する。解釈は chat-events.ts が持つ。 */
-function applyEvent(event: ChatEvent): void {
+function applyEvent(event: ChatEvent, teraId: string): void {
   const effect = interpretEvent(event);
   if (effect === null) return;
 
@@ -483,7 +480,9 @@ function applyEvent(event: ChatEvent): void {
       upsertSaved(effect.message);
       break;
     case "assistant-start":
-      liveTurn.value = { id: effect.id, createdAt: effect.createdAt, parts: [] };
+      // ステップが変わった。いまの吹き出しを確定させ、次の吹き出しを開く。
+      settleLiveTurn(teraId);
+      liveTurn.value = { id: effect.id, createdAt: effect.createdAt, seq: effect.seq, parts: [] };
       break;
     case "assistant-part": {
       const live = liveTurn.value;

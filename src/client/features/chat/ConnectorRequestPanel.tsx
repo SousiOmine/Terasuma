@@ -8,11 +8,13 @@ import {
   connectorRequestField,
   resetConnectorRequest,
   saveConnectorRequest,
+  saveProgramConnector,
   savingConnectorRequest,
 } from "../../state/connector-request";
 import { connectors, isLoadingConnectors, loadConnectors } from "../../state/connectors";
 import { discord, isLoadingDiscord, loadDiscord } from "../../state/discord";
 import { showChatError } from "../../state/failure";
+import { ProgramSetupForm, type ProgramSetupInput } from "../connectors/ProgramSetupForm";
 import { Button } from "../../ui/Button";
 import { Field } from "../../ui/Field";
 import { INPUT_CLASS } from "../../ui/styles";
@@ -20,8 +22,9 @@ import { INPUT_CLASS } from "../../ui/styles";
 /**
  * コネクタのカード。
  *
- * エージェントが computer_connect_app（GitHub のトークン）か discord_connect（Discord の webhook）を
+ * エージェントが app_connect_<id>（GitHub のトークン）か discord_connect（Discord の webhook）を
  * 呼んだとき、チャットの入力欄の上に出る。ユーザーはここで値を貼り付けて保存する。
+ * pi のようにプロバイダと API キーを設定するコネクタは、同じカードで設定欄を出す。
  * 値はサーバーへ直接送り、モデルの文脈には載らない。
  */
 export function ConnectorRequestPanel() {
@@ -48,6 +51,7 @@ export function ConnectorRequestPanel() {
   if (request === null) return null;
 
   const app = appNameOf(request.provider);
+  const program = isProgramConnector(request.provider);
 
   const save = (): void => {
     const trimmed = token.trim();
@@ -56,6 +60,10 @@ export function ConnectorRequestPanel() {
     void saveConnectorRequest(trimmed)
       .then(() => setToken(""))
       .catch(showChatError);
+  };
+
+  const saveSetup = (input: ProgramSetupInput): void => {
+    void saveProgramConnector(input).catch(showChatError);
   };
 
   const cancel = (): void => {
@@ -83,7 +91,24 @@ export function ConnectorRequestPanel() {
           </div>
         </>
       ) : field === null ? (
-        <p class="mt-3 text-xs text-secondary">{t("common.loading")}</p>
+        <p class="mt-3 text-xs text-secondary">{t(program ? "chat.connector.checking" : "common.loading")}</p>
+      ) : field.kind === "program" ? (
+        <ProgramSetupForm
+          setup={field.setup}
+          busy={saving}
+          setupUrl={field.setupUrl ?? ""}
+          cancel={
+            <button
+              type="button"
+              disabled={saving}
+              onClick={cancel}
+              class="shrink-0 text-[11px] font-medium text-secondary underline-offset-2 transition hover:text-primary hover:underline disabled:opacity-50"
+            >
+              {t("common.cancel")}
+            </button>
+          }
+          onSubmit={saveSetup}
+        />
       ) : (
         <>
           <Field label={field.label} description={field.description}>
@@ -120,7 +145,7 @@ export function ConnectorRequestPanel() {
                 class="inline-flex items-center gap-1 text-xs text-secondary underline underline-offset-2"
               >
                 <IconExternalLink size={12} stroke={1.6} class="shrink-0" />
-                {t(request.provider === DISCORD_SERVER_ID ? "settings.discord.setup" : "settings.connectors.openSetup")}
+                {t("settings.connectors.openSetup")}
               </a>
             )}
             <button
@@ -145,4 +170,9 @@ function appNameOf(provider: string): string {
   if (provider === DISCORD_SERVER_ID) return "Discord";
 
   return connectors.value?.providers.find((entry) => entry.id === provider)?.name ?? provider;
+}
+
+/** コンピュータの中で確かめるコネクタか。入力欄ではなく確認中の文を出す。 */
+function isProgramConnector(provider: string): boolean {
+  return connectors.value?.providers.find((entry) => entry.id === provider)?.kind === "program";
 }

@@ -13,7 +13,7 @@ function message(id: string): ChatMessageView {
   return { id, teraId: "t1", seq: 1, role: "user", content: id, attachments: null, parts: null, createdAt: 1 };
 }
 
-const started: ChatEvent = { type: "assistant-start", id: "a1", createdAt: 2 };
+const started: ChatEvent = { type: "assistant-start", id: "a1", createdAt: 2, seq: 2 };
 const part: ChatEvent = { type: "assistant-message", id: "a1", part: { type: "text", text: "こんにちは", at: 3 } };
 const done: ChatEvent = {
   type: "assistant-done",
@@ -73,6 +73,33 @@ describe("会話の配り口", () => {
     // そのあとに起きたことも、続けて届く。
     broadcast.publish("t1", done, "early");
     expect(await late.next()).toEqual({ done: false, value: done });
+
+    for (const subscriber of [early, late]) subscriber.abort();
+  });
+
+  test("ステップが変わっても、途中から購読した画面へ両方の assistant-start が流れる", async () => {
+    const broadcast = createConversationBroadcast();
+    const early = subscribe(broadcast, "early");
+
+    broadcast.publish("t1", started, "early");
+    broadcast.publish("t1", part, "early");
+
+    // ステップ 2 の開始より前に購読を開く。控えには始まりから積まれている。
+    const late = subscribe(broadcast, "late");
+
+    const secondStarted: ChatEvent = { type: "assistant-start", id: "a2", createdAt: 4, seq: 4 };
+    const secondPart: ChatEvent = {
+      type: "assistant-message",
+      id: "a2",
+      part: { type: "text", text: "続き", at: 5 },
+    };
+    broadcast.publish("t1", secondStarted, "early");
+    broadcast.publish("t1", secondPart, "early");
+
+    expect(await late.next()).toEqual({ done: false, value: started });
+    expect(await late.next()).toEqual({ done: false, value: part });
+    expect(await late.next()).toEqual({ done: false, value: secondStarted });
+    expect(await late.next()).toEqual({ done: false, value: secondPart });
 
     for (const subscriber of [early, late]) subscriber.abort();
   });

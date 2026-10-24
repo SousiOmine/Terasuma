@@ -341,8 +341,18 @@ export function readContext(store: Store, teraId: string): TeraContext {
   const state = store.readCompaction(teraId);
   return {
     summary: state.summary === "" ? null : state.summary,
-    messages: store.listMessagesSince(teraId, state.throughSeq),
+    // 生成の開始時に予約した応答の行は、まだ中身が無い。空の assistant を文脈へ入れると、
+    // モデルが「空の返事」を読むことになるので除く。
+    messages: store.listMessagesSince(teraId, state.throughSeq).filter((message) => !isEmptyAssistant(message)),
   };
+}
+
+function isEmptyAssistant(message: ChatMessage): boolean {
+  return (
+    message.role === "assistant" &&
+    message.content.length === 0 &&
+    (message.parts === null || message.parts.length === 0)
+  );
 }
 
 /** 直近を生のまま残す切れ目。 */

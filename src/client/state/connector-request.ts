@@ -1,13 +1,21 @@
 import { computed, signal } from "@preact/signals";
+import type { ConnectorProviderView } from "../../shared/api/settings";
 import { DISCORD_SERVER_ID } from "../../shared/tools";
 import { t } from "../i18n";
-import { cancelConnectorWait, connectors, saveConnectorToken, savingToken } from "./connectors";
+import {
+  cancelConnectorWait,
+  connectConnector,
+  connecting,
+  connectors,
+  saveConnectorToken,
+  savingToken,
+} from "./connectors";
 import { cancelDiscordWait, discord, saveWebhook, savingDiscord, WEBHOOK_PLACEHOLDER } from "./discord";
 
 /**
  * チャットのコネクタカード。
  *
- * エージェントが computer_connect_app（GitHub）か discord_connect（Discord）を呼んだときに始まり、
+ * エージェントが app_connect_<id>（GitHub など）か discord_connect（Discord）を呼んだときに始まり、
  * 値の保存が終わるまで続く。値はサーバーへ直接送り、モデルの文脈には載らない。
  * Discord の送信先は Tera ごとに 1 つなので、カードを出した時点の Tera を覚えておく。
  */
@@ -69,22 +77,19 @@ export function resetConnectorRequest(): void {
   connectorRequest.value = null;
 }
 
-/** カードに出す、貼り付け欄の見た目。 */
-export type ConnectorRequestField = {
-  label: string;
-  description: string;
-  placeholder: string;
-  /** 作り方のページ。無ければ null。 */
-  setupUrl: string | null;
-};
+/** カードに出す、貼り付け欄か設定欄の見た目。 */
+export type ConnectorRequestField =
+  | { kind: "token"; label: string; description: string; placeholder: string; setupUrl: string | null }
+  | { kind: "program"; setup: NonNullable<ConnectorProviderView["setup"]>; setupUrl: string | null };
 
-/** カードの貼り付け欄。アプリが分かるまでは null（読み込み中）。 */
+/** カードの入力欄。アプリが分かるまでは null（読み込み中）。 */
 export const connectorRequestField = computed<ConnectorRequestField | null>(() => {
   const request = connectorRequest.value;
   if (request === null) return null;
 
   if (request.provider === DISCORD_SERVER_ID) {
     return {
+      kind: "token",
       label: t("settings.discord.field.label"),
       description: t("settings.discord.field.description"),
       placeholder: WEBHOOK_PLACEHOLDER,
@@ -95,7 +100,15 @@ export const connectorRequestField = computed<ConnectorRequestField | null>(() =
   const provider = connectors.value?.providers.find((entry) => entry.id === request.provider) ?? null;
   if (provider === null) return null;
 
+  if (provider.kind === "program") {
+    if (provider.setup === null) return null;
+    return { kind: "program", setup: provider.setup, setupUrl: provider.setupUrl };
+  }
+
+  if (provider.token === null) return null;
+
   return {
+    kind: "token",
     label: provider.token.label,
     description: provider.token.description,
     placeholder: provider.token.placeholder,
@@ -111,6 +124,10 @@ export const savingConnectorRequest = computed<boolean>(() => {
   if (request.provider === DISCORD_SERVER_ID) {
     return request.teraId !== null && savingDiscord.value === request.teraId;
   }
+
+  const provider = connectors.value?.providers.find((entry) => entry.id === request.provider) ?? null;
+  if (provider?.kind === "program") return connecting.value === request.provider;
+
   return savingToken.value === request.provider;
 });
 
@@ -130,6 +147,19 @@ export async function saveConnectorRequest(value: string): Promise<void> {
 
   if (savingToken.value === request.provider) return;
   await saveConnectorToken(request.provider, value);
+}
+
+/** program コネクタの設定を保存して接続する。キーは state に残さない。 */
+export async function saveProgramConnector(input: {
+  provider: string;
+  apiKey?: string;
+  model?: string;
+}): Promise<void> {
+  const request = connectorRequest.value;
+  if (request === null) return;
+  if (connecting.value === request.provider) return;
+
+  await connectConnector(request.provider, input);
 }
 
 /** 接続をやめる。サーバーの待ちも止める。 */

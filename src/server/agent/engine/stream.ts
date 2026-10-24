@@ -49,6 +49,9 @@ function toEngineEvent<TOOLS extends ToolSet>(
   reachedStepLimit: () => boolean,
 ): EngineEvent | null {
   switch (chunk.type) {
+    case "start-step":
+      return { type: "step-start" };
+
     case "text-delta":
       return { type: "text-delta", delta: chunk.text };
 

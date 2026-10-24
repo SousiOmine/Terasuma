@@ -220,23 +220,34 @@ export type ConnectorProviderView = {
   id: string;
   name: string;
   description: string;
-  /** トークンを発行するページ。 */
+  /** 設定や接続の手順を開くページ。 */
   setupUrl: string;
-  /** 画面に出すトークン欄の見出しと説明。 */
-  token: {
-    label: string;
-    description: string;
-    placeholder: string;
-  };
+  /** トークンを貼るコネクタか、コンピュータの中のプログラムを確かめるコネクタか。 */
+  kind: "token" | "program";
+  /** トークン欄。program では null。 */
+  token: { label: string; description: string; placeholder: string } | null;
+  /** program コネクタの設定欄。token では null。 */
+  setup: {
+    provider: {
+      label: string;
+      description: string;
+      choices: readonly { id: string; label: string; defaultModel: string }[];
+      value: string | null;
+    };
+    key: { label: string; description: string; placeholder: string };
+    model: { label: string; description: string; placeholder: string; value: string | null };
+  } | null;
   /** トークンに付ける権限。画面に出す（GitHub は scope）。 */
   permissions: readonly string[];
-  /** コネクタがコンピュータへ渡す環境変数の名前。 */
+  /** コネクタがコンピュータへ渡す環境変数の名前。program では空。 */
   env: readonly string[];
-  /** トークンが保存されているか。account を読めなくても true になる。 */
+  /** 接続済みか。token はトークンあり、program は確認済みの記録あり。 */
   connected: boolean;
-  /** 接続中のアカウント。未接続なら null。 */
+  /** 接続中のアカウント。未接続・program なら null。 */
   account: string | null;
-  /** 保存されているトークンを読めなかった理由。無ければ null。 */
+  /** 接続しているものの説明（program のバージョンなど）。無ければ null。 */
+  status: string | null;
+  /** 保存されている記録を読めなかった理由。無ければ null。 */
   detail: string | null;
 };
 

@@ -1,5 +1,5 @@
 import { Database } from "bun:sqlite";
-import type { ChatMessage, Tera } from "../../../shared/api/message";
+import type { ChatMessage, MessagePart, Tera, TokenUsage } from "../../../shared/api/message";
 import { migrateSchema } from "./migrations";
 import { prepareQueries } from "./queries";
 import { toMessage, toTera } from "./rows";
@@ -87,6 +87,21 @@ export function createStore(dbPath: string, options: CreateStoreOptions = {}): S
       usage: input.usage ?? null,
     };
   });
+
+  const updateParts = db.transaction(
+    (id: string, input: { parts: readonly MessagePart[]; usage: TokenUsage | null }): ChatMessage | null => {
+      q.updateMessageParts.run(
+        JSON.stringify(input.parts),
+        input.usage?.inputTokens ?? null,
+        input.usage?.outputTokens ?? null,
+        input.usage?.cachedInputTokens ?? null,
+        id,
+      );
+
+      const row = q.selectMessageById.get(id);
+      return row === null ? null : toMessage(row);
+    },
+  );
 
   // Tera の行と identity は、どちらも入るか、どちらも入らないか。
   // 行列だけが残ると、役割の無い Tera が画面に出てしまう。
@@ -207,6 +222,14 @@ export function createStore(dbPath: string, options: CreateStoreOptions = {}): S
 
     appendMessage(input) {
       return append(input);
+    },
+
+    updateMessageParts(id, input) {
+      return updateParts(id, input);
+    },
+
+    deleteMessage(id) {
+      q.deleteMessageById.run(id);
     },
 
     readPendingStats(teraId, afterSeq) {

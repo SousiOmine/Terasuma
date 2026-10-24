@@ -308,6 +308,8 @@ function createSteeringEngine(): AgentEngine {
     stream(input): Promise<EngineStream> {
       return Promise.resolve({
         events: (async function* () {
+          // 最初のステップの開始（AI SDK と同じように、冒頭でも流れる）。
+          yield { type: "step-start" } as const;
           yield { type: "text-delta", delta: "作業中です。" } as const;
 
           // 利用者が送ってくるまで、少しずつ待つ。
@@ -317,6 +319,8 @@ function createSteeringEngine(): AgentEngine {
             if (received.length === 0) await new Promise((resolve) => setTimeout(resolve, 10));
           }
 
+          // prepareStep で発言を足した直後、次のステップが始まる。
+          yield { type: "step-start" } as const;
           yield { type: "text-delta", delta: `受け取りました: ${received.join(" / ")}` } as const;
         })(),
         usage: Promise.resolve(null),
@@ -796,14 +800,34 @@ describe("チャット API", () => {
       expect(decoded.rest).toBe("");
       expect(visibleText(decoded.events)).toContain("受け取りました: 追加の指示");
 
-      // 保存されるのは、最初の発言・割り込んだ発言・その応答の順。
+      // 割り込んだ発言は、生成の開始時に予約された応答の行より後ろの連番になる。
+      const starts = decoded.events.filter((event) => event.type === "assistant-start");
+      expect(starts).toHaveLength(2);
+      const [firstStart, secondStart] = starts;
+      if (firstStart?.type !== "assistant-start" || secondStart?.type !== "assistant-start") {
+        throw new Error("assistant-start が届きませんでした");
+      }
+      expect(message.seq).toBeGreaterThan(firstStart.seq);
+      expect(secondStart.seq).toBeGreaterThan(message.seq);
+
+      // 保存されるのは、最初の発言・ステップ 1 の応答・割り込んだ発言・ステップ 2 の応答の順。
       const messages = await harness.messages(DEFAULT_TERA_ID);
-      expect(messages.map((entry) => [entry.role, entry.content])).toEqual([
-        ["user", "最初の質問"],
-        ["user", "追加の指示"],
-        ["assistant", ""],
+      expect(messages.map((entry) => entry.role)).toEqual(["user", "assistant", "user", "assistant"]);
+      expect(messages.map((entry) => entry.id)).toEqual([
+        decoded.events[0]?.type === "user-message" ? decoded.events[0].message.id : "",
+        firstStart.id,
+        message.id,
+        secondStart.id,
       ]);
-      expect(messages[1]?.seq).toBeLessThan(messages[2]?.seq ?? 0);
+      expect(messages.map((entry) => entry.seq)).toEqual([
+        expect.any(Number),
+        firstStart.seq,
+        message.seq,
+        secondStart.seq,
+      ]);
+      for (let index = 1; index < messages.length; index += 1) {
+        expect(messages[index - 1]?.seq).toBeLessThan(messages[index]?.seq ?? 0);
+      }
     });
   });
 
@@ -836,10 +860,13 @@ describe("チャット API", () => {
       expect(visibleText(decoded.events)).toContain("最初の返事。");
       expect(visibleText(decoded.events)).toContain("続き: あとから送った指示");
 
-      // 応答は 2 つに分かれ、割り込んだ発言はその手前の seq に残る。
+      // 応答は 2 つに分かれ、割り込んだ発言は 1 つ目の応答と 2 つ目の応答の間に残る。
       const messages = await harness.messages(DEFAULT_TERA_ID);
-      expect(messages.map((entry) => entry.role)).toEqual(["user", "user", "assistant", "assistant"]);
-      expect(messages[1]?.content).toBe("あとから送った指示");
+      expect(messages.map((entry) => entry.role)).toEqual(["user", "assistant", "user", "assistant"]);
+      expect(messages[2]?.content).toBe("あとから送った指示");
+      expect(messages[0]?.seq).toBeLessThan(messages[1]?.seq ?? 0);
+      expect(messages[1]?.seq).toBeLessThan(messages[2]?.seq ?? 0);
+      expect(messages[2]?.seq).toBeLessThan(messages[3]?.seq ?? 0);
     });
   });
 
@@ -1139,7 +1166,12 @@ describe("チャット API", () => {
       controller.abort();
       await reader.cancel().catch(() => undefined);
 
-      await waitFor(async () => (await harness.messages(DEFAULT_TERA_ID)).length === 2);
+      // 応答の行は開始時に予約されるので、中身が書き込まれるまで待つ。
+      await waitFor(async () => {
+        const messages = await harness.messages(DEFAULT_TERA_ID);
+        const assistant = messages[1];
+        return messages.length === 2 && assistant !== undefined && textParts(assistant).length > 0;
+      });
 
       const [user, assistant] = await harness.messages(DEFAULT_TERA_ID);
       if (user === undefined || assistant === undefined) throw new Error("保存されていない");

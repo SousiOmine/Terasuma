@@ -72,12 +72,12 @@ If tool_search finds no computer_ tools, the container is not available on this 
   password) and set it as an environment variable for commands in this container. The
   value comes from the user and you never see it. Use this instead of asking the user to
   paste a secret into the chat.
-- computer_connect_app(provider, reason) — connect an app by having the user paste a
-  token. A card opens in the chat with a link to create the token and a field to paste
-  it. GitHub's token becomes GH_TOKEN for commands.
-  Use this when a task needs the app and its environment variable is not set.
 - app_request(provider, method, path, body?) — call the API of a connected app. The
-  token is used by Terasuma and never shown to you.
+  token is used by Terasuma and never shown to you. An app that runs inside this computer
+  has no API.
+
+Connecting an app at all (its API, or a program inside this computer): load the connectors
+skill; it has the flow and the connect tools.
 
 ## Coordinates
 
@@ -111,9 +111,8 @@ screenshot true or with files.
 - When a command needs a secret, set it with computer_set_env instead of asking for the
   value in a message. The value is entered in the chat and never reaches you; do not
   print, copy or guess it afterwards.
-- When a task needs GitHub and it is not connected, use computer_connect_app instead of
-  asking for a personal access token. The card has a field for it; never ask the user to
-  send a token in a message.
+- When a task needs an app that is not connected, load the connectors skill and use that
+  app's connect tool instead of asking for a token or an API key in a message.
 - For Discord, load the discord skill. The user saves a channel webhook URL per Tera with
   discord_connect; a webhook can only post, so do not offer to read or edit messages.
 - Write the question for the user to read, in the reply language.
@@ -138,6 +137,63 @@ export const COMPUTER_USE_SKILL: Skill = {
     "typing, keys, windows and applications. The computer_ tools are not preloaded — " +
     "find them with tool_search and run them with tool_call.",
   content: COMPUTER_USE_CONTENT,
+};
+
+/**
+ * アプリ（コネクタ）に接続するためのスキル。
+ *
+ * 接続ツールはアプリごとに 1 つあり、アプリ名を列挙するとコネクタを足すたびに書き換えが要る。
+ * そこで、探し方（tool_search）とカードの流れだけを書き、名前は検索結果から取らせる。
+ */
+const CONNECTORS_CONTENT = `# Connecting an app (connectors)
+
+Some work needs something outside this conversation: an API (for example GitHub's), or a
+program installed in the computer (for example pi, a coding agent). Each one is a
+connector. A connector stores what that app needs, either a token or the settings of the
+program, and makes it available to your tools.
+
+## When to use it
+
+- A task needs an app and its tool says it is not connected.
+- You are about to call an API, or to write code with a program inside the computer.
+- No secret for that app is available yet. Never ask the user to paste a token or an API
+  key in a chat message.
+
+## The flow
+
+1. Pick the connector the task needs.
+2. tool_search with the app's name and "connect" (for example "github connect"). Every
+   connector has its own connect tool, named app_connect_<app id>, and its description says
+   what that connector needs.
+3. tool_call with the exact tool name from the result, and {"reason": "<why you need it>"}.
+   A card opens in the chat and the user fills it in. The values never reach you.
+4. When the call returns, the app is ready. Continue the task.
+
+Take the tool name from the search result. Do not build app_connect_<app id> from memory
+and do not guess an app id. If the search finds no connect tool, tell the user the app
+cannot be connected here.
+
+## After connecting
+
+- An app with an API: call it with app_request (find it with tool_search). The token is used
+  by Terasuma and never shown to you.
+- A program inside the computer: its skill appears in your skill catalog. Load it with the
+  skill tool and follow it. Such a program has no API, so app_request does not apply.
+- Disconnecting is the user's job (Settings > Connectors). Do not try to remove a
+  connection, and never print a saved secret.
+
+## If the user asks to connect something
+
+You can start the same flow: find the connect tool, call it with a reason written for the
+user, and wait for the card. You never type the secret yourself.
+`;
+
+export const CONNECTORS_SKILL: Skill = {
+  name: "connectors",
+  description:
+    "Connecting an app before you use it (its API, or a program inside the computer): how " +
+    "to find that connector's connect tool with tool_search, and how the user fills in the card.",
+  content: CONNECTORS_CONTENT,
 };
 
 /**
@@ -384,9 +440,125 @@ export const TERA_CREATE_SKILL: Skill = {
   content: TERA_CREATE_CONTENT,
 };
 
+/**
+ * pi（pi-coding-agent）にコードを書かせるためのスキル。
+ *
+ * pi はコンピュータの中の CLI で、tmux 越しに呼ぶ。接続している間だけ一覧に載せ、
+ * 切断したら一覧から消す（BUILTIN_SKILLS には入れない）。
+ */
+const PI_CODING_CONTENT = `# Writing code with pi-coding-agent
+
+pi is a coding agent CLI installed in the computer: the Debian container where read,
+write, edit and bash run. tmux, bun, node and git are available there too. When the user
+asks for code to be written, fixed or refactored, let pi do the editing instead of editing
+the files yourself. Its work files and tmux session are per Tera (see below), so several Teras can use it at the same time.
+
+## When to use it
+
+- The user asks you to write, implement, fix, refactor or restructure code.
+- You are about to change files in a repository.
+
+Do not call write or edit yourself for this work. Load this skill, send the job to pi, and
+check what pi produced.
+
+## Call pi through tmux
+
+Your work files and the tmux session are per Tera. Several Teras share this computer, so a
+fixed path or one session name would let one Tera's job overwrite another's. Run these in
+your workspace folder: bash starts there, and its name is your Tera id.
+
+\`\`\`sh
+work="$HOME/.pi-work/\${PWD##*/}"; session="pi-work-\${PWD##*/}"
+mkdir -p "$work"
+rm -f "$work/log" "$work/prompt.md"
+
+cat > "$work/prompt.md" <<'BRIEF'
+<the job for pi: files, expected behavior, what not to touch, tests, and "do not commit,
+push, delete anything, or send anything outside this computer">
+BRIEF
+
+tmux kill-session -t "$session" 2>/dev/null
+tmux new-session -d -s "$session" -c "$PWD" -x 220 -y 60
+tmux send-keys -t "$session" -l "pi -p \\"$(cat $work/prompt.md)\\" 2>&1 | tee -a $work/log; echo __PI_DONE__ >> $work/log"
+tmux send-keys -t "$session" Enter
+\`\`\`
+
+Writing the request to a file matters: a long request passed inside the tmux command line is
+silently dropped, and pi starts with an empty prompt. Keeping the file under
+\`$HOME/.pi-work/<your Tera id>/\` keeps it out of the repository and away from other Teras.
+
+## Wait for it
+
+One bash call is cut off at about 10 minutes, so wait in chunks and call bash again for the
+next chunk. The session keeps running between calls. Set \`work\` again in each call.
+
+\`\`\`sh
+work="$HOME/.pi-work/\${PWD##*/}"; session="pi-work-\${PWD##*/}"
+for i in $(seq 1 90); do          # 90 x 5s = about 7.5 minutes
+  grep -qx __PI_DONE__ "$work/log" && break
+  sleep 5
+done
+grep -v '^__PI_DONE__$' "$work/log" | tail -60
+\`\`\`
+
+- If the output does not end with the marker, the job is still running: look at
+  \`tmux capture-pane -p -t "$session" -S -60\` and call the wait again (or tell the user).
+- Never decide that the run finished by grepping the screen for \`__PI_DONE__\`: the
+  command line you sent contains the marker too. Only the marker line that \`echo\` wrote
+  at the end of the log means the run is over.
+- To stop a job that is clearly wrong, \`tmux kill-session -t "$session"\` and say what
+  happened.
+
+## What to put in the request
+
+Always include:
+
+- The files and directories to change.
+- The behavior you expect, and how it should be checked.
+- What must not be touched.
+- Whether tests are needed, and which commands to run.
+- "Do not commit, push, delete anything, or send anything outside this computer."
+
+Keep the request concrete. If the job is large, split it into steps and call pi again for
+the next step.
+
+## Check the result yourself
+
+- Read \`git status --short\` and \`git diff\` before accepting the work.
+- Run \`bun run typecheck\`, \`bun run lint\` and \`bun test\` (or the repository's
+  equivalents) and read the failures.
+- Do not trust pi's "I checked it" message. The files and the command output are the
+  evidence.
+
+## When something is wrong
+
+Send the work back to pi with a specific description of what is wrong in the diff. Fix it
+yourself only when the change is obviously one or two lines, or after pi has failed twice
+in a row. If you do edit it yourself, say so in your reply to the user.
+
+## Rules
+
+- Do not run two pi jobs at once in the same Tera: the session name is per Tera, so a second
+  call in this Tera kills the first one. Wait for the marker before starting the next job.
+  Other Teras have their own session and their own files under $HOME/.pi-work/, so their
+  jobs do not collide with this one.
+- For a short question that needs no repository changes (a one-line check), calling
+  \`pi -p 'question'\` once directly is fine.
+- If pi is not connected or not available, ask the user to connect it in Settings >
+  Connectors. The agent can also load the connectors skill and call app_connect_pi.
+`;
+
+export const PI_CODING_SKILL: Skill = {
+  name: "pi-coding",
+  description:
+    "Writing or changing code with pi-coding-agent (pi) inside the computer through tmux: how to call it, wait for it, and check the result. Load it before you edit code yourself.",
+  content: PI_CODING_CONTENT,
+};
+
 /** このアプリに組み込まれているスキル。 */
 export const BUILTIN_SKILLS: readonly Skill[] = [
   COMPUTER_USE_SKILL,
+  CONNECTORS_SKILL,
   SKILL_CREATE_SKILL,
   DISCORD_SKILL,
   TERA_CREATE_SKILL,
@@ -402,22 +574,30 @@ export function skillCatalogText(skills: readonly Skill[]): string {
 
 /**
  * 組み込みスキルと、置き場のスキルをまとめる。
- * 一覧と本文は呼び出しのたびにファイルから引き直すので、作成や更新はすぐに見える。
+ * 一覧と本文は呼び出しのたびに引き直すので、作成や更新はすぐに見える。
+ * extra は接続状態などで変わるスキル（pi-coding など）を、呼ぶたびに評価して足す。
  */
-export function createSkillLibrary(store: SkillFileStore): SkillLibrary {
+export function createSkillLibrary(
+  store: SkillFileStore,
+  extra: () => readonly Skill[] = () => [],
+): SkillLibrary {
+  function available(): readonly Skill[] {
+    return [...BUILTIN_SKILLS, ...extra()];
+  }
+
   return {
     all() {
-      return [...BUILTIN_SKILLS, ...store.scan().skills];
+      return [...available(), ...store.scan().skills];
     },
     get(name) {
-      const builtin = BUILTIN_SKILLS.find((skill) => skill.name === name);
+      const builtin = available().find((skill) => skill.name === name);
       if (builtin !== undefined) {
         return { ...builtin, dir: null, resources: [], resourcesTruncated: false };
       }
       return store.get(name) ?? undefined;
     },
     isBuiltin(name) {
-      return BUILTIN_SKILLS.some((skill) => skill.name === name);
+      return available().some((skill) => skill.name === name);
     },
   };
 }

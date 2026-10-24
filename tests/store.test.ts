@@ -225,6 +225,41 @@ describe("store", () => {
     expect(store.getTera(DEFAULT_TERA_ID)?.updatedAt).toBeGreaterThan(before.createdAt);
   });
 
+  test("updateMessageParts は予約した行の中身と使用量を書き込み、連番を変えない", () => {
+    const store = makeStore();
+    store.appendMessage({ id: "m1", teraId: DEFAULT_TERA_ID, role: "user", content: "こんにちは" });
+    const reserved = store.appendMessage({
+      id: "m2",
+      teraId: DEFAULT_TERA_ID,
+      role: "assistant",
+      content: "",
+      attachments: null,
+      parts: [],
+    });
+
+    const parts = [{ type: "text" as const, text: "やあ", at: 2 }];
+    const usage = { inputTokens: 10, outputTokens: 20, cachedInputTokens: 5 };
+    const updated = store.updateMessageParts("m2", { parts, usage });
+    if (updated === null) throw new Error("予約した行を更新できませんでした");
+
+    expect(updated).toMatchObject({ id: "m2", seq: reserved.seq, parts, usage });
+    expect(allMessages(store, DEFAULT_TERA_ID).find((message) => message.id === "m2")).toEqual(updated);
+    expect(store.updateMessageParts("missing", { parts: [], usage: null })).toBeNull();
+  });
+
+  test("deleteMessage は行を消し、lastSeq を変えない", () => {
+    const store = makeStore();
+    store.appendMessage({ id: "m1", teraId: DEFAULT_TERA_ID, role: "user", content: "最初" });
+    store.appendMessage({ id: "m2", teraId: DEFAULT_TERA_ID, role: "assistant", content: "", parts: [] });
+    store.appendMessage({ id: "m3", teraId: DEFAULT_TERA_ID, role: "user", content: "割り込み" });
+
+    const lastSeq = store.lastSeq(DEFAULT_TERA_ID);
+    store.deleteMessage("m2");
+
+    expect(allMessages(store, DEFAULT_TERA_ID).map((message) => message.id)).toEqual(["m1", "m3"]);
+    expect(store.lastSeq(DEFAULT_TERA_ID)).toBe(lastSeq);
+  });
+
   test("画面の本文と添付を保存する", () => {
     const store = makeStore();
     const attachment = {

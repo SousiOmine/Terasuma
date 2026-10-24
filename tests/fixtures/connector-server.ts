@@ -1,5 +1,5 @@
 import type { Server } from "bun";
-import type { ConnectorProvider } from "../../src/server/connectors/providers";
+import type { ProgramConnectorProvider, TokenConnectorProvider } from "../../src/server/connectors/providers";
 
 /**
  * テストで使う接続先の API サーバー。
@@ -52,8 +52,9 @@ export function startFakeConnectorServer(): FakeConnectorServer {
 }
 
 /** テスト用の GitHub プロバイダ。宛先だけを偽サーバーへ向ける。 */
-export function fakeProvider(server: FakeConnectorServer): ConnectorProvider {
+export function fakeProvider(server: FakeConnectorServer): TokenConnectorProvider {
   return {
+    kind: "token",
     id: "github",
     name: "GitHub",
     description: "test app",
@@ -64,12 +65,36 @@ export function fakeProvider(server: FakeConnectorServer): ConnectorProvider {
       placeholder: "ghp_...",
     },
     permissions: ["repo", "read:user"],
+    needs: "a test personal access token",
     env: ["GH_TOKEN", "GITHUB_TOKEN"],
     usage: "For the API, use app_request (for example GET /user).",
     api: {
       baseUrl: `${server.origin}/api`,
       headers: { Accept: "application/json" },
       account: { path: "/user", field: "login" },
+    },
+  };
+}
+
+/** テスト用の program コネクタ。コンピュータの中の読み書きは偽の実行に差し替える。 */
+export function fakeProgramProvider(): ProgramConnectorProvider {
+  return {
+    kind: "program",
+    id: "pi",
+    name: "pi-coding-agent",
+    description: "test program",
+    setupUrl: "https://example.com/pi",
+    permissions: [],
+    needs: "an LLM provider, an API key, and a model",
+    usage: "pi is ready in the computer. Load the pi-coding skill.",
+    setup: {
+      provider: {
+        label: "LLM provider",
+        description: "test provider",
+        choices: [{ id: "anthropic", label: "Anthropic", defaultModel: "claude-sonnet-4-5" }],
+      },
+      key: { label: "API key", description: "test key", placeholder: "sk-..." },
+      model: { label: "Model", description: "test model", placeholder: "default" },
     },
   };
 }

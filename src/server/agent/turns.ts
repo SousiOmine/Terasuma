@@ -1,12 +1,10 @@
 import type { ReplyLanguage } from "../../shared/language";
 import { describeError } from "../../shared/errors";
-import { toolNameFor, UI_TOOL_NAME } from "../../shared/tools";
 import type {
   AttachmentPart,
   ChatAttachment,
   ChatEvent,
   ChatMessage,
-  MessagePart,
   NoticePart,
   SentAttachment,
   TextPart,
@@ -16,6 +14,7 @@ import type { Compaction } from "./compaction";
 import type { AgentEngine } from "./engine";
 import { toMessageView } from "./message-view";
 import type { TeraContext } from "./prompt";
+import { createStepMessages } from "./step-messages";
 import type { Store } from "../data/store";
 
 /**
@@ -212,33 +211,31 @@ async function* turnEvents(
     yield { type: "user-message", message: toMessageView(userMessage) };
   }
 
-  const assistantId = crypto.randomUUID();
-  const createdAt = Date.now();
-  yield { type: "assistant-start", id: assistantId, createdAt };
+  const steps = createStepMessages(store, teraId);
+  let draft = steps.current();
+  yield { type: "assistant-start", id: draft.id, createdAt: draft.createdAt, seq: draft.seq };
 
-  /** この区切りの記録（本文・ツール・添付・注記）。保存される並びそのもの。 */
-  const parts: MessagePart[] = [];
   /** まだ画面へ流していない、本文と添付。 */
   const outgoing: (TextPart | AttachmentPart)[] = [];
   /** いま伸びている本文。区切りが付くまで、画面へは流さない。 */
   let pendingText: TextPart | null = null;
 
   /**
-   * 添付の口。parts へはその場で足す（止められても、添付は保存に残す）。
+   * 添付の口。いまのステップの記録へはその場で足す（止められても、添付は保存に残す）。
    * 画面へは、次のモデルの出来事を待つ間に流す。
    */
   const attach = (attachments: SentAttachment[]): void => {
     if (attachments.length === 0) throw new Error("添付なしで attach が呼ばれました");
 
     const part: AttachmentPart = { type: "attachment", attachments, at: Date.now() };
-    parts.push(part);
+    draft.parts.push(part);
     outgoing.push(part);
   };
 
   const appendText = (delta: string): void => {
     if (delta.length === 0) return;
 
-    const last = parts.at(-1);
+    const last = draft.parts.at(-1);
     if (last?.type === "text") {
       last.text += delta;
       pendingText = last;
@@ -246,7 +243,7 @@ async function* turnEvents(
     }
 
     const part: TextPart = { type: "text", text: delta, at: Date.now() };
-    parts.push(part);
+    draft.parts.push(part);
     pendingText = part;
   };
 
@@ -265,20 +262,11 @@ async function* turnEvents(
    * 生成済みの内容は、正常終了でも「停止」でも必ず保存する。
    * 停止時は呼び出し元がジェネレータを return するため、yield を含む後続のコードは実行されない。
    * だから保存だけは finally から呼べる形に切り出してある。
-   * 何も起きなかったターン（部分が 1 つも無い）は、空のメッセージを作らない。
+   * 何も出なかったステップの行は残さない。
    */
   const persist = (): void => {
-    if (finalMessage !== null || parts.length === 0) return;
-
-    finalMessage = store.appendMessage({
-      id: assistantId,
-      teraId,
-      role: "assistant",
-      content: "",
-      attachments: null,
-      parts,
-      usage,
-    });
+    if (finalMessage !== null) return;
+    finalMessage = steps.finish(usage);
   };
 
   try {
@@ -306,6 +294,9 @@ async function* turnEvents(
       },
     });
 
+    /** 最初の step-start は、ターンの冒頭で開いた行がそのまま受け持つ。 */
+    let seenFirstStep = false;
+
     for await (const event of stream.events) {
       // 本文は、次の区切り（ツール呼び出し・結果・注記・終了）で確定する。
       if (event.type !== "text-delta") flushText();
@@ -313,27 +304,38 @@ async function* turnEvents(
       // 確定した本文と添付を、次のモデルの出来事より先に流す。
       while (outgoing.length > 0) {
         const part = outgoing.shift();
-        if (part !== undefined) yield { type: "assistant-message", id: assistantId, part };
+        if (part !== undefined) yield { type: "assistant-message", id: draft.id, part };
       }
 
       switch (event.type) {
+        case "step-start":
+          // AI SDK は最初のステップでも start-step を流す。冒頭で開いた行を使い続ける。
+          if (!seenFirstStep) {
+            seenFirstStep = true;
+            break;
+          }
+          // ステップの境目。ここで行を分けるので、この直後に届く追加の発言（steering）は
+          // 必ず前の行より後ろの連番になり、次の行はその下に描かれる。
+          draft = steps.nextStep(null);
+          yield { type: "assistant-start", id: draft.id, createdAt: draft.createdAt, seq: draft.seq };
+          break;
         case "text-delta":
           // 本文は画面に出す。区切りが付くまで溜め、まとめて 1 つの吹き出しにする。
           appendText(event.delta);
           break;
         case "tool-call":
-          parts.push(event.part);
-          yield { type: "tool-call", id: assistantId, part: event.part };
+          draft.parts.push(event.part);
+          yield { type: "tool-call", id: draft.id, part: event.part };
           break;
         case "tool-result":
-          parts.push(event.part);
-          yield { type: "tool-result", id: assistantId, part: event.part };
+          draft.parts.push(event.part);
+          yield { type: "tool-result", id: draft.id, part: event.part };
           break;
         case "step-limit": {
           // 上限で打ち切られたことを、画面に残す。
           const part: NoticePart = { type: "notice", text: stepLimitNote(language), at: Date.now() };
-          parts.push(part);
-          yield { type: "notice", id: assistantId, part };
+          draft.parts.push(part);
+          yield { type: "notice", id: draft.id, part };
           break;
         }
       }
@@ -351,12 +353,12 @@ async function* turnEvents(
   flushText();
   while (outgoing.length > 0) {
     const part = outgoing.shift();
-    if (part !== undefined) yield { type: "assistant-message", id: assistantId, part };
+    if (part !== undefined) yield { type: "assistant-message", id: draft.id, part };
   }
 
   // 何も書かずに終わったターンは、黙って終わらせない。
   // 本文も添付も注記も無ければ、ユーザーには何も届いていない。
-  if (failure === null && !turn.stopped && !turn.controller.signal.aborted && !hasVisiblePart(parts)) {
+  if (failure === null && !turn.stopped && !turn.controller.signal.aborted && !steps.sawContent()) {
     failure = "The model finished without writing a reply.";
   }
 
@@ -385,18 +387,6 @@ function withSteering(context: TeraContext, steering: readonly ChatMessage[]): T
     ...context,
     messages: [...context.messages.filter((message) => !ids.has(message.id)), ...steering],
   };
-}
-
-/** ユーザーの目に触れる部分があるかどうか。 */
-function hasVisiblePart(parts: readonly MessagePart[]): boolean {
-  return parts.some(
-    (part) =>
-      (part.type === "text" && part.text.trim().length > 0) ||
-      part.type === "attachment" ||
-      part.type === "notice" ||
-      // カードを出しただけのターンも、ユーザーの目には何かが届いている。
-      (part.type === "tool-call" && toolNameFor(part.server, part.tool) === UI_TOOL_NAME),
-  );
 }
 
 /**

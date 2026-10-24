@@ -122,6 +122,20 @@ user メッセージとして文脈の末尾へ足される。
 最後の呼び出しに間に合わなかった発言は、ターンを終える前に続けてもう一度応答を作る
 （届いたのに返事が無いままにしない）。
 
+応答の行は、生成を始めた時点で連番を予約して作る（中身は最後に書く）。
+連番は保存した順に付くので、これが無いと、応答中に届いた発言のほうが先の連番になり、
+画面でも履歴でも割り込みが応答の上に並んでしまう。何も出なかったターンは、予約した行を消す。
+画面は、伸びている応答の seq を境に、保存済みの履歴を前と後ろへ分けて描く
+（`client/features/chat/timeline.ts` の `splitAroundLive`）。
+
+応答は、モデルのステップ（ツール呼び出しを挟んだ 1 回の生成）ごとに別のメッセージにする。
+追加の発言はステップの境目（prepareStep）で文脈へ足されるので、行を分けておけば必ず
+「前のステップ → 追加の発言 → 次のステップ」の順になる。ステップの行は、そのステップの
+開始時に連番を予約して作る（終わってから作ると、割り込んだ発言のほうが先の連番になる）。
+tool-call と tool-result は画面に出さないので、分けずにそのステップの記録へ残す。
+何も出なかったステップの行は消す。行の面倒は `server/agent/step-messages.ts` が見る。
+画面は、伸びている応答の seq を境に保存済みの履歴を前と後ろへ分けて描く（`splitAroundLive`）。
+
 - 発言の並びは保存した時点の seq で決まる。画面も末尾ではなく seq の位置へ挿すので、
   読み直したときと並びが変わらない。
 - ターンが終わっていたら 409 `turn_not_running`。画面は同じ発言を新しいターンとして送り直す。
@@ -235,9 +249,15 @@ system プロンプトは `applied` だけを読む。書いただけでは変�
 
 ## コネクタ
 
-コネクタは、利用者が発行したトークンを貼る方式にしている（`server/connectors/providers.ts`）。
-GitHub は Personal Access Token を使う。
-プロバイダの定義は、トークン欄の文言、要求する権限、コンピュータへ渡す環境変数の名前を持つ。
+コネクタには 2 種類ある（`server/connectors/providers.ts`）。
+
+- **トークンを貼るコネクタ**: 利用者が発行したトークンを保存する（GitHub）。
+  定義は、トークン欄の文言、要求する権限、コンピュータへ渡す環境変数の名前を持つ。
+- **コンピュータの中のプログラムに LLM を繋ぐコネクタ**: プロバイダ・API キー・モデルを設定し、
+  コンテナの中で実際に 1 回呼んで確かめる（pi）。定義は選べるプロバイダと既定モデルを持つ。
+
+設定 > コネクタ の各カードは既定で閉じていて、見出しを押すと入力欄が開く（`client/ui/CollapsibleCard.tsx`）。
+カードの中身は、入力欄 → 区切り線 → 左に手順のリンク・右に送信、の同じ並びに揃える（`client/features/connectors/ConnectorForm.tsx`）。
 
 トークンは `config.json` ではなく、データディレクトリの `connectors/<id>.json` に保存する（ディレクトリ 0700、ファイル 0600）。
 保存する前に、アカウントを読んで受け付けられるか確かめる（間違ったトークンを黙って保存しない）。
@@ -245,14 +265,39 @@ GitHub は Personal Access Token を使う。
 SSH トンネルでも Tailscale 経由でも設定できる。
 MCP サーバーの redirect 方式（`server/mcp/oauth.ts`）とはここが違う。
 
+pi（pi-coding-agent）は、設定画面かチャットのカードでプロバイダ・API キー・モデルを設定する。
+Terasuma はコンテナの中の `~/.pi/agent/auth.json`（0600）と `settings.json` に書き込む
+（`server/connectors/pi.ts`）。`settings.json` には `defaultProvider` と `defaultModel` の両方を書く
+（provider だけでは 403 になる）。API キーは Terasuma の設定ファイルには保存しない。
+
+`pi auth check` は鍵の有無しか見ない（偽の鍵でも ready になる）ので、確認には使わない。
+確認は `pi -p --mode json --no-session` を 1 回呼び、NDJSON の `stopReason` を読む。
+失敗しても終了コードは 0 のことがあるため、出力を読んで判定する。
+確認できた結果は `connectors/pi.json` に残す（`server/connectors/program-store.ts`）。
+コンテナのホームを消すリセットでは pi の設定も消えるので、設定し直す。
+接続している間だけ、組み込みスキル `pi-coding` がスキル一覧に載る。
+Tera はその手順で tmux 越しに pi を呼び、コードを書かせる。切断すると一覧から消える。
+
+pi の作業ファイル（依頼文・ログ・完了の印）と tmux のセッション名は、Tera ごとに分ける
+（`$HOME/.pi-work/<tera id>/` と `pi-work-<tera id>`）。コンピュータは全 Tera で共有するので、
+固定のパスや 1 つのセッション名にすると、同時に使ったときに依頼文やログが上書きされる。
+
 コネクタが得たトークンは、コンピュータのコマンドへ環境変数として渡す（GitHub は `GH_TOKEN` / `GITHUB_TOKEN`）。
 同じ名前が `config.json` の `env` にある場合は、コネクタの値を優先する（接続し直した結果を使うため）。
 モデルは値を直接見ないが、コンテナの中で `echo $GH_TOKEN` を実行すれば読める（`computer_set_env` と同じ性質）。
 git の認証は `git -c credential.helper='!f() { echo username=x-access-token; echo "password=$GH_TOKEN"; }; f'` で渡す。
 URL にトークンを埋めると `git remote -v` の出力に現れ、その出力はツール結果として会話の記録に残る。
 
-エージェントは `computer_connect_app` でトークンの保存を待ち、`app_request` で接続済みアプリの API を叩く。
-どちらもツール一覧には載せず、`tool_search` で見つけて `tool_call` で実行する。
+接続ツールはアプリごとに 1 つで、名前は `app_connect_<app id>`（`src/shared/tools.ts` の `connectAppToolName`）。
+引数は `reason` だけで、アプリはツール名で決まる。説明は `providers.ts` の `needs` と `usage` から組み立てる
+（何が必要か、接続後に何ができるか）。旧来の `computer` の `connect_app` という 1 つのツールは廃止した。
+
+エージェントの流れは、組み込みスキル `connectors` を読む → `tool_search` で接続ツールを見つける
+（例: "github connect"）→ `tool_call` で実行 → ユーザーがチャットのカードを埋める、の順になる。
+スキルはアプリ名を列挙しないので、コネクタを足しても書き換えが要らない。
+接続ツールも `app_request` もツール一覧には載せず、`tool_search` で見つけて `tool_call` で実行する。
+
+`app_request` は 1 つのまま。未接続のときは、そのアプリの接続ツール名を案内する。
 `app_request` の Authorization は `Bearer <token>` で、パスは接続先の API の origin に収まるものだけを受け付ける。
 
 ## Discord の webhook

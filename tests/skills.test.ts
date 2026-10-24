@@ -5,7 +5,9 @@ import { createHandover } from "../src/server/computer/handover";
 import {
   BUILTIN_SKILLS,
   COMPUTER_USE_SKILL,
+  CONNECTORS_SKILL,
   DISCORD_SKILL,
+  PI_CODING_SKILL,
   SKILL_CREATE_SKILL,
   TERA_CREATE_SKILL,
   createSkillLibrary,
@@ -44,7 +46,7 @@ function availableTools(): string[] {
     env: createEnvRequestsStub(),
     teraId: "t1",
   });
-  // コネクタのツールも computer_connect_app という名前で同じ名前空間に並ぶ。
+  // コネクタの接続ツール（app_connect_<id>）は computer_ の名前空間には入らない。
   const connectors = createConnectorTools({ connectors: createConnectorsStub() });
 
   return [...Object.keys(computer), ...Object.keys(connectors)].filter((name) => name.startsWith("computer_")).sort();
@@ -68,11 +70,13 @@ function skillManageTools(initial: readonly { name: string; description: string;
 }
 
 describe("スキルのカタログ", () => {
-  test("computer-use と skill-create と discord と tera-create が説明つきで載る", () => {
+  test("computer-use と connectors と skill-create と discord と tera-create が説明つきで載る", () => {
     const catalog = skillCatalogText(BUILTIN_SKILLS);
 
     expect(catalog).toContain("- computer-use: ");
     expect(catalog).toContain(COMPUTER_USE_SKILL.description);
+    expect(catalog).toContain("- connectors: ");
+    expect(catalog).toContain(CONNECTORS_SKILL.description);
     expect(catalog).toContain("- skill-create: ");
     expect(catalog).toContain(SKILL_CREATE_SKILL.description);
     expect(catalog).toContain("- discord: ");
@@ -81,10 +85,44 @@ describe("スキルのカタログ", () => {
     expect(catalog).toContain(TERA_CREATE_SKILL.description);
     expect(BUILTIN_SKILLS.map((skill) => skill.name)).toEqual([
       "computer-use",
+      "connectors",
       "skill-create",
       "discord",
       "tera-create",
     ]);
+  });
+});
+
+describe("pi-coding スキル", () => {
+  test("組み込みには入らず、接続しているときだけ一覧に載る", () => {
+    expect(BUILTIN_SKILLS.map((skill) => skill.name)).not.toContain("pi-coding");
+
+    const store = createSkillFileStoreStub();
+    const connected = createSkillLibrary(store, () => [PI_CODING_SKILL]);
+    const disconnected = createSkillLibrary(store, () => []);
+
+    expect(connected.all().map((skill) => skill.name)).toContain("pi-coding");
+    expect(connected.get("pi-coding")?.content).toContain("pi-work");
+    expect(disconnected.all().map((skill) => skill.name)).not.toContain("pi-coding");
+  });
+
+  test("呼び出しのたびに、追加スキルを評価し直す", () => {
+    const store = createSkillFileStoreStub();
+    let enabled = false;
+    const library = createSkillLibrary(store, () => (enabled ? [PI_CODING_SKILL] : []));
+
+    expect(library.all().map((skill) => skill.name)).not.toContain("pi-coding");
+
+    enabled = true;
+    expect(library.all().map((skill) => skill.name)).toContain("pi-coding");
+  });
+
+  test("pi-coding の作業ファイルとセッションは、Tera ごとに分かれる", () => {
+    expect(PI_CODING_SKILL.content).toContain("$HOME/.pi-work/");
+    expect(PI_CODING_SKILL.content).toContain("pi-work-${PWD##*/}");
+    expect(PI_CODING_SKILL.content).not.toContain("/tmp/pi-prompt.txt");
+    expect(PI_CODING_SKILL.content).not.toContain("/tmp/pi-work.log");
+    expect(PI_CODING_SKILL.content).not.toContain("tmux send-keys -t pi-work ");
   });
 });
 
@@ -136,7 +174,9 @@ describe("skill ツール", () => {
 
     await expect(
       definition.execute({ name: "nope" } as never, { toolCallId: "call-1", messages: [] } as never),
-    ).rejects.toThrow('Unknown skill "nope". Available skills: computer-use, skill-create, discord, tera-create');
+    ).rejects.toThrow(
+      'Unknown skill "nope". Available skills: computer-use, connectors, skill-create, discord, tera-create',
+    );
   });
 
   test("名前は空を許さない", async () => {
@@ -286,6 +326,17 @@ describe("computer-use の本文", () => {
 
   test("名指ししている computer_ ツールは、実際に渡せるツールと一致する", () => {
     expect(mentionedTools(COMPUTER_USE_SKILL.content)).toEqual(availableTools());
+  });
+});
+
+describe("connectors の本文", () => {
+  test("接続ツールを名前で列挙せず、検索とカードの流れを書いている", () => {
+    const content = CONNECTORS_SKILL.content;
+
+    expect(content).toContain("app_connect_");
+    expect(content).toContain("tool_search");
+    expect(content).toContain("tool_call");
+    expect(content).toContain("app_request");
   });
 });
 

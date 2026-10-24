@@ -5,10 +5,10 @@ import type { ToolSet } from "ai";
 import { createConnectors, type ConnectorsManager } from "../src/server/connectors/manager";
 import { createConnectorTools } from "../src/server/connectors/tools";
 import { withTempDir } from "./harness";
-import { fakeProvider, startFakeConnectorServer, type FakeConnectorServer } from "./fixtures/connector-server";
+import { fakeProgramProvider, fakeProvider, startFakeConnectorServer, type FakeConnectorServer } from "./fixtures/connector-server";
 
 /**
- * コネクタのツール（computer_connect_app / app_request）。
+ * コネクタのツール（app_connect_<id> / app_request）。
  * モデルを介さずにツールをそのまま呼び、戻り値と失敗の文を確かめる。
  */
 
@@ -23,7 +23,10 @@ async function withTools(run: (context: Context) => Promise<void>): Promise<void
   const server = startFakeConnectorServer();
   try {
     await withTempDir("terasuma-connector-tools-", async (dir) => {
-      const manager = createConnectors({ dataDir: join(dir, "data"), providers: [fakeProvider(server)] });
+      const manager = createConnectors({
+        dataDir: join(dir, "data"),
+        providers: [fakeProvider(server), { ...fakeProgramProvider(), name: "Test Program" }],
+      });
       const tools = createConnectorTools({ connectors: manager });
 
       try {
@@ -67,37 +70,68 @@ async function connect(manager: ConnectorsManager, server: FakeConnectorServer):
 }
 
 describe("コネクタのツール", () => {
-  test("ツール名は computer_connect_app と app_request", async () => {
+  test("ツール名はアプリごとの接続ツールと app_request", async () => {
     await withTools(async ({ tools }) => {
-      expect(Object.keys(tools)).toEqual(["computer_connect_app", "app_request"]);
+      expect(Object.keys(tools)).toEqual(["app_connect_github", "app_connect_pi", "app_request"]);
+      // 旧来の 1 つの接続ツールは残っていない。
+      expect(Object.keys(tools)).not.toContain(["computer", "connect", "app"].join("_"));
     });
   });
 
-  test("接続していなければ、app_request は接続を促す", async () => {
+  test("接続ツールの説明は、そのアプリの needs と usage を含む", async () => {
+    await withTools(async ({ tools, manager }) => {
+      for (const id of ["github", "pi"]) {
+        const provider = manager.provider(id);
+        const description = tools[`app_connect_${id}`]?.description ?? "";
+
+        expect(description).toContain(`Connect ${provider.name}.`);
+        expect(description).toContain(provider.needs);
+        expect(description).toContain(provider.usage);
+      }
+    });
+  });
+
+  test("app_request の説明は特定のアプリに依存しない", async () => {
+    await withTools(async ({ tools }) => {
+      const description = tools["app_request"]?.description ?? "";
+
+      expect(description).not.toContain("GitHub");
+      expect(description).not.toMatch(/\bpi\b/);
+      expect(description).toContain("API");
+      expect(description).toContain("token");
+    });
+  });
+
+  test("API を持たない program コネクタには、app_request を使わないよう伝える", async () => {
+    await withTools(async ({ tools }) => {
+      const error = await rejectionOf(
+        callTool(tools, "app_request", { provider: "pi", method: "GET", path: "/user" }),
+      );
+
+      expect(error).toContain("has no API");
+      expect(error).not.toContain("pi-coding");
+    });
+  });
+
+  test("接続していなければ、app_request はそのアプリの接続ツールを案内する", async () => {
     await withTools(async ({ tools }) => {
       const error = await rejectionOf(
         callTool(tools, "app_request", { provider: "github", method: "GET", path: "/user" }),
       );
       expect(error).toMatch(/not connected/);
+      expect(error).toContain("app_connect_github");
     });
   });
 
-  test("computer_connect_app はトークンが保存されるまで待ち、以後は待たない", async () => {
+  test("接続ツールは設定が保存されるまで待ち、以後は待たない", async () => {
     await withTools(async ({ tools, manager, server }) => {
       const context = { abortSignal: new AbortController().signal };
-      const waiting = callTool(
-        tools,
-        "computer_connect_app",
-        { provider: "github", reason: "issue を読むため" },
-        context,
-      );
+      const waiting = callTool(tools, "app_connect_github", { reason: "issue を読むため" }, context);
 
       await manager.setToken("github", server.accessToken);
       expect(await waiting).toContain(`@${server.account}`);
 
-      expect(
-        await callTool(tools, "computer_connect_app", { provider: "github", reason: "もう一度" }, context),
-      ).toContain("is connected");
+      expect(await callTool(tools, "app_connect_github", { reason: "もう一度" }, context)).toContain("is connected");
     });
   });
 
@@ -172,19 +206,8 @@ describe("コネクタのツール", () => {
     });
   });
 
-  test("知らないアプリは、使える名前を添えて断る", async () => {
+  test("app_request の知らないアプリは、使える名前を添えて断る", async () => {
     await withTools(async ({ tools }) => {
-      expect(
-        await rejectionOf(
-          callTool(
-            tools,
-            "computer_connect_app",
-            { provider: "linear", reason: "issue を見るため" },
-            { abortSignal: new AbortController().signal },
-          ),
-        ),
-      ).toMatch(/Unknown app/);
-
       const error = await rejectionOf(
         callTool(tools, "app_request", { provider: "linear", method: "GET", path: "/user" }),
       );
@@ -198,8 +221,8 @@ describe("コネクタのツール", () => {
       const controller = new AbortController();
       const waiting = callTool(
         tools,
-        "computer_connect_app",
-        { provider: "github", reason: "issue を読むため" },
+        "app_connect_github",
+        { reason: "issue を読むため" },
         { abortSignal: controller.signal },
       );
       const rejected = rejectionOf(waiting);

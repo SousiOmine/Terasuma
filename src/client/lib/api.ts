@@ -342,6 +342,19 @@ export async function saveConnectorToken(id: string, token: string): Promise<Con
   return request<ConnectorsView>(`${connectorPath(id)}/token`, jsonRequest("PUT", { token }));
 }
 
+/** program コネクタの設定。キーが無ければ、いまの設定を確かめるだけ。 */
+export type ConnectorSetupInput = { provider?: string; apiKey?: string; model?: string };
+
+/** program コネクタ（コンピュータの中のプログラム）の設定を書いて確かめる。 */
+export async function connectConnector(id: string, input: ConnectorSetupInput = {}): Promise<ConnectorsView> {
+  const body: ConnectorSetupInput = {};
+  if (input.provider !== undefined) body.provider = input.provider;
+  if (input.apiKey !== undefined) body.apiKey = input.apiKey;
+  if (input.model !== undefined) body.model = input.model;
+
+  return request<ConnectorsView>(`${connectorPath(id)}/connect`, jsonRequest("POST", body));
+}
+
 /** コネクタの待ちをやめる（チャットのカード）。 */
 export async function cancelConnectorWait(id: string): Promise<ConnectorsView> {
   return request<ConnectorsView>(`${connectorPath(id)}/wait`, { method: "DELETE" });

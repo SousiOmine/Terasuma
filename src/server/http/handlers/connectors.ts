@@ -1,6 +1,6 @@
 import { describeError } from "../../../shared/errors";
 import { AppError, ValidationError } from "../../errors";
-import { readConnectorTokenForm } from "../body";
+import { readConnectorSetupForm, readConnectorTokenForm } from "../body";
 import { json } from "../respond";
 import type { ApiDeps, ApiRequest } from "./shared";
 
@@ -23,6 +23,23 @@ export function connectorHandlers(deps: Pick<ApiDeps, "connectors">) {
     /** コネクタの一覧（設定と、いま分かっている状態）。 */
     listConnectors(): Response {
       return json(connectors.view());
+    },
+
+    /**
+     * program コネクタの設定を書いて確かめる。キーが無ければ、いまの設定を確かめるだけ。
+     * 確かめられなければ、理由を入力の誤りとして返す（トークンの保存と同じ扱い）。
+     */
+    async connectConnector(req: ApiRequest<{ id: string }>): Promise<Response> {
+      const id = req.params.id;
+      requireConnector(id);
+
+      const form = await readConnectorSetupForm(req);
+      try {
+        return json(await connectors.connect(id, form));
+      } catch (error) {
+        if (error instanceof AppError) throw error;
+        throw new ValidationError(describeError(error));
+      }
     },
 
     /**

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { CHAT_SERVER_ID, UI_TOOL } from "../../src/shared/tools";
 import type { ChatMessage, MessagePart } from "../../src/shared/api/message";
-import { buildItems } from "../../src/client/features/chat/timeline";
+import { buildItems, splitAroundLive } from "../../src/client/features/chat/timeline";
 import type { LiveTurn } from "../../src/client/state/chat";
 
 const TAG = "ja-JP";
@@ -92,11 +92,66 @@ describe("チャットの並び", () => {
     const live: LiveTurn = {
       id: "live",
       createdAt: DAY2,
+      seq: 2,
       parts: [{ type: "text", text: "きょう", at: DAY2 }],
     };
     const continued = buildItems([], live, TAG, saved.lastDay).items;
 
     expect(continued.map((item) => item.kind)).toEqual(["date", "agent"]);
     expect(continued[0]?.kind === "date" ? continued[0].label : "").toContain("1月3日");
+  });
+});
+
+describe("伸びている応答の前後", () => {
+  test("liveSeq より小さい seq は before、大きい seq は after、同じ seq はどちらにも入れない", () => {
+    const messages = [
+      { ...user("u1", "前", DAY1), seq: 1 },
+      { ...assistant("a1", [], DAY1), seq: 2 },
+      { ...user("u2", "後ろ", DAY1), seq: 3 },
+    ];
+
+    const { before, after } = splitAroundLive(messages, 2);
+
+    expect(before.map((message) => message.id)).toEqual(["u1"]);
+    expect(after.map((message) => message.id)).toEqual(["u2"]);
+  });
+
+  test("liveSeq が null なら全部 before", () => {
+    const messages = [{ ...user("u1", "前", DAY1), seq: 1 }, { ...user("u2", "後ろ", DAY1), seq: 2 }];
+
+    const { before, after } = splitAroundLive(messages, null);
+
+    expect(before.map((message) => message.id)).toEqual(["u1", "u2"]);
+    expect(after).toEqual([]);
+  });
+
+  test("ステップが分かれた会話も、user → assistant → user → assistant の順に並ぶ", () => {
+    // 保存済み: 最初の発言・ステップ 1 の応答・割り込んだ発言。受信中: ステップ 2 の応答。
+    const saved = [
+      { ...user("u1", "最初の質問", DAY1), seq: 1 },
+      { ...assistant("a1", [{ type: "text", text: "ステップ 1", at: DAY1 }], DAY1), seq: 2 },
+      { ...user("u2", "追加の指示", DAY1), seq: 3 },
+    ];
+    const live: LiveTurn = {
+      id: "a2",
+      createdAt: DAY1,
+      seq: 4,
+      parts: [{ type: "text", text: "ステップ 2", at: DAY1 }],
+    };
+
+    const split = splitAroundLive(saved, live.seq);
+    const head = buildItems(split.before, null, TAG);
+    const middle = buildItems([], live, TAG, head.lastDay);
+    const tail = buildItems(split.after, null, TAG, middle.lastDay);
+    const items = [...head.items, ...middle.items, ...tail.items];
+
+    expect(items.filter((item) => item.kind !== "date").map((item) => item.kind)).toEqual([
+      "user",
+      "agent",
+      "user",
+      "agent",
+    ]);
+    const last = items.at(-1);
+    expect(last?.kind === "agent" ? last.parts[0] : null).toMatchObject({ type: "text", text: "ステップ 2" });
   });
 });

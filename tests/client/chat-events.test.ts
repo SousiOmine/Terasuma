@@ -34,10 +34,11 @@ describe("チャットのイベントの読み替え", () => {
   });
 
   test("ターンの開始は、届いているターンの入れ替えになる", () => {
-    expect(interpretEvent({ type: "assistant-start", id: "a1", createdAt: 1 })).toEqual({
+    expect(interpretEvent({ type: "assistant-start", id: "a1", createdAt: 1, seq: 2 })).toEqual({
       kind: "assistant-start",
       id: "a1",
       createdAt: 1,
+      seq: 2,
     });
   });
 
@@ -153,7 +154,7 @@ describe("チャットのイベントの読み替え", () => {
     ).toBeNull();
   });
 
-  test("tool_call 越しのコネクタの呼び出しは、コネクタカードを出す", () => {
+  test("tool_call 越しのアプリの接続ツールは、そのアプリのカードを出す", () => {
     expect(
       interpretEvent({
         type: "tool-call",
@@ -163,7 +164,7 @@ describe("チャットのイベントの読み替え", () => {
           id: "c8",
           server: "tool",
           tool: "call",
-          args: { name: "computer_connect_app", args: { provider: "github", reason: "issue を読むため" } },
+          args: { name: "app_connect_github", args: { reason: "issue を読むため" } },
         },
       }),
     ).toEqual({
@@ -173,7 +174,7 @@ describe("チャットのイベントの読み替え", () => {
       reason: "issue を読むため",
     });
 
-    // 理由が無くても、アプリが分かればカードを出す。
+    // 理由が無くても、ツール名だけでアプリが分かるのでカードを出す。
     expect(
       interpretEvent({
         type: "tool-call",
@@ -183,12 +184,12 @@ describe("チャットのイベントの読み替え", () => {
           id: "c9",
           server: "tool",
           tool: "call",
-          args: { name: "computer_connect_app", args: { provider: "github" } },
+          args: { name: "app_connect_github", args: {} },
         },
       }),
     ).toEqual({ kind: "connector-request-start", callId: "c9", provider: "github", reason: null });
 
-    // アプリ名が無ければ、どの接続か分からないので何もしない。
+    // 接続ツールでなければ、アプリが分からないので何もしない。
     expect(
       interpretEvent({
         type: "tool-call",
@@ -198,7 +199,7 @@ describe("チャットのイベントの読み替え", () => {
           id: "c10",
           server: "tool",
           tool: "call",
-          args: { name: "computer_connect_app", args: {} },
+          args: { name: "app_request", args: { provider: "github", method: "GET", path: "/user" } },
         },
       }),
     ).toBeNull();

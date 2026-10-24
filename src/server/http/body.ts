@@ -146,6 +146,36 @@ export async function readDiscordWebhookForm(req: JsonRequest): Promise<{ url: s
 }
 
 /**
+ * program コネクタの設定を読む。本文は省略できる（キーが無ければ、いまの設定を確かめるだけ）。
+ * 値は前後の空白を落とし、無い項目は undefined にする。
+ */
+export async function readConnectorSetupForm(req: JsonRequest): Promise<{
+  provider?: string;
+  apiKey?: string;
+  model?: string;
+}> {
+  const body = await readJsonBody(req);
+
+  const provider = readSetupString(body, "provider");
+  const apiKey = readSetupString(body, "apiKey");
+  const model = readSetupString(body, "model");
+
+  return {
+    ...(provider === undefined ? {} : { provider }),
+    ...(apiKey === undefined ? {} : { apiKey }),
+    ...(model === undefined ? {} : { model }),
+  };
+}
+
+/** 設定の入力 1 つ。無ければ undefined、文字列なら前後の空白を落とす。 */
+function readSetupString(body: Record<string, unknown> | null, key: string): string | undefined {
+  const value = body?.[key];
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== "string") throw new ValidationError(`${key} must be a string`);
+  return value.trim();
+}
+
+/**
  * 画面から来たトークンを読む。空欄は受け付けない（消すときは切断を使う）。
  */
 export async function readConnectorTokenForm(req: JsonRequest): Promise<{ token: string }> {

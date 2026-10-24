@@ -4,19 +4,21 @@ import { z } from "zod";
 import { describeError } from "../../shared/errors";
 import { truncateText } from "../../shared/text";
 import { sendRequest } from "../http/client";
-import { APP_REQUEST_TOOL_NAME, CONNECT_APP_TOOL_NAME } from "../../shared/tools";
+import { APP_REQUEST_TOOL_NAME, connectAppToolName } from "../../shared/tools";
 import { ConnectorNotFound } from "../errors";
 import type { ConnectorsManager } from "./manager";
+import type { ConnectorProvider } from "./providers";
 
 /**
  * コネクタを扱うツール。
  *
- * computer_connect_app はチャットにコネクタのカードを出し、ユーザーがトークンを保存するまで待つ。
+ * アプリごとの接続ツール（app_connect_<id>）はチャットにコネクタのカードを出し、
+ * ユーザーがトークンかプログラムの設定を保存するまで待つ。
  * app_request は接続済みのトークンで API を叩く（トークンはモデルに渡さない）。
  * どちらもツール一覧には載せず、tool_search で見つけて tool_call で実行する。
  */
 
-/** モデルへ渡すツール。キーは "computer_connect_app" と "app_request"。 */
+/** モデルへ渡すツール。キーは "app_connect_<id>" と "app_request"。 */
 export type ConnectorToolset = ToolSet;
 
 /** ツールの供給元。 */
@@ -48,40 +50,52 @@ export function createConnectorToolset(connectors: ConnectorsManager): Connector
   };
 }
 
+/** 接続ツールの説明。定義の name / needs / usage から組み立てる。 */
+function connectDescription(provider: ConnectorProvider): string {
+  return [
+    `Connect ${provider.name}. It needs ${provider.needs}.`,
+    "Call this when a task needs it and it is not connected yet.",
+    "A card opens in the chat; the user fills it in and you never see the secret values.",
+    `After it returns, the app is ready. ${provider.usage}`,
+  ].join(" ");
+}
+
 export function createConnectorTools(options: { connectors: ConnectorsManager }): ConnectorToolset {
   const { connectors } = options;
-  const appIds = connectors.ids();
+  const providers = connectors.ids().map((id) => connectors.provider(id));
+  const appIds = providers.map((provider) => provider.id);
   const appList = appIds.join(", ");
   const firstApp = appIds[0] ?? "github";
 
-  return {
-    [CONNECT_APP_TOOL_NAME]: tool({
-      description: [
-        "Connect an app to the computer by having the user paste a token.",
-        "Call this when a task needs the app and its environment variable is not set.",
-        "A card opens in the chat with a link to create the token and a field to paste it.",
-        "You never see the token. Once this returns, the token is available to every command in the computer.",
-      ].join(" "),
-      inputSchema: z.object({
-        provider: z.string().min(1).describe(`App to connect (${appList}).`),
-        reason: z.string().min(1).describe("Why you need it, written for the user to read"),
-      }),
-      execute: async ({ provider }: { provider: string }, context: ToolContext) => {
-        const signal = context.abortSignal;
-        if (signal === undefined) {
-          throw new Error("Cannot wait for the user because the turn's abort signal is not available");
-        }
-
-        try {
-          return await connectors.wait(provider, signal);
-        } catch (error) {
-          if (error instanceof ConnectorNotFound) {
-            throw new Error(`Unknown app "${provider}". Use one of: ${appList}.`, { cause: error });
+  const connectTools = Object.fromEntries(
+    providers.map((provider) => [
+      connectAppToolName(provider.id),
+      tool({
+        description: connectDescription(provider),
+        inputSchema: z.object({
+          reason: z.string().min(1).describe("Why you need it, written for the user to read"),
+        }),
+        execute: async (_input: { reason: string }, context: ToolContext) => {
+          const signal = context.abortSignal;
+          if (signal === undefined) {
+            throw new Error("Cannot wait for the user because the turn's abort signal is not available");
           }
-          throw error;
-        }
-      },
-    }),
+
+          try {
+            return await connectors.wait(provider.id, signal);
+          } catch (error) {
+            if (error instanceof ConnectorNotFound) {
+              throw new Error(`Unknown app "${provider.id}".`);
+            }
+            throw error;
+          }
+        },
+      }),
+    ]),
+  );
+
+  return {
+    ...connectTools,
 
     [APP_REQUEST_TOOL_NAME]: tool({
       description: [
@@ -98,10 +112,16 @@ export function createConnectorTools(options: { connectors: ConnectorsManager })
       }),
       execute: async ({ provider, method, path, body }: AppRequestInput, context: ToolContext) => {
         const definition = providerOf(connectors, provider, appList);
+        if (definition.kind !== "token") {
+          throw new Error(
+            `${definition.name} has no API. Run it inside the computer instead.`,
+          );
+        }
+
         const token = connectors.token(provider);
         if (token === null) {
           throw new Error(
-            `${definition.name} is not connected. Call ${CONNECT_APP_TOOL_NAME} and let the user paste a token first.`,
+            `${definition.name} is not connected. Call ${connectAppToolName(provider)} and let the user fill in the card first.`,
           );
         }
 
@@ -140,7 +160,7 @@ export function createConnectorTools(options: { connectors: ConnectorsManager })
         const text = await response.text();
         if (response.status === 401) {
           throw new Error(
-            `${definition.name} rejected the saved token. Ask the user to save a new one with ${CONNECT_APP_TOOL_NAME}.`,
+            `${definition.name} rejected the saved token. Ask the user to save a new one with ${connectAppToolName(provider)}.`,
           );
         }
 

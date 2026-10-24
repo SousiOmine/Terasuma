@@ -269,7 +269,8 @@ describe("会話の購読", () => {
         await engine.started;
 
         const late = await openEvents(harness, "watcher");
-        expect(await late.take()).toEqual({ type: "sync", lastSeq: 1, turnRunning: true });
+        // 応答の行は開始時に予約されているので、最新の連番はその分まで進んでいる。
+        expect(await late.take()).toEqual({ type: "sync", lastSeq: 2, turnRunning: true });
         expect(await late.take()).toMatchObject({ type: "assistant-start" });
 
         engine.release();

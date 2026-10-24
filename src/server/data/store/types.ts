@@ -156,6 +156,13 @@ export type MessageLog = {
   listMessagesBetween(teraId: string, range: { since: number | null; until: number | null }): ChatMessage[];
   /** 履歴の末尾に追記する。Tera の行が先に存在している必要がある。 */
   appendMessage(input: AppendMessageInput): ChatMessage;
+  /** 予約した応答の行に、中身と使用量を書き込む。行が無ければ null。 */
+  updateMessageParts(
+    id: string,
+    input: { parts: readonly MessagePart[]; usage: TokenUsage | null },
+  ): ChatMessage | null;
+  /** 1 行を消す（何も出なかったターンの予約を取り消す）。 */
+  deleteMessage(id: string): void;
   /** seq より後の履歴の統計。全行を開かずに、件数・最後の時刻・文字数を返す。 */
   readPendingStats(teraId: string, afterSeq: number): PendingStats;
 };

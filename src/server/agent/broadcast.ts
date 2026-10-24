@@ -82,8 +82,11 @@ export function createConversationBroadcast(): ConversationBroadcast {
     const channel = channelOf(teraId);
 
     // 走っているターンの出来事は、途中から購読した画面へ流し直せるように覚えておく。
-    if (event.type === "assistant-start") channel.live = [event];
-    else if (isTurnEnd(event)) channel.live = null;
+    if (event.type === "assistant-start") {
+      // ステップごとに応答の行が分かれるので、ターンの途中で何度も来る。
+      if (channel.live === null) channel.live = [];
+      channel.live.push(event);
+    } else if (isTurnEnd(event)) channel.live = null;
     else channel.live?.push(event);
 
     for (const subscriber of channel.subscribers) {

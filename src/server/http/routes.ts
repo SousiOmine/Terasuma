@@ -100,6 +100,10 @@ export function createRoutes(api: WithErrorHandling<ApiHandlers>, screen: Screen
     "/api/connectors/:id/token": {
       PUT: api.setConnectorToken,
     },
+    // program コネクタ（コンピュータの中のプログラム）を確かめる。
+    "/api/connectors/:id/connect": {
+      POST: api.connectConnector,
+    },
     "/api/connectors/:id/wait": {
       DELETE: api.cancelConnectorWait,
     },

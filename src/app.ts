@@ -4,6 +4,7 @@ import type { AttachmentToolsetProvider, CodingToolsetProvider } from "./server/
 import { createCompaction, type Compaction } from "./server/agent/compaction";
 import { createEngine, type AgentEngine } from "./server/agent/engine";
 import { createSkillFileStore } from "./server/agent/skill-files";
+import { PI_CODING_SKILL } from "./server/agent/skills";
 import { createCodingToolset } from "./server/agent/tools/coding";
 import { createComputerToolset } from "./server/agent/tools/computer";
 import { createAttachmentTools } from "./server/agent/tools/attachments";
@@ -11,7 +12,7 @@ import { createHistoryToolset } from "./server/agent/tools/history";
 import { createTeraToolset } from "./server/agent/tools/tera";
 import { createWebSearchToolset } from "./server/agent/tools/web";
 import { createWebSearchManager, type WebSearchManager } from "./server/websearch-manager";
-import { createContainerManager, type ContainerManager } from "./server/computer/container";
+import { ContainerError, createContainerManager, type ContainerManager } from "./server/computer/container";
 import { createEnvRequests } from "./server/computer/env";
 import { createFileStore } from "./server/computer/files";
 import { createHandover } from "./server/computer/handover";
@@ -92,7 +93,37 @@ export function startApp(config: AppConfig, overrides: AppOverrides = {}): App {
 
   // コネクタ。トークンはデータディレクトリに置き、コンピュータの環境変数にも混ぜる。
   // コネクタが設定した値は、設定ファイルの env より優先する（接続し直した結果を使うため）。
-  const connectors = overrides.connectors ?? createConnectors({ dataDir: config.dataDir });
+  // program コネクタ（pi）はコンテナの中で確かめるので、コンテナは後で作ってここに入れる。
+  let containerRef: ContainerManager | null = null;
+  const connectors =
+    overrides.connectors ??
+    createConnectors({
+      dataDir: config.dataDir,
+      runtime: {
+        async run(script, { timeoutMs }) {
+          if (containerRef === null) throw new Error("The computer is not ready yet.");
+          return containerRef.shell(script, { timeoutMs });
+        },
+        async readText(path) {
+          if (containerRef === null) throw new Error("The computer is not ready yet.");
+          try {
+            return Buffer.from(await containerRef.readFile(path)).toString("utf8");
+          } catch (error) {
+            // 無いファイルは「まだ設定が無い」として扱う（コンテナが止まっているのは別）。
+            if (error instanceof ContainerError) throw error;
+            return null;
+          }
+        },
+        async writeText(path, text) {
+          if (containerRef === null) throw new Error("The computer is not ready yet.");
+          await containerRef.writeFile(path, Buffer.from(text, "utf8"));
+        },
+      },
+    });
+
+  // 接続している間だけ一覧に載せるスキル（pi-coding）があるか。
+  // テストで差し替えたコネクタの一覧に無い id を、ターンのたびに触らないようにする。
+  const hasPiConnector = connectors.ids().includes("pi");
 
   // Discord の送信先（webhook URL）は Tera ごとに持つ。URL は秘密なのでデータディレクトリへ 0600 で置く。
   const discord = overrides.discord ?? createDiscordWebhooks({ store, dataDir: config.dataDir });
@@ -120,6 +151,7 @@ export function startApp(config: AppConfig, overrides: AppOverrides = {}): App {
       containerDir: join(import.meta.dir, "..", "container"),
       env: () => ({ ...settings.read().env, ...connectors.env() }),
     });
+  containerRef = container;
 
   // エージェントがユーザーへ画面を渡すときの待ち（ログインや二段階認証）。
   const handover = createHandover();
@@ -180,6 +212,7 @@ export function startApp(config: AppConfig, overrides: AppOverrides = {}): App {
       catalog,
       skills,
       identity: store,
+      extraSkills: () => (hasPiConnector && connectors.connected("pi") ? [PI_CODING_SKILL] : []),
     });
 
   // 古いやり取りは、3 時間の放置か、文脈長に近づいたときに、背景で要約へ畳む。

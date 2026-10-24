@@ -11,7 +11,7 @@ import type { ChatEvent, TextPart } from "../src/shared/api/message";
 const part: TextPart = { type: "text", text: "こんにちは", at: 2 };
 
 const events: ChatEvent[] = [
-  { type: "assistant-start", id: "a1", createdAt: 1 },
+  { type: "assistant-start", id: "a1", createdAt: 1, seq: 1 },
   { type: "assistant-message", id: "a1", part },
   { type: "notice", id: "a1", part: { type: "notice", text: "止まりました", at: 3 } },
   { type: "error", code: "model_error", detail: "失敗した" },

@@ -136,7 +136,7 @@ export function isChatEvent(value: unknown): value is ChatEvent {
     case "assistant-done":
       return isChatMessageView(value.message);
     case "assistant-start":
-      return isString(value.id) && isNumber(value.createdAt);
+      return isString(value.id) && isNumber(value.createdAt) && isNumber(value.seq);
     case "assistant-message":
       return (
         isString(value.id) &&

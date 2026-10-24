@@ -28,6 +28,9 @@ export const CARD_ACTION_CLASS =
 /** 一覧の中に置くカード。設定の面（白）の上に、薄い灰の面で区切る。 */
 export const CARD_CLASS = "rounded-[20px] bg-surface-alt p-5";
 
+/** 折りたたむカードの枠。閉じているときの高さを抑えるため、CARD_CLASS より余白を小さくする。 */
+export const CARD_COMPACT_CLASS = "rounded-[20px] bg-surface-alt p-4";
+
 /** 選択肢を横に並べる枠（言語、MCP の種類、プロバイダの切り替え）。 */
 export const SEGMENTED_CLASS = "flex gap-1 rounded-full bg-soft p-1";
 

@@ -1,4 +1,3 @@
-import { IconExternalLink } from "@tabler/icons-preact";
 import { useEffect, useState } from "preact/hooks";
 import type { DiscordWebhookTeraView } from "../../../shared/api/discord";
 import { useDeleteTarget } from "../../hooks/useDeleteTarget";
@@ -15,12 +14,13 @@ import {
   showDiscordError,
   WEBHOOK_PLACEHOLDER,
 } from "../../state/discord";
-import { Button } from "../../ui/Button";
 import { ConfirmDialog } from "../../ui/ConfirmDialog";
 import { Field } from "../../ui/Field";
 import { SettingsError } from "../../ui/SettingsSection";
 import { StatusBadge } from "../../ui/StatusBadge";
-import { CARD_ACTION_CLASS, CARD_CLASS, INPUT_CLASS } from "../../ui/styles";
+import { CollapsibleCard } from "../../ui/CollapsibleCard";
+import { CARD_ACTION_CLASS, INPUT_CLASS } from "../../ui/styles";
+import { ConnectorForm } from "./ConnectorForm";
 
 /**
  * 設定 > コネクタ の Discord。
@@ -99,79 +99,55 @@ function DiscordWebhookCard({ tera, setupUrl, onDisconnect }: DiscordWebhookCard
   };
 
   return (
-    <div class={CARD_CLASS}>
-      <div class="flex flex-col gap-3 sm:flex-row sm:items-start">
-        <div class="min-w-0 flex-1">
-          <div class="flex flex-wrap items-center gap-2">
-            <p class="truncate text-sm font-medium">{tera.teraName}</p>
-            <StatusBadge tone={tera.connected ? "success" : "neutral"}>
-              {t(tera.connected ? "settings.connectors.state.connected" : "settings.connectors.state.disconnected")}
-            </StatusBadge>
-            {tera.connected && tera.channelId !== null && (
-              <span class="text-xs text-secondary">
-                {t("settings.discord.channel", { channel: tera.channelId })}
-              </span>
-            )}
-          </div>
-
-          {tera.connected && tera.webhookName !== null && (
-            <p class="mt-1 text-[11px] leading-5 text-secondary">
-              {t("settings.discord.webhookName", { name: tera.webhookName })}
-            </p>
-          )}
-          {tera.detail !== null && (
-            <p class="mt-1.5 break-words text-xs leading-5 text-secondary">{tera.detail}</p>
-          )}
-        </div>
-
-        {tera.connected && (
+    <CollapsibleCard
+      title={tera.teraName}
+      badge={
+        <StatusBadge tone={tera.connected ? "success" : "neutral"}>
+          {t(tera.connected ? "settings.connectors.state.connected" : "settings.connectors.state.disconnected")}
+        </StatusBadge>
+      }
+      lines={[
+        tera.connected && tera.channelId !== null ? t("settings.discord.channel", { channel: tera.channelId }) : null,
+        tera.connected && tera.webhookName !== null
+          ? t("settings.discord.webhookName", { name: tera.webhookName })
+          : null,
+        tera.detail,
+      ]}
+      action={
+        tera.connected ? (
           <button type="button" onClick={onDisconnect} class={CARD_ACTION_CLASS}>
             {t("settings.discord.disconnect")}
           </button>
-        )}
-      </div>
-
-      <div class="mt-3">
-        <Field
-          label={t("settings.discord.field.label")}
-          description={t("settings.discord.field.description")}
-        >
-          <div class="flex items-center gap-2">
-            <input
-              class={`${INPUT_CLASS} min-w-0 flex-1`}
-              type="password"
-              value={url}
-              placeholder={WEBHOOK_PLACEHOLDER}
-              aria-label={t("settings.discord.field.label")}
-              autocomplete="off"
-              autocapitalize="off"
-              spellcheck={false}
-              disabled={saving}
-              onInput={(event) => setUrl(event.currentTarget.value)}
-              onKeyDown={(event) => {
-                if (event.key !== "Enter") return;
-                event.preventDefault();
-                save();
-              }}
-            />
-            <Button variant="primary" disabled={saving || url.trim().length === 0} onClick={save}>
-              {t(saving ? "settings.discord.saving" : "settings.discord.save")}
-            </Button>
-          </div>
+        ) : undefined
+      }
+    >
+      <ConnectorForm
+        setupUrl={setupUrl}
+        setupLabel={t("settings.connectors.openSetup")}
+        submitLabel={t(saving ? "settings.discord.saving" : "settings.discord.save")}
+        submitDisabled={saving || url.trim().length === 0}
+        onSubmit={save}
+      >
+        <Field label={t("settings.discord.field.label")} description={t("settings.discord.field.description")}>
+          <input
+            class={INPUT_CLASS}
+            type="password"
+            value={url}
+            placeholder={WEBHOOK_PLACEHOLDER}
+            aria-label={t("settings.discord.field.label")}
+            autocomplete="off"
+            autocapitalize="off"
+            spellcheck={false}
+            disabled={saving}
+            onInput={(event) => setUrl(event.currentTarget.value)}
+            onKeyDown={(event) => {
+              if (event.key !== "Enter") return;
+              event.preventDefault();
+              save();
+            }}
+          />
         </Field>
-
-        <div class="flex flex-col gap-3 border-t border-stroke pt-3 sm:flex-row sm:items-center sm:justify-between">
-          <a
-            href={setupUrl}
-            target="_blank"
-            rel="noreferrer noopener"
-            class="inline-flex items-center gap-1 text-xs text-secondary underline underline-offset-2"
-          >
-            <IconExternalLink size={12} stroke={1.6} class="shrink-0" />
-            {t("settings.discord.setup")}
-          </a>
-        </div>
-      </div>
-    </div>
+      </ConnectorForm>
+    </CollapsibleCard>
   );
 }

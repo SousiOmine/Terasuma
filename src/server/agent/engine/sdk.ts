@@ -4,7 +4,7 @@ import type { ConnectorToolsetProvider } from "../../connectors/tools";
 import type { DiscordToolsetProvider } from "../../discord/tools";
 import type { ImageStore } from "../../computer/images";
 import type { IdentityStore } from "../identity";
-import type { SkillFileStore } from "../skill-types";
+import type { Skill, SkillFileStore } from "../skill-types";
 import type {
   AttachmentToolsetProvider,
   CodingToolsetProvider,
@@ -70,6 +70,8 @@ export type AiSdkEngineOptions = {
   skills: SkillFileStore;
   /** Tera の identity の読み書き。system プロンプトに載せる版と、書いた版を持つ。 */
   identity: IdentityStore;
+  /** 接続状態などで変わる、組み込みの追加スキル。呼び出しのたびに評価する。 */
+  extraSkills?: () => readonly Skill[];
 };
 
 export function createAiSdkEngine(options: AiSdkEngineOptions): AgentEngine {
@@ -88,10 +90,11 @@ export function createAiSdkEngine(options: AiSdkEngineOptions): AgentEngine {
     catalog,
     skills,
     identity,
+    extraSkills,
   } = options;
 
   // スキルの一覧はターンの開始時に読み直す。ツールの定義は変わらないので、ここで 1 度だけ組む。
-  const library = createSkillLibrary(skills);
+  const library = createSkillLibrary(skills, extraSkills);
   const skillTools = createSkillTools(library);
 
   // チャットへ UI を送るツール。ターンによらず同じなので、ここで 1 度だけ組む。
@@ -146,7 +149,7 @@ export function createAiSdkEngine(options: AiSdkEngineOptions): AgentEngine {
       // （サーバーが増えても、使わないツールの定義で毎回の文脈が膨らまないようにするため）。
       // 一覧は呼び出しのたびに組み直すので、設定画面でサーバーを足しても作り直さずに済む。
       const [mcpTools, computerTools] = await Promise.all([mcp.toolset(), computer.toolset({ teraId })]);
-      // コネクタのツール（computer_connect_app と app_request）も、検索してから実行する。
+      // コネクタのツール（app_connect_<id> と app_request）も、検索してから実行する。
       // Discord のツールは送信先が Tera ごとに決まるので、このターンの Tera で組む。
       // 新しい Tera を作るツールも、作る先（作業フォルダの親）がアプリで決まるのでここで組む。
       const discordTools = discord.toolset({ teraId });

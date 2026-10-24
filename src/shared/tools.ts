@@ -40,8 +40,8 @@ export const HISTORY_SERVER_ID = "history";
 export const WEB_SERVER_ID = "web";
 
 /**
- * 接続済みアプリの API を叩く内蔵ツールのサーバー id。
- * アプリごとの API を 1 つの名前にまとめる（"app_request"）。
+ * アプリ（コネクタ）のツールのサーバー id。
+ * 接続（app_connect_<id>）と API の呼び出し（app_request）が並ぶ。
  */
 export const APP_SERVER_ID = "app";
 
@@ -127,13 +127,24 @@ export const SET_ENV_TOOL = "set_env";
 export const SET_ENV_TOOL_NAME = `${COMPUTER_SERVER_ID}${TOOL_NAME_SEPARATOR}${SET_ENV_TOOL}`;
 
 /**
- * アプリ（GitHub など）にトークンで接続するツール名（サーバー id を付けない形）。
- * ユーザーはチャットのカードからトークンを貼り、トークンはモデルに渡らない。
+ * アプリ（コネクタ）に接続するツール名の、サーバー id を付けない形。
+ * アプリごとに 1 つ作り、名前でアプリが決まる（例: app_connect_github）。
  */
-export const CONNECT_APP_TOOL = "connect_app";
+export const CONNECT_APP_TOOL = "connect";
 
-/** モデルへ渡すときの、アプリに接続するツールの名前。 */
-export const CONNECT_APP_TOOL_NAME = `${COMPUTER_SERVER_ID}${TOOL_NAME_SEPARATOR}${CONNECT_APP_TOOL}`;
+/** モデルへ渡す、アプリ 1 つに接続するツールの名前（例: app_connect_github）。 */
+export function connectAppToolName(appId: string): string {
+  return `${APP_SERVER_ID}${TOOL_NAME_SEPARATOR}${CONNECT_APP_TOOL}${TOOL_NAME_SEPARATOR}${appId}`;
+}
+
+/** ツール名が接続ツールなら、アプリ id を返す。違えば null。 */
+export function connectAppIdOf(toolName: string): string | null {
+  const prefix = `${APP_SERVER_ID}${TOOL_NAME_SEPARATOR}${CONNECT_APP_TOOL}${TOOL_NAME_SEPARATOR}`;
+  if (!toolName.startsWith(prefix)) return null;
+
+  const id = toolName.slice(prefix.length);
+  return id.length === 0 ? null : id;
+}
 
 /** 接続済みアプリの API を叩くツール名（サーバー id を付けない形）。 */
 export const APP_REQUEST_TOOL = "request";

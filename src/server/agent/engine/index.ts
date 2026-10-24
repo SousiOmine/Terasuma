@@ -17,7 +17,7 @@ import type {
 } from "../contracts";
 import type { TeraContext } from "../prompt";
 import type { IdentityStore } from "../identity";
-import type { SkillFileStore } from "../skill-types";
+import type { Skill, SkillFileStore } from "../skill-types";
 import { createAiSdkEngine } from "./sdk";
 import { createMockEngine } from "./mock";
 
@@ -31,6 +31,8 @@ import { createMockEngine } from "./mock";
 
 /** モデルから流れてくる出来事。画面へ流す単位でもある。 */
 export type EngineEvent =
+  /** モデルのステップが始まった（最初のステップでも流れる）。 */
+  | { type: "step-start" }
   | { type: "text-delta"; delta: string }
   | { type: "tool-call"; part: Extract<MessagePart, { type: "tool-call" }> }
   | { type: "tool-result"; part: Extract<MessagePart, { type: "tool-result" }> }
@@ -130,6 +132,8 @@ export function createEngine(options: {
   skills: SkillFileStore;
   /** Tera の identity の読み書き。system プロンプトに載せる版と、書いた版を持つ。 */
   identity: IdentityStore;
+  /** 接続状態などで変わる、組み込みの追加スキル。呼び出しのたびに評価する。 */
+  extraSkills?: () => readonly Skill[];
 }): AgentEngine {
   if (options.config.engine === "mock") return createMockEngine();
   return createAiSdkEngine({
@@ -147,5 +151,6 @@ export function createEngine(options: {
     catalog: options.catalog,
     skills: options.skills,
     identity: options.identity,
+    extraSkills: options.extraSkills,
   });
 }

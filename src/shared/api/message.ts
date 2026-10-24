@@ -207,7 +207,7 @@ export type Tera = {
  */
 export type ChatEvent =
   | { type: "user-message"; message: ChatMessageView }
-  | { type: "assistant-start"; id: string; createdAt: number }
+  | { type: "assistant-start"; id: string; createdAt: number; seq: number }
   | { type: "assistant-message"; id: string; part: TextPart | AttachmentPart }
   | { type: "notice"; id: string; part: NoticePart }
   | { type: "tool-call"; id: string; part: Extract<MessagePart, { type: "tool-call" }> }

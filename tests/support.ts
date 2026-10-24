@@ -217,7 +217,9 @@ export function createConnectorsStub(): ConnectorsManager {
       throw new Error("No connector providers in this stub");
     },
     ids: () => [],
+    connected: () => false,
     setToken: async () => empty,
+    connect: async () => empty,
     cancelWait: () => undefined,
     disconnect: () => empty,
     wait: async () => "",

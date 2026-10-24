@@ -71,6 +71,16 @@ export function prepareQueries(db: Database) {
             SUM(LENGTH(content) + COALESCE(LENGTH(parts), 0)) AS chars
      FROM messages WHERE tera_id = ? AND seq > ?`,
   );
+  const updateMessageParts = db.query<
+    unknown,
+    [string, number | null, number | null, number | null, string]
+  >(
+    `UPDATE messages
+        SET parts = ?, input_tokens = ?, output_tokens = ?, cached_input_tokens = ?
+      WHERE id = ?`,
+  );
+  const selectMessageById = db.query<MessageRow, [string]>(`SELECT ${MESSAGE_COLUMNS} FROM messages WHERE id = ?`);
+  const deleteMessageById = db.query<unknown, [string]>("DELETE FROM messages WHERE id = ?");
   const insertMessage = db.query<
     { seq: number },
     [
@@ -140,6 +150,9 @@ export function prepareQueries(db: Database) {
     selectLastSeq,
     selectMessagesBetween,
     selectPendingStats,
+    updateMessageParts,
+    selectMessageById,
+    deleteMessageById,
     insertMessage,
     selectCompaction,
     upsertCompaction,
