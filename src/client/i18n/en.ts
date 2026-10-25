@@ -99,7 +99,6 @@ export const en = {
   "chat.connector.failed": "The connection could not be completed. Ask again.",
 
   "composer.placeholder": "Send a message",
-  "composer.placeholder.steering": "Send to the working agent",
   "composer.send": "Send",
   "composer.sendHint": "Send (Ctrl + Enter)",
   "composer.stop": "Stop",

@@ -97,7 +97,6 @@ export const ja: Record<MessageKey, string> = {
   "chat.connector.failed": "接続できませんでした。もう一度頼んでください。",
 
   "composer.placeholder": "メッセージを入力",
-  "composer.placeholder.steering": "作業中のエージェントへ送る",
   "composer.send": "送信",
   "composer.sendHint": "送信（Ctrl + Enter）",
   "composer.stop": "停止",

@@ -147,8 +147,8 @@ export function Composer() {
               ref={textareaRef}
               rows={1}
               value={draft}
-              placeholder={t(streaming ? "composer.placeholder.steering" : "composer.placeholder")}
-              aria-label={t(streaming ? "composer.placeholder.steering" : "composer.placeholder")}
+              placeholder={t("composer.placeholder")}
+              aria-label={t("composer.placeholder")}
               class="max-h-40 min-h-9 flex-1 resize-none bg-transparent px-1.5 py-2 text-[15px] leading-6 text-primary outline-none placeholder:text-tertiary"
               onInput={(event) => setDraft(event.currentTarget.value)}
               onPaste={handlePaste}
