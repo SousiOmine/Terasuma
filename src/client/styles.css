@@ -34,7 +34,7 @@
  * 影は重ねず、面の縁を柔らかくする分だけに留める。
  */
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
 
   --app-canvas: #f4f4f7;
   --app-surface: #ffffff;
@@ -86,41 +86,41 @@
   --app-ease-emphasized: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --app-canvas: #0c0c11;
-    --app-surface: #15151b;
-    --app-surface-alt: #1b1b23;
-    --app-soft: #23232d;
-    --app-soft-strong: #2e2e3a;
-    --app-stroke: #26262f;
-    --app-stroke-strong: #3b3b47;
+:root[data-theme="dark"] {
+  color-scheme: dark;
 
-    --app-text: #f3f3f7;
-    --app-text-secondary: #a5a5b2;
-    --app-text-tertiary: #8b8b98;
+  --app-canvas: #0c0c11;
+  --app-surface: #15151b;
+  --app-surface-alt: #1b1b23;
+  --app-soft: #23232d;
+  --app-soft-strong: #2e2e3a;
+  --app-stroke: #26262f;
+  --app-stroke-strong: #3b3b47;
 
-    --app-accent: #a79cff;
-    --app-accent-fill: #b9aeff;
-    --app-accent-hover: #cbc2ff;
-    --app-accent-soft: #241f3d;
-    --app-accent-ink: #d6cfff;
-    --app-on-accent: #17131f;
-    --app-ring: rgba(167, 156, 255, 0.28);
-    --app-selection: #3a3266;
+  --app-text: #f3f3f7;
+  --app-text-secondary: #a5a5b2;
+  --app-text-tertiary: #8b8b98;
 
-    --app-success: #5fd3a2;
-    --app-warning: #f2ba5c;
-    --app-danger: #ff9a90;
-    --app-danger-soft: #2b1715;
+  --app-accent: #a79cff;
+  --app-accent-fill: #b9aeff;
+  --app-accent-hover: #cbc2ff;
+  --app-accent-soft: #241f3d;
+  --app-accent-ink: #d6cfff;
+  --app-on-accent: #17131f;
+  --app-ring: rgba(167, 156, 255, 0.28);
+  --app-selection: #3a3266;
 
-    --app-orb-ink: #17122b;
+  --app-success: #5fd3a2;
+  --app-warning: #f2ba5c;
+  --app-danger: #ff9a90;
+  --app-danger-soft: #2b1715;
 
-    --app-shadow-2: 0 1px 2px rgba(0, 0, 0, 0.4), 0 2px 6px -2px rgba(0, 0, 0, 0.5);
-    --app-shadow-4: 0 1px 2px rgba(0, 0, 0, 0.4), 0 10px 24px -12px rgba(0, 0, 0, 0.6);
-    --app-shadow-16: 0 4px 12px rgba(0, 0, 0, 0.5), 0 40px 80px -28px rgba(0, 0, 0, 0.75);
-    --app-shadow-panel: 0 1px 2px rgba(0, 0, 0, 0.35), 0 24px 60px -32px rgba(0, 0, 0, 0.65);
-  }
+  --app-orb-ink: #17122b;
+
+  --app-shadow-2: 0 1px 2px rgba(0, 0, 0, 0.4), 0 2px 6px -2px rgba(0, 0, 0, 0.5);
+  --app-shadow-4: 0 1px 2px rgba(0, 0, 0, 0.4), 0 10px 24px -12px rgba(0, 0, 0, 0.6);
+  --app-shadow-16: 0 4px 12px rgba(0, 0, 0, 0.5), 0 40px 80px -28px rgba(0, 0, 0, 0.75);
+  --app-shadow-panel: 0 1px 2px rgba(0, 0, 0, 0.35), 0 24px 60px -32px rgba(0, 0, 0, 0.65);
 }
 
 /*
@@ -395,16 +395,14 @@ input.tera-md-check {
     0 8px 20px -10px rgba(86, 70, 220, 0.7);
 }
 
-@media (prefers-color-scheme: dark) {
-  .tera-orb {
-    background:
-      radial-gradient(90% 90% at 30% 18%, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0) 44%),
-      linear-gradient(145deg, #8b7bff 0%, #a190ff 52%, #cfc4ff 100%);
-    box-shadow:
-      inset 0 1px 2px rgba(255, 255, 255, 0.55),
-      inset 0 -8px 14px rgba(60, 44, 160, 0.28),
-      0 10px 24px -12px rgba(140, 124, 255, 0.6);
-  }
+:root[data-theme="dark"] .tera-orb {
+  background:
+    radial-gradient(90% 90% at 30% 18%, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0) 44%),
+    linear-gradient(145deg, #8b7bff 0%, #a190ff 52%, #cfc4ff 100%);
+  box-shadow:
+    inset 0 1px 2px rgba(255, 255, 255, 0.55),
+    inset 0 -8px 14px rgba(60, 44, 160, 0.28),
+    0 10px 24px -12px rgba(140, 124, 255, 0.6);
 }
 
 /*

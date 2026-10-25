@@ -29,7 +29,8 @@ function referencedKeys(): Set<string> {
     const source = readFileSync(file, "utf8");
     for (const match of source.matchAll(/"([a-z][a-zA-Z0-9]*(?:\.[a-zA-Z0-9_]+)+)"/g)) {
       const key = match[1];
-      if (key !== undefined) keys.add(key);
+      // localStorage のキー（terasuma.theme など）は文言ではないので数えない。
+      if (key !== undefined && !key.startsWith("terasuma.")) keys.add(key);
     }
   }
 

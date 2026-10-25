@@ -120,6 +120,12 @@ export const ja: Record<MessageKey, string> = {
   "settings.language.label": "言語",
   "settings.language.description": "画面の表示と、エージェントの返事に使う言語",
 
+  "settings.theme.label": "外観",
+  "settings.theme.description": "画面の明るさ",
+  "settings.theme.auto": "自動",
+  "settings.theme.light": "ライト",
+  "settings.theme.dark": "ダーク",
+
   "settings.advanced": "詳細設定",
 
   "settings.connectors": "コネクタ",

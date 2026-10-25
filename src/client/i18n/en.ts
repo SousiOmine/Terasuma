@@ -122,6 +122,12 @@ export const en = {
   "settings.language.label": "Language",
   "settings.language.description": "Language used in the interface and in the agent's replies.",
 
+  "settings.theme.label": "Appearance",
+  "settings.theme.description": "Screen brightness",
+  "settings.theme.auto": "Auto",
+  "settings.theme.light": "Light",
+  "settings.theme.dark": "Dark",
+
   "settings.advanced": "Advanced",
 
   "settings.connectors": "Connectors",

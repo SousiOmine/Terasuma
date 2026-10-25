@@ -2,6 +2,7 @@ import { IconArrowLeft } from "@tabler/icons-preact";
 import type { Locale, MessageKey } from "../../i18n";
 import { LOCALES, locale, setLocale, t } from "../../i18n";
 import { closeSettings, setSettingsCategory, settingsCategory, type SettingsCategory } from "../../state/route";
+import { setTheme, theme, THEMES, type Theme } from "../../theme";
 import { Segmented } from "../../ui/Segmented";
 import { ContainerSettingsView } from "../container/ContainerSettingsView";
 import { ConnectorsSettingsView } from "../connectors/ConnectorsSettingsView";
@@ -23,6 +24,13 @@ const CATEGORIES: readonly { id: SettingsCategory; labelKey: MessageKey }[] = [
 
 /** 言語名はその言語自身で書く（どの言語で表示していても読めるように）。 */
 const LOCALE_LABELS: Record<Locale, string> = { ja: "日本語", en: "English" };
+
+/** 配色の選択肢のラベル。 */
+const THEME_LABELS: Record<Theme, MessageKey> = {
+  auto: "settings.theme.auto",
+  light: "settings.theme.light",
+  dark: "settings.theme.dark",
+};
 
 export function SettingsView() {
   // カテゴリは signal で持つ。チャット画面の案内から「モデル」を直接開けるようにするため。
@@ -106,6 +114,21 @@ function GeneralSettings() {
             options={LOCALES.map((code) => ({ value: code, label: LOCALE_LABELS[code] }))}
             value={locale.value}
             onChange={setLocale}
+          />
+        </div>
+      </div>
+
+      <div class="mt-6 flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
+        <div class="min-w-0">
+          <p class="text-[13px] font-medium">{t("settings.theme.label")}</p>
+          <p class="mt-1 text-xs leading-5 text-secondary">{t("settings.theme.description")}</p>
+        </div>
+
+        <div class="w-48 shrink-0">
+          <Segmented
+            options={THEMES.map((value) => ({ value, label: t(THEME_LABELS[value]) }))}
+            value={theme.value}
+            onChange={setTheme}
           />
         </div>
       </div>

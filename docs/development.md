@@ -431,6 +431,14 @@ src/
 `server/computer/contract.ts` を正典にする。イメージを作り直したときに値がずれていないかは、
 コンテナの起動時に確かめ、ずれていれば起動を失敗させる。
 
+## 画面の明るさ
+
+配色は `<html data-theme="light|dark">` で決める（`client/theme.ts`）。`styles.css` の明るいトークンは `:root`、
+暗いトークンは `:root[data-theme="dark"]` に置き、`color-scheme` もそこで切り替える。
+利用者は 設定 > 一般 > 外観 で 自動／ライト／ダーク を選ぶ。選んだ値は `localStorage` の `terasuma.theme` に残す。
+「自動」は OS の設定（`prefers-color-scheme`）に従い、OS 側で切り替わったときも追従する。
+最初の描画で明るい色がちらつかないよう、`index.html` の `<head>` で読み込み前に `data-theme` を決める。
+
 ## 画面の幅
 
 幅が 768px 未満（Tailwind の `md`）なら、狭い画面向けの見た目にする。768px 以上は変えない。
