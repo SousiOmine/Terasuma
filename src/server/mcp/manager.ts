@@ -51,6 +51,11 @@ export type McpManager = {
   test(serverId: string, server: McpServerSettings): Promise<McpTestView>;
   /** モデルへ渡すツール。設定が変わっていれば作り直してから返す。 */
   toolset(): Promise<McpToolset>;
+  /**
+   * 設定から消えたサーバーの接続・認可の待ち・状態・ツールを、その場で片付ける。
+   * 設定にまだ残っている id では何もしない（消す順を取り違えたときに、繋がっている接続を落とさないため）。
+   */
+  forget(serverId: string): Promise<void>;
   /** OAuth の認可を始める。開く URL を返す（すでに認可済みなら null）。 */
   authorize(serverId: string): Promise<McpAuthorizationView>;
   /** 待っている認可を取り消す。次に接続を確かめたときの結果に戻る。 */
@@ -357,11 +362,28 @@ export function createMcpManager(options: McpManagerOptions): McpManager {
 
     async toolset() {
       const servers = settings.read().mcpServers;
-      if (Object.keys(servers).length === 0) return {};
-
       // 設定が変わっていれば、変わったサーバーだけ繋ぎ直す。
+      // 空になったときも通し、refresh() に残りの接続を閉じさせる。
       await syncSettings(servers);
       return tools;
+    },
+
+    async forget(serverId) {
+      // 設定に残っているなら、消す順を取り違えている。繋がっている接続は落とさない。
+      if (settings.read().mcpServers[serverId] !== undefined) return;
+
+      pending.delete(serverId);
+      pendingTests.delete(serverId);
+
+      const connection = connections.get(serverId);
+      connections.delete(serverId);
+      if (connection !== undefined) await connection.client.close().catch(() => undefined);
+
+      statuses.delete(serverId);
+
+      // 次のツール取得を待たず、設定から消えたサーバーのツールを外す。
+      // settingsKey は触らない（次の syncSettings が差分を見て他の接続を揃える）。
+      rebuild(settings.read().mcpServers);
     },
 
     async authorize(serverId) {

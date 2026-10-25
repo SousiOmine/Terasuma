@@ -72,12 +72,13 @@ export function mcpHandlers(deps: Pick<ApiDeps, "settings" | "mcp">) {
       return commit(() => settings.putMcpServer(id, parsed.server));
     },
 
-    removeMcpServer(req: ApiRequest<{ id: string }>): Response {
+    async removeMcpServer(req: ApiRequest<{ id: string }>): Promise<Response> {
       const id = req.params.id;
       requireMcpServer(settings, id);
 
-      deps.mcp.cancelAuthorization(id);
-      return commit(() => void settings.deleteMcpServer(id));
+      commit(() => void settings.deleteMcpServer(id));
+      await deps.mcp.forget(id);
+      return currentView();
     },
 
     /** 接続を確かめ、公開されているツールを返す。 */

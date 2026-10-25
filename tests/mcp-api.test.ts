@@ -13,6 +13,7 @@ function createManagerStub() {
     check: [] as string[],
     authorize: [] as string[],
     cancelled: [] as string[],
+    forgotten: [] as string[],
     completed: [] as AuthorizationCallback[],
     tested: [] as { id: string; server: McpServerSettings }[],
   };
@@ -41,6 +42,10 @@ function createManagerStub() {
     },
     cancelTest: (id) => {
       calls.cancelled.push(id);
+    },
+    forget: async (id) => {
+      calls.forgotten.push(id);
+      statuses.delete(id);
     },
     completeAuthorization: async (_state, callback) => {
       calls.completed.push(callback);
@@ -182,13 +187,16 @@ describe("MCP サーバーの API", () => {
     );
   });
 
-  test("削除すると設定から消え、一覧が返る", async () => {
-    await withMcpServer({ mcpServers: { local: LOCAL } }, async (harness) => {
+  test("削除すると設定から消え、接続とツールもその場で片付き、一覧が返る", async () => {
+    await withMcpServer({ mcpServers: { local: LOCAL } }, async (harness, stub) => {
+      stub.statuses.set("local", { state: "connected", tools: ["echo"], detail: null });
+
       const removed = await harness.request("/api/mcp/servers/local", { method: "DELETE" });
 
       expect(removed.status).toBe(200);
       expect(((await removed.json()) as McpServersView).servers).toEqual([]);
       expect(harness.file().mcpServers).toEqual({});
+      expect(stub.calls.forgotten).toEqual(["local"]);
       expect((await harness.request("/api/mcp/servers/local", { method: "DELETE" })).status).toBe(404);
     });
   });

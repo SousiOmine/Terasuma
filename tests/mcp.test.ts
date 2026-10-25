@@ -9,7 +9,7 @@ import type { McpServerSettings, McpServersSettings } from "../src/server/data/s
 import { McpServerNotFound, createMcpManager, type McpManager } from "../src/server/mcp/manager";
 import { MAX_MCP_RESULT_CHARS } from "../src/server/mcp/tools";
 import { createImageStore, type ImageStore } from "../src/server/computer/images";
-import { createSettingsStore } from "../src/server/data/settings";
+import { createSettingsStore, type SettingsStore } from "../src/server/data/settings";
 import type { ImageRef } from "../src/shared/api/message";
 import { startFakeOAuthServer } from "./fixtures/oauth-server";
 import { testPng } from "./support";
@@ -79,22 +79,23 @@ function startHttpMcpServer() {
 /** 一時ディレクトリに本物の設定ファイルを作り、そこを指す manager を渡す。 */
 async function withManager(
   servers: McpServersSettings,
-  run: (manager: McpManager, images: ImageStore) => Promise<void>,
+  run: (manager: McpManager, images: ImageStore, settings: SettingsStore) => Promise<void>,
 ): Promise<void> {
   const dir = mkdtempSync(join(tmpdir(), "terasuma-mcp-"));
   const path = join(dir, CONFIG_FILE_NAME);
   writeFileSync(path, `${JSON.stringify({ mcpServers: servers }, null, 2)}\n`, "utf8");
 
   const images = createImageStore(dir);
+  const settings = createSettingsStore(path);
   const manager = createMcpManager({
-    settings: createSettingsStore(path),
+    settings,
     dataDir: dir,
     images,
     callbackUrl: () => new URL(CALLBACK_URL),
   });
 
   try {
-    await run(manager, images);
+    await run(manager, images, settings);
   } finally {
     await manager.close();
     rmSync(dir, { recursive: true, force: true });
@@ -216,6 +217,48 @@ describe("MCP サーバーとの接続", () => {
       if (echo === undefined) throw new Error("echo が無い");
       const result = await echo.execute?.({ text: "こんにちは" }, {} as never);
       expect(result).toBeDefined();
+    });
+  });
+
+  test("設定から消したサーバーを forget すると、ツールと状態がその場で消える", async () => {
+    const { id, server } = stdioServer("local");
+    await withManager({ [id]: server }, async (manager, _images, settings) => {
+      expect(Object.keys(await manager.toolset()).sort()).toEqual(["local_echo", "local_fail", "local_shot"]);
+      expect(manager.status(id).state).toBe("connected");
+
+      settings.deleteMcpServer(id);
+      await manager.forget(id);
+
+      expect(manager.status(id).state).toBe("unknown");
+      expect(manager.status(id).tools).toEqual([]);
+      expect(await manager.toolset()).toEqual({});
+    });
+  });
+
+  test("設定から最後の 1 件を消して toolset を呼ぶと、残っていた接続を閉じる", async () => {
+    const { id, server } = stdioServer("local");
+    await withManager({ [id]: server }, async (manager, _images, settings) => {
+      expect(Object.keys(await manager.toolset()).sort()).toEqual(["local_echo", "local_fail", "local_shot"]);
+      expect(manager.status(id).state).toBe("connected");
+
+      settings.deleteMcpServer(id);
+
+      // SDK は子プロセスの終了を外から待つ口を出していないため、
+      // 接続を閉じた結果としてツールが消え、状態が空になることを確かめる。
+      expect(await manager.toolset()).toEqual({});
+      expect(manager.status(id)).toEqual({ state: "unknown", tools: [], detail: null });
+    });
+  });
+
+  test("設定に残っているサーバーは forget しても、接続とツールをそのまま使う", async () => {
+    const { id, server } = stdioServer("local");
+    await withManager({ [id]: server }, async (manager) => {
+      expect(Object.keys(await manager.toolset()).sort()).toEqual(["local_echo", "local_fail", "local_shot"]);
+
+      await manager.forget(id);
+
+      expect(manager.status(id).state).toBe("connected");
+      expect(Object.keys(await manager.toolset()).sort()).toEqual(["local_echo", "local_fail", "local_shot"]);
     });
   });
 
