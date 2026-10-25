@@ -147,6 +147,25 @@ export const ROUTINE_RUN_TOOL = "run";
 /** モデルへ渡すときの、ルーチンをいま実行するツールの名前。 */
 export const ROUTINE_RUN_TOOL_NAME = `${ROUTINE_SERVER_ID}${TOOL_NAME_SEPARATOR}${ROUTINE_RUN_TOOL}`;
 
+/**
+ * MCP サーバーを足す・消す内蔵ツールのサーバー id。
+ * ツール名は "mcp_add_server" などになるので、MCP サーバーの id としては予約する
+ * （外部のサーバーが "mcp" を名乗ると、内蔵ツールと名前が衝突するため）。
+ */
+export const MCP_SERVER_ID = "mcp";
+
+/** MCP サーバーを足すツール名（サーバー id を付けない形）。 */
+export const MCP_ADD_TOOL = "add_server";
+
+/** モデルへ渡すときの、MCP サーバーを足すツールの名前。 */
+export const MCP_ADD_SERVER_TOOL_NAME = `${MCP_SERVER_ID}${TOOL_NAME_SEPARATOR}${MCP_ADD_TOOL}`;
+
+/** MCP サーバーを消すツール名（サーバー id を付けない形）。 */
+export const MCP_REMOVE_TOOL = "remove_server";
+
+/** モデルへ渡すときの、MCP サーバーを消すツールの名前。 */
+export const MCP_REMOVE_SERVER_TOOL_NAME = `${MCP_SERVER_ID}${TOOL_NAME_SEPARATOR}${MCP_REMOVE_TOOL}`;
+
 /** 画面をユーザーへ渡すツール名（サーバー id を付けない形）。 */
 export const ASK_USER_TOOL = "ask_user";
 

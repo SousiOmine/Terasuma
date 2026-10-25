@@ -14,6 +14,7 @@ import {
   createHistoryStub,
   createIdentityStoreStub,
   createImageStub,
+  createMcpManageToolsStub,
   createMcpStub,
   createSkillFileStoreStub,
   createWebSearchToolsStub,
@@ -97,6 +98,7 @@ async function runEngine(settings: ModelSettings): Promise<string> {
   const stream = await createAiSdkEngine({
     settings: reader,
     mcp: createMcpStub(),
+    mcpManage: createMcpManageToolsStub(),
     computer: createComputerStub(),
     attachments: createAttachmentsStub(),
     history: createHistoryStub(),

@@ -28,6 +28,12 @@ async function search(tools: Record<string, unknown>, input: unknown): Promise<s
   return output;
 }
 
+/** レジストリを作り、その getter を渡した tool_search / tool_call を組む。 */
+async function discoveryTools() {
+  const registry = await registryOf();
+  return createDiscoveryTools(() => registry);
+}
+
 async function registryOf(): Promise<ToolRegistry> {
   return createToolRegistry({
     local_echo: tool({
@@ -143,13 +149,13 @@ describe("ツールのレジストリ", () => {
 
 describe("tool_search と tool_call", () => {
   test("検索語を省くと、名前だけの一覧を返す", async () => {
-    const tools = createDiscoveryTools(await registryOf());
+    const tools = await discoveryTools();
 
     expect(await search(tools, {})).toContain("3 tool(s) available across 3 group(s)");
   });
 
   test("当たったツールの本文と、次にすることの案内を返す", async () => {
-    const tools = createDiscoveryTools(await registryOf());
+    const tools = await discoveryTools();
     const text = await search(tools, { query: "echo" });
 
     expect(text).toContain('Found 1 tool(s) matching "echo".');
@@ -159,7 +165,7 @@ describe("tool_search と tool_call", () => {
   });
 
   test("当たらなくても、存在するツールの一覧を添える", async () => {
-    const tools = createDiscoveryTools(await registryOf());
+    const tools = await discoveryTools();
     const text = await search(tools, { query: "nothing-here" });
 
     expect(text.startsWith('No tools match "nothing-here".')).toBe(true);
@@ -167,22 +173,43 @@ describe("tool_search と tool_call", () => {
   });
 
   test("見つけたツールを、名前を付けた結果で返す", async () => {
-    const tools = createDiscoveryTools(await registryOf());
+    const tools = await discoveryTools();
     const output = await runTool(tools, TOOL_CALL_TOOL_NAME, { name: "local_echo", args: { text: "hi" } });
 
     expect(readToolOutput(output)).toEqual({ text: "[local_echo]\necho: hi", images: [] });
   });
 
   test("ツールが返した画像は、tool_call 越しでもそのまま残る", async () => {
-    const tools = createDiscoveryTools(await registryOf());
+    const tools = await discoveryTools();
     const output = await runTool(tools, TOOL_CALL_TOOL_NAME, { name: "computer_screenshot" });
 
     expect(readToolOutput(output)).toEqual({ text: "[computer_screenshot]\n撮りました", images: [REF] });
   });
 
   test("知らない名前は、実行の失敗として返る", async () => {
-    const tools = createDiscoveryTools(await registryOf());
+    const tools = await discoveryTools();
 
     await expect(runTool(tools, TOOL_CALL_TOOL_NAME, { name: "nope" })).rejects.toThrow('Unknown tool "nope"');
+  });
+
+  test("getter は実行のたびに引き直され、差し替えたレジストリが見える", async () => {
+    let registry = await registryOf();
+    const tools = createDiscoveryTools(() => registry);
+
+    expect(await search(tools, { query: "echo" })).toContain("local_echo");
+
+    // ターンの途中でレジストリが差し替わったのと同じ状態にする。
+    registry = await createToolRegistry({
+      late_echo: tool({
+        description: "あとから足したツール",
+        inputSchema: z.object({ text: z.string() }),
+        execute: async ({ text }: { text: string }) => `late: ${text}`,
+      }),
+    });
+
+    expect(await search(tools, { query: "late" })).toContain("late_echo");
+    expect(
+      readToolOutput(await runTool(tools, TOOL_CALL_TOOL_NAME, { name: "late_echo", args: { text: "hi" } })),
+    ).toEqual({ text: "[late_echo]\nlate: hi", images: [] });
   });
 });

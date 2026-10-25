@@ -9,12 +9,12 @@ import { DEFAULT_SEARCH_LIMIT, MAX_SEARCH_LIMIT, type ToolRegistry } from "./reg
  * モデルのツール一覧に載せないツールを、検索して実行するための 2 つ。
  *
  * 一覧を渡さない代わりに、モデルは名前・説明・引数スキーマをここで知り、tool_call で実行する。
- * レジストリはターンごとに作り直されるので、設定画面で MCP サーバーを足しても、
- * 次のターンからは新しいツールが見つかる。
+ * レジストリは毎回 getter から引き直す。ターンの途中で MCP サーバーを足して
+ * レジストリが差し替わっても、その場から新しいツールが見つかる。
  */
 
-/** tool_search と tool_call の組。 */
-export function createDiscoveryTools(registry: ToolRegistry): ToolSet {
+/** tool_search と tool_call の組。registry は呼び出しのたびに引く。 */
+export function createDiscoveryTools(registry: () => ToolRegistry): ToolSet {
   return {
     [TOOL_SEARCH_TOOL_NAME]: tool({
       description: [
@@ -39,11 +39,12 @@ export function createDiscoveryTools(registry: ToolRegistry): ToolSet {
           ),
       }),
       execute: async ({ query, limit }: { query?: string; limit?: number }) => {
+        const current = registry();
         const text = (query ?? "").trim();
-        if (text.length === 0) return registry.browse();
+        if (text.length === 0) return current.browse();
 
-        const matches = registry.search(text, limit ?? DEFAULT_SEARCH_LIMIT);
-        if (matches.length === 0) return `No tools match "${text}".\n\n${registry.browse()}`;
+        const matches = current.search(text, limit ?? DEFAULT_SEARCH_LIMIT);
+        if (matches.length === 0) return `No tools match "${text}".\n\n${current.browse()}`;
 
         return [
           `Found ${matches.length} tool(s) matching "${text}".`,
@@ -72,7 +73,7 @@ export function createDiscoveryTools(registry: ToolRegistry): ToolSet {
         { name, args }: { name: string; args?: Record<string, unknown> },
         context: { toolCallId: string; abortSignal?: AbortSignal },
       ) => {
-        const output = await registry.call(name, args ?? {}, {
+        const output = await registry().call(name, args ?? {}, {
           toolCallId: context.toolCallId,
           ...(context.abortSignal === undefined ? {} : { abortSignal: context.abortSignal }),
         });

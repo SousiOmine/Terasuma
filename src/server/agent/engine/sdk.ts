@@ -1,5 +1,5 @@
 import { generateText, stepCountIs, streamText } from "ai";
-import type { ModelMessage } from "ai";
+import type { ModelMessage, ToolSet } from "ai";
 import type { ConnectorToolsetProvider } from "../../connectors/tools";
 import type { DiscordToolsetProvider } from "../../discord/tools";
 import type { ImageStore } from "../../computer/images";
@@ -10,6 +10,7 @@ import type {
   CodingToolsetProvider,
   ComputerToolsetProvider,
   HistoryToolsetProvider,
+  McpManageToolsetProvider,
   RoutineToolsetProvider,
   TeraToolsetProvider,
   ToolsetProvider,
@@ -62,6 +63,8 @@ export type AiSdkEngineOptions = {
   discord: DiscordToolsetProvider;
   /** スケジュールされた実行（ルーチン）のツール。扱うルーチンは Tera ごと。 */
   routine: RoutineToolsetProvider;
+  /** MCP サーバーを足す・消すツール。 */
+  mcpManage: McpManageToolsetProvider;
   /** 新しい Tera を作るツール。 */
   tera: TeraToolsetProvider;
   /** コンテナのファイルとシェルのツール。相対パスと bash の cwd が Tera ごとに違うので、ターンごとに組む。 */
@@ -88,6 +91,7 @@ export function createAiSdkEngine(options: AiSdkEngineOptions): AgentEngine {
     connectors,
     discord,
     routine,
+    mcpManage,
     tera,
     coding,
     images,
@@ -151,22 +155,33 @@ export function createAiSdkEngine(options: AiSdkEngineOptions): AgentEngine {
       // 名前・説明・引数スキーマは tool_search で取り寄せ、tool_call で実行する
       // （サーバーが増えても、使わないツールの定義で毎回の文脈が膨らまないようにするため）。
       // 一覧は呼び出しのたびに組み直すので、設定画面でサーバーを足しても作り直さずに済む。
-      const [mcpTools, computerTools] = await Promise.all([mcp.toolset(), computer.toolset({ teraId })]);
+      const [initialMcpTools, computerTools] = await Promise.all([mcp.toolset(), computer.toolset({ teraId })]);
       // コネクタのツール（app_connect_<id> と app_request）も、検索してから実行する。
       // Discord のツールは送信先が Tera ごとに決まるので、このターンの Tera で組む。
       // ルーチンのツールも、触れるルーチンがこのターンの Tera のものに限られるので、ここで組む。
       // 新しい Tera を作るツールも、作る先（作業フォルダの親）がアプリで決まるのでここで組む。
+      // MCP サーバーを足す・消すツールも、設定と接続の実体がアプリで決まるのでここで組む。
+      const connectorTools = connectors.toolset();
       const discordTools = discord.toolset({ teraId });
       const routineTools = routine.toolset({ teraId });
+      const mcpManageTools = mcpManage.toolset();
       const teraTools = tera.toolset();
-      const registry = await createToolRegistry({
+
+      // MCP のツールだけは、ターンの途中で設定が変わると中身が入れ替わる。
+      // prepareStep で参照が変わったときだけ、この一式を組み直す。
+      let mcpTools = initialMcpTools;
+      let registry = await createToolRegistry({
         ...mcpTools,
         ...computerTools,
-        ...connectors.toolset(),
+        ...connectorTools,
         ...discordTools,
         ...teraTools,
         ...routineTools,
+        ...mcpManageTools,
       });
+
+      // ターンの途中で MCP のツールが変わったら、スキルと同じく次のモデル呼び出しの前に知らせる。
+      const mcpNotices: string[] = [];
 
       // コンテナのツール（read / write / edit / bash）は、この Tera の作業フォルダを基準にする。
       const codingTools = coding.toolset({ teraId });
@@ -187,7 +202,7 @@ export function createAiSdkEngine(options: AiSdkEngineOptions): AgentEngine {
           ...chatUiTools,
           ...historyTools,
           ...webTools,
-          ...createDiscoveryTools(registry),
+          ...createDiscoveryTools(() => registry),
           ...skillTools,
           ...skillManageTools,
           ...createIdentityTools({ store: identity, teraId }),
@@ -217,9 +232,26 @@ export function createAiSdkEngine(options: AiSdkEngineOptions): AgentEngine {
         ...(providerOptions === null ? {} : { providerOptions }),
         // 画像を結果に置けないプロバイダでは、結果の直後に user メッセージとして足し、
         // どの呼び出しの画像かを本文で示す（プロバイダの役割の並びも壊さない）。
-        // ターンの途中でスキルが変わったときも、次の呼び出しの前に user メッセージで知らせる。
+        // ターンの途中でスキルや MCP のツールが変わったときも、次の呼び出しの前に user メッセージで知らせる。
         // 利用者が途中で送った発言は、届いた順にそのまま足す（最新の指示として扱わせる）。
-        prepareStep: ({ messages: current }) => {
+        prepareStep: async ({ messages: current }) => {
+          // 設定が変わっていなければ mcp.toolset() は同じ参照を返し、接続も試さない。
+          const refreshedMcpTools = await mcp.toolset();
+          if (registryNeedsRebuild(mcpTools, refreshedMcpTools)) {
+            const previous = mcpTools;
+            mcpTools = refreshedMcpTools;
+            registry = await createToolRegistry({
+              ...mcpTools,
+              ...computerTools,
+              ...connectorTools,
+              ...discordTools,
+              ...teraTools,
+              ...routineTools,
+              ...mcpManageTools,
+            });
+            mcpNotices.push(mcpChangeNotice(previous, mcpTools));
+          }
+
           const appended: ModelMessage[] = [];
 
           if (!toolResultImages && pendingImages.length > 0) {
@@ -229,6 +261,10 @@ export function createAiSdkEngine(options: AiSdkEngineOptions): AgentEngine {
 
           if (skillNotices.length > 0) {
             appended.push({ role: "user", content: skillNotices.splice(0).join("\n\n") });
+          }
+
+          if (mcpNotices.length > 0) {
+            appended.push({ role: "user", content: mcpNotices.splice(0).join("\n\n") });
           }
 
           for (const message of takeSteering()) {
@@ -257,6 +293,35 @@ export function createAiSdkEngine(options: AiSdkEngineOptions): AgentEngine {
       return result.text;
     },
   };
+}
+
+/**
+ * MCP のツール一式を組み直す必要があるか。
+ * mcp.toolset() は設定が変わっていなければ同じ参照を返すので、参照の比較だけで足りる。
+ */
+export function registryNeedsRebuild(previous: ToolSet, next: ToolSet): boolean {
+  return previous !== next;
+}
+
+/** 1 つの notice に名前を並べる上限。多すぎるときは件数だけを伝える。 */
+const MAX_NOTICE_MCP_TOOLS = 5;
+
+/**
+ * ターンの途中で MCP のツールが変わったことを、モデルへ 1 文で知らせる。
+ * 新しいツール名を数件だけ並べ、多すぎるときは件数だけを伝える。
+ */
+function mcpChangeNotice(previous: ToolSet, next: ToolSet): string {
+  const added = Object.keys(next).filter((name) => previous[name] === undefined);
+  const lines = ["The MCP tools changed during this turn. Find the new ones with tool_search."];
+
+  if (added.length === 0) return lines.join(" ");
+  if (added.length > MAX_NOTICE_MCP_TOOLS) {
+    lines.push(`${added.length} new tools were added; search for them with tool_search.`);
+    return lines.join(" ");
+  }
+
+  lines.push(`New tools: ${added.join(", ")}. Find one with tool_search and run it with tool_call.`);
+  return lines.join(" ");
 }
 
 /**

@@ -28,6 +28,7 @@ import { createDiscordWebhooks, type DiscordWebhooks } from "./server/discord/ma
 import { createDiscordToolset } from "./server/discord/tools";
 import { startServer, type StartedServer } from "./server/http/server";
 import { createMcpManager, type McpManager } from "./server/mcp/manager";
+import { createMcpManageToolset } from "./server/mcp/manage";
 import { OAUTH_CALLBACK_PATH } from "./server/mcp/oauth";
 import { CATALOG_FILE_NAME, createCatalog, modelContextTokens, type Catalog } from "./server/provider/catalog";
 import { createRoutineScheduler, type RoutineScheduler } from "./server/routine/scheduler";
@@ -230,6 +231,7 @@ export function startApp(config: AppConfig, overrides: AppOverrides = {}): App {
       connectors: createConnectorToolset(connectors),
       discord: createDiscordToolset({ discord }),
       routine: routineToolset,
+      mcpManage: createMcpManageToolset({ settings, mcp }),
       tera: teraToolset,
       coding,
       images,

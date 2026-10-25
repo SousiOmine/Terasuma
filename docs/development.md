@@ -241,6 +241,15 @@ private な IP を指す場合までは塞げない。
 `read` は 50 KB、`bash` は末尾 50 KB、`history_search` は 40,000 文字、`web_search` は 20,000 文字。
 MCP の結果は 50,000 文字で切り、切ったことを末尾に残す（`server/mcp/tools.ts` の `MAX_MCP_RESULT_CHARS`）。
 
+## MCP サーバー
+
+MCP サーバーは `config.json` の `mcpServers` に置く。足す・消すのは設定画面（設定 > MCP）と、エージェントの `mcp_add_server` / `mcp_remove_server`（`server/mcp/manage.ts`）。
+`mcp_add_server` は保存したうえでその場で接続を試すので、繋がれば同じターンから `tool_search` で新しいツールを探し、`tool_call` で実行できる。
+エンジンは `prepareStep` で `mcp.toolset()` の参照が変わったときだけレジストリを組み直す（設定が変わっていなければ何もしない）。
+接続はターンの開始時と、設定が変わったときにだけ試す（落ちているサーバーで毎回待たされないように）。
+サーバーを消すと、その接続・状態・ツールは `forget()` でその場で片付く。
+環境変数に秘密が要るサーバーは、秘密を会話に残さないため、`mcp_add_server` では渡せない（設定画面から足す）。
+
 ## スキル
 
 エージェントが作ったスキルは、コンピュータのホームの中の `.agents/skills/<name>/SKILL.md` に置く。

@@ -41,6 +41,8 @@ import {
   createImageStub,
   createAttachmentsStub,
   createIdentityStoreStub,
+  createMcpManageToolsStub,
+  createMcpStub,
   createSkillFileStoreStub,
   createWebSearchToolsStub,
   makeStore,
@@ -183,20 +185,21 @@ function createToolsetProvider(): ToolsetProvider & { executed: unknown[] } {
     },
   });
 
-  return { executed, toolset: async () => ({ local_echo: echo }) };
+  const tools = { local_echo: echo };
+  return { executed, toolset: async () => tools };
 }
 
 /** 画像を 1 枚返すツールを 1 つ持つ供給元。 */
 function createImageToolsetProvider(ref: ImageRef): ToolsetProvider {
-  return {
-    toolset: async () => ({
-      local_shot: tool({
-        description: "テスト用の画像",
-        inputSchema: z.object({}),
-        execute: async () => ({ text: "撮りました", images: [ref] }),
-      }),
+  const tools = {
+    local_shot: tool({
+      description: "テスト用の画像",
+      inputSchema: z.object({}),
+      execute: async () => ({ text: "撮りました", images: [ref] }),
     }),
   };
+
+  return { toolset: async () => tools };
 }
 
 function settingsFor(port: number): ModelSettings {
@@ -257,6 +260,7 @@ async function run(
   const stream = await createAiSdkEngine({
     settings: reader,
     mcp: provider,
+    mcpManage: createMcpManageToolsStub(),
     computer,
     attachments,
     history: historyTools,
@@ -331,6 +335,55 @@ describe("ツール検索（AI SDK 経由）", () => {
     }
   });
 
+  test("ターンの途中で MCP のツール一式が変わると、その場でレジストリを組み直す", async () => {
+    const fake = startScriptedProvider([
+      { tool: "tool_call", args: JSON.stringify({ name: "local_switch", args: {} }) },
+      { tool: "tool_search", args: JSON.stringify({ query: "late" }) },
+      { tool: "tool_call", args: JSON.stringify({ name: "late_echo", args: { text: "hi" } }) },
+      { text: "使いました" },
+    ]);
+
+    // 1 ステップ目に実行すると、次のステップから provider が新しいツール一式を返す。
+    let switched = false;
+    const switchTool = tool({
+      description: "あとから MCP のツールが増えたことにする",
+      inputSchema: z.object({}),
+      execute: async () => {
+        switched = true;
+        return "switched";
+      },
+    });
+    const initialTools = { local_switch: switchTool };
+    const nextTools = {
+      local_switch: switchTool,
+      late_echo: tool({
+        description: "あとから足した echo",
+        inputSchema: z.object({ text: z.string() }),
+        execute: async ({ text }: { text: string }) => `late: ${text}`,
+      }),
+    };
+    const provider: ToolsetProvider = { toolset: async () => (switched ? nextTools : initialTools) };
+
+    try {
+      const events = await run(provider, settingsFor(portOf(fake.server)));
+
+      // 組み直した次の呼び出しには、知らせと新しいツールの検索結果が入る。
+      expect(JSON.stringify(fake.bodies[1])).toContain("The MCP tools changed during this turn");
+      expect(JSON.stringify(fake.bodies[1])).toContain("late_echo");
+      expect(JSON.stringify(fake.bodies[2])).toContain("late_echo");
+      expect(JSON.stringify(fake.bodies[3])).toContain("[late_echo]");
+
+      const call = callsOf(events, "tool", "call").find((event) => calledName(event) === "late_echo");
+      if (call === undefined) throw new Error("新しいツールの tool_call がモデルへ渡らなかった");
+
+      const result = resultOf(events, call.part.id);
+      expect(result.part.failed).toBe(false);
+      expect(result.part.output).toBe("[late_echo]\nlate: hi");
+    } finally {
+      await fake.server.stop(true);
+    }
+  });
+
   test("スキル → ツール検索 → tool_call の流れが 1 ターンで通る", async () => {
     const fake = startScriptedProvider([
       { tool: "skill", args: JSON.stringify({ name: "computer-use" }) },
@@ -341,7 +394,7 @@ describe("ツール検索（AI SDK 経由）", () => {
     const { container, commands } = createShellContainer("");
 
     try {
-      const events = await run({ toolset: async () => ({}) }, settingsFor(portOf(fake.server)), {
+      const events = await run(createMcpStub(), settingsFor(portOf(fake.server)), {
         toolset: async () =>
           createComputerTools({
             container,
@@ -383,7 +436,8 @@ describe("ツール検索（AI SDK 経由）", () => {
     try {
       const stream = await createAiSdkEngine({
         settings: { read: () => settingsFor(portOf(fake.server)) },
-        mcp: { toolset: async () => ({}) },
+        mcp: createMcpStub(),
+        mcpManage: createMcpManageToolsStub(),
         computer: createComputerStub(),
         attachments: createAttachmentsStub(),
         history: createHistoryStub(),
@@ -428,7 +482,7 @@ describe("ツール検索（AI SDK 経由）", () => {
     const fake = startScriptedProvider([{ text: "はい" }]);
 
     try {
-      await run({ toolset: async () => ({}) }, settingsFor(portOf(fake.server)));
+      await run(createMcpStub(), settingsFor(portOf(fake.server)));
       expect(toolNames(fake.bodies[0]).sort()).toEqual([
         "chat_ui",
         "identity",
@@ -449,7 +503,7 @@ describe("ツール検索（AI SDK 経由）", () => {
     ]);
 
     try {
-      const events = await run({ toolset: async () => ({}) }, settingsFor(portOf(fake.server)));
+      const events = await run(createMcpStub(), settingsFor(portOf(fake.server)));
       const call = callsOf(events, "tool", "call")[0];
       if (call === undefined) throw new Error("tool_call が呼ばれなかった");
 
@@ -490,7 +544,7 @@ describe("ツール検索（AI SDK 経由）", () => {
     ]);
 
     try {
-      const events = await run({ toolset: async () => ({}) }, settingsFor(portOf(fake.server)));
+      const events = await run(createMcpStub(), settingsFor(portOf(fake.server)));
 
       const call = callsOf(events, "", "skill")[0];
       if (call === undefined) throw new Error("skill が呼ばれなかった");
@@ -524,7 +578,7 @@ describe("ツール検索（AI SDK 経由）", () => {
 
     try {
       const events = await run(
-        { toolset: async () => ({}) },
+        createMcpStub(),
         settingsFor(portOf(fake.server)),
         undefined,
         undefined,
@@ -581,7 +635,7 @@ describe("履歴検索（AI SDK 経由）", () => {
 
     try {
       const events = await run(
-        { toolset: async () => ({}) },
+        createMcpStub(),
         settingsFor(portOf(fake.server)),
         createComputerStub(),
         createCodingStub(),
@@ -624,7 +678,7 @@ describe("コンテナのツール（tool_call 経由）", () => {
     const { container, commands } = createShellContainer("");
 
     try {
-      const events = await run({ toolset: async () => ({}) }, settingsFor(portOf(fake.server)), {
+      const events = await run(createMcpStub(), settingsFor(portOf(fake.server)), {
         toolset: async () =>
           createComputerTools({
             container,
@@ -659,7 +713,7 @@ describe("コンテナのツール（tool_call 経由）", () => {
     const handover = createHandover();
 
     try {
-      const running = run({ toolset: async () => ({}) }, settingsFor(portOf(fake.server)), {
+      const running = run(createMcpStub(), settingsFor(portOf(fake.server)), {
         toolset: async () =>
           createComputerTools({
             container: createContainerStub(),
@@ -698,7 +752,7 @@ describe("コンテナのツール（tool_call 経由）", () => {
 
     try {
       const events = await run(
-        { toolset: async () => ({}) },
+        createMcpStub(),
         settingsFor(portOf(fake.server)),
         createComputerStub(),
         // 相対パスは、このターンの Tera（t1）の作業フォルダから解決する。
@@ -728,7 +782,7 @@ describe("作業場", () => {
     const fake = startScriptedProvider([{ text: "わかりました" }]);
 
     try {
-      await run({ toolset: async () => ({}) }, settingsFor(portOf(fake.server)));
+      await run(createMcpStub(), settingsFor(portOf(fake.server)));
 
       // 相対パスの基準は、このターンの Tera（t1）の作業フォルダ。
       const prompt = JSON.stringify(fake.bodies[0]);
@@ -765,7 +819,7 @@ describe("添付", () => {
 
     try {
       await run(
-        { toolset: async () => ({}) },
+        createMcpStub(),
         settingsFor(portOf(fake.server)),
         createComputerStub(),
         createCodingStub(),
@@ -966,9 +1020,7 @@ describe("失敗", () => {
     });
 
     try {
-      const failure = await run({ toolset: async () => ({}) }, settingsFor(portOf(server))).catch(
-        (error: unknown) => error,
-      );
+      const failure = await run(createMcpStub(), settingsFor(portOf(server))).catch((error: unknown) => error);
       expect(failure).toBeInstanceOf(Error);
     } finally {
       await server.stop(true);
@@ -982,7 +1034,7 @@ describe("チャットの UI", () => {
     const fake = startScriptedProvider([{ tool: "chat_ui", args: JSON.stringify({ markup }) }, { text: "どうぞ" }]);
 
     try {
-      const events = await run({ toolset: async () => ({}) }, settingsFor(portOf(fake.server)));
+      const events = await run(createMcpStub(), settingsFor(portOf(fake.server)));
 
       expect(toolNames(fake.bodies[0])).toContain("chat_ui");
 
@@ -1005,7 +1057,7 @@ describe("チャットの UI", () => {
     ]);
 
     try {
-      const events = await run({ toolset: async () => ({}) }, settingsFor(portOf(fake.server)));
+      const events = await run(createMcpStub(), settingsFor(portOf(fake.server)));
 
       const call = callsOf(events, "chat", "ui")[0];
       if (call === undefined) throw new Error("chat_ui が呼ばれなかった");
@@ -1042,7 +1094,8 @@ describe("途中で届いた発言", () => {
     try {
       const stream = await createAiSdkEngine({
         settings: { read: () => settingsFor(portOf(fake.server)) },
-        mcp: { toolset: async () => ({}) },
+        mcp: createMcpStub(),
+        mcpManage: createMcpManageToolsStub(),
         computer: createComputerStub(),
         attachments: createAttachmentsStub(),
         history: createHistoryStub(),
@@ -1091,7 +1144,7 @@ describe("identity（AI SDK 経由）", () => {
 
     try {
       await run(
-        { toolset: async () => ({}) },
+        createMcpStub(),
         settingsFor(portOf(fake.server)),
         undefined,
         undefined,

@@ -15,6 +15,7 @@ import type {
   CodingToolsetProvider,
   ComputerToolsetProvider,
   HistoryToolsetProvider,
+  McpManageToolsetProvider,
   RoutineToolsetProvider,
   TeraToolsetProvider,
   WebSearchToolsetProvider,
@@ -46,12 +47,13 @@ export function makeStore() {
  */
 export function createMcpStub(): McpManager {
   const unknown = { state: "unknown", tools: [], detail: null } as const;
+  const tools = {};
 
   return {
     status: () => unknown,
     check: async () => unknown,
     test: async () => ({ ...unknown, authorizationUrl: null }),
-    toolset: async () => ({}),
+    toolset: async () => tools,
     forget: async () => undefined,
     authorize: async () => ({ url: null }),
     cancelAuthorization: () => undefined,
@@ -206,6 +208,11 @@ export function createDiscordToolsStub(): DiscordToolsetProvider {
 
 /** 新しい Tera を作るツールを渡さないテストのための差し替え（エンジン用）。 */
 export function createTeraToolsStub(): TeraToolsetProvider {
+  return { toolset: () => ({}) };
+}
+
+/** MCP サーバーを足す・消すツールを渡さないテストのための差し替え（エンジン用）。 */
+export function createMcpManageToolsStub(): McpManageToolsetProvider {
   return { toolset: () => ({}) };
 }
 

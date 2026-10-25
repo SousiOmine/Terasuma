@@ -39,6 +39,11 @@ export type TeraToolsetProvider = {
   toolset(): TeraToolset;
 };
 
+/** MCP サーバーを足す・消すツールの供給元。 */
+export type McpManageToolsetProvider = {
+  toolset(): ToolSet;
+};
+
 /**
  * 画像やファイルをチャットへ添付するツールの供給元。
  * 添付の口はターンごとに差し替わり、相対パスの基準も Tera ごとに変わるので、両方を渡す。
