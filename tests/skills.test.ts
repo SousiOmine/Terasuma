@@ -7,6 +7,7 @@ import {
   COMPUTER_USE_SKILL,
   CONNECTORS_SKILL,
   DISCORD_SKILL,
+  MCP_SKILL,
   PI_CODING_SKILL,
   ROUTINE_SKILL,
   SKILL_CREATE_SKILL,
@@ -71,7 +72,7 @@ function skillManageTools(initial: readonly { name: string; description: string;
 }
 
 describe("スキルのカタログ", () => {
-  test("computer-use と connectors と skill-create と discord と tera-create と routine が説明つきで載る", () => {
+  test("computer-use と connectors と skill-create と discord と tera-create と routine と mcp が説明つきで載る", () => {
     const catalog = skillCatalogText(BUILTIN_SKILLS);
 
     expect(catalog).toContain("- computer-use: ");
@@ -86,6 +87,8 @@ describe("スキルのカタログ", () => {
     expect(catalog).toContain(TERA_CREATE_SKILL.description);
     expect(catalog).toContain("- routine: ");
     expect(catalog).toContain(ROUTINE_SKILL.description);
+    expect(catalog).toContain("- mcp: ");
+    expect(catalog).toContain(MCP_SKILL.description);
     expect(BUILTIN_SKILLS.map((skill) => skill.name)).toEqual([
       "computer-use",
       "connectors",
@@ -93,6 +96,7 @@ describe("スキルのカタログ", () => {
       "discord",
       "tera-create",
       "routine",
+      "mcp",
     ]);
   });
 });
@@ -193,7 +197,7 @@ describe("skill ツール", () => {
     await expect(
       definition.execute({ name: "nope" } as never, { toolCallId: "call-1", messages: [] } as never),
     ).rejects.toThrow(
-      'Unknown skill "nope". Available skills: computer-use, connectors, skill-create, discord, tera-create, routine',
+      'Unknown skill "nope". Available skills: computer-use, connectors, skill-create, discord, tera-create, routine, mcp',
     );
   });
 
@@ -401,6 +405,20 @@ describe("routine の本文", () => {
     // 実行の仕方（誰に見せるか、どこへ届けるか）は、ルーチンを作るときの指示に書くもの。
     // 手順書には置かない。
     expect(content).not.toContain("Nobody is watching");
+  });
+});
+
+describe("mcp スキル", () => {
+  test("探し方と、足す・消すツールと、秘密を渡せないことを短く書いている", () => {
+    const content = MCP_SKILL.content;
+
+    expect(content).toContain("mcp_add_server");
+    expect(content).toContain("mcp_remove_server");
+    expect(content).toContain("Settings > MCP");
+    expect(content).toContain("env");
+    expect(content).toContain("tool_search");
+    expect(content).toContain("tool_call");
+    expect(content.split("\n").length).toBeLessThan(40);
   });
 });
 
