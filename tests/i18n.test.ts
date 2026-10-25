@@ -77,7 +77,51 @@ describe("i18n", () => {
     expect(t("settings.mcp.tools", { count: 3 })).toBe("Tools (3)");
 
     setLocale("ja");
-    expect(t("settings.mcp.tools", { count: 3 })).toBe("ツール (3)");
+    expect(t("settings.mcp.tools", { count: 3 })).toBe("ツール（3）");
+  });
+
+  test("ja のボタンの文言は「する」で終わらない", () => {
+    const keys = [
+      "common.add",
+      "common.edit",
+      "common.check",
+      "common.delete",
+      "chat.env.submit",
+      "settings.mcp.authorize",
+      "settings.mcp.form.save",
+      "settings.webSearch.form.save",
+      "settings.wizard.save",
+      "settings.connectors.program.connect",
+      "settings.connectors.token.save",
+      "settings.discord.save",
+    ] as const;
+
+    for (const key of keys) expect(ja[key], key).not.toMatch(/する$/);
+  });
+
+  test("ja に生の英単語（webhook / identity）を残さない", () => {
+    for (const [key, value] of Object.entries(ja)) {
+      expect(value, `ja: ${key}`).not.toContain("webhook");
+      expect(value, `ja: ${key}`).not.toContain("identity");
+    }
+  });
+
+  test("ja は丸括弧を全角にする", () => {
+    for (const [key, value] of Object.entries(ja)) {
+      expect(value, `ja: ${key}`).not.toContain(" (");
+    }
+  });
+
+  test("en に「(s)」を残さない", () => {
+    for (const [key, value] of Object.entries(en)) {
+      expect(value, `en: ${key}`).not.toContain("(s)");
+    }
+  });
+
+  test("en の cannot は 1 語で書く", () => {
+    for (const [key, value] of Object.entries(en)) {
+      expect(value, `en: ${key}`).not.toContain("can not");
+    }
   });
 
   test("画面が参照するキーはすべて辞書にある", () => {

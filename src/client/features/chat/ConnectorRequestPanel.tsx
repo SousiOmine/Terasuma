@@ -131,7 +131,7 @@ export function ConnectorRequestPanel() {
                 }}
               />
               <Button variant="primary" disabled={saving || token.trim().length === 0} onClick={save}>
-                {t(saving ? "settings.connectors.token.saving" : "settings.connectors.token.save")}
+                {t(saving ? "common.checking" : "settings.connectors.token.save")}
               </Button>
             </div>
           </Field>

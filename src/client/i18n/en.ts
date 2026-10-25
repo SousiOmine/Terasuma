@@ -24,7 +24,7 @@ export const en = {
   "tera.menu": "{name} actions",
 
   "routine.title": "Routines",
-  "routine.badge": "{count} routine(s)",
+  "routine.badge": "Routines ({count})",
   "routine.schedule.daily": "Every day at {time}",
   "routine.schedule.weekly": "Every {days} at {time}",
   "routine.schedule.every": "Every {minutes} min",
@@ -72,12 +72,13 @@ export const en = {
   "chat.menu.open": "Open menu",
   "chat.menu.close": "Close menu",
 
-  "chat.container.unavailable": "The computer is not available. podman was not found.",
+  "chat.container.unavailable":
+    "The computer is not available. The program that runs the container (podman) was not found.",
 
   "chat.computer.title": "Computer screen",
   "chat.computer.show": "Show screen",
   "chat.computer.hide": "Hide screen",
-  "chat.computer.notRunning": "The computer is not running, so the screen can not be shown.",
+  "chat.computer.notRunning": "The computer is not running, so the screen cannot be shown.",
   "chat.computer.connecting": "Connecting…",
   "chat.computer.disconnected": "Could not connect to the screen.",
   "chat.computer.reconnect": "Reconnect",
@@ -91,7 +92,7 @@ export const en = {
   "chat.env.submitting": "Setting…",
   "chat.env.waiting": "Waiting for your input",
 
-  "chat.connector.title": "Connect {app}",
+  "chat.connector.title": "{app} needs a connector",
   "chat.connector.waiting": "Paste it and save; the task continues from there.",
   "chat.connector.waitingShort": "Waiting for connection",
   "chat.connector.checking": "Checking in the computer…",
@@ -133,10 +134,8 @@ export const en = {
   "settings.connectors.account": "Connected as {account}",
   "settings.connectors.permissions": "Required permissions: {permissions}",
   "settings.connectors.token.save": "Save",
-  "settings.connectors.token.saving": "Checking…",
   "settings.connectors.program.connect": "Save and connect",
   "settings.connectors.program.check": "Check the connection",
-  "settings.connectors.program.checking": "Checking…",
   "settings.connectors.program.status": "In the computer: {status}",
   "settings.connectors.openSetup": "Open the setup guide",
   "settings.connectors.env": "Environment variables for the computer: {names}",
@@ -154,7 +153,6 @@ export const en = {
   "settings.discord.channel": "Channel: {channel}",
   "settings.discord.webhookName": "Webhook name: {name}",
   "settings.discord.save": "Save",
-  "settings.discord.saving": "Checking…",
   "settings.discord.disconnect": "Disconnect",
   "settings.discord.disconnectTitle": "Disconnect this Discord webhook?",
   "settings.discord.disconnectMessage":
@@ -165,7 +163,7 @@ export const en = {
   "settings.container.description":
     "The virtual desktop the agent operates. Apps, screen interaction, and file access all happen inside it.",
   "settings.container.state.label": "Status",
-  "settings.container.state.podman_missing": "podman is not installed",
+  "settings.container.state.podman_missing": "The program that runs the container (podman) is not installed",
   "settings.container.state.image_missing": "Image is not built yet",
   "settings.container.state.container_missing": "Computer is not created yet",
   "settings.container.state.stopped": "Stopped",
@@ -229,8 +227,7 @@ export const en = {
   "settings.mcp.form.save": "Save",
   "settings.mcp.form.idFixed": "The name cannot be changed.",
   "settings.mcp.form.invalidName": "Use lowercase letters, digits and hyphens for the name (for example filesystem).",
-  "settings.mcp.form.reservedName":
-    "That name collides with Terasuma's built-in tools (computer_, chat_, tool_, history_, web_, skill_). Choose another name.",
+  "settings.mcp.form.reservedName": "That name collides with Terasuma's built-in tools. Choose another name.",
   "settings.mcp.form.nameTaken": "That name is already in use.",
   "settings.mcp.form.needCommand": "Enter a command.",
   "settings.mcp.form.needUrl": "Enter a URL.",
@@ -333,7 +330,7 @@ export const en = {
 
   "error.invalid_request": "The message could not be sent.",
   "error.tera_not_found": "This Tera does not exist.",
-  "error.model_error": "The model did not respond.",
+  "error.model_error": "The model did not respond. Try again.",
   "error.model_not_configured": "No model is configured.",
   "error.provider_not_found": "This provider is not configured.",
   "error.provider_exists": "This provider is already added.",
@@ -359,10 +356,10 @@ export const en = {
   "error.not_found": "That location was not found.",
   "error.method_not_allowed": "That operation is not supported here.",
   "error.settings_write_failed": "The settings could not be saved.",
-  "error.internal_error": "Something went wrong.",
+  "error.internal_error": "Something went wrong. Try again.",
   "error.network": "The server is not reachable.",
   "error.stream_ended": "The reply was cut off.",
-  "error.input": "Check the input.",
+  "error.input": "That input was not accepted. Check it and try again.",
   "error.dismiss": "Dismiss",
 } as const;
 

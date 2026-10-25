@@ -78,7 +78,7 @@ export function DiscordConnectorCard() {
             <ConnectorForm
               setupUrl={view.setupUrl}
               setupLabel={t("settings.connectors.openSetup")}
-              submitLabel={t(saving ? "settings.discord.saving" : "settings.discord.save")}
+              submitLabel={t(saving ? "common.checking" : "settings.discord.save")}
               submitDisabled={saving || filled.length === 0}
               onSubmit={save}
             >

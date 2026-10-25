@@ -54,7 +54,7 @@ export function ProgramSetupForm({
 
   const submitLabel = t(
     busy
-      ? "settings.connectors.program.checking"
+      ? "common.checking"
       : key.length > 0
         ? "settings.connectors.program.connect"
         : "settings.connectors.program.check",

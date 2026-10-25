@@ -177,7 +177,7 @@ function TokenConnectorForm({
     <ConnectorForm
       setupUrl={provider.setupUrl}
       setupLabel={t("settings.connectors.openSetup")}
-      submitLabel={t(saving ? "settings.connectors.token.saving" : "settings.connectors.token.save")}
+      submitLabel={t(saving ? "common.checking" : "settings.connectors.token.save")}
       submitDisabled={saving || token.trim().length === 0}
       onSubmit={save}
     >
