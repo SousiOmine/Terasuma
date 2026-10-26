@@ -20,9 +20,11 @@ import { openSettings } from "../../state/route";
 import { activeTera } from "../../state/session";
 import { sidebarOpen, toggleSidebar } from "../../state/sidebar";
 import { Banner } from "../../ui/Banner";
+import { CopyButton } from "../../ui/CopyButton";
 import { ErrorNotice } from "../../ui/ErrorNotice";
 import { ChatAvatar } from "./ChatAvatar";
 import { Composer } from "./Composer";
+import { messageTextOf } from "./copy-text";
 import { ConnectorRequestPanel } from "./ConnectorRequestPanel";
 import { EnvRequestPanel } from "./EnvRequestPanel";
 import { AgentMessageBubble, NoticeLine, TypingBubble, UserMessageBubble } from "./MessageBubble";
@@ -226,6 +228,7 @@ function renderItem(item: ChatItem) {
       return <UserMessageBubble key={item.key} message={item.message} time={formatTime(item.message.createdAt, tag)} />;
     case "agent": {
       const last = item.parts[item.parts.length - 1];
+      const text = messageTextOf(item.parts);
       return (
         <div key={item.key} class="flex items-start gap-3">
           <ChatAvatar size={24} class="mt-0.5" />
@@ -235,7 +238,12 @@ function renderItem(item: ChatItem) {
                 <AgentMessageBubble key={`${item.key}-${index}`} part={part} />
               ))}
             </div>
-            {last !== undefined && <time class="text-[11px] text-tertiary tera-tnum">{formatTime(last.at, tag)}</time>}
+            {last !== undefined && (
+              <div class="flex items-center justify-end gap-1.5">
+                <time class="text-[11px] text-tertiary tera-tnum">{formatTime(last.at, tag)}</time>
+                {text.length > 0 && <CopyButton text={text} />}
+              </div>
+            )}
           </div>
         </div>
       );

@@ -9,6 +9,7 @@ import type {
   TextPart,
 } from "../../../shared/api/message";
 import { t } from "../../i18n";
+import { CopyButton } from "../../ui/CopyButton";
 import { ChatAvatar } from "./ChatAvatar";
 import { ImageLightbox } from "./ImageLightbox";
 import { Markdown } from "./Markdown";
@@ -50,7 +51,10 @@ export function UserMessageBubble({ message, time }: { message: ChatMessageView;
           </div>
         )}
       </div>
-      <time class="pr-1 text-[11px] text-tertiary tera-tnum">{time}</time>
+      <div class="flex items-center gap-1 pr-1">
+        <time class="text-[11px] text-tertiary tera-tnum">{time}</time>
+        {message.content.length > 0 && <CopyButton text={message.content} />}
+      </div>
     </div>
   );
 }
