@@ -1,4 +1,5 @@
 import { IconDownload, IconFile, IconRepeat } from "@tabler/icons-preact";
+import { useState } from "preact/hooks";
 import { formatBytes } from "../../../shared/text";
 import type {
   AttachmentPart,
@@ -9,6 +10,7 @@ import type {
 } from "../../../shared/api/message";
 import { t } from "../../i18n";
 import { ChatAvatar } from "./ChatAvatar";
+import { ImageLightbox } from "./ImageLightbox";
 import { Markdown } from "./Markdown";
 
 /**
@@ -67,47 +69,54 @@ export function AgentMessageBubble({ part }: { part: TextPart | AttachmentPart }
   );
 }
 
-/** 写真。1 枚なら大きく、複数なら 2 列に並べる。押すと元の大きさで開く。 */
+/** 写真。1 枚なら大きく、複数なら 2 列に並べる。押すと画面の上で拡大する。 */
 function ImageGrid({ images }: { images: readonly SentAttachment[] }) {
-  if (images.length === 1) {
-    const image = images[0];
-    if (image === undefined) return null;
-
-    return (
-      <a
-        href={image.url}
-        target="_blank"
-        rel="noreferrer"
-        title={t("chat.image.open", { name: image.name })}
-        class="block w-fit overflow-hidden rounded-[16px]"
-      >
-        <img
-          src={image.url}
-          alt={image.name}
-          width={image.image?.width}
-          height={image.image?.height}
-          loading="lazy"
-          class="max-h-72 w-auto max-w-full object-cover"
-        />
-      </a>
-    );
-  }
+  const [open, setOpen] = useState<number | null>(null);
+  const openIndex = open !== null && open >= 0 && open < images.length ? open : null;
+  const single = images[0];
 
   return (
-    <div class="grid w-[min(20rem,100%)] grid-cols-2 gap-1 overflow-hidden rounded-[16px]">
-      {images.map((image, index) => (
-        <a
-          key={`${image.url}-${index}`}
-          href={image.url}
-          target="_blank"
-          rel="noreferrer"
-          title={t("chat.image.open", { name: image.name })}
-          class="block aspect-square overflow-hidden bg-soft"
+    <>
+      {images.length === 1 && single !== undefined && (
+        <button
+          type="button"
+          onClick={() => setOpen(0)}
+          title={t("chat.image.enlarge", { name: single.name })}
+          aria-label={t("chat.image.enlarge", { name: single.name })}
+          class="block w-fit cursor-zoom-in overflow-hidden rounded-[16px] border-0 bg-transparent p-0 transition hover:brightness-105"
         >
-          <img src={image.url} alt={image.name} loading="lazy" class="h-full w-full object-cover" />
-        </a>
-      ))}
-    </div>
+          <img
+            src={single.url}
+            alt={single.name}
+            width={single.image?.width}
+            height={single.image?.height}
+            loading="lazy"
+            class="max-h-72 w-auto max-w-full object-cover"
+          />
+        </button>
+      )}
+
+      {images.length > 1 && (
+        <div class="grid w-[min(20rem,100%)] grid-cols-2 gap-1 overflow-hidden rounded-[16px]">
+          {images.map((image, index) => (
+            <button
+              key={`${image.url}-${index}`}
+              type="button"
+              onClick={() => setOpen(index)}
+              title={t("chat.image.enlarge", { name: image.name })}
+              aria-label={t("chat.image.enlarge", { name: image.name })}
+              class="block aspect-square cursor-zoom-in overflow-hidden border-0 bg-soft p-0 transition hover:brightness-105"
+            >
+              <img src={image.url} alt={image.name} loading="lazy" class="h-full w-full object-cover" />
+            </button>
+          ))}
+        </div>
+      )}
+
+      {openIndex !== null && (
+        <ImageLightbox images={images} index={openIndex} onIndexChange={setOpen} onClose={() => setOpen(null)} />
+      )}
+    </>
   );
 }
 
