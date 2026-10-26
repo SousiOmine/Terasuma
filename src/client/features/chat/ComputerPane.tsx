@@ -5,6 +5,7 @@ import { containerStatus, fetchVncToken } from "../../state/container";
 import { envRequestActive } from "../../state/env-request";
 import { chatError, clearChatError } from "../../state/failure";
 import { t } from "../../i18n";
+import { screenTokenProtocol } from "../../../shared/screen";
 import { ErrorNotice } from "../../ui/ErrorNotice";
 import {
   answerHandover,
@@ -39,11 +40,32 @@ type RfbClient = {
 type RfbConstructor = new (
   target: Element,
   url: string,
-  options?: { credentials?: { password?: string } },
+  options?: { credentials?: { password?: string }; wsProtocols?: string[] },
 ) => RfbClient;
 
 /** 接続の様子。画面が出るまでの間も何か出しておく（真っ黒なままだと壊れて見える）。 */
 type ConnectionState = "connecting" | "connected" | "disconnected";
+
+/** 枠の大きさが決まるまで待つ。0 のまま作ると、noVNC の拡大率が 0 になる。 */
+function waitForSize(element: HTMLElement, timeoutMs: number): Promise<void> {
+  if (element.clientWidth > 0 && element.clientHeight > 0) return Promise.resolve();
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      observer.disconnect();
+      clearTimeout(timer);
+      resolve();
+    };
+    const observer = new ResizeObserver(() => {
+      if (element.clientWidth > 0 && element.clientHeight > 0) finish();
+    });
+    const timer = setTimeout(finish, timeoutMs);
+    observer.observe(element);
+  });
+}
 
 export function ComputerPane() {
   const open = computerPaneOpen.value;
@@ -71,10 +93,15 @@ export function ComputerPane() {
 
     let disposed = false;
     let client: RfbClient | null = null;
+    let resizeObserver: ResizeObserver | null = null;
     setConnection("connecting");
 
     void (async () => {
       try {
+        // 枠の大きさが 0 のまま noVNC を作ると、拡大率が 0 になって画面が見えなくなる。
+        await waitForSize(target, 2000);
+        if (disposed) return;
+
         // noVNC はアプリのバンドルに同梱する（コンテナから配ると、コンテナの書き換えが
         // Terasuma のオリジンで実行されてしまう）。
         const [module, token] = await Promise.all([
@@ -84,20 +111,33 @@ export function ComputerPane() {
         if (disposed) return;
 
         const protocol = location.protocol === "https:" ? "wss" : "ws";
+        // クエリと subprotocol の両方で渡す（プロキシがどちらかを落としても繋がるように）。
         const url = `${protocol}://${location.host}/api/computer/vnc?token=${encodeURIComponent(token)}`;
-        client = new module.default(target, url);
-        client.viewOnly = computerViewOnly.value;
-        client.scaleViewport = true;
+        const rfb = new module.default(target, url, { wsProtocols: [screenTokenProtocol(token)] });
+        client = rfb;
+        rfb.viewOnly = computerViewOnly.value;
+        rfb.scaleViewport = true;
         // 画面が入りきらない部分（接続中など）は、下のカードの背景をそのまま見せる。
         // 既定の黒を敷くと、画面が出るまでの間だけ黒い帯になる。
-        client.background = "transparent";
-        client.addEventListener("connect", () => {
-          if (!disposed) setConnection("connected");
+        rfb.background = "transparent";
+        rfb.addEventListener("connect", () => {
+          if (disposed) return;
+          setConnection("connected");
+          // 枠に大きさが付いた後に、拡大率を計算し直す。
+          rfb.scaleViewport = true;
         });
-        client.addEventListener("disconnect", () => {
+        rfb.addEventListener("disconnect", (event) => {
           if (!disposed) setConnection("disconnected");
+          console.warn("[screen] disconnected", (event as CustomEvent).detail);
         });
-        clientRef.current = client;
+        clientRef.current = rfb;
+
+        // 枠の大きさが変わったら、拡大率を計算し直す。
+        resizeObserver = new ResizeObserver(() => {
+          const current = clientRef.current;
+          if (current !== null) current.scaleViewport = true;
+        });
+        resizeObserver.observe(target);
       } catch (error) {
         if (disposed) return;
         console.error(error);
@@ -107,6 +147,7 @@ export function ComputerPane() {
 
     return () => {
       disposed = true;
+      resizeObserver?.disconnect();
       clientRef.current = null;
       client?.disconnect();
     };

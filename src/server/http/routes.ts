@@ -1,4 +1,5 @@
 import index from "../../client/index.html";
+import { SCREEN_TOKEN_PATH } from "../../shared/screen";
 import { OAUTH_CALLBACK_PATH } from "../mcp/oauth";
 import type { ApiHandlers } from "./handlers";
 import type { WithErrorHandling } from "./respond";
@@ -158,7 +159,7 @@ export function createRoutes(api: WithErrorHandling<ApiHandlers>, screen: Screen
       POST: api.resetContainer,
     },
     // 画面の WebSocket を開くためのトークン。noVNC の JS はアプリのバンドルに同梱する。
-    "/api/computer/vnc-token": {
+    [SCREEN_TOKEN_PATH]: {
       GET: api.readVncToken,
     },
     // 画面の操作。ブラウザと、コンテナの中の x11vnc を繋ぐ。

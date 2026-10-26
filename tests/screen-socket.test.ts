@@ -20,19 +20,24 @@ async function tokenOf(request: (path: string) => Promise<Response>): Promise<st
 }
 
 /** 生のハンドシェイクを送り、応答の 1 行目を返す。 */
-function handshake(port: number, path: string): Promise<string> {
+function handshake(port: number, path: string, headers: Record<string, string> = {}): Promise<string> {
   return new Promise((resolve) => {
     const socket = net.connect(port, "127.0.0.1");
     let data = "";
 
     socket.once("connect", () => {
+      const extra = Object.entries(headers)
+        .map(([name, value]) => `${name}: ${value}\r\n`)
+        .join("");
       socket.write(
         `GET ${path} HTTP/1.1\r\n` +
           `Host: 127.0.0.1:${port}\r\n` +
           "Upgrade: websocket\r\n" +
           "Connection: Upgrade\r\n" +
           "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n" +
-          "Sec-WebSocket-Version: 13\r\n\r\n",
+          "Sec-WebSocket-Version: 13\r\n" +
+          extra +
+          "\r\n",
       );
     });
     socket.once("data", (chunk) => {
@@ -83,6 +88,23 @@ describe("画面の WebSocket", () => {
     await withScreenServer(createContainerStub({ vncPort: 1 }), async (request, port) => {
       const token = await tokenOf(request);
       expect(await handshake(port, `/api/computer/vnc?token=${encodeURIComponent(token)}`)).toContain("101");
+    });
+  });
+
+  test("subprotocol で正しいトークンを渡しても、WebSocket に切り替わる", async () => {
+    await withScreenServer(createContainerStub({ vncPort: 1 }), async (request, port) => {
+      const token = await tokenOf(request);
+      expect(
+        await handshake(port, "/api/computer/vnc", { "Sec-WebSocket-Protocol": `terasuma.vnc.${token}` }),
+      ).toContain("101");
+    });
+  });
+
+  test("subprotocol のトークンが違えば開けない", async () => {
+    await withScreenServer(createContainerStub({ vncPort: 1 }), async (_request, port) => {
+      expect(await handshake(port, "/api/computer/vnc", { "Sec-WebSocket-Protocol": "terasuma.vnc.wrong" })).toContain(
+        "401",
+      );
     });
   });
 });

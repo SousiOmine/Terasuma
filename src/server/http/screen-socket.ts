@@ -1,5 +1,6 @@
 import type { Server, WebSocketHandler } from "bun";
 import { timingSafeEqual } from "node:crypto";
+import { screenTokenFromProtocols } from "../../shared/screen";
 import type { ContainerManager } from "../computer/container";
 import { jsonError } from "./respond";
 
@@ -26,7 +27,11 @@ export function createScreenSocket(container: ContainerManager, vncToken: string
   return {
     async upgrade(req, server) {
       // WebSocket は CORS の制約を受けない。トークンを知らない画面（他サイト）は開けない。
-      const provided = new URL(req.url).searchParams.get("token");
+      // Tailscale（serve / funnel）はアップグレード要求からクエリを落とすため、
+      // 直接 localhost で開く場合のクエリと、中継を通る場合のヘッダの両方を受け付ける。
+      const url = new URL(req.url);
+      const provided =
+        url.searchParams.get("token") ?? screenTokenFromProtocols(req.headers.get("sec-websocket-protocol"));
       if (!sameToken(provided, vncToken)) {
         return jsonError(401, "invalid_request", "画面のトークンが違います");
       }
@@ -58,8 +63,14 @@ export function createScreenSocket(container: ContainerManager, vncToken: string
           ws.send(typeof event.data === "string" ? event.data : new Uint8Array(event.data as ArrayBuffer));
         };
         // コンテナ側が切れたらブラウザ側も切る（繋がっているように見せない）。
-        upstream.onclose = () => ws.close();
-        upstream.onerror = () => ws.close();
+        upstream.onclose = (event) => {
+          console.warn("[screen] upstream closed", event.code, event.reason);
+          ws.close();
+        };
+        upstream.onerror = () => {
+          console.warn("[screen] upstream error");
+          ws.close();
+        };
       },
       message(ws, message) {
         if (ws.data.upstream === null) {

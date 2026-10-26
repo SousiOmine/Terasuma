@@ -25,6 +25,7 @@ import type {
   WebSearchSettingsView,
   WebSearchTestView,
 } from "../../shared/api/settings";
+import { SCREEN_TOKEN_PATH } from "../../shared/screen";
 
 import { ApiError, fetchOrThrow, jsonRequest, request } from "./http";
 
@@ -518,7 +519,7 @@ export async function fetchContainer(): Promise<ContainerStatusView> {
 
 /** 画面の WebSocket を開くための、この起動でだけ使えるトークン。 */
 export async function fetchVncToken(): Promise<string> {
-  const body = await request<{ token: string }>(`${CONTAINER_PATH}/vnc-token`);
+  const body = await request<{ token: string }>(SCREEN_TOKEN_PATH);
   return body.token;
 }
 

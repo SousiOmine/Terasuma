@@ -395,6 +395,10 @@ WebSocket はブラウザが独自ヘッダを付けられず、CORS の制約�
   この GET は cross-origin から読めないので、トークンを知っている画面だけが中継を開ける。
 - `/api/computer/vnc?token=...` は、トークンが一致しなければ 401。一致すれば、
   コンテナの websockify へ繋ぐ。
+- 画面のトークンは、クエリ（`?token=...`）と `Sec-WebSocket-Protocol`（`terasuma.vnc.<token>`）の
+  両方で受け付ける。
+- Tailscale（serve / funnel）は WebSocket のアップグレード要求からクエリを落とすため、ヘッダ側が要る。
+- noVNC の拡大率は、枠の大きさが決まってから計算する（0 のままだと極小で描かれる）。
 - noVNC の JS は `@novnc/novnc` としてアプリのバンドルに同梱する。コンテナから配ると、
   コンテナの中のファイルを書き換えるだけで Terasuma のオリジンでコードが動いてしまう。
   コンテナ側は websockify だけを動かし、`--web` で noVNC の静的ファイルは配らない。
