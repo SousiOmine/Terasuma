@@ -2,19 +2,16 @@ import { describe, expect, test } from "bun:test";
 import { asSchema } from "ai";
 import type { ToolSet } from "ai";
 import { createHandover } from "../src/server/computer/handover";
-import {
-  BUILTIN_SKILLS,
-  COMPUTER_USE_SKILL,
-  CONNECTORS_SKILL,
-  DISCORD_SKILL,
-  MCP_SKILL,
-  PI_CODING_SKILL,
-  ROUTINE_SKILL,
-  SKILL_CREATE_SKILL,
-  TERA_CREATE_SKILL,
-  createSkillLibrary,
-  skillCatalogText,
-} from "../src/server/agent/skills";
+import { BUILTIN_SKILLS, PI_CODING_SKILL, builtinOf, createSkillLibrary, skillCatalogText } from "../src/server/agent/skills";
+
+// 組み込みスキルは名前で引く（本文は Markdown ファイルが持つ）。
+const COMPUTER_USE_SKILL = builtinOf("computer-use")!;
+const CONNECTORS_SKILL = builtinOf("connectors")!;
+const DISCORD_SKILL = builtinOf("discord")!;
+const MCP_SKILL = builtinOf("mcp")!;
+const ROUTINE_SKILL = builtinOf("routine")!;
+const SKILL_CREATE_SKILL = builtinOf("skill-create")!;
+const TERA_CREATE_SKILL = builtinOf("tera-create")!;
 import { createComputerTools } from "../src/server/tools/computer";
 import { createConnectorTools } from "../src/server/connectors/tools";
 import { createSkillTools } from "../src/server/tools/skill";
