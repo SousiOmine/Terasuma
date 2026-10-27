@@ -8,7 +8,7 @@
 import { MAX_DIRECT_FETCH_BYTES, MAX_DIRECT_FETCH_CHARS } from "./constants";
 import { WebSearchError } from "./errors";
 import { htmlToText, pageTitle } from "./html";
-import { combineSignal } from "../http/client";
+import { combineSignal } from "../../shared/async";
 import { describeError } from "../../shared/errors";
 import type { FetchLike, FetchRequest, FetchResponse } from "./types";
 

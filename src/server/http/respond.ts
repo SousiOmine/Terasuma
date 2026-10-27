@@ -1,5 +1,5 @@
 import { describeError } from "../../shared/errors";
-import type { ApiErrorCode } from "../../shared/api/error";
+import { ERROR_STATUS, type ApiErrorCode } from "../../shared/api/error";
 import { AppError } from "../errors";
 import { requireClientForMutation } from "./client-id";
 import { SECURITY_HEADERS } from "./security";
@@ -19,9 +19,9 @@ export function noContent(): Response {
   return new Response(null, { status: 204, headers: SECURITY_HEADERS });
 }
 
-/** 画面が文言を選べる形の失敗。 */
-export function jsonError(status: number, code: ApiErrorCode, detail?: string): Response {
-  return json({ code, detail: detail ?? null }, status);
+/** 画面が文言を選べる形の失敗。状態はコードから決まる（ERROR_STATUS）。 */
+export function jsonError(code: ApiErrorCode, detail?: string): Response {
+  return json({ code, detail: detail ?? null }, ERROR_STATUS[code]);
 }
 
 /**
@@ -30,8 +30,8 @@ export function jsonError(status: number, code: ApiErrorCode, detail?: string): 
  * 知らない例外は 500 にまとめる（内部の詳細は detail に残す）。
  */
 export function errorResponse(error: unknown): Response {
-  if (error instanceof AppError) return jsonError(error.status, error.code, error.message);
-  return jsonError(500, "internal_error", describeError(error));
+  if (error instanceof AppError) return jsonError(error.code, error.message);
+  return jsonError("internal_error", describeError(error));
 }
 
 /** ハンドラ 1 つを、例外を応答に変える形で包む。 */

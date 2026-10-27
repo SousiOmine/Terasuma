@@ -33,19 +33,19 @@ export function createScreenSocket(container: ContainerManager, vncToken: string
       const provided =
         url.searchParams.get("token") ?? screenTokenFromProtocols(req.headers.get("sec-websocket-protocol"));
       if (!sameToken(provided, vncToken)) {
-        return jsonError(401, "invalid_request", "画面のトークンが違います");
+        return jsonError("unauthorized", "画面のトークンが違います");
       }
 
       const status = await container.status();
       if (status.state !== "running" || status.vncPort === null) {
-        return jsonError(409, "container_not_running", "コンピュータが動いていないため、画面を表示できません");
+        return jsonError("container_not_running", "コンピュータが動いていないため、画面を表示できません");
       }
 
       const upgraded = server.upgrade(req, {
         data: { vncPort: status.vncPort, upstream: null, queue: [] },
       });
       // 切り替えに成功した場合、Bun はこの戻り値を使わない（undefined を返す）。
-      return upgraded ? undefined : jsonError(400, "invalid_request", "WebSocket に切り替えられませんでした");
+      return upgraded ? undefined : jsonError("invalid_request", "WebSocket に切り替えられませんでした");
     },
 
     websocket: {

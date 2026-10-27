@@ -1,12 +1,14 @@
 import type { ToolSet } from "ai";
 import { tool } from "ai";
 import { z } from "zod";
-import { ENV_NAME_PATTERN, isReservedEnvName } from "../../computer/env-name";
+import { isReservedEnvName } from "../../computer/env-name";
+import { ENV_NAME_PATTERN } from "../../../shared/env";
 import type { ContainerManager, ShellResult } from "../../computer/container";
 import type { ComputerToolsetProvider } from "../contracts";
 import type { EnvRequests } from "../../computer/env";
 import type { Handover } from "../../computer/handover";
 import type { ImageStore } from "../../computer/images";
+import { reasonSchema, requireSignal, type ToolContext } from "./context";
 
 /**
  * コンテナの画面をエージェントに渡すツールセット。
@@ -36,7 +38,6 @@ const ACTION_TIMEOUT_MS = 15_000;
  * ツールの実行に渡ってくる中断。
  * ターンが止まったら、待っている操作もコンテナのコマンドも打ち切る。
  */
-type ToolContext = { abortSignal?: AbortSignal };
 
 /**
  * モデルへ渡すコンテナのツールを決める。
@@ -259,11 +260,8 @@ export function createComputerTools(options: ComputerToolsOptions): ComputerTool
         question: z.string().min(1).describe("What you need the user to do, written for the user to read"),
       }),
       execute: async (_input: { question: string }, context: ToolContext) => {
-        const signal = context.abortSignal;
         // 中断を受け取れないと、ユーザーを待ったままターンを片付けられなくなる。
-        if (signal === undefined) {
-          throw new Error("Cannot wait for the user because the turn's abort signal is not available");
-        }
+        const signal = requireSignal(context);
 
         // 何を頼むかは、呼び出しの引数としてそのまま画面へ流れる。
         return handover.wait(teraId, signal);
@@ -283,14 +281,11 @@ export function createComputerTools(options: ComputerToolsOptions): ComputerTool
           .regex(ENV_NAME_PATTERN, "Use letters, digits and underscores, starting with a letter or underscore")
           .refine((value) => !isReservedEnvName(value), "This name is used by the computer itself; choose another name")
           .describe("Name of the environment variable, for example GITHUB_TOKEN"),
-        description: z.string().min(1).describe("Why you need it, written for the user to read"),
+        description: reasonSchema,
       }),
       execute: async ({ name }: { name: string }, context: ToolContext) => {
-        const signal = context.abortSignal;
         // 中断を受け取れないと、ユーザーを待ったままターンを片付けられなくなる。
-        if (signal === undefined) {
-          throw new Error("Cannot wait for the user because the turn's abort signal is not available");
-        }
+        const signal = requireSignal(context);
 
         // 何に使うか（description）は、呼び出しの引数としてそのまま画面へ流れる。
         // 値はユーザーから直接受け取り、この戻り値にもモデルの文脈にも入れない。

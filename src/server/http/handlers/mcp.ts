@@ -37,7 +37,7 @@ export function mcpHandlers(deps: Pick<ApiDeps, "settings" | "mcp">) {
       const parsed = await readMcpForm(req);
 
       if (settings.read().mcpServers[parsed.id] !== undefined) {
-        throw new AppError("mcp_server_exists", 409, `MCP サーバー ${parsed.id} はすでに追加されています`);
+        throw new AppError("mcp_server_exists", `MCP サーバー ${parsed.id} はすでに追加されています`);
       }
 
       return commit(() => settings.putMcpServer(parsed.id, parsed.server));
@@ -99,7 +99,7 @@ export function mcpHandlers(deps: Pick<ApiDeps, "settings" | "mcp">) {
       } catch (error) {
         // 認可を始められなかった理由は、接続先の問題として返す（設定の誤りではない）。
         if (error instanceof AppError) throw error;
-        throw new AppError("mcp_authorization_failed", 502, describeError(error));
+        throw new AppError("mcp_authorization_failed", describeError(error));
       }
     },
 

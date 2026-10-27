@@ -5,9 +5,8 @@
  * 接続確認は保存の前だけに使い、失敗しても HTTP は 200 で理由を返す。
  */
 
-import { describeError } from "../../../shared/errors";
 import type { WebSearchProviderForm } from "../../../shared/api/settings";
-import { ValidationError, WebSearchProviderExists, WebSearchProviderNotFound } from "../../errors";
+import { asValidationError, ValidationError, WebSearchProviderExists, WebSearchProviderNotFound } from "../../errors";
 import { webSearchProviderSettingsFromForm } from "../../data/settings";
 import type { WebSearchProviderSettings } from "../../data/settings";
 import { isWebSearchProviderId } from "../../websearch/index";
@@ -31,7 +30,7 @@ export function webSearchHandlers(deps: Pick<ApiDeps, "settings" | "webSearch">)
     try {
       return webSearchProviderSettingsFromForm(form, `webSearch.providers.${id}`);
     } catch (error) {
-      throw new ValidationError(describeError(error));
+      asValidationError(error);
     }
   }
 

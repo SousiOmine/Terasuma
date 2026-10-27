@@ -82,14 +82,14 @@ export type ApiDeps = {
 
 /** Tera が無ければ 404。あれば何もしない。 */
 export function requireTera(store: Store, id: string): void {
-  if (store.getTera(id) === null) throw new AppError("tera_not_found", 404, `Tera ${id} はありません`);
+  if (store.getTera(id) === null) throw new AppError("tera_not_found", `Tera ${id} はありません`);
 }
 
 /** プロバイダが設定されていなければ 404。 */
 export function requireProvider(settings: SettingsStore, id: string): ProviderSettings {
   const provider = settings.read().providers[id];
   if (provider === undefined) {
-    throw new AppError("provider_not_found", 404, `プロバイダ ${id} は設定されていません`);
+    throw new AppError("provider_not_found", `プロバイダ ${id} は設定されていません`);
   }
   return provider;
 }

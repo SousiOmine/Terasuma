@@ -9,9 +9,11 @@ import { createResource } from "./resource";
  */
 
 /** サーバーから読んだ Web 検索の設定。まだ読めていないときは null。 */
-const settingsResource = createResource(api.fetchWebSearch);
-export const webSearchSettings = settingsResource.data;
-export const isLoadingWebSearch = settingsResource.loading;
+export const webSearchResource = createResource(api.fetchWebSearch);
+export const webSearchSettings = webSearchResource.data;
+export const isLoadingWebSearch = webSearchResource.loading;
+/** 設定を読めなかった理由。「読み込み中」と区別して画面に出す。 */
+export const webSearchLoadError = webSearchResource.error;
 
 /** Web 検索の画面の中だけに出す失敗。 */
 const failure = createErrorSignal();
@@ -20,9 +22,9 @@ export const showWebSearchError = failure.show;
 export const clearWebSearchError = failure.clear;
 
 /** 設定画面を開いたときに読む（まだ読めていなければ）。 */
-export const loadWebSearchSettings = settingsResource.load;
+export const loadWebSearchSettings = webSearchResource.load;
 /** 設定を読み直す。 */
-export const refreshWebSearchSettings = settingsResource.refresh;
+export const refreshWebSearchSettings = webSearchResource.refresh;
 
 /** 保存する前に、入力されたキーで検索できるか確かめる。設定には書かない。 */
 export async function testWebSearchProvider(form: WebSearchProviderForm): Promise<WebSearchTestView> {

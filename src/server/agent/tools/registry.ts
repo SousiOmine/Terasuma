@@ -2,6 +2,7 @@ import { asSchema, type ToolSet } from "ai";
 import { truncateText } from "../../../shared/text";
 import { splitToolName } from "../../../shared/tools";
 import { describeToolFailure } from "../tool-failure";
+import { clampInt } from "../../../shared/numbers";
 
 /**
  * モデルのツール一覧に載せないツールの置き場。
@@ -155,7 +156,7 @@ function rank(entry: Entry, terms: readonly string[]): number {
 
 /** 件数を、レジストリが受け付ける範囲に収める。 */
 function clampLimit(limit: number): number {
-  return Math.min(Math.max(Math.trunc(limit), 1), MAX_SEARCH_LIMIT);
+  return clampInt(limit, 1, MAX_SEARCH_LIMIT);
 }
 
 /** 検索結果の 1 件分の本文。引数があるときだけ JSON Schema を添える。 */

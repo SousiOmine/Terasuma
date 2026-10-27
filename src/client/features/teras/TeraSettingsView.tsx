@@ -6,7 +6,7 @@ import { t } from "../../i18n";
 import { focusTeraId } from "../../state/route";
 import {
   clearRoutinesError,
-  isLoadingRoutines,
+  routinesLoadError,
   removeRoutine,
   routines,
   routinesError,
@@ -129,9 +129,9 @@ function TeraCard({
 }) {
   const all = routines.value?.routines ?? [];
   const items = all.filter((routine) => routine.teraId === tera.id);
-  const loading = routines.value === null && isLoadingRoutines.value;
-  const unavailable = routines.value === null && !isLoadingRoutines.value;
-  const error = routinesError.value;
+  // 読み込み中と、読み込めなかった（更新ボタンを出す）を区別する。
+  const loading = routines.value === null && routinesLoadError.value === null;
+  const unavailable = routines.value === null && routinesLoadError.value !== null;
 
   return (
     <CollapsibleCard
@@ -148,7 +148,7 @@ function TeraCard({
       <div class="mt-1 space-y-2">
         <p class="text-xs leading-5 text-secondary">{t("settings.teras.routines.description")}</p>
 
-        <SettingsError error={error} onDismiss={clearRoutinesError} />
+        <SettingsError error={routinesError.value} onDismiss={clearRoutinesError} />
 
         {loading ? (
           <p class="text-xs text-secondary">{t("common.loading")}</p>

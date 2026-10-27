@@ -30,7 +30,12 @@ export const messages = signal<readonly ChatMessageView[]>([]);
 export type LiveTurn = {
   id: string;
   createdAt: number;
-  seq: number;
+  /**
+   * この応答に予約された連番。開始の合図（assistant-start）を受け取っていれば入る。
+   * 途中から購読したときなど、合図が無いまま部分だけが届くと null になる。
+   * null のときは、保存済みの履歴を前後に分けず、末尾に並べる。
+   */
+  seq: number | null;
   parts: readonly MessagePart[];
 };
 
@@ -456,7 +461,8 @@ function upsertSaved(message: ChatMessageView): void {
 function settleLiveTurn(teraId: string): void {
   const live = liveTurn.value;
   liveTurn.value = null;
-  if (live === null || live.parts.length === 0) return;
+  // 連番が分からない応答は、保存済みの行として置けない（同じ行を 2 つ作ってしまう）。
+  if (live === null || live.parts.length === 0 || live.seq === null) return;
   if (activeTeraId.value !== teraId) return;
 
   upsertSaved({
@@ -508,7 +514,12 @@ function applyEvent(event: ChatEvent, teraId: string): void {
       break;
     case "assistant-part": {
       const live = liveTurn.value;
-      if (live === null) throw new Error(`ターンの開始前にメッセージが届きました（${effect.id}）`);
+      // 応答の途中から購読したときなど、開始の合図が無いまま部分が届くことがある。
+      // その場合は捨てずに新しいターンとして開く（黙って消すと、本文が欠けて見える）。
+      if (live === null) {
+        liveTurn.value = { id: effect.id, createdAt: effect.part.at, seq: null, parts: [effect.part] };
+        break;
+      }
       liveTurn.value = { ...live, parts: [...live.parts, effect.part] };
       break;
     }
@@ -516,7 +527,10 @@ function applyEvent(event: ChatEvent, teraId: string): void {
       // カードの材料（ツール呼び出し）は、そのままターンの記録に積む。
       // 画面はここからマークアップを解釈して描く（保存する形は増やさない）。
       const live = liveTurn.value;
-      if (live === null) throw new Error(`ターンの開始前に UI が届きました（${effect.part.id}）`);
+      if (live === null) {
+        liveTurn.value = { id: effect.id, createdAt: Date.now(), seq: null, parts: [effect.part] };
+        break;
+      }
       liveTurn.value = { ...live, parts: [...live.parts, effect.part] };
       break;
     }

@@ -1,7 +1,6 @@
 import { IconChevronDown } from "@tabler/icons-preact";
 import type { ComponentChildren } from "preact";
 import { useState } from "preact/hooks";
-import { t } from "../i18n";
 import { CARD_COMPACT_CLASS } from "./styles";
 
 export type CollapsibleCardProps = {
@@ -42,8 +41,9 @@ export function CollapsibleCard({
         <button
           type="button"
           class="flex min-w-0 flex-1 items-center gap-2 text-left"
+          // aria-expanded で開閉は伝わる。aria-label を付けると、中の見出し（カード名）が
+          // 読み上げから消え、どのカードか分からない「開く」ボタンが並ぶことになる。
           aria-expanded={open}
-          aria-label={open ? t("settings.connectors.collapse") : t("settings.connectors.expand")}
           onClick={() => setOpen(!open)}
         >
           <span class="min-w-0 flex-1">

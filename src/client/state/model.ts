@@ -16,9 +16,11 @@ import { createResource } from "./resource";
 export type ModelProblem = "unset" | "provider-missing";
 
 /** サーバから読んだモデル設定。まだ読めていないときは null。 */
-const settingsResource = createResource(api.fetchModelSettings);
-export const modelSettings = settingsResource.data;
-export const isLoadingSettings = settingsResource.loading;
+export const modelResource = createResource(api.fetchModelSettings);
+export const modelSettings = modelResource.data;
+export const isLoadingSettings = modelResource.loading;
+/** 設定を読めなかった理由。「読み込み中」と区別して画面に出す。 */
+export const modelLoadError = modelResource.error;
 
 /** 設定画面の中だけに出す失敗。チャット側のエラー表示とは分けてある。 */
 const failure = createErrorSignal();
@@ -27,8 +29,11 @@ export const showSettingsError = failure.show;
 export const clearSettingsError = failure.clear;
 
 /** models.dev のカタログ。まだ読めていないときは null。 */
-const catalogResource = createResource(api.fetchCatalog);
+export const catalogResource = createResource(api.fetchCatalog);
 export const catalogProviders = catalogResource.data;
+export const isLoadingCatalog = catalogResource.loading;
+/** カタログを読めなかった理由。読めないとプロバイダを追加できないので、画面に出す。 */
+export const catalogLoadError = catalogResource.error;
 
 /**
  * 既定のモデルの思考強度。
@@ -62,9 +67,9 @@ export function providerName(provider: ProviderView): string {
 }
 
 /** 設定を読む（まだ読めていなければ）。失敗は呼び出し側が画面に出す。 */
-export const loadModelSettings = settingsResource.load;
+export const loadModelSettings = modelResource.load;
 /** 設定を読み直す（読み込み直しボタン）。 */
-export const refreshModelSettings = settingsResource.refresh;
+export const refreshModelSettings = modelResource.refresh;
 
 /** カタログを読む（まだ読めていなければ）。 */
 export const loadCatalog = catalogResource.load;

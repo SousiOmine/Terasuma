@@ -5,7 +5,7 @@
  * すべてのプロバイダで同じにする。プロバイダごとの差は、URL・ヘッダー・本文・応答の読み方だけ。
  */
 
-import { readErrorDetail, sendRequest } from "../http/client";
+import { readErrorDetail, sendRequestOrThrow } from "../http/client";
 import { MAX_ERROR_DETAIL_CHARS } from "./constants";
 import { WebSearchError } from "./errors";
 import { describeError } from "../../shared/errors";
@@ -25,14 +25,11 @@ export async function requestJson(
   init: RequestInit,
   options: JsonRequestOptions,
 ): Promise<unknown> {
-  const outcome = await sendRequest(fetchImpl, url, init, {
+  const response = await sendRequestOrThrow(fetchImpl, url, init, {
     timeoutMs: options.timeoutMs,
     ...(options.signal === undefined ? {} : { signal: options.signal }),
+    onNetwork: (error) => networkError(options.provider, error),
   });
-
-  if (outcome.kind === "network") throw networkError(options.provider, outcome.error);
-
-  const response = outcome.response;
   if (!response.ok) {
     throw responseError(options.provider, response.status, await readErrorDetail(response, MAX_ERROR_DETAIL_CHARS));
   }

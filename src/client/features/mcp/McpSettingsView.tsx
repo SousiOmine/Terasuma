@@ -1,5 +1,6 @@
 import { IconExternalLink, IconPlus, IconRefresh } from "@tabler/icons-preact";
-import { useEffect, useState } from "preact/hooks";
+import { useState } from "preact/hooks";
+import { useResourceOnce } from "../../hooks/useResourceOnce";
 import type { McpServerState, McpServerView } from "../../../shared/api/settings";
 import { useDeleteTarget } from "../../hooks/useDeleteTarget";
 import type { MessageKey } from "../../i18n";
@@ -12,7 +13,8 @@ import {
   checkingServer,
   clearMcpError,
   isLoadingMcp,
-  loadMcpServers,
+  mcpLoadError,
+  mcpServersResource,
   mcpError,
   mcpServers,
   removeMcpServer,
@@ -56,18 +58,15 @@ const STATE_TONES: Record<McpServerState, BadgeTone> = {
  */
 export function McpSettingsView() {
   const view = mcpServers.value;
-  const error = mcpError.value;
+  const error = mcpError.value ?? mcpLoadError.value;
   const checking = checkingServer.value;
   const authorizing = authorizingServer.value;
 
   const [dialog, setDialog] = useState<McpDialogMode | null>(null);
   const deleting = useDeleteTarget<McpServerView>();
 
-  useEffect(() => {
-    // 設定画面を直接開いた場合に備えて、まだ読めていなければここで読む。
-    if (mcpServers.value !== null || isLoadingMcp.value) return;
-    void loadMcpServers().catch(showMcpError);
-  }, []);
+  // 設定画面を直接開いた場合に備えて、まだ読めていなければここで読む。
+  useResourceOnce(mcpServersResource);
 
   const runCheck = (serverId: string) => void checkServer(serverId).catch(showMcpError);
 
@@ -83,7 +82,12 @@ export function McpSettingsView() {
         }
       />
 
-      <ResourceList data={view === null ? null : view.servers} empty={t("settings.mcp.empty")}>
+      <ResourceList
+        data={view === null ? null : view.servers}
+        loading={isLoadingMcp.value}
+        error={mcpLoadError.value}
+        empty={t("settings.mcp.empty")}
+      >
         {(server) => (
           <McpServerCard
             key={server.id}

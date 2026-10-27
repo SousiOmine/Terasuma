@@ -1,17 +1,19 @@
 import { IconPlus } from "@tabler/icons-preact";
-import { useEffect, useState } from "preact/hooks";
+import { useState } from "preact/hooks";
+import { useResourceOnce } from "../../hooks/useResourceOnce";
 import type { WebSearchProviderView } from "../../../shared/api/settings";
 import { useDeleteTarget } from "../../hooks/useDeleteTarget";
 import { t } from "../../i18n";
 import {
   clearWebSearchError,
   isLoadingWebSearch,
-  loadWebSearchSettings,
   refreshWebSearchSettings,
   removeWebSearchProvider,
   setDefaultWebSearchProvider,
   showWebSearchError,
   webSearchError,
+  webSearchLoadError,
+  webSearchResource,
   webSearchSettings,
 } from "../../state/websearch";
 import { Button } from "../../ui/Button";
@@ -39,11 +41,8 @@ export function WebSearchProviderSection() {
   const [makingDefault, setMakingDefault] = useState<string | null>(null);
   const deleting = useDeleteTarget<WebSearchProviderView>();
 
-  useEffect(() => {
-    // 設定画面を直接開いた場合に備えて、まだ読めていなければここで読む。
-    if (webSearchSettings.value !== null || isLoadingWebSearch.value) return;
-    void loadWebSearchSettings().catch(showWebSearchError);
-  }, []);
+  // 設定画面を直接開いた場合に備えて、まだ読めていなければここで読む。
+  useResourceOnce(webSearchResource);
 
   const reload = () => void refreshWebSearchSettings().catch(showWebSearchError);
 
@@ -79,7 +78,12 @@ export function WebSearchProviderSection() {
         }
       />
 
-      <ResourceList data={view === null ? null : view.providers} empty={t("settings.webSearch.empty")}>
+      <ResourceList
+        data={view === null ? null : view.providers}
+        loading={isLoadingWebSearch.value}
+        error={webSearchLoadError.value}
+        empty={t("settings.webSearch.empty")}
+      >
         {(provider) => (
           <WebSearchProviderCard
             key={provider.id}

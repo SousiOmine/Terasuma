@@ -1,8 +1,10 @@
-import { isEnvName, isReservedEnvName } from "./env-name";
+import { isReservedEnvName } from "./env-name";
+import { isEnvName } from "../../shared/env";
 import { describeError } from "../../shared/errors";
 import type { SettingsStore } from "../data/settings";
 import { SettingsWriteError } from "../errors";
 import { createPendingRegistry } from "../wait/pending";
+import { waitEndedText } from "../agent/tools/context";
 
 /**
  * エージェントが秘密（API キーなど）を必要としたときの、チャットからの入力待ち。
@@ -66,7 +68,7 @@ export function envCancelledText(name: string): string {
 }
 
 /** ターンが終わって、待ちを続けられなくなったときの理由。 */
-const WAIT_ENDED = "The turn ended before the user entered the value";
+const WAIT_ENDED = waitEndedText("the user entered the value");
 
 export type EnvRequests = {
   /**

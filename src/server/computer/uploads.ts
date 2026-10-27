@@ -1,6 +1,6 @@
 import { posix } from "node:path";
 import { MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS_TOTAL_BYTES } from "../../shared/attachments";
-import { formatBytes } from "../../shared/text";
+import { formatBytes, truncateBytesFromStart } from "../../shared/text";
 import type { ChatAttachment } from "../../shared/api/message";
 import { ValidationError } from "../errors";
 import type { ContainerManager } from "./container";
@@ -124,19 +124,5 @@ export function safeFileName(input: string): string {
     .join("")
     .trim();
   const name = cleaned.length === 0 || cleaned === "." || cleaned === ".." ? "file" : cleaned;
-  return truncateToBytes(name, MAX_FILE_NAME_BYTES);
-}
-
-/** 文字の境目を壊さずに、UTF-8 のバイト数で名前を切る。 */
-function truncateToBytes(text: string, maxBytes: number): string {
-  let used = 0;
-  let result = "";
-
-  for (const char of text) {
-    const size = Buffer.byteLength(char, "utf-8");
-    if (used + size > maxBytes) break;
-    used += size;
-    result += char;
-  }
-  return result;
+  return truncateBytesFromStart(name, MAX_FILE_NAME_BYTES);
 }

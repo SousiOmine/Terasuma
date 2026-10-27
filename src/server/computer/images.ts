@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { writeBinary } from "../data/secret-file";
 import { join } from "node:path";
 import type { ImageRef } from "../../shared/api/message";
 
@@ -94,10 +95,7 @@ export function createImageStore(dataDir: string): ImageStore {
       const sha256 = createHash("sha256").update(data).digest("hex");
       const file = fileFor(sha256, type);
 
-      if (!existsSync(file)) {
-        mkdirSync(imagesDir, { recursive: true });
-        writeFileSync(file, data);
-      }
+      if (!existsSync(file)) writeBinary(file, data, { createDirectory: true });
 
       return { sha256, mime: type, width: size.width, height: size.height };
     },

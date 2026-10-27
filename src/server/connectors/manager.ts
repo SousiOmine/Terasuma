@@ -7,6 +7,7 @@ import { checkPi, setupPi, type PiRuntime, type PiStatus } from "./pi";
 import { createProgramStore, type ProgramStore } from "./program-store";
 import { createTokenStore, type TokenStore } from "./token-store";
 import { createWaiterQueue } from "../wait/waiters";
+import { waitEndedText } from "../agent/tools/context";
 
 /**
  * コネクタの状態。
@@ -67,15 +68,19 @@ export type ConnectorsOptions = {
   dataDir: string;
   /** 差し替えたいときだけ渡す（テスト用）。 */
   providers?: readonly ConnectorProvider[];
-  /** コンピュータの中の読み書きと実行。program コネクタに必要。 */
-  runtime?: PiRuntime;
+  /**
+   * コンピュータの中の読み書きと実行。program コネクタに必要。
+   * 関数で受け取るのは、コンピュータがコネクタより後に組み立てられるため
+   * （呼ぶのはターンの中なので、そのときには用意できている）。
+   */
+  runtime?: () => PiRuntime;
 };
 
 /** プロバイダごとのトークンと確認結果の置き場。 */
 const TOKENS_DIR_NAME = "connectors";
 
 /** ターンが終わって、待ちを続けられなくなったときの理由。 */
-const WAIT_ENDED = "The turn ended before the connector was set up.";
+const WAIT_ENDED = waitEndedText("the connector was set up.");
 
 export function createConnectors(options: ConnectorsOptions): ConnectorsManager {
   const providers = options.providers ?? CONNECTOR_PROVIDERS;
@@ -134,7 +139,7 @@ export function createConnectors(options: ConnectorsOptions): ConnectorsManager 
     provider: Extract<ConnectorProvider, { kind: "program" }>,
     input: { provider?: string; apiKey?: string; model?: string },
   ) {
-    const runtime = options.runtime;
+    const runtime = options.runtime?.();
     if (runtime === undefined) {
       throw new Error(`The computer is not available, so ${provider.name} cannot be checked.`);
     }

@@ -2,7 +2,8 @@ import { posix } from "node:path";
 import type { ToolSet } from "ai";
 import { tool } from "ai";
 import { throwIfAborted } from "../../../shared/async";
-import { formatBytes } from "../../../shared/text";
+import type { ToolContext } from "./context";
+import { formatBytes, truncateBytesFromEnd } from "../../../shared/text";
 import { z } from "zod";
 import type { ShellResult } from "../../computer/container";
 import { WORKDIR_IN_CONTAINER } from "../../computer/contract";
@@ -66,7 +67,6 @@ const BOM = "\uFEFF";
 const UTF8 = new TextDecoder("utf-8", { ignoreBOM: true });
 
 /** ツールの実行に渡ってくる中断。ターンが止まったら、ファイル操作もコマンドも打ち切る。 */
-type ToolContext = { abortSignal?: AbortSignal };
 
 export function createCodingToolset({ container, root }: CodingToolsetOptions): CodingToolset {
   const where = `Paths are relative to ${root} unless absolute; ~ is ${WORKDIR_IN_CONTAINER}.`;
@@ -427,7 +427,7 @@ function truncateTail(content: string, maxLines: number, maxBytes: number): Tail
     const size = Buffer.byteLength(line, "utf-8") + (kept.length === 0 ? 0 : 1);
     if (bytes + size > maxBytes) {
       if (kept.length === 0) {
-        const tail = truncateStringToBytesFromEnd(line, maxBytes);
+        const tail = truncateBytesFromEnd(line, maxBytes);
         kept.unshift(tail);
         bytes = Buffer.byteLength(tail, "utf-8");
         truncatedBy = "bytes";
@@ -449,14 +449,4 @@ function truncateTail(content: string, maxLines: number, maxBytes: number): Tail
     startLine: totalLines - kept.length + 1,
     endLine: totalLines,
   };
-}
-
-/** 文字列の末尾を、UTF-8 の文字の境目を崩さずに maxBytes バイトまで残す。 */
-function truncateStringToBytesFromEnd(text: string, maxBytes: number): string {
-  const buffer = Buffer.from(text, "utf-8");
-  if (buffer.length <= maxBytes) return text;
-
-  let start = buffer.length - maxBytes;
-  while (start < buffer.length && ((buffer[start] ?? 0) & 0xc0) === 0x80) start += 1;
-  return buffer.subarray(start).toString("utf-8");
 }

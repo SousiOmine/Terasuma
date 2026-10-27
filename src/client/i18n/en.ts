@@ -142,8 +142,6 @@ export const en = {
     "Connectors to the external services your CLI commands and tools use. Save a token or webhook URL; the computer, app_request, and Discord posts can then use it.",
   "settings.connectors.state.connected": "Connected",
   "settings.connectors.state.disconnected": "Not connected",
-  "settings.connectors.expand": "Expand",
-  "settings.connectors.collapse": "Collapse",
   "settings.connectors.account": "Connected as {account}",
   "settings.connectors.permissions": "Required permissions: {permissions}",
   "settings.connectors.token.save": "Save",
@@ -368,12 +366,18 @@ export const en = {
   "error.media_not_found": "The file was not found.",
   "error.not_found": "That location was not found.",
   "error.method_not_allowed": "That operation is not supported here.",
+  "error.unauthorized": "This page is not allowed to do that.",
   "error.settings_write_failed": "The settings could not be saved.",
   "error.internal_error": "Something went wrong. Try again.",
   "error.network": "The server is not reachable.",
   "error.stream_ended": "The reply was cut off.",
   "error.input": "That input was not accepted. Check it and try again.",
   "error.dismiss": "Dismiss",
+
+  // 画面（クライアント）の中だけで起きる、状態の食い違い。
+  // サーバのコードと混ぜず、届いた順序が想定と違ったときの説明に使う。
+  "error.tera_list_empty": "No Tera is left after deleting it. Reload the page.",
+  "error.tera_unknown": "The Tera for this request is not known. Reload the page.",
 } as const;
 
 export type MessageKey = keyof typeof en;

@@ -1,3 +1,4 @@
+import { isEnvName } from "../../../shared/env";
 import { mcpServerIdProblem } from "../../../shared/ids";
 import type { McpServerForm } from "../../../shared/api/settings";
 import type { MessageKey } from "../../i18n";
@@ -69,7 +70,7 @@ export function parseEnv(value: string): Record<string, string> | null {
     if (separator <= 0) return null;
 
     const name = line.slice(0, separator).trim();
-    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) return null;
+    if (!isEnvName(name)) return null;
     variables[name] = line.slice(separator + 1).trim();
   }
   return variables;

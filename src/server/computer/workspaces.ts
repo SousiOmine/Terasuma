@@ -2,6 +2,7 @@ import { mkdirSync, rmSync } from "node:fs";
 import { join, posix } from "node:path";
 import { containerHomeDir } from "./container";
 import { WORKDIR_IN_CONTAINER } from "./contract";
+import { isTeraId } from "../../shared/ids";
 
 /**
  * Tera ごとの作業フォルダ。
@@ -20,18 +21,6 @@ const TERAS_DIR_NAME = "teras";
 
 /** コンテナの中の、作業フォルダを並べるディレクトリ。 */
 export const TERAS_DIR_IN_CONTAINER = posix.join(WORKDIR_IN_CONTAINER, TERAS_DIR_NAME);
-
-/**
- * Tera の id を、フォルダ名としてそのまま使えるかどうかの規則。
- * 形は shared/ids.ts の ID_PATTERN と同じだが、Tera の id はパスを組み立てるこの場所で決める。
- * 作る導線（tera_create ツール）も、行を書く前にここで確かめる。
- */
-const TERA_ID_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
-
-/** Tera の id を、フォルダ名としてそのまま使えるかどうか。 */
-export function isTeraId(value: string): boolean {
-  return TERA_ID_PATTERN.test(value);
-}
 
 /** フォルダ名に使えない id は、黙って別名にせず止める。 */
 function assertTeraId(teraId: string): void {

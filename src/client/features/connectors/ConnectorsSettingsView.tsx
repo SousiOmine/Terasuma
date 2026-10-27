@@ -1,4 +1,5 @@
-import { useEffect, useState } from "preact/hooks";
+import { useState } from "preact/hooks";
+import { useResourceOnce } from "../../hooks/useResourceOnce";
 import type { ConnectorProviderView } from "../../../shared/api/settings";
 import { useDeleteTarget } from "../../hooks/useDeleteTarget";
 import type { MessageKey } from "../../i18n";
@@ -9,8 +10,9 @@ import {
   connecting,
   connectors,
   connectorsError,
+  connectorsLoadError,
+  connectorsResource,
   isLoadingConnectors,
-  loadConnectors,
   removeConnector,
   saveConnectorToken,
   savingToken,
@@ -19,6 +21,7 @@ import {
 import { ConfirmDialog } from "../../ui/ConfirmDialog";
 import { Field } from "../../ui/Field";
 import { SettingsSection } from "../../ui/SettingsSection";
+import { LoadOrError } from "../../ui/LoadOrError";
 import { StatusBadge } from "../../ui/StatusBadge";
 import { CollapsibleCard } from "../../ui/CollapsibleCard";
 import { CARD_ACTION_CLASS, INPUT_CLASS } from "../../ui/styles";
@@ -44,11 +47,8 @@ export function ConnectorsSettingsView() {
   const error = connectorsError.value;
   const disconnecting = useDeleteTarget<ConnectorProviderView>();
 
-  useEffect(() => {
-    // 設定画面を直接開いた場合に備えて、まだ読めていなければここで読む。
-    if (connectors.value !== null || isLoadingConnectors.value) return;
-    void loadConnectors().catch(showConnectorsError);
-  }, []);
+  // 設定画面を直接開いた場合に備えて、まだ読めていなければここで読む。
+  useResourceOnce(connectorsResource);
 
   return (
     <SettingsSection title={t("settings.connectors")} error={error} onDismiss={clearConnectorsError}>
@@ -56,7 +56,7 @@ export function ConnectorsSettingsView() {
 
       <div class="mt-4 space-y-2">
         {view === null ? (
-          <p class="text-xs text-secondary">{t("common.loading")}</p>
+          <LoadOrError loading={isLoadingConnectors.value} error={connectorsLoadError.value} />
         ) : (
           view.providers.map((provider) => (
             <ConnectorCard key={provider.id} provider={provider} onDisconnect={() => disconnecting.open(provider)} />

@@ -1,9 +1,8 @@
-import { isEnvName } from "../../computer/env-name";
-import { describeError } from "../../../shared/errors";
+import { isEnvName } from "../../../shared/env";
 import type { ComputerEnvView } from "../../../shared/api/settings";
 import { normalizeEnvValue } from "../../computer/env";
 import type { SettingsStore } from "../../data/settings";
-import { ConflictError, ValidationError } from "../../errors";
+import { asValidationError, ConflictError, ValidationError } from "../../errors";
 import { readJsonBody } from "../body";
 import { json, noContent } from "../respond";
 import { SECURITY_HEADERS } from "../security";
@@ -117,7 +116,7 @@ export function computerHandlers(deps: Pick<ApiDeps, "settings" | "handover" | "
         value = normalizeEnvValue(raw);
       } catch (error) {
         // 送られた値そのものは、理由にも応答にも含めない。
-        throw new ValidationError(describeError(error));
+        asValidationError(error);
       }
 
       if (!deps.envRequests.answer(teraId, { kind: "value", name, value })) {

@@ -1,5 +1,5 @@
 import { describeError } from "../../shared/errors";
-import { sendRequest } from "../http/client";
+import { sendRequestOrThrow } from "../http/client";
 import type { TokenConnectorProvider } from "./providers";
 
 /**
@@ -21,15 +21,16 @@ async function requestVerify(provider: TokenConnectorProvider, accessToken: stri
   const url = new URL(`${base}${provider.api.verify.path}`);
   const { header, prefix } = provider.api.auth;
 
-  const outcome = await sendRequest(
+  return sendRequestOrThrow(
     fetch,
     url.toString(),
     { headers: { ...provider.api.headers, [header]: `${prefix}${accessToken}` } },
-    { timeoutMs: HTTP_TIMEOUT_MS },
+    {
+      timeoutMs: HTTP_TIMEOUT_MS,
+      // 繋がらなければ、その失敗をそのまま画面へ返す（理由はブラウザの通信の失敗と同じ形）。
+      onNetwork: (error) => (error instanceof Error ? error : new Error(String(error))),
+    },
   );
-
-  if (outcome.kind === "network") throw outcome.error;
-  return outcome.response;
 }
 
 /** 応答からアカウント名を読む。field が null のコネクタは読まないので null。 */

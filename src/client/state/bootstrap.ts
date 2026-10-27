@@ -3,7 +3,7 @@ import { openTera } from "./chat";
 import { loadContainer, showContainerError } from "./container";
 import { showChatError } from "./failure";
 import { loadModelSettings } from "./model";
-import { refreshTeras, teras } from "./session";
+import { loadTeras, teras } from "./session";
 
 /**
  * 画面を開いたときの読み込み。
@@ -19,7 +19,8 @@ export async function bootstrap(): Promise<void> {
   try {
     // モデル設定は、チャット画面の「使うモデルがありません」の案内にも使う。
     await loadModelSettings();
-    await refreshTeras();
+    // 起動時はまだ読んでいないので load で足りる（読み直しは Tera を消したときなどに使う）。
+    await loadTeras();
 
     // いまは 1 体だけなので、開く Tera は一覧の先頭で決まる。
     const first = teras.value[0];

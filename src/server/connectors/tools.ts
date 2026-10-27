@@ -3,12 +3,13 @@ import { tool } from "ai";
 import { z } from "zod";
 import { describeError } from "../../shared/errors";
 import { truncateText } from "../../shared/text";
-import { sendRequest } from "../http/client";
+import { sendRequestOrThrow } from "../http/client";
 import { APP_REQUEST_TOOL_NAME, connectAppToolName } from "../../shared/tools";
 import { ConnectorNotFound } from "../errors";
 import { COMPOSIO_CONNECTOR_ID, createComposioTools } from "./composio";
 import type { ConnectorsManager } from "./manager";
 import type { ConnectorProvider } from "./providers";
+import { reasonInputSchema, requireSignal, type ToolContext } from "../agent/tools/context";
 
 /**
  * コネクタを扱うツール。
@@ -34,7 +35,6 @@ const API_TIMEOUT_MS = 30_000;
 /** モデルへ返す応答の上限（文字数）。 */
 const MAX_RESPONSE_CHARS = 20_000;
 
-type ToolContext = { abortSignal?: AbortSignal };
 
 /** API の引数。method はスキーマの列挙より広い string として受ける。 */
 type AppRequestInput = {
@@ -74,14 +74,10 @@ export function createConnectorTools(options: { connectors: ConnectorsManager })
       connectAppToolName(provider.id),
       tool({
         description: connectDescription(provider),
-        inputSchema: z.object({
-          reason: z.string().min(1).describe("Why you need it, written for the user to read"),
-        }),
+        inputSchema: reasonInputSchema,
         execute: async (_input: { reason: string }, context: ToolContext) => {
-          const signal = context.abortSignal;
-          if (signal === undefined) {
-            throw new Error("Cannot wait for the user because the turn's abort signal is not available");
-          }
+          // 中断を受け取れないと、ユーザーを待ったままターンを片付けられなくなる。
+          const signal = requireSignal(context);
 
           try {
             return await connectors.wait(provider.id, signal);
@@ -137,7 +133,7 @@ export function createConnectorTools(options: { connectors: ConnectorsManager })
         const withBody = body !== undefined && method !== "GET" && method !== "DELETE";
         if (withBody) headers["Content-Type"] = "application/json";
 
-        const outcome = await sendRequest(
+        const response = await sendRequestOrThrow(
           fetch,
           url.toString(),
           {
@@ -148,16 +144,10 @@ export function createConnectorTools(options: { connectors: ConnectorsManager })
           {
             timeoutMs: API_TIMEOUT_MS,
             ...(context.abortSignal === undefined ? {} : { signal: context.abortSignal }),
+            onNetwork: (error) =>
+              new Error(`Could not reach ${definition.name}: ${describeError(error)}`, { cause: error }),
           },
         );
-
-        if (outcome.kind === "network") {
-          throw new Error(`Could not reach ${definition.name}: ${describeError(outcome.error)}`, {
-            cause: outcome.error,
-          });
-        }
-
-        const response = outcome.response;
 
         const text = await response.text();
         if (response.status === 401) {

@@ -6,9 +6,11 @@ import { createResource } from "./resource";
 import { pollUntil, type PollOutcome } from "../lib/polling";
 
 /** サーバーから読んだ MCP サーバーの一覧。まだ読めていないときは null。 */
-const serversResource = createResource(api.fetchMcpServers);
-export const mcpServers = serversResource.data;
-export const isLoadingMcp = serversResource.loading;
+export const mcpServersResource = createResource(api.fetchMcpServers);
+export const mcpServers = mcpServersResource.data;
+export const isLoadingMcp = mcpServersResource.loading;
+/** 一覧を読めなかった理由。「読み込み中」と区別して画面に出す。 */
+export const mcpLoadError = mcpServersResource.error;
 
 /** 詳細設定の中だけに出す失敗。 */
 const failure = createErrorSignal();
@@ -30,8 +32,9 @@ export const AUTHORIZATION_POLL_MS = 2_000;
 export const AUTHORIZATION_TIMEOUT_MS = 5 * 60 * 1_000;
 
 /** 設定画面を開いたときに読む（まだ読めていなければ）。 */
-export const loadMcpServers = serversResource.load;
-/** 一覧を読み直す。 */
+export const loadMcpServers = mcpServersResource.load;
+/** 一覧を読み直す（読み込み中でも始め直す）。 */
+export const refreshMcpServers = mcpServersResource.refresh;
 
 /** 保存する前に、入力された設定で繋がるか確かめる。設定には書かない。 */
 export async function testMcpServer(form: McpServerForm): Promise<McpTestView> {

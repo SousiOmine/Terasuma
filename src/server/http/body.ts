@@ -7,7 +7,7 @@ import type { UploadFile } from "../computer/uploads";
 import { readUploadedFiles } from "../computer/uploads";
 import { mcpServerSettingsFromForm, parseProviderCredentials } from "../data/settings";
 import type { McpServerSettings, ProviderSettings } from "../data/settings";
-import { ValidationError } from "../errors";
+import { asValidationError, ValidationError } from "../errors";
 
 /**
  * リクエストの本文から値を読み、検証して、保存できる形に整える。
@@ -127,7 +127,7 @@ export async function readMcpForm(req: JsonRequest): Promise<{ id: string; serve
   try {
     return { id, server: mcpServerSettingsFromForm(form, `mcpServers.${id}`) };
   } catch (error) {
-    throw new ValidationError(describeError(error));
+    asValidationError(error);
   }
 }
 
@@ -287,7 +287,7 @@ export function parseProviderSettings(id: string, body: Record<string, unknown> 
   try {
     return parseProviderCredentials(credentials, `providers.${id}`);
   } catch (error) {
-    throw new ValidationError(describeError(error));
+    asValidationError(error);
   }
 }
 

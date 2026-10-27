@@ -11,6 +11,7 @@ import {
 import type { AgentEngine } from "./engine";
 import type { TeraContext } from "./prompt";
 import { contextTokens, estimateMessageTokens, estimateTokens } from "./tokens";
+import { combineSignal } from "../../shared/async";
 
 /**
  * 過去の対話の圧縮（Compaction）。
@@ -75,8 +76,11 @@ export type Compaction = {
    * Tera を消す前に呼ぶ（同じ id を作り直した先へ、古い会話の要約が書かれるのを防ぐ）。
    */
   cancel(teraId: string): Promise<void>;
-  /** 予約を片付ける。 */
-  close(): void;
+  /**
+   * 予約を片付け、走っている畳みを打ち切って終わるまで待つ。
+   * 終了の直前に呼ぶ（DB を閉じた後で要約を書き込ませないため）。
+   */
+  close(): Promise<void>;
 };
 
 export type CreateCompactionOptions = {
@@ -182,7 +186,7 @@ export function createCompaction(options: CreateCompactionOptions): Compaction {
   async function run(teraId: string, force: boolean, cancelSignal: AbortSignal): Promise<void> {
     // 更新そのものに期限を置く（長い履歴でも、1 回で際限なく呼び続けない）。
     // Tera を消すときは cancelSignal で、待たずに打ち切る。
-    const signal = AbortSignal.any([AbortSignal.timeout(UPDATE_TIMEOUT_MS), cancelSignal]);
+    const signal = combineSignal(cancelSignal, UPDATE_TIMEOUT_MS);
 
     try {
       await compact(teraId, force, signal);
@@ -325,9 +329,14 @@ export function createCompaction(options: CreateCompactionOptions): Compaction {
     });
   }
 
-  function close(): void {
+  async function close(): Promise<void> {
     for (const timer of timers.values()) clearTimeout(timer);
     timers.clear();
+
+    // 走っている畳みは、止めてから終わるまで待つ。書き込みが済む前に DB を閉じない。
+    const jobs = [...running.values()];
+    for (const current of jobs) current.controller.abort();
+    await Promise.allSettled(jobs.map((current) => current.job));
   }
 
   return { context, check, update, cancel, close };

@@ -4,6 +4,7 @@ import { join, relative } from "node:path";
 import { setLocale, t } from "../src/client/i18n";
 import { en } from "../src/client/i18n/en";
 import { ja } from "../src/client/i18n/ja";
+import { CLIENT_ERROR_CODES } from "../src/client/lib/http";
 import { API_ERROR_CODES } from "../src/shared/api/error";
 
 const root = join(import.meta.dir, "..");
@@ -35,8 +36,8 @@ function referencedKeys(): Set<string> {
   }
 
   // 失敗の文言は `error.${code}` で組み立てるので、コードの一覧から足す。
-  for (const code of [...API_ERROR_CODES, "network", "input", "mcp_unreachable", "stream_ended"])
-    keys.add(`error.${code}`);
+  // 足し忘れると、その失敗だけ文言が出ない（キーが無いと画面は空文字を出す）。
+  for (const code of [...API_ERROR_CODES, ...CLIENT_ERROR_CODES]) keys.add(`error.${code}`);
 
   return keys;
 }

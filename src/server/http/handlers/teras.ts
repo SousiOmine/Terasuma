@@ -134,7 +134,7 @@ export function terasHandlers(
       // 呼び出しの中で初めて失敗すると、画面には「モデルから応答を得られませんでした」としか出せない。
       // ファイルを置く前に確かめて、無駄なファイルを残さない。
       const resolution = resolveModel(settings.read(), deps.catalog.snapshot());
-      if (!resolution.ok) throw new AppError("model_not_configured", 400, resolution.detail);
+      if (!resolution.ok) throw new AppError("model_not_configured", resolution.detail);
 
       const uploaded = await saveUploads(container, req.params.id, form.files, req.signal);
       const attachments = uploaded.length === 0 ? null : uploaded;
@@ -165,7 +165,7 @@ export function terasHandlers(
 
       // モデルを呼べない状態なら、ターンを始めずに理由を返す（送信と同じ）。
       const resolution = resolveModel(settings.read(), deps.catalog.snapshot());
-      if (!resolution.ok) throw new AppError("model_not_configured", 400, resolution.detail);
+      if (!resolution.ok) throw new AppError("model_not_configured", resolution.detail);
 
       // 最後のユーザー発言を探す。無ければ、答える先が無い。
       const page = store.listMessagesPage(teraId, { limit: 50, before: null });

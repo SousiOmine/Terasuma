@@ -89,7 +89,7 @@ async function withProgramConnectorServer(
 ): Promise<void> {
   await withServer(request, {
     connectors: ({ dir }) =>
-      createConnectors({ dataDir: dir, providers: [fakeProgramProvider()], runtime: fake.runtime }),
+      createConnectors({ dataDir: dir, providers: [fakeProgramProvider()], runtime: () => fake.runtime }),
   });
 }
 

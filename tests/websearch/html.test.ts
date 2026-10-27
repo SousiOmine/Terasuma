@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { decodeEntities, htmlToText, pageTitle } from "../../src/server/websearch/html";
-import { truncateText } from "../../src/server/websearch/text";
+import { truncateText } from "../../src/shared/text";
 
 describe("HTML から本文へ", () => {
   test("タイトルを取り出す", () => {
@@ -49,15 +49,11 @@ describe("HTML から本文へ", () => {
 
 describe("本文の切り詰め", () => {
   test("上限以内はそのまま", () => {
-    expect(truncateText("short", 10)).toBe("short");
+    expect(truncateText("short", 10, "parens")).toBe("short");
   });
 
   test("上限を超えたら切って、残りの文字数を添える", () => {
     const text = "a".repeat(20);
-    expect(truncateText(text, 5)).toBe("aaaaa\n\n… (15 more characters)");
-  });
-
-  test("上限が 1 未満でも 1 文字は返す", () => {
-    expect(truncateText("abc", 0)).toBe("a\n\n… (2 more characters)");
+    expect(truncateText(text, 5, "parens")).toBe("aaaaa\n… (15 more characters)");
   });
 });

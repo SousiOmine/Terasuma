@@ -19,7 +19,7 @@ export function routineHandlers(deps: Pick<ApiDeps, "store" | "routines">) {
   /** 無い id は 404。 */
   function requireRoutine(id: string): RoutineRecord {
     const routine = store.readRoutine(id);
-    if (routine === null) throw new AppError("not_found", 404, `ルーチン ${id} はありません`);
+    if (routine === null) throw new AppError("not_found", `ルーチン ${id} はありません`);
     return routine;
   }
 

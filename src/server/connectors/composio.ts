@@ -3,10 +3,11 @@ import { tool } from "ai";
 import { z } from "zod";
 import { describeError } from "../../shared/errors";
 import { recordOf } from "../../shared/guards";
-import { truncateText } from "../../shared/text";
+import { oneLine, truncateText } from "../../shared/text";
 import { COMPOSIO_EXECUTE_TOOL_NAME, COMPOSIO_SEARCH_TOOL_NAME, connectAppToolName } from "../../shared/tools";
-import { sendRequest } from "../http/client";
+import { sendRequestOrThrow } from "../http/client";
 import type { ConnectorsManager } from "./manager";
+import type { ToolContext } from "../agent/tools/context";
 
 /**
  * Composio のツール。
@@ -40,7 +41,6 @@ const SEARCH_LIMIT = 20;
 /** 1 つの引数の説明の上限（文字数）。 */
 const MAX_ARGUMENT_CHARS = 120;
 
-type ToolContext = { abortSignal?: AbortSignal };
 
 /** 検索の引数。 */
 type SearchInput = { query: string; toolkit?: string };
@@ -83,18 +83,19 @@ export function createComposioTools(options: { connectors: ConnectorsManager }):
     };
     if (init.body !== undefined) headers["Content-Type"] = "application/json";
 
-    const outcome = await sendRequest(
+    const response = await sendRequestOrThrow(
       fetch,
       `${baseUrl}${path}`,
       { method: init.method, headers, ...(init.body === undefined ? {} : { body: JSON.stringify(init.body) }) },
-      { timeoutMs: API_TIMEOUT_MS, ...(signal === undefined ? {} : { signal }) },
+      {
+        timeoutMs: API_TIMEOUT_MS,
+        ...(signal === undefined ? {} : { signal }),
+        onNetwork: (error) =>
+          new Error(`Could not reach Composio: ${describeError(error)}`, {
+            cause: error,
+          }),
+      },
     );
-
-    if (outcome.kind === "network") {
-      throw new Error(`Could not reach Composio: ${describeError(outcome.error)}`, { cause: outcome.error });
-    }
-
-    const response = outcome.response;
     if (response.status === 401) {
       throw new Error(
         `Composio rejected the saved API key (HTTP 401). The key may be revoked, or it may lack the permissions this call needs; ask the user to save a key with ${connectAppToolName(COMPOSIO_CONNECTOR_ID)}.`,
@@ -228,10 +229,6 @@ function argumentsOf(value: unknown): string[] {
     parts.push(`${name} (${shape})${note}`);
   }
   return parts;
-}
-
-function oneLine(text: string): string {
-  return text.replace(/\s+/g, " ").trim();
 }
 
 function stringOf(value: unknown): string | null {

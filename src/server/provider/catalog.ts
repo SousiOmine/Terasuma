@@ -7,10 +7,10 @@
  * （チャットの呼び出しで通信を待たせないため）。応答は 5MB を超えるので、
  * クライアントへは必要な範囲だけを API で返す。
  */
-import { mkdirSync, readFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { readFileSync } from "node:fs";
+import { writeJson } from "../data/secret-file";
 import { modelParts, type ModelId } from "../../shared/model";
-import { sendRequest, type FetchLike } from "../http/client";
+import { sendRequestOrThrow, type FetchLike } from "../http/client";
 import { catalogRoute } from "./kinds";
 import { describeError } from "../../shared/errors";
 
@@ -158,28 +158,24 @@ export function createCatalog(options: {
 
   async function writeFileCache(data: unknown, fetchedAt: number): Promise<void> {
     try {
-      mkdirSync(dirname(cachePath), { recursive: true });
-      await Bun.write(cachePath, `${JSON.stringify({ fetchedAt, data } satisfies CatalogFile)}\n`);
+      // 秘密ではない（公開のカタログ）ので、端末の既定の権限で置く。
+      writeJson(cachePath, { fetchedAt, data } satisfies CatalogFile, { createDirectory: true });
     } catch {
       // 書けなくてもメモリのカタログで動く。次回の起動で取り直すだけ。
     }
   }
 
   async function fetchCatalog(): Promise<CatalogSnapshot> {
-    const outcome = await sendRequest(
+    const response = await sendRequestOrThrow(
       fetchImpl,
       MODELS_DEV_URL,
       { headers: { Accept: "application/json" } },
-      { timeoutMs: CATALOG_TIMEOUT_MS },
+      {
+        timeoutMs: CATALOG_TIMEOUT_MS,
+        onNetwork: (error) =>
+          new Error(`${MODELS_DEV_URL} からカタログを取得できません: ${describeError(error)}`, { cause: error }),
+      },
     );
-
-    if (outcome.kind === "network") {
-      throw new Error(`${MODELS_DEV_URL} からカタログを取得できません: ${describeError(outcome.error)}`, {
-        cause: outcome.error,
-      });
-    }
-
-    const response = outcome.response;
     if (!response.ok) {
       throw new Error(`${MODELS_DEV_URL} からカタログを取得できません: HTTP ${response.status}`);
     }

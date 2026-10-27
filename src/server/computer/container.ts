@@ -85,7 +85,7 @@ export class ContainerError extends AppError {
   ) {
     // 操作の前提（動いていること）が満たされていない場合だけ 409。
     // イメージの作成や起動の失敗は、接続先（podman）側の問題として 502 にする。
-    super(code, code === "container_not_running" ? 409 : 502, message);
+    super(code, message);
   }
 }
 

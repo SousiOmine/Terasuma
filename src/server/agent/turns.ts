@@ -97,6 +97,11 @@ export type Turns = {
    * 止めるターンが無ければ false（すでに終わっている。呼び直しても害はない）。
    */
   stop(teraId: string): boolean;
+  /**
+   * 走っているすべてのターンを止め、保存が終わるまで待つ。
+   * 終了の直前に呼ぶ（DB を閉じた後で書き込ませないため）。
+   */
+  close(): Promise<void>;
 };
 
 /** 一時的な失敗のときに、やり直すまでの待ち（ミリ秒）。回数はこの配列の長さ。 */
@@ -133,6 +138,10 @@ type RunningTurn = {
   pending: ChatMessage[];
   /** このターンを始めたきっかけ。保存する発言の origin を決める。 */
   origin: TurnOrigin;
+  /** このターンのイベント列が終わるまで解決しない。close() が保存の完了を待つのに使う。 */
+  done: Promise<void>;
+  /** done を解決する。ターンの finally から呼ぶ。 */
+  finish(): void;
 };
 
 export function createTurns(deps: TurnDeps): Turns {
@@ -148,7 +157,18 @@ export function createTurns(deps: TurnDeps): Turns {
       // 画面は 1 つのターンしか始めないが、別のタブから同じ Tera を開けるため、ここでも断る。
       if (running.has(teraId)) return null;
 
-      const turn: RunningTurn = { controller: new AbortController(), stopped: false, pending: [], origin };
+      let finish: () => void = () => undefined;
+      const done = new Promise<void>((resolve) => {
+        finish = resolve;
+      });
+      const turn: RunningTurn = {
+        controller: new AbortController(),
+        stopped: false,
+        pending: [],
+        origin,
+        done,
+        finish,
+      };
       running.set(teraId, turn);
       return runTurn(deps, teraId, input, turn, running, options?.startUserMessage ?? true);
     },
@@ -191,8 +211,26 @@ export function createTurns(deps: TurnDeps): Turns {
       turn.controller.abort();
       return true;
     },
+
+    async close() {
+      // 止めたターンは、それまでの本文と添付を保存してから終わる。書き込みが終わるまで待つ。
+      const turns = [...running.values()];
+      for (const turn of turns) {
+        turn.stopped = true;
+        turn.controller.abort();
+      }
+      if (turns.length === 0) return;
+
+      // 一度も読まれなかったイベント列は終わらない（ジェネレータは最初の next で動き出す）。
+      // 終了を待ち続けないよう、上限を置く。
+      const done = Promise.allSettled(turns.map((turn) => turn.done));
+      await Promise.race([done, new Promise<void>((resolve) => setTimeout(resolve, CLOSE_TIMEOUT_MS))]);
+    },
   };
 }
+
+/** close() が、走っているターンの片付けを待つ上限（ミリ秒）。 */
+const CLOSE_TIMEOUT_MS = 10_000;
 
 /**
  * ターン分のイベント列。終わったら、実行中の印を必ず外す。
@@ -219,6 +257,7 @@ async function* runTurn(
     }
   } finally {
     running.delete(teraId);
+    turn.finish();
 
     // ターンが終わってから、次に畳む時を決める（要れば今すぐ、要らなければ 3 時間後に予約）。
     deps.compaction.check(teraId);

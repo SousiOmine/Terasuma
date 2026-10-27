@@ -1,10 +1,10 @@
-import { rmSync } from "node:fs";
 import { join } from "node:path";
 import type { DiscordWebhookTeraView, DiscordWebhooksView } from "../../shared/api/discord";
 import type { TeraDirectory } from "../data/store";
-import { readPrivateJson, writePrivateJson } from "../data/secret-file";
+import { createPrivateJsonStore, type PrivateJsonStore } from "../data/private-store";
 import type { FetchLike } from "../http/client";
 import { createWaiterQueue } from "../wait/waiters";
+import { waitEndedText } from "../agent/tools/context";
 import {
   parseWebhookUrl,
   sendWebhookMessage,
@@ -78,7 +78,7 @@ const DIR_NAME = "discord";
 const SETUP_URL = "https://support.discord.com/hc/en-us/articles/228383668-Intro-to-Webhooks";
 
 /** ターンが終わって、待ちを続けられなくなったときの理由。 */
-const WAIT_ENDED = "The turn ended before the webhook URL was saved.";
+const WAIT_ENDED = waitEndedText("the webhook URL was saved.");
 
 export function createDiscordWebhooks(options: DiscordWebhooksOptions): DiscordWebhooks {
   const fetchImpl = options.fetch ?? fetch;
@@ -94,18 +94,31 @@ export function createDiscordWebhooks(options: DiscordWebhooksOptions): DiscordW
     return join(options.dataDir, DIR_NAME, `${teraId}.json`);
   }
 
+  /**
+   * Tera ごとの置き場。読み出しは覚えておき、保存・削除で覚え直す（private-store が持つ）。
+   * 置き場は Tera の一覧にある id からだけ作り、URL など外から来た文字列をファイル名にしない。
+   */
+  const stores = new Map<string, PrivateJsonStore<StoredWebhook>>();
+
+  function storeOf(teraId: string): PrivateJsonStore<StoredWebhook> {
+    const existing = stores.get(teraId);
+    if (existing !== undefined) return existing;
+
+    const store = createPrivateJsonStore<StoredWebhook>({
+      path: pathOf(teraId),
+      is: (value): value is StoredWebhook => storedWebhookOf(value) !== null,
+      what: "Discord の webhook として読めません",
+    });
+    stores.set(teraId, store);
+    return store;
+  }
+
   function load(teraId: string): WebhookState {
-    const path = pathOf(teraId);
-    const content = readPrivateJson(path);
+    const content = storeOf(teraId).read();
 
     if (content.kind === "missing") return { kind: "none" };
     if (content.kind === "unreadable") return { kind: "unreadable", detail: content.detail };
-
-    const webhook = storedWebhookOf(content.value);
-    if (webhook === null) {
-      return { kind: "unreadable", detail: `${path} の内容が Discord の webhook として読めません` };
-    }
-    return { kind: "webhook", webhook };
+    return { kind: "webhook", webhook: content.value };
   }
 
   /** ツールへ返す、接続できたときの文。URL そのものは含めない。 */
@@ -141,8 +154,8 @@ export function createDiscordWebhooks(options: DiscordWebhooksOptions): DiscordW
     view,
 
     async set(teraId, url) {
-      // ファイルの置き場を先に決める（id が不正なら、通信する前に断る）。
-      const path = pathOf(teraId);
+      // 置き場を先に決める（Tera の一覧に無い id なら、通信する前に断る）。
+      storeOf(teraId);
 
       // 間違った URL を保存すると、次の送信で初めて失敗する。ここで確かめる。
       const webhook = parseWebhookUrl(url);
@@ -154,14 +167,14 @@ export function createDiscordWebhooks(options: DiscordWebhooksOptions): DiscordW
         channelId: info.channelId,
         savedAt: Date.now(),
       };
-      writePrivateJson(path, stored, { createDirectory: true });
+      storeOf(teraId).save(stored);
       waiting.resolveAll(teraId, connectedText(stored));
       return view();
     },
 
     clear(teraId) {
       waiting.rejectAll(teraId, new Error("The Discord webhook was removed."));
-      rmSync(pathOf(teraId), { force: true });
+      storeOf(teraId).clear();
       return view();
     },
 

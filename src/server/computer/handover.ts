@@ -1,4 +1,5 @@
 import { createPendingRegistry } from "../wait/pending";
+import { waitEndedText } from "../agent/tools/context";
 
 /**
  * エージェントからユーザーへ画面を渡す（引き受け）。
@@ -21,7 +22,7 @@ export type HandoverAnswer =
 export const HANDOVER_DONE = "The user finished working on the computer.";
 
 /** ターンが終わって、待ちを続けられなくなったときの理由。 */
-const HANDOVER_ENDED = "The turn ended before the screen was handed over";
+const HANDOVER_ENDED = waitEndedText("the screen was handed over");
 
 export type Handover = {
   /**

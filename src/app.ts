@@ -24,6 +24,7 @@ import { createSettingsStore, type SettingsStore } from "./server/data/settings"
 import { createStore, type Store } from "./server/data/store";
 import { createConnectors, type ConnectorsManager } from "./server/connectors/manager";
 import { COMPOSIO_CONNECTOR_ID } from "./server/connectors/composio";
+import type { PiRuntime } from "./server/connectors/pi";
 import { createConnectorToolset } from "./server/connectors/tools";
 import { createDiscordWebhooks, type DiscordWebhooks } from "./server/discord/manager";
 import { createDiscordToolset } from "./server/discord/tools";
@@ -104,35 +105,51 @@ export function startApp(config: AppConfig, overrides: AppOverrides = {}): App {
   // エージェントが作ったスキルは、コンピュータのホームの .agents/skills に置く。
   const skills = createSkillFileStore({ dataDir: config.dataDir });
 
+  // デスクトップ用の Containerfile と entry.sh は、リポジトリの container/ に置いてある。
+  // src から実行しても dist から実行しても、1 つ上がリポジトリのルートになる。
+  // エージェントがチャットで受け取った環境変数は、コンテナの中のコマンドへ渡す。
+  let connectorsRef: ConnectorsManager | null = null;
+  const container =
+    overrides.container ??
+    createContainerManager({
+      dataDir: config.dataDir,
+      containerDir: join(import.meta.dir, "..", "container"),
+      // コネクタが保存したトークンを、コンテナの中のコマンドへ渡す。コネクタはこの後で作るので、
+      // 呼ばれたときに読む（呼ぶのはコマンドを走らせるときで、そのときには用意できている）。
+      env: () => ({ ...settings.read().env, ...(connectorsRef?.env() ?? {}) }),
+    });
+
+  /** program コネクタ（pi）が、コンテナの中のファイルとシェルを使う口。 */
+  function piRuntime(): PiRuntime {
+    return {
+      async run(script, { timeoutMs }) {
+        return container.shell(script, { timeoutMs });
+      },
+      async readText(path) {
+        try {
+          return Buffer.from(await container.readFile(path)).toString("utf8");
+        } catch (error) {
+          // 無いファイルは「まだ設定が無い」として扱う（コンテナが止まっているのは別）。
+          if (error instanceof ContainerError) throw error;
+          return null;
+        }
+      },
+      async writeText(path, text) {
+        await container.writeFile(path, Buffer.from(text, "utf8"));
+      },
+    };
+  }
+
   // コネクタ。トークンはデータディレクトリに置き、コンピュータの環境変数にも混ぜる。
   // コネクタが設定した値は、設定ファイルの env より優先する（接続し直した結果を使うため）。
-  // program コネクタ（pi）はコンテナの中で確かめるので、コンテナは後で作ってここに入れる。
-  let containerRef: ContainerManager | null = null;
+  // program コネクタ（pi）はコンテナの中で確かめるので、runtime は関数として渡す（前もって用意しない）。
   const connectors =
     overrides.connectors ??
     createConnectors({
       dataDir: config.dataDir,
-      runtime: {
-        async run(script, { timeoutMs }) {
-          if (containerRef === null) throw new Error("The computer is not ready yet.");
-          return containerRef.shell(script, { timeoutMs });
-        },
-        async readText(path) {
-          if (containerRef === null) throw new Error("The computer is not ready yet.");
-          try {
-            return Buffer.from(await containerRef.readFile(path)).toString("utf8");
-          } catch (error) {
-            // 無いファイルは「まだ設定が無い」として扱う（コンテナが止まっているのは別）。
-            if (error instanceof ContainerError) throw error;
-            return null;
-          }
-        },
-        async writeText(path, text) {
-          if (containerRef === null) throw new Error("The computer is not ready yet.");
-          await containerRef.writeFile(path, Buffer.from(text, "utf8"));
-        },
-      },
+      runtime: piRuntime,
     });
+  connectorsRef = connectors;
 
   // 接続している間だけ一覧に載せるスキル（pi-coding、composio）があるか。
   // テストで差し替えたコネクタの一覧に無い id を、ターンのたびに触らないようにする。
@@ -144,7 +161,8 @@ export function startApp(config: AppConfig, overrides: AppOverrides = {}): App {
 
   // 認可コードの受け取り先は、待ち受けているポートが決まってから決まる。
   // 実際に使うポートは startServer の戻り値で分かるので、そこまで null のままにする。
-  let boundPort: number | null = null;
+  // 「まだ決まっていない」を型に出すため、数値ではなく入れ物を持たせる。
+  const listening: { port: number | null } = { port: null };
   const mcp =
     overrides.mcp ??
     createMcpManager({
@@ -152,20 +170,11 @@ export function startApp(config: AppConfig, overrides: AppOverrides = {}): App {
       dataDir: config.dataDir,
       images,
       callbackUrl: () =>
-        boundPort === null ? null : new URL(`http://${config.host}:${boundPort}${OAUTH_CALLBACK_PATH}`),
+        listening.port === null
+          ? null
+          : new URL(`http://${config.host}:${listening.port}${OAUTH_CALLBACK_PATH}`),
     });
 
-  // デスクトップ用の Containerfile と entry.sh は、リポジトリの container/ に置いてある。
-  // src から実行しても dist から実行しても、1 つ上がリポジトリのルートになる。
-  // エージェントがチャットで受け取った環境変数は、コンテナの中のコマンドへ渡す。
-  const container =
-    overrides.container ??
-    createContainerManager({
-      dataDir: config.dataDir,
-      containerDir: join(import.meta.dir, "..", "container"),
-      env: () => ({ ...settings.read().env, ...connectors.env() }),
-    });
-  containerRef = container;
 
   // エージェントがユーザーへ画面を渡すときの待ち（ログインや二段階認証）。
   const handover = createHandover();
@@ -289,7 +298,7 @@ export function startApp(config: AppConfig, overrides: AppOverrides = {}): App {
       dataDir: config.dataDir,
     },
   });
-  boundPort = server.port ?? null;
+  listening.port = server.port ?? null;
 
   // ルーチンは、サーバが待ち受けを始めてから動かす（起動直後の読み込みと重ねない）。
   routines.start();
@@ -310,14 +319,18 @@ export function startApp(config: AppConfig, overrides: AppOverrides = {}): App {
     routines,
 
     async shutdown() {
-      // ルーチンのタイマーを止めてから、ほかの接続を畳む。
+      // 割り込みを受けてから閉じるまでの間に、新しいターンが始まらないようにする。
+      // ルーチンのタイマーを先に止める（閉じた後でターンを始めさせないため）。
       routines.close();
-      // 畳まないと、MCP サーバーの接続と SQLite の WAL、圧縮の予約がそのまま残る。
-      await server.stop(true);
+      // 走っているターンは、それまでの本文と添付を保存してから終わる。保存が済むまで待つ。
+      await turns.close();
       connectors.close();
       discord.close();
+      // 走っている要約も、書き込みが終わるまで待つ。
+      await compaction.close();
+      // ターンが止まったので、接続を畳む。
+      await server.stop(true);
       await mcp.close();
-      compaction.close();
       store.close();
     },
   };

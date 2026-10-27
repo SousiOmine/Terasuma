@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { writeBinary, writeJson } from "../data/secret-file";
 import { extname, join } from "node:path";
 import { safeFileName } from "./uploads";
 
@@ -105,10 +106,10 @@ export function createFileStore(dataDir: string): FileStore {
       const id = createHash("sha256").update(data).digest("hex");
       const metadata: FileMetadata = { name: safeName, mime: mimeOfFileName(safeName) };
 
-      mkdirSync(filesDir, { recursive: true });
-      if (!existsSync(dataPath(id))) writeFileSync(dataPath(id), data);
       // 同じ中身を別の名前で送られたら、最後に送られた名前を表示に使う。
-      writeFileSync(metadataPath(id), `${JSON.stringify(metadata)}\n`, "utf8");
+      // どちらも一時ファイル経由で置き換える（書き込み中に落ちても、半端なファイルを残さない）。
+      if (!existsSync(dataPath(id))) writeBinary(dataPath(id), data, { createDirectory: true });
+      writeJson(metadataPath(id), metadata, { createDirectory: true });
 
       return { id, name: safeName, size: data.length, mime: metadata.mime, url: `/api/files/${id}` };
     },

@@ -10,7 +10,26 @@ import { CLIENT_HEADER } from "../../shared/api/events";
  */
 
 /** サーバが返すコードに、クライアント側だけで発生するコードを足したもの。 */
-export type ClientErrorCode = ApiErrorCode | "network" | "input" | "mcp_unreachable" | "stream_ended";
+/**
+ * サーバの codes に足す、画面の中だけで起きる失敗。
+ * 文言は error.<code> で引くので、辞書にも同じだけ並べる（i18n のテストが突き合わせる）。
+ */
+export const CLIENT_ERROR_CODES = [
+  /** サーバに繋がらない。 */
+  "network",
+  /** 画面の入力が受け付けられない。 */
+  "input",
+  /** MCP サーバーに繋がらない。 */
+  "mcp_unreachable",
+  /** 応答が終わりの合図なしに切れた。 */
+  "stream_ended",
+  /** 一覧の読み直しをしたら、Tera が 1 体も残っていなかった。 */
+  "tera_list_empty",
+  /** 操作の対象の Tera が、画面の持つ一覧に無い。 */
+  "tera_unknown",
+] as const;
+
+export type ClientErrorCode = ApiErrorCode | (typeof CLIENT_ERROR_CODES)[number];
 
 /**
  * この画面（タブ）の id。読み込みごとに作り、すべての要求に付ける。

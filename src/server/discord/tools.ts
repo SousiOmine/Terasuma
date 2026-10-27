@@ -4,6 +4,7 @@ import { z } from "zod";
 import { DISCORD_CONNECT_TOOL_NAME, DISCORD_SEND_TOOL_NAME } from "../../shared/tools";
 import type { DiscordWebhooks } from "./manager";
 import type { SentWebhookMessage, WebhookMessage } from "./webhook";
+import { reasonInputSchema, requireSignal, type ToolContext } from "../agent/tools/context";
 
 /**
  * Discord の webhook を扱うツール。
@@ -31,7 +32,6 @@ const MAX_USERNAME_CHARS = 80;
 /** 1 回に付けられる埋め込みの上限（Discord の制限）。 */
 const MAX_EMBEDS = 10;
 
-type ToolContext = { abortSignal?: AbortSignal };
 
 /** discord_connect の引数。reason は画面に出すためだけに使う。 */
 type ConnectInput = { reason: string };
@@ -54,14 +54,10 @@ export function createDiscordToolset(options: { discord: DiscordWebhooks }): Dis
             "A card opens in the chat with a link that explains how to create a webhook and a field to paste the URL.",
             "You never see the URL. Once this returns, discord_send can post to the channel.",
           ].join(" "),
-          inputSchema: z.object({
-            reason: z.string().min(1).describe("Why you need it, written for the user to read"),
-          }),
+          inputSchema: reasonInputSchema,
           execute: async (_input: ConnectInput, context: ToolContext) => {
-            const signal = context.abortSignal;
-            if (signal === undefined) {
-              throw new Error("Cannot wait for the user because the turn's abort signal is not available");
-            }
+            // 中断を受け取れないと、ユーザーを待ったままターンを片付けられなくなる。
+            const signal = requireSignal(context);
 
             return options.discord.wait(teraId, signal);
           },

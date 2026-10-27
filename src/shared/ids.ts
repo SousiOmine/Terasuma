@@ -53,6 +53,14 @@ export function isProviderId(value: string): boolean {
   return ID_PATTERN.test(value);
 }
 
+/**
+ * Tera の id として使えるかどうか。作業フォルダの名前にもそのまま使う。
+ * 形はプロバイダ id と同じ（別名にせず、外れた値は失敗させる）。
+ */
+export function isTeraId(value: string): boolean {
+  return ID_PATTERN.test(value);
+}
+
 /** MCP サーバー id を受け付けられない理由。使える場合は null。 */
 export function mcpServerIdProblem(value: string): McpServerIdProblem | null {
   if (RESERVED_MCP_SERVER_IDS.includes(value)) return "reserved";

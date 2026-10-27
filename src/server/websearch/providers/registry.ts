@@ -7,7 +7,7 @@
 
 import { DEFAULT_FETCH_CHARS, MAX_FETCH_CHARS } from "../constants";
 import { fetchDirect } from "../direct-fetch";
-import { truncateText } from "../text";
+import { truncateText } from "../../../shared/text";
 import type {
   CreateSearchProviderOptions,
   ProviderAdapter,
@@ -21,6 +21,7 @@ import { numberLimit } from "./helpers";
 import { perplexity } from "./perplexity";
 import { tavily } from "./tavily";
 import { tinyfish } from "./tinyfish";
+import { clampInt } from "../../../shared/numbers";
 
 /** 設定に書けるプロバイダ id。並び順は設定画面の候補の順になる。 */
 export const WEB_SEARCH_PROVIDER_IDS: readonly WebSearchProviderId[] = [
@@ -83,11 +84,11 @@ export function createSearchProvider(options: CreateSearchProviderOptions): Sear
           ? await fetchDirect(context.fetch, normalized)
           : await adapter.fetchPage(context, normalized);
 
-      return { ...response, text: truncateText(response.text, maxChars) };
+      return { ...response, text: truncateText(response.text, maxChars, "parens") };
     },
   };
 }
 
 function clampChars(value: number): number {
-  return Math.min(Math.max(Math.trunc(value), 1_000), MAX_FETCH_CHARS);
+  return clampInt(value, 1_000, MAX_FETCH_CHARS);
 }

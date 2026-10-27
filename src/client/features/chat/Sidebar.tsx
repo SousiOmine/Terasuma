@@ -5,7 +5,7 @@ import { useDeleteTarget } from "../../hooks/useDeleteTarget";
 import { t } from "../../i18n";
 import { openTera } from "../../state/chat";
 import { focusTeraId, openSettings } from "../../state/route";
-import { activeTeraId, teras } from "../../state/session";
+import { activeTeraId, isLoadingTeras, teras, terasLoadError } from "../../state/session";
 import { clearTeraError, removeTera, showTeraError, teraError } from "../../state/teras";
 import { closeSidebar, sidebarOpen } from "../../state/sidebar";
 import { ConfirmDialog } from "../../ui/ConfirmDialog";
@@ -76,7 +76,10 @@ export function Sidebar() {
 
         <nav class="min-h-0 flex-1 overflow-y-auto px-2.5 py-1">
           {items.length === 0 ? (
-            <p class="px-3 py-3 text-xs text-secondary">{t("tera.empty")}</p>
+            // まだ読めていない間に出すと「消えた」と誤解させるので、読み込み中は別の文言にする。
+            <p class="px-3 py-3 text-xs text-secondary">
+              {isLoadingTeras.value || terasLoadError.value === null ? t("common.loading") : t("tera.empty")}
+            </p>
           ) : (
             <ul class="space-y-1">
               {items.map((tera) => {

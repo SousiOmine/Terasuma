@@ -38,11 +38,52 @@ export const API_ERROR_CODES = [
   "media_not_found",
   "not_found",
   "method_not_allowed",
+  /** 画面のトークンが違う（WebSocket の門番）。 */
+  "unauthorized",
   "settings_write_failed",
   "internal_error",
 ] as const;
 
 export type ApiErrorCode = (typeof API_ERROR_CODES)[number];
+
+/**
+ * コードから HTTP の状態を決める表。
+ *
+ * 同じコードが場所によって 404 になったり 400 になったりすると、画面も呼び出し側も
+ * 状態で分岐できない。状態はコードに 1 つだけ結び付ける。
+ * 表に無いコードは足し忘れなので、型で必ず埋めさせる（Record<ApiErrorCode, number>）。
+ */
+export const ERROR_STATUS: Record<ApiErrorCode, number> = {
+  invalid_request: 400,
+  tera_not_found: 404,
+  model_error: 502,
+  model_not_configured: 400,
+  provider_not_found: 404,
+  provider_exists: 409,
+  provider_auth_failed: 400,
+  provider_unreachable: 502,
+  provider_no_models: 502,
+  catalog_unavailable: 502,
+  mcp_server_not_found: 404,
+  mcp_server_exists: 409,
+  mcp_authorization_failed: 502,
+  connector_not_found: 404,
+  web_search_not_found: 404,
+  web_search_exists: 409,
+  container_build_failed: 502,
+  container_start_failed: 502,
+  container_not_running: 409,
+  handover_not_pending: 409,
+  env_request_not_pending: 409,
+  turn_in_progress: 409,
+  turn_not_running: 409,
+  media_not_found: 404,
+  not_found: 404,
+  method_not_allowed: 405,
+  unauthorized: 401,
+  settings_write_failed: 500,
+  internal_error: 500,
+};
 
 /** もう一度試す価値がある失敗か。設定の誤りや入力の誤りは、やり直しても変わらない。 */
 export function isRetryableErrorCode(code: string): boolean {

@@ -1,7 +1,8 @@
 import * as api from "../lib/api";
 import { createErrorSignal } from "../lib/errors";
 import { openTera } from "./chat";
-import { activeTeraId, teras } from "./session";
+import { t } from "../i18n";
+import { activeTeraId, setTeras } from "./session";
 
 /**
  * Tera の削除。
@@ -28,10 +29,10 @@ export async function removeTera(teraId: string): Promise<void> {
   clearTeraError();
 
   const remaining = await api.deleteTera(teraId);
-  teras.value = remaining;
+  setTeras(remaining);
   if (activeTeraId.value !== teraId) return;
 
   const next = remaining[0];
-  if (next === undefined) throw new Error("削除したあとに Tera が 1 体も残っていません");
+  if (next === undefined) throw new Error(t("error.tera_list_empty"));
   await openTera(next.id);
 }

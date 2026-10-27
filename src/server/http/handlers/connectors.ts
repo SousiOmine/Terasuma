@@ -1,5 +1,4 @@
-import { describeError } from "../../../shared/errors";
-import { AppError, ValidationError } from "../../errors";
+import { asValidationError } from "../../errors";
 import { readConnectorSetupForm, readConnectorTokenForm } from "../body";
 import { json } from "../respond";
 import type { ApiDeps, ApiRequest } from "./shared";
@@ -37,8 +36,7 @@ export function connectorHandlers(deps: Pick<ApiDeps, "connectors">) {
       try {
         return json(await connectors.connect(id, form));
       } catch (error) {
-        if (error instanceof AppError) throw error;
-        throw new ValidationError(describeError(error));
+        asValidationError(error);
       }
     },
 
@@ -54,9 +52,8 @@ export function connectorHandlers(deps: Pick<ApiDeps, "connectors">) {
       try {
         return json(await connectors.setToken(id, form.token));
       } catch (error) {
-        if (error instanceof AppError) throw error;
         // 受け付けられないトークン・接続先に届かない、は入力の誤りとして返す。
-        throw new ValidationError(describeError(error));
+        asValidationError(error);
       }
     },
 

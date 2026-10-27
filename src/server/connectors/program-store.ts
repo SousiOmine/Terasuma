@@ -1,11 +1,10 @@
-import { rmSync } from "node:fs";
-import { readPrivateJson, writePrivateJson } from "../data/secret-file";
+import { createPrivateJsonStore } from "../data/private-store";
 
 /**
  * program コネクタの確認結果を 1 ファイルに保存する。
  *
  * トークンではないが、置き場と権限は token-store.ts と同じにする
- * （ディレクトリ 0700、ファイル 0600、読み出しは覚えておき、save/clear で覚え直す）。
+ * （data/private-store.ts がディレクトリ 0700、ファイル 0600、読み出しの記憶を持つ）。
  */
 
 /** 確かめた結果。 */
@@ -33,52 +32,36 @@ export type ProgramStore = {
 };
 
 export function createProgramStore(path: string): ProgramStore {
-  // 読み出しは接続状態を見るたびに走るので、覚えておく。
-  // 書くのはこのプロセスだけなので、保存・削除のときに覚え直せば足りる。
-  let cached: ProgramRecordState | null = null;
-
-  function load(): ProgramRecordState {
-    if (cached !== null) return cached;
-
-    const content = readPrivateJson(path);
-    if (content.kind === "missing") {
-      cached = { kind: "none" };
-      return cached;
-    }
-    if (content.kind === "unreadable") {
-      cached = { kind: "unreadable", detail: content.detail };
-      return cached;
-    }
-    if (!isProgramRecord(content.value)) {
-      cached = { kind: "unreadable", detail: `${path} の内容がプログラムの記録として読めません` };
-      return cached;
-    }
-
-    cached = {
-      kind: "record",
-      record: {
-        status: content.value.status,
-        provider: content.value.provider ?? null,
-        model: content.value.model ?? null,
-        checkedAt: content.value.checkedAt,
-      },
-    };
-    return cached;
-  }
+  const store = createPrivateJsonStore<ProgramRecord>({
+    path,
+    is: isProgramRecord,
+    what: "プログラムの記録として読めません",
+  });
 
   return {
     read() {
-      return load();
+      const content = store.read();
+      if (content.kind === "missing") return { kind: "none" };
+      if (content.kind === "unreadable") return content;
+
+      // 前の版の記録には無い項目があるので、無い場合は null に揃える。
+      return {
+        kind: "record",
+        record: {
+          status: content.value.status,
+          provider: content.value.provider ?? null,
+          model: content.value.model ?? null,
+          checkedAt: content.value.checkedAt,
+        },
+      };
     },
 
     save(record) {
-      writePrivateJson(path, record, { createDirectory: true });
-      cached = { kind: "record", record };
+      store.save(record);
     },
 
     clear() {
-      rmSync(path, { force: true });
-      cached = { kind: "none" };
+      store.clear();
     },
   };
 }

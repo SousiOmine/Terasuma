@@ -6,6 +6,9 @@
  * 失敗を自分のエラー型へ読み替える（WebSearchError、ProviderRequestError など）。
  */
 
+import { combineSignal } from "../../shared/async";
+import { oneLine } from "../../shared/text";
+
 /** fetch の差し替え口。テストでは通信せずに応答を返せる。 */
 export type FetchLike = (input: string, init: RequestInit) => Promise<Response>;
 
@@ -13,12 +16,6 @@ export type FetchLike = (input: string, init: RequestInit) => Promise<Response>;
 export type FetchOutcome =
   | { kind: "response"; response: Response }
   | { kind: "network"; error: unknown; timedOut: boolean };
-
-/** タイムアウトと、呼び出し元の中断を 1 つの signal にまとめる。 */
-export function combineSignal(signal: AbortSignal | undefined, timeoutMs: number): AbortSignal {
-  const timeout = AbortSignal.timeout(timeoutMs);
-  return signal === undefined ? timeout : AbortSignal.any([signal, timeout]);
-}
 
 /**
  * 1 回の問い合わせ。通信の失敗は投げずに結果で返す（呼び出し側が自分のエラー型へ変える）。
@@ -31,13 +28,39 @@ export async function sendRequest(
   options: { timeoutMs: number; signal?: AbortSignal },
 ): Promise<FetchOutcome> {
   const timeout = AbortSignal.timeout(options.timeoutMs);
-  const signal = options.signal === undefined ? timeout : AbortSignal.any([options.signal, timeout]);
+  const signal = combineSignal(options.signal, options.timeoutMs);
 
   try {
     return { kind: "response", response: await fetchImpl(url, { ...init, signal }) };
   } catch (error) {
     return { kind: "network", error, timedOut: timeout.aborted };
   }
+}
+
+/**
+ * 1 回の問い合わせ。通信できなければ onNetwork が作った例外を投げる。
+ *
+ * 「通信できなかったら自分のエラー型に読み替える」という同じ分岐が、呼び出し側に何度も
+ * 書かれていた。読み替えの文言だけを渡し、分岐はここに 1 つ置く。
+ * 応答が返れば、状態コードが何であってもそのまま返す（判定は呼び出し側の仕事）。
+ */
+export async function sendRequestOrThrow(
+  fetchImpl: FetchLike,
+  url: string,
+  init: RequestInit,
+  options: {
+    timeoutMs: number;
+    signal?: AbortSignal;
+    /** 通信できなかった（または中断された）ときに投げる例外。timedOut で理由を選べる。 */
+    onNetwork: (error: unknown, timedOut: boolean) => Error;
+  },
+): Promise<Response> {
+  const outcome = await sendRequest(fetchImpl, url, init, {
+    timeoutMs: options.timeoutMs,
+    ...(options.signal === undefined ? {} : { signal: options.signal }),
+  });
+  if (outcome.kind === "response") return outcome.response;
+  throw options.onNetwork(outcome.error, outcome.timedOut);
 }
 
 /** 失敗の応答から、読める 1 文を取り出す。読めなければ空文字。 */
@@ -87,9 +110,5 @@ function findMessage(value: unknown): string | null {
   return null;
 }
 
-function oneLine(text: string, limit: number): string {
-  const line = text.replace(/\s+/g, " ").trim();
-  return line.length > limit ? `${line.slice(0, limit)}…` : line;
-}
 
 /** 通信そのものができなかった理由を、短い 1 文にする。 */

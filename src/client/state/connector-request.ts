@@ -2,6 +2,7 @@ import { computed, signal } from "@preact/signals";
 import type { ConnectorProviderView } from "../../shared/api/settings";
 import { DISCORD_SERVER_ID } from "../../shared/tools";
 import { t } from "../i18n";
+import { ApiError } from "../lib/http";
 import {
   cancelConnectorWait,
   connectConnector,
@@ -138,7 +139,7 @@ export async function saveConnectorRequest(value: string): Promise<void> {
 
   if (request.provider === DISCORD_SERVER_ID) {
     const teraId = request.teraId;
-    if (teraId === null) throw new Error("The Tera for this Discord webhook is not known.");
+    if (teraId === null) throw new ApiError("tera_unknown");
     if (savingDiscord.value) return;
 
     await saveWebhooks([{ teraId, url: value }]);

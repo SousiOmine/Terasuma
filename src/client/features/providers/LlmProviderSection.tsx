@@ -1,18 +1,19 @@
 import { IconPlus } from "@tabler/icons-preact";
-import { useEffect, useState } from "preact/hooks";
+import { useState } from "preact/hooks";
+import { useResourceOnce } from "../../hooks/useResourceOnce";
 import { modelProvider } from "../../../shared/model";
 import type { ProviderView } from "../../../shared/api/settings";
 import { useDeleteTarget } from "../../hooks/useDeleteTarget";
 import { t } from "../../i18n";
 import {
-  catalogProviders,
+  catalogResource,
   clearSettingsError,
   isLoadingSettings,
-  loadCatalog,
-  loadModelSettings,
-  refreshModelSettings,
+  modelLoadError,
+  modelResource,
   modelSettings,
   providerName,
+  refreshModelSettings,
   removeProvider,
   settingsError,
   showSettingsError,
@@ -41,17 +42,10 @@ export function LlmProviderSection() {
   const [wizard, setWizard] = useState<WizardMode | null>(null);
   const deleting = useDeleteTarget<ProviderView>();
 
-  useEffect(() => {
-    // 設定画面を直接開いた場合に備えて、まだ読めていなければここで読む。
-    if (modelSettings.value !== null || isLoadingSettings.value) return;
-    void loadModelSettings().catch(showSettingsError);
-  }, []);
-
-  useEffect(() => {
-    // プロバイダの表示名はカタログの名前を使うので、この節で読む。
-    if (catalogProviders.value !== null) return;
-    void loadCatalog().catch(showSettingsError);
-  }, []);
+  // 設定画面を直接開いた場合に備えて、まだ読めていなければここで読む。
+  useResourceOnce(modelResource);
+  // プロバイダの表示名はカタログの名前を使うので、この節で読む。
+  useResourceOnce(catalogResource);
 
   const reload = () => void refreshModelSettings().catch(showSettingsError);
 
@@ -77,6 +71,7 @@ export function LlmProviderSection() {
       <ResourceList
         data={settings === null ? null : settings.providers}
         loading={loading}
+        error={modelLoadError.value}
         empty={t("settings.providers.llm.empty")}
       >
         {(provider) => (

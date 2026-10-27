@@ -59,7 +59,7 @@ export function startServer(options: ServerOptions): StartedServer {
       websocket: screen.websocket,
       fetch(request) {
         const problem = routeProblem(routes, new URL(request.url).pathname, request.method);
-        return problem === "method_not_allowed" ? jsonError(405, "method_not_allowed") : jsonError(404, "not_found");
+        return problem === "method_not_allowed" ? jsonError("method_not_allowed") : jsonError("not_found");
       },
       /**
        * ハンドラから漏れた例外も、ほかの失敗と同じ JSON で返す。
@@ -68,7 +68,7 @@ export function startServer(options: ServerOptions): StartedServer {
        */
       error(error: Error): Response {
         console.error(error);
-        return jsonError(500, "internal_error", describeError(error));
+        return jsonError("internal_error", describeError(error));
       },
     });
 

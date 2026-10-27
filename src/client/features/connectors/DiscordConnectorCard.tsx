@@ -1,12 +1,13 @@
-import { useEffect, useState } from "preact/hooks";
+import { useState } from "preact/hooks";
+import { useResourceOnce } from "../../hooks/useResourceOnce";
 import { useDeleteTarget } from "../../hooks/useDeleteTarget";
 import { t } from "../../i18n";
 import {
   clearDiscordError,
   discord,
   discordError,
-  isLoadingDiscord,
-  loadDiscord,
+  discordLoadError,
+  discordResource,
   removeWebhook,
   saveWebhooks,
   savingDiscord,
@@ -35,11 +36,8 @@ export function DiscordConnectorCard() {
   const [urls, setUrls] = useState<Readonly<Record<string, string>>>({});
   const disconnecting = useDeleteTarget<{ id: string; name: string }>();
 
-  useEffect(() => {
-    // 設定画面を直接開いた場合に備えて、まだ読めていなければここで読む。
-    if (discord.value !== null || isLoadingDiscord.value) return;
-    void loadDiscord().catch(showDiscordError);
-  }, []);
+  // 設定画面を直接開いた場合に備えて、まだ読めていなければここで読む。
+  useResourceOnce(discordResource);
 
   const teras = view?.teras ?? [];
   const connected = teras.filter((tera) => tera.connected).length;
@@ -68,7 +66,12 @@ export function DiscordConnectorCard() {
         }
         lines={[
           t("settings.discord.description"),
-          ...(view === null ? [t("common.loading")] : view.teras.length === 0 ? [t("settings.discord.empty")] : []),
+          // 読み込み中と、失敗と、Tera が 1 体もいない場合を区別する。
+          ...(view === null
+            ? [discordLoadError.value !== null ? t(`error.${discordLoadError.value.code}`) : t("common.loading")]
+            : view.teras.length === 0
+              ? [t("settings.discord.empty")]
+              : []),
         ]}
       >
         {view !== null && view.teras.length > 0 && (

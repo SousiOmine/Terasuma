@@ -157,6 +157,9 @@ export async function withServer<T>(
     isDevelopment: options.isDevelopment ?? false,
   };
 
+  // 走っているターンを止めるため、ハーネスの後始末からも触れるようにしておく。
+  const turns = createTurns({ store, engine, compaction });
+
   // 起動そのものが失敗した場合も、作った置き場を残さない。
   let started: StartedServer;
   try {
@@ -177,7 +180,7 @@ export async function withServer<T>(
         handover,
         envRequests,
         compaction,
-        turns: createTurns({ store, engine, compaction }),
+        turns,
         broadcast: createConversationBroadcast(),
         catalog: options.catalog ?? createCatalog({ cachePath: join(dir, CATALOG_FILE_NAME) }),
         checkConnection: options.checkConnection ?? createConnectionChecker(),
@@ -186,7 +189,7 @@ export async function withServer<T>(
       },
     });
   } catch (error) {
-    compaction.close();
+    await compaction.close();
     store.close();
     rmSync(dir, { recursive: true, force: true });
     throw error;
@@ -213,7 +216,9 @@ export async function withServer<T>(
   try {
     return await run(harness);
   } finally {
-    compaction.close();
+    // 走っているターンと圧縮を止めてから、接続と DB を畳む（本番の shutdown と同じ順）。
+    await turns.close();
+    await compaction.close();
     connectors.close();
     discord.close();
     await started.server.stop(true);

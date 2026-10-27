@@ -1,4 +1,5 @@
 import { posix } from "node:path";
+import { oneLine } from "../../shared/text";
 import { WORKDIR_IN_CONTAINER } from "../computer/contract";
 import { CONNECTOR_PROVIDERS } from "./providers";
 
@@ -245,10 +246,6 @@ function messageText(message: Record<string, unknown>): string {
   return parts.join("").trim();
 }
 
-/** 1 行に詰める。改行は空白にし、長すぎる理由は切り詰める。 */
-function oneLine(text: string, limit: number): string {
-  return text.replace(/\s+/g, " ").trim().slice(0, limit).trim();
-}
 
 /** 出力の最後の空でない行。無ければ null。 */
 function lastNonEmptyLine(text: string): string | null {

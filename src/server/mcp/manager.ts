@@ -25,7 +25,7 @@ export type McpToolset = ToolSet;
 /** 設定に無い MCP サーバーを触ろうとしたときの失敗。 */
 export class McpServerNotFound extends AppError {
   constructor(readonly serverId: string) {
-    super("mcp_server_not_found", 404, `MCP サーバー ${serverId} は設定されていません`);
+    super("mcp_server_not_found", `MCP サーバー ${serverId} は設定されていません`);
   }
 }
 

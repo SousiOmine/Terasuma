@@ -170,7 +170,7 @@ export function modelHandlers(deps: Pick<ApiDeps, "settings" | "catalog" | "chec
 
       const models = catalogModels(snapshot, req.params.id);
       if (models === undefined) {
-        throw new AppError("provider_not_found", 404, `プロバイダ ${req.params.id} がカタログにありません`);
+        throw new AppError("provider_not_found", `プロバイダ ${req.params.id} がカタログにありません`);
       }
       return json({ models: models.map((model) => model.id) });
     },
@@ -196,7 +196,7 @@ export function modelHandlers(deps: Pick<ApiDeps, "settings" | "catalog" | "chec
       const id = readProviderId(body);
 
       if (settings.read().providers[id] !== undefined) {
-        throw new AppError("provider_exists", 409, `プロバイダ ${id} はすでに設定されています`);
+        throw new AppError("provider_exists", `プロバイダ ${id} はすでに設定されています`);
       }
 
       const defaultModel = readDefaultModel(body);
@@ -255,7 +255,7 @@ export function modelHandlers(deps: Pick<ApiDeps, "settings" | "catalog" | "chec
       if (provider.baseUrl === undefined) {
         const models = catalogModels(await loadCatalog(), id);
         if (models === undefined) {
-          throw new AppError("provider_not_found", 404, `プロバイダ ${id} がカタログにありません`);
+          throw new AppError("provider_not_found", `プロバイダ ${id} がカタログにありません`);
         }
         return json({ models: models.map((model) => model.id) });
       }

@@ -79,7 +79,12 @@ export function createStore(dbPath: string, options: CreateStoreOptions = {}): S
       input.usage?.outputTokens ?? null,
       input.usage?.cachedInputTokens ?? null,
     );
-    const seq = inserted?.seq ?? 1;
+    // INSERT は RETURNING seq を必ず返す。返らなかったら、行が入っていないということなので、
+    // それらしい連番を作って先へ進まない（壊れた行を画面とモデルの両方へ流さないため）。
+    if (inserted === null) {
+      throw new Error(`Could not append a message to Tera ${input.teraId} (seq was not returned)`);
+    }
+    const seq = inserted.seq;
 
     q.touchTera.run(at, input.teraId);
 

@@ -11,9 +11,11 @@ import { createResource } from "./resource";
  */
 
 /** サーバーから読んだコネクタの一覧。まだ読めていないときは null。 */
-const connectorsResource = createResource(api.fetchConnectors);
+export const connectorsResource = createResource(api.fetchConnectors);
 export const connectors = connectorsResource.data;
 export const isLoadingConnectors = connectorsResource.loading;
+/** 一覧を読めなかった理由。「読み込み中」と区別して画面に出す。 */
+export const connectorsLoadError = connectorsResource.error;
 
 /** 設定画面の中だけに出す失敗。 */
 const failure = createErrorSignal();
@@ -29,7 +31,8 @@ export const connecting = signal<string | null>(null);
 
 /** 設定画面を開いたときに読む（まだ読めていなければ）。 */
 export const loadConnectors = connectorsResource.load;
-/** 一覧を読み直す。 */
+/** 一覧を読み直す（読み込み中でも始め直す）。 */
+export const refreshConnectors = connectorsResource.refresh;
 
 /** トークンを保存する。受け付けられなければ、サーバーが理由を返す。 */
 export async function saveConnectorToken(id: string, token: string): Promise<void> {

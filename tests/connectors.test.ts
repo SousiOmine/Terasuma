@@ -294,7 +294,7 @@ async function withProgramConnectors(
     const manager = createConnectors({
       dataDir: join(dir, "data"),
       providers: [fakeProgramProvider()],
-      runtime: fake.runtime,
+      runtime: () => fake.runtime,
     });
 
     try {

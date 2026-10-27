@@ -302,7 +302,7 @@ describe("チャットのイベントの読み替え", () => {
     };
 
     // 引数（マークアップ）は解釈せず、そのまま渡す。解釈は画面側で 1 度だけ行う。
-    expect(interpretEvent({ type: "tool-call", id: "a1", part })).toEqual({ kind: "chat-ui", part });
+    expect(interpretEvent({ type: "tool-call", id: "a1", part })).toEqual({ kind: "chat-ui", id: "a1", part });
 
     // ほかのツール呼び出しはカードにしない。
     expect(

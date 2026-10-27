@@ -1,4 +1,5 @@
 import { auth } from "@modelcontextprotocol/client";
+import { recordOf } from "../../shared/guards";
 import { readPrivateJson, writePrivateJson } from "../data/secret-file";
 import type {
   OAuthClientInformationContext,
@@ -55,11 +56,17 @@ export function createFileOAuthStorage(path: string): OAuthStorage {
       throw new Error(`${path} を JSON として解釈できません: ${content.detail}`);
     }
 
-    const raw = content.value;
-    if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
-      throw new Error(`${path} の内容は JSON のオブジェクトにしてください`);
+    // 値はすべて文字列（SDK の入出力の型）。1 つでも違えば、壊れた材料として断る。
+    const record = recordOf(content.value);
+    if (record === null) throw new Error(`${path} の内容は JSON のオブジェクトにしてください`);
+
+    const entries = Object.entries(record);
+    const broken = entries.find(([, value]) => typeof value !== "string");
+    if (broken !== undefined) {
+      throw new Error(`${path} の ${broken[0]} が文字列ではありません`);
     }
-    cache = raw as Record<string, string>;
+
+    cache = Object.fromEntries(entries) as Record<string, string>;
     return cache;
   }
 

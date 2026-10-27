@@ -1,4 +1,6 @@
 import { describeError } from "../../shared/errors";
+import { tailChars } from "../../shared/text";
+import { combineSignal } from "../../shared/async";
 
 /**
  * この端末でコマンドを 1 つ実行する。
@@ -74,7 +76,7 @@ const OUTPUT_BYTE_LIMIT = 32 * 1024 * 1024;
 
 export async function runCommand(cmd: readonly string[], options: RunCommandOptions): Promise<CommandResult> {
   const timeout = AbortSignal.timeout(options.timeoutMs);
-  const abort = options.signal === undefined ? timeout : AbortSignal.any([options.signal, timeout]);
+  const abort = combineSignal(options.signal, options.timeoutMs);
 
   try {
     const proc = Bun.spawn({
@@ -128,7 +130,7 @@ export async function runCommand(cmd: readonly string[], options: RunCommandOpti
 /** 出力をバイト列のまま受け取る。上限を超えた分は読み捨て、切ったことを結果に書く。 */
 export async function runCommandBytes(cmd: readonly string[], options: RunCommandOptions): Promise<CommandBytesResult> {
   const timeout = AbortSignal.timeout(options.timeoutMs);
-  const abort = options.signal === undefined ? timeout : AbortSignal.any([options.signal, timeout]);
+  const abort = combineSignal(options.signal, options.timeoutMs);
 
   try {
     const proc = Bun.spawn({
@@ -229,22 +231,15 @@ async function readLimited(
 
     if (text.length > limit) {
       truncated = true;
-      text = from === "head" ? text.slice(0, limit) : tailOf(text, limit);
+      text = from === "head" ? text.slice(0, limit) : tailChars(text, limit);
     }
   }
 
   text += decoder.decode();
   if (text.length > limit) {
     truncated = true;
-    text = from === "head" ? text.slice(0, limit) : tailOf(text, limit);
+    text = from === "head" ? text.slice(0, limit) : tailChars(text, limit);
   }
 
   return { text, truncated };
-}
-
-/** 末尾 limit 文字を取る。先頭がサロゲートペアの後半なら、そこは落とす。 */
-function tailOf(text: string, limit: number): string {
-  const tail = text.slice(text.length - limit);
-  const first = tail.charCodeAt(0);
-  return first >= 0xdc00 && first <= 0xdfff ? tail.slice(1) : tail;
 }

@@ -13,6 +13,7 @@ import {
 import type { Dirent } from "node:fs";
 import { dirname, join, posix, relative, sep } from "node:path";
 import { describeError } from "../../shared/errors";
+import { oneLine } from "../../shared/text";
 import { containerHomeDir, SKILLS_DIR_IN_CONTAINER } from "../computer/container";
 import type {
   LoadedSkill,
@@ -480,9 +481,4 @@ function skillsDirProblem(skillsDir: string): string | null {
 function isMissing(error: unknown): boolean {
   const code = (error as NodeJS.ErrnoException | null)?.code;
   return code === "ENOENT" || code === "ENOTDIR";
-}
-
-/** 一覧に載せる説明を 1 行にする。 */
-function oneLine(text: string): string {
-  return text.replace(/\s+/g, " ").trim();
 }

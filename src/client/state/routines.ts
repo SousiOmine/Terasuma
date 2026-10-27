@@ -12,9 +12,11 @@ import { createResource } from "./resource";
  */
 
 /** サーバーから読んだ一覧。まだ読めていないときは null。 */
-const resource = createResource(api.fetchRoutines);
-export const routines = resource.data;
-export const isLoadingRoutines = resource.loading;
+export const routinesResource = createResource(api.fetchRoutines);
+export const routines = routinesResource.data;
+export const isLoadingRoutines = routinesResource.loading;
+/** 一覧を読めなかった理由。「読み込み中」と区別して画面に出す。 */
+export const routinesLoadError = routinesResource.error;
 
 /** 設定画面の中だけに出す失敗。 */
 const failure = createErrorSignal();
@@ -26,15 +28,15 @@ export const clearRoutinesError = failure.clear;
 export const savingRoutine = signal<string | null>(null);
 
 /** 設定画面を開いたときに読む（まだ読めていなければ）。 */
-export const loadRoutines = resource.load;
+export const loadRoutines = routinesResource.load;
 /** 一覧を読み直す。 */
-export const refreshRoutines = resource.refresh;
+export const refreshRoutines = routinesResource.refresh;
 
 /** 有効・無効を切り替える。 */
 export async function setEnabled(id: string, enabled: boolean): Promise<void> {
   savingRoutine.value = id;
   try {
-    resource.data.value = await api.setRoutineEnabled(id, enabled);
+    routinesResource.data.value = await api.setRoutineEnabled(id, enabled);
   } finally {
     savingRoutine.value = null;
   }
@@ -44,7 +46,7 @@ export async function setEnabled(id: string, enabled: boolean): Promise<void> {
 export async function removeRoutine(id: string): Promise<void> {
   savingRoutine.value = id;
   try {
-    resource.data.value = await api.deleteRoutine(id);
+    routinesResource.data.value = await api.deleteRoutine(id);
   } finally {
     savingRoutine.value = null;
   }
@@ -54,7 +56,7 @@ export async function removeRoutine(id: string): Promise<void> {
 export async function runNow(id: string): Promise<void> {
   savingRoutine.value = id;
   try {
-    resource.data.value = await api.runRoutine(id);
+    routinesResource.data.value = await api.runRoutine(id);
   } finally {
     savingRoutine.value = null;
   }
@@ -64,7 +66,7 @@ export async function runNow(id: string): Promise<void> {
 export async function stopRun(id: string): Promise<void> {
   savingRoutine.value = id;
   try {
-    resource.data.value = await api.stopRoutine(id);
+    routinesResource.data.value = await api.stopRoutine(id);
   } finally {
     savingRoutine.value = null;
   }

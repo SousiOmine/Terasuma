@@ -140,8 +140,6 @@ export const ja: Record<MessageKey, string> = {
     "CLI やツールから使う外部サービスへのコネクタです。トークンやウェブフック URL を保存すると、コンピュータのコマンド、app_request、Discord への送信で使えます。",
   "settings.connectors.state.connected": "接続済み",
   "settings.connectors.state.disconnected": "未接続",
-  "settings.connectors.expand": "開く",
-  "settings.connectors.collapse": "閉じる",
   "settings.connectors.account": "{account} として接続済み",
   "settings.connectors.permissions": "必要な権限: {permissions}",
   "settings.connectors.token.save": "保存",
@@ -364,6 +362,7 @@ export const ja: Record<MessageKey, string> = {
   "error.turn_not_running": "この会話は応答を生成していません。",
   "error.media_not_found": "ファイルが見つかりません。",
   "error.not_found": "その場所は見つかりませんでした。",
+  "error.unauthorized": "この画面には、その操作をする権限がありません。",
   "error.method_not_allowed": "その操作は受け付けていません。",
   "error.settings_write_failed": "設定を保存できませんでした。",
   "error.internal_error": "問題が発生しました。もう一度試してください。",
@@ -371,4 +370,8 @@ export const ja: Record<MessageKey, string> = {
   "error.stream_ended": "応答が途中で切れました。",
   "error.input": "入力が受け付けられませんでした。内容を確認してください。",
   "error.dismiss": "閉じる",
+
+  // 画面（クライアント）の中だけで起きる、状態の食い違い。
+  "error.tera_list_empty": "削除したあとに Tera が残っていません。画面を読み直してください。",
+  "error.tera_unknown": "この要求の対象の Tera が分かりません。画面を読み直してください。",
 };

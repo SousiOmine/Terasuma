@@ -1,5 +1,4 @@
-import { describeError } from "../../../shared/errors";
-import { AppError, ValidationError } from "../../errors";
+import { asValidationError } from "../../errors";
 import { readDiscordWebhookForm } from "../body";
 import { json } from "../respond";
 import { requireTera, type ApiDeps, type ApiRequest } from "./shared";
@@ -30,9 +29,8 @@ export function discordHandlers(deps: Pick<ApiDeps, "store" | "discord">) {
       try {
         return json(await discord.set(teraId, form.url));
       } catch (error) {
-        if (error instanceof AppError) throw error;
         // 受け付けられない URL・Discord に届かない、は入力の誤りとして返す。
-        throw new ValidationError(describeError(error));
+        asValidationError(error);
       }
     },
 

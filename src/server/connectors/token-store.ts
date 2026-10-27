@@ -1,10 +1,9 @@
-import { rmSync } from "node:fs";
-import { readPrivateJson, writePrivateJson } from "../data/secret-file";
+import { createPrivateJsonStore } from "../data/private-store";
 
 /**
  * コネクタのトークンを 1 ファイルに保存する。
  *
- * トークンは秘密なので、ディレクトリを 0700、ファイルを 0600 にする。
+ * トークンは秘密なので、置き場と権限は data/private-store.ts に任せる（ディレクトリ 0700、ファイル 0600）。
  * 読めないファイルは「接続が壊れている」として理由を返し、コンピュータのコマンドは止めない
  * （その状態でも、接続し直せば上書きできる）。
  */
@@ -31,44 +30,22 @@ export type TokenStore = {
 };
 
 export function createTokenStore(path: string): TokenStore {
-  // 読み出しはコマンドのたびに走る（環境変数を組み立てる）ので、覚えておく。
-  // 書くのはこのプロセスだけなので、保存・削除のときに覚え直せば足りる。
-  let cached: StoredTokenState | null = null;
-
-  function load(): StoredTokenState {
-    if (cached !== null) return cached;
-
-    const content = readPrivateJson(path);
-    if (content.kind === "missing") {
-      cached = { kind: "none" };
-      return cached;
-    }
-    if (content.kind === "unreadable") {
-      cached = { kind: "unreadable", detail: content.detail };
-      return cached;
-    }
-    if (!isStoredToken(content.value)) {
-      cached = { kind: "unreadable", detail: `${path} の内容がコネクタの記録として読めません` };
-      return cached;
-    }
-
-    cached = { kind: "token", token: content.value };
-    return cached;
-  }
+  const store = createPrivateJsonStore<StoredToken>({ path, is: isStoredToken, what: "コネクタの記録として読めません" });
 
   return {
     read() {
-      return load();
+      const content = store.read();
+      if (content.kind === "missing") return { kind: "none" };
+      if (content.kind === "unreadable") return content;
+      return { kind: "token", token: content.value };
     },
 
     save(token) {
-      writePrivateJson(path, token, { createDirectory: true });
-      cached = { kind: "token", token };
+      store.save(token);
     },
 
     clear() {
-      rmSync(path, { force: true });
-      cached = { kind: "none" };
+      store.clear();
     },
   };
 }

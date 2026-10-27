@@ -1,6 +1,8 @@
 import { signal } from "@preact/signals";
 import * as api from "../lib/api";
+import { describeError } from "../../shared/errors";
 import { createErrorSignal } from "../lib/errors";
+import { ApiError } from "../lib/http";
 import { createResource } from "./resource";
 
 /**
@@ -15,9 +17,11 @@ import { createResource } from "./resource";
 export const WEBHOOK_PLACEHOLDER = "https://discord.com/api/webhooks/…";
 
 /** サーバーから読んだ一覧。まだ読めていないときは null。 */
-const resource = createResource(api.fetchDiscord);
-export const discord = resource.data;
-export const isLoadingDiscord = resource.loading;
+export const discordResource = createResource(api.fetchDiscord);
+export const discord = discordResource.data;
+export const isLoadingDiscord = discordResource.loading;
+/** 一覧を読めなかった理由。「読み込み中」と区別して画面に出す。 */
+export const discordLoadError = discordResource.error;
 
 /** 設定画面の中だけに出す失敗。 */
 const failure = createErrorSignal();
@@ -29,8 +33,9 @@ export const clearDiscordError = failure.clear;
 export const savingDiscord = signal(false);
 
 /** 設定画面を開いたときに読む（まだ読めていなければ）。 */
-export const loadDiscord = resource.load;
-/** 一覧を読み直す。 */
+export const loadDiscord = discordResource.load;
+/** 一覧を読み直す（読み込み中でも始め直す）。 */
+export const refreshDiscord = discordResource.refresh;
 
 /** 入力された URL をまとめて保存する。1 つ失敗しても残りは試し、失敗した分をまとめて投げる。 */
 export async function saveWebhooks(entries: readonly { teraId: string; url: string }[]): Promise<void> {
@@ -42,14 +47,16 @@ export async function saveWebhooks(entries: readonly { teraId: string; url: stri
         discord.value = await api.saveDiscordWebhook(entry.teraId, entry.url.trim());
       } catch (error) {
         const name = discord.value?.teras.find((tera) => tera.teraId === entry.teraId)?.teraName ?? entry.teraId;
-        failed.push(`${name}: ${error instanceof Error ? error.message : String(error)}`);
+        failed.push(`${name}: ${describeError(error)}`);
       }
     }
   } finally {
     savingDiscord.value = false;
   }
 
-  if (failed.length > 0) throw new Error(failed.join(" / "));
+  // どの Tera の保存に失敗したかは、名前に添えて 1 つの失敗として返す。
+  // 失敗の種別（コード）は画面が文言を選べるように、1 つ目の失敗から引き継ぐ。
+  if (failed.length > 0) throw new ApiError("invalid_request", failed.join(", "));
 }
 
 /** 保存されている webhook を消す。 */

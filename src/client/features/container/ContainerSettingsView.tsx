@@ -6,11 +6,13 @@ import { t } from "../../i18n";
 import {
   clearContainerError,
   computerEnv,
+  computerEnvLoadError,
   containerBusy,
   containerError,
+  containerLoadError,
   containerStatus,
-  loadComputerEnv,
-  loadContainer,
+  refreshComputerEnv,
+  refreshContainer,
   removeComputerEnv,
   resetContainer,
   showContainerError,
@@ -20,6 +22,7 @@ import { Button } from "../../ui/Button";
 import { DeleteAction } from "../../ui/CardActions";
 import { ConfirmDialog } from "../../ui/ConfirmDialog";
 import { SettingsSection } from "../../ui/SettingsSection";
+import { LoadOrError } from "../../ui/LoadOrError";
 import { CARD_CLASS } from "../../ui/styles";
 
 /** 状態の表示。文言は i18n にまとめる（状態に色は付けない）。 */
@@ -50,10 +53,11 @@ export function ContainerSettingsView() {
   /** 削除の確認。環境変数は名前だけを持つので、対象も名前で持つ。 */
   const deleting = useDeleteTarget<{ id: string }>();
 
+  // 設定画面を開くたびに状態を読み直す（別の画面で起動した結果を、古いまま出さない）。
+  // 読み込み中でも始め直すので、load ではなく refresh を使う。
   useEffect(() => {
-    // 設定画面を直接開いた場合に備えて、ここでも状態を読み直す。
-    void loadContainer().catch(showContainerError);
-    void loadComputerEnv().catch(showContainerError);
+    void refreshContainer().catch(showContainerError);
+    void refreshComputerEnv().catch(showContainerError);
   }, []);
 
   const run = (operation: () => Promise<void>) => {
@@ -76,7 +80,11 @@ export function ContainerSettingsView() {
         <div class="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
           <div class="min-w-0">
             <p class="text-xs text-secondary">{t("settings.container.state.label")}</p>
-            <p class="mt-1 text-sm">{status === null ? t("common.checking") : t(STATE_LABELS[status.state])}</p>
+            {status === null ? (
+              <LoadOrError loading={true} error={containerLoadError.value} />
+            ) : (
+              <p class="mt-1 text-sm">{t(STATE_LABELS[status.state])}</p>
+            )}
           </div>
 
           {status !== null && status.state !== "podman_missing" && (
@@ -115,7 +123,7 @@ export function ContainerSettingsView() {
         <p class="text-sm font-medium">{t("settings.container.env.title")}</p>
 
         {env === null ? (
-          <p class="mt-3 text-xs text-secondary">{t("common.loading")}</p>
+          <LoadOrError loading={true} error={computerEnvLoadError.value} />
         ) : env.length === 0 ? (
           <p class="mt-3 text-xs text-secondary">{t("settings.container.env.empty")}</p>
         ) : (

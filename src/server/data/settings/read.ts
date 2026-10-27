@@ -1,4 +1,4 @@
-import { isEnvName } from "../../computer/env-name";
+import { isEnvName } from "../../../shared/env";
 import { isRecord } from "../../../shared/guards";
 import { isProviderId, mcpServerIdProblem } from "../../../shared/ids";
 import { isModelId } from "../../../shared/model";

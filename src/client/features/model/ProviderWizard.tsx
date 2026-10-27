@@ -190,12 +190,7 @@ export function ProviderWizard({ mode, onClose }: ProviderWizardProps) {
       {!editing && <StepIndicator current={step} />}
 
       {step === "choose" && (
-        <ProviderChooser
-          onSelectCatalog={selectCatalogProvider}
-          onSelectPreset={selectPreset}
-          error={error}
-          onError={setError}
-        />
+        <ProviderChooser onSelectCatalog={selectCatalogProvider} onSelectPreset={selectPreset} error={error} />
       )}
 
       {target !== null && step !== "choose" && (

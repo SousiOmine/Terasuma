@@ -12,8 +12,10 @@ import { createResource } from "./resource";
  */
 
 /** サーバから読んだコンテナの状態。まだ読めていないときは null。 */
-const statusResource = createResource(api.fetchContainer);
-export const containerStatus = statusResource.data;
+export const containerResource = createResource(api.fetchContainer);
+export const containerStatus = containerResource.data;
+/** 状態を読めなかった理由。「読み込み中」と区別して画面に出す。 */
+export const containerLoadError = containerResource.error;
 
 /** 設定画面から実行できる操作。 */
 export type ContainerOperation = "start" | "reset";
@@ -31,12 +33,15 @@ export const clearContainerError = failure.clear;
  * コンピュータのコマンドへ渡す環境変数の名前。
  * 値はサーバから返らない（画面にもモデルにも出さない）。まだ読めていないときは null。
  */
-const envResource = createResource(api.fetchComputerEnv);
-export const computerEnv = envResource.data;
+export const computerEnvResource = createResource(api.fetchComputerEnv);
+export const computerEnv = computerEnvResource.data;
+/** 名前の一覧を読めなかった理由。「読み込み中」と区別して画面に出す。 */
+export const computerEnvLoadError = computerEnvResource.error;
 
 /** 設定されている環境変数の名前を読む（まだ読めていなければ）。 */
-export const loadComputerEnv = envResource.load;
-/** 名前の一覧を読み直す。 */
+export const loadComputerEnv = computerEnvResource.load;
+/** 名前の一覧を読み直す（読み込み中でも始め直す）。 */
+export const refreshComputerEnv = computerEnvResource.refresh;
 
 /** 環境変数を消す。サーバが返した、残っている名前の一覧をそのまま置く。 */
 export async function removeComputerEnv(name: string): Promise<void> {
@@ -44,8 +49,9 @@ export async function removeComputerEnv(name: string): Promise<void> {
 }
 
 /** 状態を読む（まだ読めていなければ）。 */
-export const loadContainer = statusResource.load;
+export const loadContainer = containerResource.load;
 /** 状態を読み直す（操作の後や、読み込み直しボタン）。 */
+export const refreshContainer = containerResource.refresh;
 
 export async function startContainer(): Promise<void> {
   await run("start", api.startContainer);

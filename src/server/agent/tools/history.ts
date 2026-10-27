@@ -7,6 +7,7 @@ import { HISTORY_SEARCH_TOOL_NAME, TOOL_CALL_TOOL, TOOL_SERVER_ID, toolNameFor }
 import type { ChatMessage, MessagePart } from "../../../shared/api/message";
 import type { Store } from "../../data/store";
 import type { HistoryToolsetProvider } from "../contracts";
+import { clampInt } from "../../../shared/numbers";
 
 /**
  * 過去の対話履歴を検索する内蔵ツール（history_search）。
@@ -325,7 +326,7 @@ function nameList(names: readonly string[]): string {
 /** 件数を、受け付ける範囲に収める。 */
 function clampLimit(limit: number | undefined): number {
   if (limit === undefined) return DEFAULT_HISTORY_LIMIT;
-  return Math.min(Math.max(Math.trunc(limit), 1), MAX_HISTORY_LIMIT);
+  return clampInt(limit, 1, MAX_HISTORY_LIMIT);
 }
 
 /** 期間の端。 */

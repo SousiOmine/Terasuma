@@ -1,15 +1,17 @@
 import { IconAlertTriangle } from "@tabler/icons-preact";
 import { useEffect, useState } from "preact/hooks";
+import { useResourceOnce } from "../../hooks/useResourceOnce";
 import { t } from "../../i18n";
 import {
   clearSettingsError,
   isLoadingSettings,
-  loadModelSettings,
-  refreshModelSettings,
   loadReasoning,
+  modelLoadError,
   modelProblem,
   modelReasoning,
+  modelResource,
   modelSettings,
+  refreshModelSettings,
   saveReasoning,
   settingsError,
   showSettingsError,
@@ -17,6 +19,7 @@ import {
 import { setSettingsCategory } from "../../state/route";
 import { Button } from "../../ui/Button";
 import { SettingsSection } from "../../ui/SettingsSection";
+import { LoadOrError } from "../../ui/LoadOrError";
 import { INPUT_CLASS } from "../../ui/styles";
 import { ModelPickerDialog } from "./ModelPickerDialog";
 
@@ -35,11 +38,8 @@ export function ModelSettingsView() {
 
   const [pickerOpen, setPickerOpen] = useState(false);
 
-  useEffect(() => {
-    // 設定画面を直接開いた場合に備えて、まだ読めていなければここで読む。
-    if (modelSettings.value !== null || isLoadingSettings.value) return;
-    void loadModelSettings().catch(showSettingsError);
-  }, []);
+  // 設定画面を直接開いた場合に備えて、まだ読めていなければここで読む。
+  useResourceOnce(modelResource);
 
   useEffect(() => {
     // 思考強度はモデルごとの設定。選ばれているモデルの分だけを読む。
@@ -82,7 +82,11 @@ export function ModelSettingsView() {
           </Button>
         </div>
 
-        <p class="mt-3 truncate font-mono text-[13px]">{settings?.model ?? t("settings.model.default.unset")}</p>
+        {settings === null ? (
+          <LoadOrError loading={isLoadingSettings.value} error={modelLoadError.value} />
+        ) : (
+          <p class="mt-3 truncate font-mono text-[13px]">{settings.model ?? t("settings.model.default.unset")}</p>
+        )}
         {problem === "unset" && <p class="mt-1 text-xs text-secondary">{t("settings.model.default.unsetHint")}</p>}
         {problem === "provider-missing" && (
           <p class="mt-1 flex items-center gap-1.5 text-xs font-medium text-primary">

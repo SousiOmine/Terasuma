@@ -31,8 +31,8 @@ export type ChatEventEffect =
   | { kind: "message"; message: ChatMessageView }
   | { kind: "assistant-start"; id: string; createdAt: number; seq: number }
   | { kind: "assistant-part"; id: string; part: TextPart | AttachmentPart | NoticePart }
-  /** chat_ui の呼び出し。カードを画面に置く。 */
-  | { kind: "chat-ui"; part: Extract<MessagePart, { type: "tool-call" }> }
+  /** chat_ui の呼び出し。カードを画面に置く。id は、その呼び出しを含む応答の行。 */
+  | { kind: "chat-ui"; id: string; part: Extract<MessagePart, { type: "tool-call" }> }
   | { kind: "handover-start"; callId: string; question: string | null }
   | { kind: "env-request-start"; callId: string; name: string; description: string | null }
   /** コネクタが要る。チャットにコネクタのカードを出す。 */
@@ -62,7 +62,7 @@ export function interpretEvent(event: ChatEvent): ChatEventEffect | null {
     case "tool-call": {
       // chat_ui は、呼び出しの引数（マークアップ）をそのままカードとして置く。
       // ほかのツールは画面に出さず、ユーザーの入力を待つ呼び出しだけ入力を出す。
-      if (chatUiPartOf(event.part) !== null) return { kind: "chat-ui", part: event.part };
+      if (chatUiPartOf(event.part) !== null) return { kind: "chat-ui", id: event.id, part: event.part };
 
       const ask = toolCallArgs(event.part, ASK_USER_TOOL_NAME);
       if (ask !== null) {

@@ -12,7 +12,7 @@ import type { ApiErrorCode } from "../../shared/api/error";
 import type { ProviderCheckResult } from "../../shared/api/settings";
 import { describeError } from "../../shared/errors";
 import { AppError } from "../errors";
-import { readErrorDetail, sendRequest, type FetchLike } from "../http/client";
+import { readErrorDetail, sendRequestOrThrow, type FetchLike } from "../http/client";
 
 /** 接続確認で返す失敗の種類。ルート側でそのまま API のコードになる。 */
 export type ProviderErrorCode = Extract<
@@ -22,8 +22,8 @@ export type ProviderErrorCode = Extract<
 
 export class ProviderRequestError extends AppError {
   constructor(code: ProviderErrorCode, message: string) {
-    // 認証の失敗は入力の問題なので 400、それ以外は接続先の問題として 502 にする。
-    super(code, code === "provider_auth_failed" ? 400 : 502, message);
+    // 状態はコードから決まる（認証の失敗は 400、接続先の問題は 502）。
+    super(code, message);
   }
 }
 
@@ -109,30 +109,24 @@ async function probeModels(fetchImpl: FetchLike, request: ProviderRequest): Prom
     else headers["Authorization"] = `Bearer ${request.apiKey}`;
   }
 
-  const outcome = await sendRequest(
+  const response = await sendRequestOrThrow(
     fetchImpl,
     target.url,
     { headers },
     {
       timeoutMs: CONNECTION_TIMEOUT_MS,
       ...(request.signal === undefined ? {} : { signal: request.signal }),
+      onNetwork: (_error, timedOut) => {
+        if (timedOut) {
+          return new ProviderRequestError(
+            "provider_unreachable",
+            `${target.url} から ${CONNECTION_TIMEOUT_MS / 1000} 秒以内に応答がありません`,
+          );
+        }
+        return new ProviderRequestError("provider_unreachable", `${target.url} に接続できません: ${describeError(_error)}`);
+      },
     },
   );
-
-  if (outcome.kind === "network") {
-    if (outcome.timedOut) {
-      throw new ProviderRequestError(
-        "provider_unreachable",
-        `${target.url} から ${CONNECTION_TIMEOUT_MS / 1000} 秒以内に応答がありません`,
-      );
-    }
-    throw new ProviderRequestError(
-      "provider_unreachable",
-      `${target.url} に接続できません: ${describeError(outcome.error)}`,
-    );
-  }
-
-  const response = outcome.response;
   if (!response.ok) {
     if (response.status === 401 || response.status === 403) {
       const detail = await readErrorDetail(response, 200);

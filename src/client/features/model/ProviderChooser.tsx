@@ -1,9 +1,11 @@
-import { useEffect, useState } from "preact/hooks";
+import { useState } from "preact/hooks";
+import { useResourceOnce } from "../../hooks/useResourceOnce";
 import { OPENAI_COMPATIBLE_TEMPLATE, type EndpointPreset } from "../../../shared/providers";
 import { t } from "../../i18n";
-import { type ErrorState, toErrorState } from "../../lib/errors";
-import { catalogProviders, loadCatalog } from "../../state/model";
+import type { ErrorState } from "../../lib/errors";
+import { catalogLoadError, catalogProviders, catalogResource, isLoadingCatalog } from "../../state/model";
 import { ErrorNotice } from "../../ui/ErrorNotice";
+import { LoadOrError } from "../../ui/LoadOrError";
 import { SearchInput } from "../../ui/SearchInput";
 import { chooserEntries } from "./providerForm";
 
@@ -22,21 +24,17 @@ export function ProviderChooser({
   onSelectCatalog,
   onSelectPreset,
   error,
-  onError,
 }: {
   onSelectCatalog: (id: string, name: string) => void;
   onSelectPreset: (preset: EndpointPreset) => void;
+  /** 呼び出し側が持つ失敗（接続確認など）。カタログの失敗は Resource が持つ。 */
   error: ErrorState | null;
-  onError: (error: ErrorState | null) => void;
 }) {
   const [query, setQuery] = useState("");
   const list = catalogProviders.value;
 
-  useEffect(() => {
-    if (catalogProviders.value !== null) return;
-
-    void loadCatalog().catch((failure: unknown) => onError(toErrorState(failure)));
-  }, []);
+  // カタログは、まだ読めていなければ読む（失敗は Resource が持ち、下で表示する）。
+  useResourceOnce(catalogResource);
 
   const keyword = query.trim().toLowerCase();
   const visible = chooserEntries(list, presetName).filter(
@@ -51,7 +49,9 @@ export function ProviderChooser({
 
       <div class="max-h-80 overflow-y-auto rounded-[16px] bg-surface-alt p-1.5">
         {list === null ? (
-          <p class="px-3 py-4 text-center text-xs text-secondary">{t("common.loading")}</p>
+          <div class="px-3 py-4">
+            <LoadOrError loading={isLoadingCatalog.value} error={catalogLoadError.value} />
+          </div>
         ) : visible.length === 0 ? (
           <p class="px-3 py-4 text-center text-xs text-secondary">{t("settings.wizard.noMatch")}</p>
         ) : (

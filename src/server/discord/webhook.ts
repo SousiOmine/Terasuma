@@ -1,5 +1,5 @@
 import { describeError } from "../../shared/errors";
-import { readErrorDetail, sendRequest, type FetchLike } from "../http/client";
+import { readErrorDetail, sendRequestOrThrow, type FetchLike } from "../http/client";
 
 /**
  * Discord の webhook の URL と、その API。
@@ -70,18 +70,15 @@ export type WebhookInfo = {
  * 受け付けられない URL（消えた webhook・書き間違い）は、そのまま保存しない。
  */
 export async function verifyWebhook(url: string, fetchImpl: FetchLike): Promise<WebhookInfo> {
-  const outcome = await sendRequest(
+  const response = await sendRequestOrThrow(
     fetchImpl,
     url,
     { headers: { Accept: "application/json" } },
-    { timeoutMs: HTTP_TIMEOUT_MS },
+    {
+      timeoutMs: HTTP_TIMEOUT_MS,
+      onNetwork: (error) => new Error(`Could not reach Discord: ${describeError(error)}`, { cause: error }),
+    },
   );
-
-  if (outcome.kind === "network") {
-    throw new Error(`Could not reach Discord: ${describeError(outcome.error)}`, { cause: outcome.error });
-  }
-
-  const response = outcome.response;
   if (!response.ok) throw new Error(webhookErrorMessage(response.status));
 
   const data = await readJsonObject(response);
@@ -123,7 +120,7 @@ export async function sendWebhookMessage(
   if (message.username !== null) body["username"] = message.username;
   if (message.embeds !== null) body["embeds"] = message.embeds;
 
-  const outcome = await sendRequest(
+  const response = await sendRequestOrThrow(
     fetchImpl,
     `${url}?wait=true`,
     {
@@ -131,14 +128,12 @@ export async function sendWebhookMessage(
       headers: { "Content-Type": "application/json", Accept: "application/json" },
       body: JSON.stringify(body),
     },
-    { timeoutMs: SEND_TIMEOUT_MS, ...(signal === undefined ? {} : { signal }) },
+    {
+      timeoutMs: SEND_TIMEOUT_MS,
+      ...(signal === undefined ? {} : { signal }),
+      onNetwork: (error) => new Error(`Could not reach Discord: ${describeError(error)}`, { cause: error }),
+    },
   );
-
-  if (outcome.kind === "network") {
-    throw new Error(`Could not reach Discord: ${describeError(outcome.error)}`, { cause: outcome.error });
-  }
-
-  const response = outcome.response;
   if (response.ok) {
     const data = await readJsonObject(response);
     return { messageId: stringFieldOf(data, "id"), channelId: stringFieldOf(data, "channel_id") };
