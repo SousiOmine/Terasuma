@@ -119,11 +119,12 @@ export function createConnectors(options: ConnectorsOptions): ConnectorsManager 
     }
 
     const who = status === null ? provider.name : `${provider.name} as @${status}`;
-    const envName = provider.env[0] ?? "TOKEN";
+    // コンピュータへトークンを渡さないコネクタ（Composio）は、環境変数の案内を出さない。
+    if (provider.env.length === 0) return `${who} is connected. ${provider.usage}`;
 
     return [
       `${who} is connected.`,
-      `Commands in the computer can use $${envName}; do not put the token in a URL or print it.`,
+      `Commands in the computer can use $${provider.env[0]}; do not put the token in a URL or print it.`,
       provider.usage,
     ].join(" ");
   }

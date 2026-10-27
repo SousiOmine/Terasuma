@@ -175,6 +175,30 @@ Terasuma がコンピュータの中の pi に設定を書き、実際に 1 回�
 API キーはコンピュータの中の pi の設定にだけ保存され、Terasuma の設定ファイルには入りません。
 接続している間は組み込みスキル `pi-coding` が使えるようになり、Tera は tmux 越しに pi を呼びます。
 
+## Composio のコネクタ
+
+Composio を使うと、Gmail、Google カレンダー、Slack、Notion、Linear など 1,600 以上のアプリを、
+1 つのプロジェクト API キーで扱える。Terasuma は `app_composio_search` でツールを探し、
+`app_composio_execute` で実行する。
+
+Composio を追加するときは、`設定 > コネクタ` の Composio にプロジェクト API キーを保存する。
+
+1. `設定 > コネクタ` の Composio で「接続の手順を開く」を押す。
+   Composio のダッシュボードの API キーのページが開く（ログインが要る）。
+2. **Create API Key** でキーを作る。アプリごとの権限を絞るなら **scoped key** を選び、
+   `Toolkits` の読み取りと `Tool execution` の書き込みを有効にする。
+3. 表示されたキーをコピーし、Terasuma の Composio の欄に貼り付けて保存する。
+
+キーは `~/.local/share/terasuma/connectors/composio.json`（0600）に保存される。
+コンピュータのコマンドには渡さない（`GH_TOKEN` のように `$...` では読めない。Terasuma のサーバーだけが使う）。
+
+保存する前に、Terasuma は `GET /api/v3.1/tools` を 1 回呼んで、キーが受け付けられるかを確かめる。
+`HTTP 401` で保存できないときは、キーが失効しているか、権限が足りない。
+scoped key では、確認に `Toolkits` の読み取り、実行に `Tool execution` の書き込みが要る
+（権限が足りない場合も Composio は 401 を返す）。
+
+アプリの接続（OAuth）は Composio のダッシュボードで済ませる。Terasuma の画面からは繋げない。
+
 ## Discord への送信
 
 Discord へ通知を送るときは、チャンネルの **webhook URL** を `設定 > コネクタ` の Discord に保存する。

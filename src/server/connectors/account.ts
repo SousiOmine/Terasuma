@@ -3,25 +3,28 @@ import { sendRequest } from "../http/client";
 import type { TokenConnectorProvider } from "./providers";
 
 /**
- * 保存したトークンで、接続中のアカウントを読む。
+ * 保存したトークンで、そのトークンを受け付けられるかを確かめる。
  *
  * 保存の前には必ず verifyAccount を通す。間違ったトークンを黙って保存すると、
  * 次のコマンドで初めて 401 になるため。
+ * 何を読むかは定義（api.auth / api.verify）が決める。GitHub は /user でアカウント名を読み、
+ * Composio はキーに対応するアカウント名が無いので、応答の成否だけを見る。
  */
 
 /** 1 回の HTTP の上限。応答しないサーバーで接続操作を止めない。 */
 const HTTP_TIMEOUT_MS = 15_000;
 
-/** アカウント名を読む 1 回の要求。成否の扱いは呼び出し側が決める。 */
-async function requestAccount(provider: TokenConnectorProvider, accessToken: string): Promise<Response> {
+/** 確かめる 1 回の要求。宛先は定義の baseUrl の後ろに付ける。 */
+async function requestVerify(provider: TokenConnectorProvider, accessToken: string): Promise<Response> {
   // パスは API の baseUrl の後ろに付ける（"/user" を URL の解決に任せると origin 直下になる）。
   const base = provider.api.baseUrl.replace(/\/+$/, "");
-  const url = new URL(`${base}${provider.api.account.path}`);
+  const url = new URL(`${base}${provider.api.verify.path}`);
+  const { header, prefix } = provider.api.auth;
 
   const outcome = await sendRequest(
     fetch,
     url.toString(),
-    { headers: { ...provider.api.headers, Authorization: `Bearer ${accessToken}` } },
+    { headers: { ...provider.api.headers, [header]: `${prefix}${accessToken}` } },
     { timeoutMs: HTTP_TIMEOUT_MS },
   );
 
@@ -29,20 +32,25 @@ async function requestAccount(provider: TokenConnectorProvider, accessToken: str
   return outcome.response;
 }
 
-/** 応答からアカウント名を読む。無ければ null。 */
-function accountFrom(data: Record<string, unknown>, provider: TokenConnectorProvider): string | null {
-  const value = data[provider.api.account.field];
+/** 応答からアカウント名を読む。field が null のコネクタは読まないので null。 */
+async function accountFrom(response: Response, provider: TokenConnectorProvider): Promise<string | null> {
+  const field = provider.api.verify.field;
+  if (field === null) return null;
+
+  const data = await readJsonObject(response);
+  const value = data[field];
   return typeof value === "string" && value.length > 0 ? value : null;
 }
 
 /**
- * 貼られたトークンでアカウントを読む。
- * 設定画面で保存する前に確かめ、受け付けられないトークンを黙って保存しない。
+ * 貼られたトークンを確かめる。
+ * 設定画面で保存する前に通し、受け付けられないトークンを黙って保存しない。
+ * 返すのは接続中のアカウント名で、名前を持たないコネクタでは null。
  */
-export async function verifyAccount(provider: TokenConnectorProvider, accessToken: string): Promise<string> {
+export async function verifyAccount(provider: TokenConnectorProvider, accessToken: string): Promise<string | null> {
   let response: Response;
   try {
-    response = await requestAccount(provider, accessToken);
+    response = await requestVerify(provider, accessToken);
   } catch (error) {
     throw new Error(`Could not reach ${provider.name}: ${describeError(error)}`, { cause: error });
   }
@@ -50,8 +58,10 @@ export async function verifyAccount(provider: TokenConnectorProvider, accessToke
     throw new Error(`${provider.name} did not accept the token (HTTP ${response.status})`);
   }
 
-  const account = accountFrom(await readJsonObject(response), provider);
-  if (account === null) throw new Error(`${provider.name} did not return the account name`);
+  const account = await accountFrom(response, provider);
+  if (account === null && provider.api.verify.field !== null) {
+    throw new Error(`${provider.name} did not return the account name`);
+  }
 
   return account;
 }

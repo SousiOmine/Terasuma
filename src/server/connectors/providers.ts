@@ -29,20 +29,33 @@ export type ConnectorCommon = {
   usage: string;
 };
 
-/** 利用者が発行したトークンを貼るコネクタ（GitHub）。 */
+/** 利用者が発行したトークンを貼るコネクタ（GitHub、Composio）。 */
 export type TokenConnectorProvider = ConnectorCommon & {
   kind: "token";
   /** 画面に出すトークン欄の見出しと説明。 */
   token: { label: string; description: string; placeholder: string };
-  /** コネクタがコンピュータへ渡す環境変数の名前。 */
+  /**
+   * コネクタがコンピュータへ渡す環境変数の名前。
+   * 空にすると、トークンはコンテナへ渡らない（コンテナの中の bash からも読めない）。
+   */
   env: readonly string[];
   /** 接続したアカウントの API。モデルが app_request で叩く先でもある。 */
   api: {
     baseUrl: string;
     /** すべての要求に付けるヘッダー。 */
     headers: Record<string, string>;
-    /** アカウント名を読むための API。 */
-    account: { path: string; field: string };
+    /**
+     * トークンを載せるヘッダー。
+     * GitHub は Authorization に "Bearer " を付けた値を載せ、Composio は x-api-key にトークンそのものを載せる
+     * （Composio は両方を同時に渡すと 401 で断る）。
+     */
+    auth: { header: string; prefix: string };
+    /**
+     * 貼られたトークンを受け付けるか確かめる API。保存の前に必ず通す。
+     * field が null なら、応答の成否だけで判断し、アカウント名は取らない
+     * （Composio のキーには対応するアカウント名が無い）。
+     */
+    verify: { path: string; field: string | null };
   };
 };
 
@@ -103,7 +116,45 @@ const GITHUB: TokenConnectorProvider = {
       Accept: "application/vnd.github+json",
       "X-GitHub-Api-Version": "2022-11-28",
     },
-    account: { path: "/user", field: "login" },
+    auth: { header: "Authorization", prefix: "Bearer " },
+    verify: { path: "/user", field: "login" },
+  },
+};
+
+/**
+ * Composio。1,600 以上のアプリのツールを、1 つのプロジェクト API キーで検索して実行する。
+ *
+ * キーはコンテナへ渡さない（`env` を空にする）。ツールは Terasuma のサーバーから叩くので、
+ * コンテナの中のコマンドがキーを読む必要が無い。
+ *
+ * キーは scoped project key を作るのが安全。Terasuma は保存時に `GET /tools` で確かめるので
+ * Toolkits read が要り、実行には Tool execution write が要る（権限不足も Composio 側では
+ * 401 Invalid API key として返る）。
+ */
+const COMPOSIO: TokenConnectorProvider = {
+  kind: "token",
+  id: "composio",
+  name: "Composio",
+  description: "Gmail、Slack、Notion など 1,600 以上のアプリのツール。実行は Composio のサーバーを経由します。",
+  setupUrl: "https://dashboard.composio.dev/~/project/settings/api-keys",
+  token: {
+    label: "プロジェクト API キー",
+    description:
+      "Composio のダッシュボードで発行したプロジェクト API キーを貼り付けます。アプリごとの権限を絞るなら scoped key を作ってください" +
+      "（保存時の確認に Toolkits の読み取り、ツールの実行に Tool execution の書き込みが要ります）。",
+    placeholder: "ak_...",
+  },
+  permissions: [],
+  needs: "a Composio project API key",
+  env: [],
+  usage:
+    "Find a tool with app_composio_search, then run it with app_composio_execute and the arguments its schema shows. " +
+    "For REST calls the tools do not cover, use app_request (for example GET /tools/GITHUB_CREATE_ISSUE).",
+  api: {
+    baseUrl: "https://backend.composio.dev/api/v3.1",
+    headers: { Accept: "application/json" },
+    auth: { header: "x-api-key", prefix: "" },
+    verify: { path: "/tools", field: null },
   },
 };
 
@@ -155,4 +206,4 @@ const PI: ProgramConnectorProvider = {
 };
 
 /** 標準で使えるプロバイダ。並び順が設定画面の並び順になる。 */
-export const CONNECTOR_PROVIDERS: readonly ConnectorProvider[] = [GITHUB, PI];
+export const CONNECTOR_PROVIDERS: readonly ConnectorProvider[] = [GITHUB, COMPOSIO, PI];

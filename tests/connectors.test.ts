@@ -5,6 +5,7 @@ import { WORKDIR_IN_CONTAINER } from "../src/server/computer/contract";
 import { createConnectors, type ConnectorScriptResult, type ConnectorsManager } from "../src/server/connectors/manager";
 import type { PiRuntime } from "../src/server/connectors/pi";
 import { ConnectorNotFound } from "../src/server/errors";
+import { CONNECTOR_PROVIDERS, type TokenConnectorProvider } from "../src/server/connectors/providers";
 import { withTempDir } from "./harness";
 import {
   fakeProgramProvider,
@@ -46,6 +47,42 @@ async function withConnectors(run: (context: Context) => Promise<void>): Promise
 /** ターンが続いている状態の signal。 */
 function signal(): AbortSignal {
   return new AbortController().signal;
+}
+
+/**
+ * 環境変数を渡さず、アカウント名も持たないコネクタ（Composio と同じ形）で確かめる。
+ * 偽の接続先は、キーを受け付けるかどうかだけを返す。
+ */
+async function withConnectorServerWithoutEnv(run: (context: Context) => Promise<void>): Promise<void> {
+  const server = startFakeConnectorServer();
+  try {
+    await withTempDir("terasuma-connectors-", async (dir) => {
+      const base = fakeProvider(server);
+      const manager = createConnectors({
+        dataDir: join(dir, "data"),
+        providers: [
+          {
+            ...base,
+            id: "composio",
+            name: "Composio",
+            env: [],
+            api: {
+              ...base.api,
+              verify: { path: "/user", field: null },
+            },
+          },
+        ],
+      });
+
+      try {
+        await run({ manager, dir, server });
+      } finally {
+        manager.close();
+      }
+    });
+  } finally {
+    await server.server.stop(true);
+  }
 }
 
 /**
@@ -166,6 +203,25 @@ describe("コネクタ", () => {
   test("知らないコネクタ id は失敗する", async () => {
     await withConnectors(async ({ manager }) => {
       expect(() => manager.provider("unknown")).toThrow(ConnectorNotFound);
+    });
+  });
+
+  test("環境変数を渡さないコネクタは、接続の文にも $NAME を出さない", async () => {
+    await withConnectorServerWithoutEnv(async ({ manager, server }) => {
+      await manager.setToken("composio", server.accessToken);
+
+      expect(manager.env()).toEqual({});
+      const text = await manager.wait("composio", signal());
+      expect(text).not.toContain("$");
+      expect(text).toContain("is connected");
+    });
+  });
+
+  test("アカウント名を持たないコネクタは、account を null のまま接続済みにする", async () => {
+    await withConnectorServerWithoutEnv(async ({ manager, server }) => {
+      const view = await manager.setToken("composio", server.accessToken);
+
+      expect(view.providers[0]).toMatchObject({ connected: true, account: null, detail: null });
     });
   });
 });
@@ -358,5 +414,33 @@ describe("program コネクタ", () => {
       expect(manager.env()).toEqual({});
       expect(manager.token("pi")).toBeNull();
     });
+  });
+});
+
+describe("標準のコネクタの定義", () => {
+  /** トークンを貼るコネクタだけを取り出す。 */
+  function tokenProviders(): readonly TokenConnectorProvider[] {
+    return CONNECTOR_PROVIDERS.filter((provider): provider is TokenConnectorProvider => provider.kind === "token");
+  }
+
+  test("GitHub と Composio と pi が並ぶ", () => {
+    expect(CONNECTOR_PROVIDERS.map((provider) => provider.id)).toEqual(["github", "composio", "pi"]);
+  });
+
+  test("Composio のキーはコンテナへ渡さず、x-api-key で送る", () => {
+    const composio = tokenProviders().find((provider) => provider.id === "composio");
+
+    expect(composio?.env).toEqual([]);
+    expect(composio?.api.auth).toEqual({ header: "x-api-key", prefix: "" });
+    expect(composio?.api.baseUrl).toBe("https://backend.composio.dev/api/v3.1");
+  });
+
+  test("トークンを貼るコネクタは、確かめる API と載せるヘッダーを持つ", () => {
+    for (const provider of tokenProviders()) {
+      expect(provider.api.verify.path.startsWith("/"), provider.id).toBe(true);
+      expect(provider.api.auth.header.length, provider.id).toBeGreaterThan(0);
+      // 環境変数を渡すなら名前が要る。渡さないなら空でそろえる。
+      expect(Array.isArray(provider.env), provider.id).toBe(true);
+    }
   });
 });

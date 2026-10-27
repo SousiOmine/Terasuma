@@ -281,8 +281,9 @@ system プロンプトは `applied` だけを読む。書いただけでは変�
 
 コネクタには 2 種類ある（`server/connectors/providers.ts`）。
 
-- **トークンを貼るコネクタ**: 利用者が発行したトークンを保存する（GitHub）。
-  定義は、トークン欄の文言、要求する権限、コンピュータへ渡す環境変数の名前を持つ。
+- **トークンを貼るコネクタ**: 利用者が発行したトークンを保存する（GitHub、Composio）。
+  定義は、トークン欄の文言、要求する権限、コンピュータへ渡す環境変数の名前、
+  トークンを載せるヘッダー（`api.auth`）、確かめる API（`api.verify`）を持つ。
 - **コンピュータの中のプログラムに LLM を繋ぐコネクタ**: プロバイダ・API キー・モデルを設定し、
   コンテナの中で実際に 1 回呼んで確かめる（pi）。定義は選べるプロバイダと既定モデルを持つ。
 
@@ -290,7 +291,11 @@ system プロンプトは `applied` だけを読む。書いただけでは変�
 カードの中身は、入力欄 → 区切り線 → 左に手順のリンク・右に送信、の同じ並びに揃える（`client/features/connectors/ConnectorForm.tsx`）。
 
 トークンは `config.json` ではなく、データディレクトリの `connectors/<id>.json` に保存する（ディレクトリ 0700、ファイル 0600）。
-保存する前に、アカウントを読んで受け付けられるか確かめる（間違ったトークンを黙って保存しない）。
+保存する前に、`api.verify` の API を 1 回呼んで受け付けられるか確かめる（間違ったトークンを黙って保存しない）。
+`api.verify.field` が null のコネクタ（Composio）は、応答の成否だけを見て、アカウント名は取らない（画面の `account` は null）。
+`api.auth` はトークンを載せるヘッダーで、GitHub は `Authorization: Bearer <token>`、Composio は `x-api-key: <token>` になる
+（Composio は両方を同時に渡すと 401 で断る）。`app_request` も同じ定義からヘッダーを組む。
+`env` を空にしたコネクタのトークンは、コンテナへ渡さない（中の bash からも読めない）。
 トークンを貼るだけなので、コールバック URL を使わない。
 SSH トンネルでも Tailscale 経由でも設定できる。
 MCP サーバーの redirect 方式（`server/mcp/oauth.ts`）とはここが違う。
@@ -328,7 +333,24 @@ URL にトークンを埋めると `git remote -v` の出力に現れ、その�
 接続ツールも `app_request` もツール一覧には載せず、`tool_search` で見つけて `tool_call` で実行する。
 
 `app_request` は 1 つのまま。未接続のときは、そのアプリの接続ツール名を案内する。
-`app_request` の Authorization は `Bearer <token>` で、パスは接続先の API の origin に収まるものだけを受け付ける。
+`app_request` は定義の `api.auth` のヘッダー（GitHub は `Authorization: Bearer <token>`、Composio は `x-api-key: <token>`）で送り、
+パスは接続先の API の origin に収まるものだけを受け付ける。
+
+Composio はアプリが 1,600 以上あるので、アプリごとの接続ツールを作らない。代わりに 2 つのツールを置く
+（`server/connectors/composio.ts`。ツール名は `src/shared/tools.ts`）。
+
+- `app_composio_search(query, toolkit?)`: `GET /tools?query=...`。slug・説明・引数（`input_parameters`）を一覧にする。
+- `app_composio_execute(toolSlug, args?)`: `POST /tools/execute/<slug>`。本文は `user_id`・`arguments`・`version: "latest"`。
+
+接続ツール `app_connect_composio` は他のアプリと同じくあり、キーの保存を待つ。
+アプリの OAuth は Composio のダッシュボードで済ませる（Terasuma の画面からは繋げない）。
+`user_id` は `terasuma` 固定（`COMPOSIO_USER_ID`）で、全 Tera が同じ接続を共有する。
+Composio の Session API（`tool_router/session`）は使わない。セッションの作成・キャッシュ・失効が増える割に、
+検索と実行は direct API で足りる（Composio は direct execution を legacy と位置づけているので、
+廃止されたら `composio.ts` の中だけを差し替える）。
+キーは `env: []` でコンテナへ渡さない。保存時の確認は `GET /tools?limit=1` なので、scoped key には
+Toolkits の読み取りが要り、実行には Tool execution の書き込みが要る（権限不足も 401 で返る）。
+接続している間だけ、スキル `composio` がスキル一覧に載る（`app.ts` の `extraSkills`）。
 
 ## Discord の webhook
 

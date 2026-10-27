@@ -6,6 +6,7 @@ import { truncateText } from "../../shared/text";
 import { sendRequest } from "../http/client";
 import { APP_REQUEST_TOOL_NAME, connectAppToolName } from "../../shared/tools";
 import { ConnectorNotFound } from "../errors";
+import { COMPOSIO_CONNECTOR_ID, createComposioTools } from "./composio";
 import type { ConnectorsManager } from "./manager";
 import type { ConnectorProvider } from "./providers";
 
@@ -15,10 +16,11 @@ import type { ConnectorProvider } from "./providers";
  * アプリごとの接続ツール（app_connect_<id>）はチャットにコネクタのカードを出し、
  * ユーザーがトークンかプログラムの設定を保存するまで待つ。
  * app_request は接続済みのトークンで API を叩く（トークンはモデルに渡さない）。
- * どちらもツール一覧には載せず、tool_search で見つけて tool_call で実行する。
+ * Composio だけはアプリが 1,600 以上あるので、接続ツールの代わりに検索と実行の 2 つを持つ。
+ * どれもツール一覧には載せず、tool_search で見つけて tool_call で実行する。
  */
 
-/** モデルへ渡すツール。キーは "app_connect_<id>" と "app_request"。 */
+/** モデルへ渡すツール。キーは "app_connect_<id>"、"app_request"、Composio の 2 つ。 */
 export type ConnectorToolset = ToolSet;
 
 /** ツールの供給元。 */
@@ -96,13 +98,14 @@ export function createConnectorTools(options: { connectors: ConnectorsManager })
 
   return {
     ...connectTools,
+    ...(appIds.includes(COMPOSIO_CONNECTOR_ID) ? createComposioTools({ connectors }) : {}),
 
     [APP_REQUEST_TOOL_NAME]: tool({
       description: [
         "Call the API of a connected app with its saved token.",
         "Use tool_search to find this when you need the API instead of the CLI.",
         'path must begin with "/" and stay on the app\'s API, for example "/user" or "/repos/{owner}/{repo}".',
-        "The token is never returned. A 401 means the user must connect the app again.",
+        "The token is never returned. A 401 means the saved token was rejected: ask the user to save it again.",
       ].join(" "),
       inputSchema: z.object({
         provider: z.string().min(1).describe(`Connected app id (${appList}), for example "${firstApp}"`),
@@ -124,9 +127,10 @@ export function createConnectorTools(options: { connectors: ConnectorsManager })
         }
 
         const url = apiUrl(definition.api.baseUrl, path);
+        const { header, prefix } = definition.api.auth;
         const headers: Record<string, string> = {
           ...definition.api.headers,
-          Authorization: `Bearer ${token}`,
+          [header]: `${prefix}${token}`,
         };
 
         // GET と DELETE に本文は付けない（付けるとサーバーによっては拒否される）。

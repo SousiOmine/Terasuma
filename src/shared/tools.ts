@@ -208,6 +208,22 @@ export const APP_REQUEST_TOOL = "request";
 export const APP_REQUEST_TOOL_NAME = `${APP_SERVER_ID}${TOOL_NAME_SEPARATOR}${APP_REQUEST_TOOL}`;
 
 /**
+ * Composio のツールを検索するツール名（サーバー id を付けない形）。
+ * Composio は 1,600 以上のアプリのツールを 1 つのキーで扱うので、接続ツールではなく
+ * 検索と実行の 2 つを用意する（接続は Composio のダッシュボードで済ませる）。
+ */
+export const COMPOSIO_SEARCH_TOOL = "composio_search";
+
+/** モデルへ渡すときの、Composio のツールを検索するツールの名前。 */
+export const COMPOSIO_SEARCH_TOOL_NAME = `${APP_SERVER_ID}${TOOL_NAME_SEPARATOR}${COMPOSIO_SEARCH_TOOL}`;
+
+/** Composio のツールを実行するツール名（サーバー id を付けない形）。 */
+export const COMPOSIO_EXECUTE_TOOL = "composio_execute";
+
+/** モデルへ渡すときの、Composio のツールを実行するツールの名前。 */
+export const COMPOSIO_EXECUTE_TOOL_NAME = `${APP_SERVER_ID}${TOOL_NAME_SEPARATOR}${COMPOSIO_EXECUTE_TOOL}`;
+
+/**
  * Discord へメッセージを送る内蔵ツールのサーバー id。
  * 送信先は Tera ごとに保存した webhook が決めるので、名前はこの 1 つにまとめる。
  */

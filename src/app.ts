@@ -6,7 +6,7 @@ import { createCompaction, type Compaction } from "./server/agent/compaction";
 import { createEngine, type AgentEngine } from "./server/agent/engine";
 import { createSkillFileStore } from "./server/agent/skill-files";
 import { createTurns } from "./server/agent/turns";
-import { PI_CODING_SKILL } from "./server/agent/skills";
+import { PI_CODING_SKILL, COMPOSIO_SKILL } from "./server/agent/skills";
 import { createCodingToolset } from "./server/agent/tools/coding";
 import { createComputerToolset } from "./server/agent/tools/computer";
 import { createAttachmentTools } from "./server/agent/tools/attachments";
@@ -23,6 +23,7 @@ import { ensureTeraWorkspace } from "./server/computer/workspaces";
 import { createSettingsStore, type SettingsStore } from "./server/data/settings";
 import { createStore, type Store } from "./server/data/store";
 import { createConnectors, type ConnectorsManager } from "./server/connectors/manager";
+import { COMPOSIO_CONNECTOR_ID } from "./server/connectors/composio";
 import { createConnectorToolset } from "./server/connectors/tools";
 import { createDiscordWebhooks, type DiscordWebhooks } from "./server/discord/manager";
 import { createDiscordToolset } from "./server/discord/tools";
@@ -133,9 +134,10 @@ export function startApp(config: AppConfig, overrides: AppOverrides = {}): App {
       },
     });
 
-  // 接続している間だけ一覧に載せるスキル（pi-coding）があるか。
+  // 接続している間だけ一覧に載せるスキル（pi-coding、composio）があるか。
   // テストで差し替えたコネクタの一覧に無い id を、ターンのたびに触らないようにする。
   const hasPiConnector = connectors.ids().includes("pi");
+  const hasComposioConnector = connectors.ids().includes(COMPOSIO_CONNECTOR_ID);
 
   // Discord の送信先（webhook URL）は Tera ごとに持つ。URL は秘密なのでデータディレクトリへ 0600 で置く。
   const discord = overrides.discord ?? createDiscordWebhooks({ store, dataDir: config.dataDir });
@@ -238,7 +240,10 @@ export function startApp(config: AppConfig, overrides: AppOverrides = {}): App {
       catalog,
       skills,
       identity: store,
-      extraSkills: () => (hasPiConnector && connectors.connected("pi") ? [PI_CODING_SKILL] : []),
+      extraSkills: () => [
+        ...(hasPiConnector && connectors.connected("pi") ? [PI_CODING_SKILL] : []),
+        ...(hasComposioConnector && connectors.connected(COMPOSIO_CONNECTOR_ID) ? [COMPOSIO_SKILL] : []),
+      ],
     });
 
   // 古いやり取りは、3 時間の放置か、文脈長に近づいたときに、背景で要約へ畳む。

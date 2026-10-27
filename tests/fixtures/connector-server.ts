@@ -71,7 +71,8 @@ export function fakeProvider(server: FakeConnectorServer): TokenConnectorProvide
     api: {
       baseUrl: `${server.origin}/api`,
       headers: { Accept: "application/json" },
-      account: { path: "/user", field: "login" },
+      auth: { header: "Authorization", prefix: "Bearer " },
+      verify: { path: "/user", field: "login" },
     },
   };
 }
