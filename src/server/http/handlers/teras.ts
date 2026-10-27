@@ -1,7 +1,7 @@
 import { resolveModel } from "../../provider/routing";
 import { saveUploads } from "../../computer/uploads";
 import { ensureTeraWorkspace, removeTeraWorkspace } from "../../computer/workspaces";
-import { toMessageView } from "../../agent/message-view";
+import { toMessageView } from "../../conversation/message-view";
 import { AppError, ConflictError, ValidationError } from "../../errors";
 import type { ConversationEvent } from "../../../shared/api/events";
 import { encodeChatEvent, encodeConversationEvent } from "../../../shared/sse";

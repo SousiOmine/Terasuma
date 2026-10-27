@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { FileSettings } from "../src/server/data/settings";
-import type { WebSearchManager } from "../src/server/websearch-manager";
+import type { WebSearchManager } from "../src/server/websearch/manager";
 import type { WebSearchSettingsView, WebSearchTestView } from "../src/shared/api/settings";
 import { withServer } from "./harness";
 

@@ -28,10 +28,10 @@ import type { ConnectorToolsetProvider } from "../src/server/connectors/tools";
 import type { ConnectorsManager } from "../src/server/connectors/manager";
 import type { DiscordToolsetProvider } from "../src/server/discord/tools";
 import type { RoutineScheduler } from "../src/server/routine/scheduler";
-import type { WebSearchManager } from "../src/server/websearch-manager";
+import type { WebSearchManager } from "../src/server/websearch/manager";
 import { createSettingsStore, type SettingsStore } from "../src/server/data/settings";
 import { createStore, type Store, type TeraIdentity } from "../src/server/data/store";
-import { createCompaction, type Compaction } from "../src/server/agent/compaction";
+import { createCompaction, type Compaction } from "../src/server/conversation/compaction";
 import type { IdentityStore } from "../src/server/agent/identity";
 import type { ContainerStatusView } from "../src/shared/api/settings";
 

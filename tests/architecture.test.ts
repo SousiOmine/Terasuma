@@ -85,7 +85,15 @@ describe("依存の向き", () => {
   });
 
   test("ツールはエンジンを知らない（供給元の型は contracts にある）", () => {
-    expectNoImports("src/server/agent/tools", ["src/server/agent/engine"]);
+    expectNoImports("src/server/tools", ["src/server/agent/engine"]);
+  });
+
+  test("会話の進行は HTTP 層を知らない", () => {
+    expectNoImports("src/server/conversation", ["src/server/http/"]);
+  });
+
+  test("ツールは会話の進行を知らない（道具立てと会話を混ぜない）", () => {
+    expectNoImports("src/server/tools", ["src/server/conversation/"]);
   });
 
   test("画面の実装は通信層を直接呼ばない（state を通す）", () => {

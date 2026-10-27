@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { ToolSet } from "ai";
-import { createToolRegistry } from "../src/server/agent/tools/registry";
+import { createToolRegistry } from "../src/server/tools/registry";
 import { createStore, DEFAULT_TERA_ID } from "../src/server/data/store";
 import { createDiscordWebhooks, type DiscordWebhooks } from "../src/server/discord/manager";
 import { createDiscordToolset } from "../src/server/discord/tools";

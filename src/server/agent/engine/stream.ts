@@ -4,7 +4,7 @@ import { splitToolName } from "../../../shared/tools";
 import type { MessagePart, TokenUsage } from "../../../shared/api/message";
 import { describeToolFailure } from "../tool-failure";
 import { readToolOutput } from "../tool-output";
-import type { EngineEvent, EngineStream } from "./index";
+import type { EngineEvent, EngineStream } from "./contract";
 
 /** AI SDK のストリームを、画面と保存に必要な出来事だけに絞る。 */
 

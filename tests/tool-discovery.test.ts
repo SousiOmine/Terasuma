@@ -2,8 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { jsonSchema, tool } from "ai";
 import { z } from "zod";
 import { readToolOutput } from "../src/server/agent/tool-output";
-import { createDiscoveryTools } from "../src/server/agent/tools/discovery";
-import { createToolRegistry, type ToolRegistry } from "../src/server/agent/tools/registry";
+import { createDiscoveryTools } from "../src/server/tools/discovery";
+import { createToolRegistry, type ToolRegistry } from "../src/server/tools/registry";
 import { TOOL_CALL_TOOL_NAME, TOOL_SEARCH_TOOL_NAME } from "../src/shared/tools";
 import type { ImageRef } from "../src/shared/api/message";
 

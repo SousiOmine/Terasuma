@@ -5,9 +5,9 @@
  * ここで組み立てる。このファイルはライブラリの外に置く（切り出すときに残るのは向こうだけ）。
  */
 
-import { describeError } from "../shared/errors";
-import type { WebSearchTestView } from "../shared/api/settings";
-import type { SettingsStore } from "./data/settings";
+import { describeError } from "../../shared/errors";
+import type { WebSearchTestView } from "../../shared/api/settings";
+import type { SettingsStore } from "../data/settings";
 import {
   createSearchProvider,
   isWebSearchProviderId,
@@ -15,7 +15,7 @@ import {
   WEB_SEARCH_FAILURE_TEXT,
   type FetchLike,
   type SearchProvider,
-} from "./websearch/index";
+} from "./index";
 
 /** 接続確認に使う検索語。短く、どのプロバイダでも結果が返るものにする。 */
 const TEST_QUERY = "Terasuma web search connection test";

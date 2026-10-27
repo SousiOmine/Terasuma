@@ -4,7 +4,7 @@ import type { TeraDirectory } from "../data/store";
 import { createPrivateJsonStore, type PrivateJsonStore } from "../data/private-store";
 import type { FetchLike } from "../http/client";
 import { createWaiterQueue } from "../wait/waiters";
-import { waitEndedText } from "../agent/tools/context";
+import { waitEndedText } from "../tools/context";
 import {
   parseWebhookUrl,
   sendWebhookMessage,

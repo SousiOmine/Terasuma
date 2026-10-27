@@ -15,10 +15,10 @@ import {
   createSkillLibrary,
   skillCatalogText,
 } from "../src/server/agent/skills";
-import { createComputerTools } from "../src/server/agent/tools/computer";
+import { createComputerTools } from "../src/server/tools/computer";
 import { createConnectorTools } from "../src/server/connectors/tools";
-import { createSkillTools } from "../src/server/agent/tools/skill";
-import { createSkillManageTools, type SkillChange } from "../src/server/agent/tools/skill-manage";
+import { createSkillTools } from "../src/server/tools/skill";
+import { createSkillManageTools, type SkillChange } from "../src/server/tools/skill-manage";
 import type { SkillFileStore, SkillLibrary } from "../src/server/agent/skill-types";
 import {
   createConnectorsStub,

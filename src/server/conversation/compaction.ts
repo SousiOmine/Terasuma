@@ -8,7 +8,7 @@ import {
   SUMMARIZATION_SYSTEM_PROMPT,
   TURN_PREFIX_PROMPT,
 } from "./compaction-text";
-import type { AgentEngine } from "./engine";
+import type { AgentEngine } from "../agent/engine";
 import type { TeraContext } from "./prompt";
 import { contextTokens, estimateMessageTokens, estimateTokens } from "./tokens";
 import { combineSignal } from "../../shared/async";

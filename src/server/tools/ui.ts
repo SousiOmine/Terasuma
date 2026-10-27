@@ -1,8 +1,8 @@
 import type { ToolSet } from "ai";
 import { tool } from "ai";
 import { z } from "zod";
-import { UI_TOOL_NAME } from "../../../shared/tools";
-import { parseUiMarkup, UI_MARKUP_LIMITS } from "../../../shared/ui-markup";
+import { UI_TOOL_NAME } from "../../shared/tools";
+import { parseUiMarkup, UI_MARKUP_LIMITS } from "../../shared/ui-markup";
 
 /**
  * Tera がチャットへ UI（カード）を送るツール。

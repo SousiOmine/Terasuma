@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ImageRef } from "../src/shared/api/message";
-import { createComputerToolset, createComputerTools } from "../src/server/agent/tools/computer";
+import { createComputerToolset, createComputerTools } from "../src/server/tools/computer";
 import { createContainerManager, type ContainerManager, type ShellResult } from "../src/server/computer/container";
 import type { EnvRequests } from "../src/server/computer/env";
 import { createHandover } from "../src/server/computer/handover";

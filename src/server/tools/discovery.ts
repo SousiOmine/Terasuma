@@ -1,10 +1,10 @@
 import type { ToolSet } from "ai";
 import { tool } from "ai";
 import { z } from "zod";
-import { TOOL_CALL_TOOL_NAME, TOOL_SEARCH_TOOL_NAME } from "../../../shared/tools";
-import { isRecord } from "../../../shared/guards";
-import { describeToolFailure } from "../tool-failure";
-import { readToolOutput } from "../tool-output";
+import { TOOL_CALL_TOOL_NAME, TOOL_SEARCH_TOOL_NAME } from "../../shared/tools";
+import { isRecord } from "../../shared/guards";
+import { describeToolFailure } from "../agent/tool-failure";
+import { readToolOutput } from "../agent/tool-output";
 import { DEFAULT_SEARCH_LIMIT, MAX_SEARCH_LIMIT, type ToolRegistry } from "./registry";
 
 /**

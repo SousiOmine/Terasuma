@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { attachmentNotice, userContentForModel, withAttachmentNotice } from "../src/server/agent/model-content";
+import { attachmentNotice, userContentForModel, withAttachmentNotice } from "../src/server/conversation/model-content";
 import type { ChatAttachment, ChatMessage } from "../src/shared/api/message";
 
 function message(content: string, attachments: ChatAttachment[] | null): ChatMessage {

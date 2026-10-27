@@ -7,9 +7,9 @@ import { WORKDIR_IN_CONTAINER } from "../computer/contract";
 import { TERAS_DIR_IN_CONTAINER } from "../computer/workspaces";
 import type { ImageReader } from "../computer/images";
 import { userContentForModel } from "./model-content";
-import { skillCatalogText } from "./skills";
-import type { Skill } from "./skill-types";
-import { readStoredImages, toolResultOutput, type StoredImages } from "./tool-output";
+import { skillCatalogText } from "../agent/skills";
+import type { Skill } from "../agent/skill-types";
+import { readStoredImages, toolResultOutput, type StoredImages } from "../agent/tool-output";
 
 /**
  * モデルへ渡す system プロンプト。

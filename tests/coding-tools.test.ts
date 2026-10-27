@@ -11,7 +11,7 @@ import {
   resolveToolPath,
   type CodingContainer,
   type CodingToolset,
-} from "../src/server/agent/tools/coding";
+} from "../src/server/tools/coding";
 
 /**
  * read / write / edit / bash を、モデルを介さずにそのまま呼ぶ。

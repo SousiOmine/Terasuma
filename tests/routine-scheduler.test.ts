@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { createConversationBroadcast } from "../src/server/agent/broadcast";
+import { createConversationBroadcast } from "../src/server/conversation/broadcast";
 import type { AgentEngine } from "../src/server/agent/engine";
 import { createMockEngine } from "../src/server/agent/engine/mock";
-import { createTurns } from "../src/server/agent/turns";
+import { createTurns } from "../src/server/conversation/turns";
 import { createStore, type Store } from "../src/server/data/store";
 import type { FileSettings } from "../src/server/data/settings";
 import { parseCatalog, type Catalog } from "../src/server/provider/catalog";

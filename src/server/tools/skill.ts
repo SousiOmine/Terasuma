@@ -1,8 +1,8 @@
 import type { ToolSet } from "ai";
 import { tool } from "ai";
 import { z } from "zod";
-import { SKILL_TOOL } from "../../../shared/tools";
-import type { LoadedSkill, SkillLibrary } from "../skill-types";
+import { SKILL_TOOL } from "../../shared/tools";
+import type { LoadedSkill, SkillLibrary } from "../agent/skill-types";
 
 /**
  * スキルを読み込むツール。

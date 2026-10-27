@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { ToolSet } from "ai";
-import { MAX_HISTORY_LIMIT, DEFAULT_HISTORY_LIMIT, createHistoryTools } from "../src/server/agent/tools/history";
+import { MAX_HISTORY_LIMIT, DEFAULT_HISTORY_LIMIT, createHistoryTools } from "../src/server/tools/history";
 import { createStore, DEFAULT_TERA_ID, type Store } from "../src/server/data/store";
 import { HISTORY_SEARCH_TOOL_NAME } from "../src/shared/tools";
 import type { ChatAttachment, MessagePart } from "../src/shared/api/message";

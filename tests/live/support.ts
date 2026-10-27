@@ -12,7 +12,7 @@ import { expect } from "bun:test";
 import { loadConfig } from "../../src/config";
 import { startApp } from "../../src/app";
 import { resolveModel } from "../../src/server/provider/routing";
-import type { Compaction } from "../../src/server/agent/compaction";
+import type { Compaction } from "../../src/server/conversation/compaction";
 import type { ContainerManager } from "../../src/server/computer/container";
 import { createStore, type Store } from "../../src/server/data/store";
 import type { ReplyLanguage } from "../../src/shared/language";

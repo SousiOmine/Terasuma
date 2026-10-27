@@ -1,12 +1,12 @@
 import { posix } from "node:path";
 import type { ToolSet } from "ai";
 import { tool } from "ai";
-import { throwIfAborted } from "../../../shared/async";
+import { throwIfAborted } from "../../shared/async";
 import type { ToolContext } from "./context";
-import { formatBytes, truncateBytesFromEnd } from "../../../shared/text";
+import { formatBytes, truncateBytesFromEnd } from "../../shared/text";
 import { z } from "zod";
-import type { ShellResult } from "../../computer/container";
-import { WORKDIR_IN_CONTAINER } from "../../computer/contract";
+import type { ShellResult } from "../computer/container";
+import { WORKDIR_IN_CONTAINER } from "../computer/contract";
 
 /**
  * エージェントが、Debian のデスクトップコンテナの中のファイルを読み書きし、

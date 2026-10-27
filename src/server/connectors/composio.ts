@@ -7,7 +7,7 @@ import { oneLine, truncateText } from "../../shared/text";
 import { COMPOSIO_EXECUTE_TOOL_NAME, COMPOSIO_SEARCH_TOOL_NAME, connectAppToolName } from "../../shared/tools";
 import { sendRequestOrThrow } from "../http/client";
 import type { ConnectorsManager } from "./manager";
-import type { ToolContext } from "../agent/tools/context";
+import type { ToolContext } from "../tools/context";
 
 /**
  * Composio のツール。

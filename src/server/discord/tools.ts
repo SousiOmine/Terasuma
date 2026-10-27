@@ -4,7 +4,7 @@ import { z } from "zod";
 import { DISCORD_CONNECT_TOOL_NAME, DISCORD_SEND_TOOL_NAME } from "../../shared/tools";
 import type { DiscordWebhooks } from "./manager";
 import type { SentWebhookMessage, WebhookMessage } from "./webhook";
-import { reasonInputSchema, requireSignal, type ToolContext } from "../agent/tools/context";
+import { reasonInputSchema, requireSignal, type ToolContext } from "../tools/context";
 
 /**
  * Discord の webhook を扱うツール。

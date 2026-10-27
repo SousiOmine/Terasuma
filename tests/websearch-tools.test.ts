@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { ToolSet } from "ai";
-import { createWebSearchToolset, createWebTools } from "../src/server/agent/tools/web";
-import type { WebSearchManager } from "../src/server/websearch-manager";
+import { createWebSearchToolset, createWebTools } from "../src/server/tools/web";
+import type { WebSearchManager } from "../src/server/websearch/manager";
 import {
   WebSearchError,
   type FetchRequest,

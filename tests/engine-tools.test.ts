@@ -5,9 +5,9 @@ import { join } from "node:path";
 import { tool } from "ai";
 import { z } from "zod";
 import type { ModelSettings } from "../src/server/data/settings";
-import { createCodingToolset } from "../src/server/agent/tools/coding";
-import { createComputerTools } from "../src/server/agent/tools/computer";
-import { createTeraToolset } from "../src/server/agent/tools/tera";
+import { createCodingToolset } from "../src/server/tools/coding";
+import { createComputerTools } from "../src/server/tools/computer";
+import { createTeraToolset } from "../src/server/tools/tera";
 import type { ContainerManager } from "../src/server/computer/container";
 import { createAiSdkEngine } from "../src/server/agent/engine/sdk";
 import type { EngineEvent, SettingsReader } from "../src/server/agent/engine";
@@ -18,8 +18,8 @@ import type {
   HistoryToolsetProvider,
   ToolsetProvider,
 } from "../src/server/agent/contracts";
-import { createAttachmentTools } from "../src/server/agent/tools/attachments";
-import { createHistoryToolset } from "../src/server/agent/tools/history";
+import { createAttachmentTools } from "../src/server/tools/attachments";
+import { createHistoryToolset } from "../src/server/tools/history";
 import { createFileStore } from "../src/server/computer/files";
 import type { ChatMessage, ImageRef, SentAttachment } from "../src/shared/api/message";
 import { createImageStore, type ImageStore } from "../src/server/computer/images";

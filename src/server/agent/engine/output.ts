@@ -1,6 +1,6 @@
 import type { ToolSet } from "ai";
 import type { ImageStore } from "../../computer/images";
-import type { PendingImages } from "../prompt";
+import type { PendingImages } from "../../conversation/prompt";
 import { readStoredImages, readToolOutput, toolResultOutput } from "../tool-output";
 
 /** ツールの戻り値を、モデルへ渡す形（本文 + 画像）に揃える。 */

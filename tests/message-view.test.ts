@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { toMessageView } from "../src/server/agent/message-view";
+import { toMessageView } from "../src/server/conversation/message-view";
 import type { ChatMessage, MessagePart, SentAttachment } from "../src/shared/api/message";
 
 const attachment: SentAttachment = {

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { asSchema } from "ai";
-import { createChatUiTools } from "../src/server/agent/tools/ui";
+import { createChatUiTools } from "../src/server/tools/ui";
 import { UI_MARKUP_LIMITS } from "../src/shared/ui-markup";
 
 /**

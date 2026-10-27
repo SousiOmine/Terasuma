@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { createCompaction, type Compaction } from "../src/server/agent/compaction";
-import { estimateMessageTokens, estimateTokens } from "../src/server/agent/tokens";
+import { createCompaction, type Compaction } from "../src/server/conversation/compaction";
+import { estimateMessageTokens, estimateTokens } from "../src/server/conversation/tokens";
 import type { CompleteInput } from "../src/server/agent/engine";
 import { DEFAULT_TERA_ID, DEFAULT_TERA_IDENTITY, type Store } from "../src/server/data/store";
 import type { ChatMessage, MessagePart } from "../src/shared/api/message";

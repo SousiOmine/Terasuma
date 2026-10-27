@@ -1,6 +1,6 @@
 import type { ChatMessage, TokenUsage } from "../../../shared/api/message";
-import { userContentForModel } from "../model-content";
-import type { AgentEngine, EngineEvent } from "./index";
+import { userContentForModel } from "../../conversation/model-content";
+import type { AgentEngine, EngineEvent } from "./contract";
 
 /** API キー無しで画面とストリーミングを確かめるためのモック。 */
 

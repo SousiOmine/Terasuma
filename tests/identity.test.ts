@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { MAX_IDENTITY_CHARS } from "../src/server/agent/identity";
-import { createIdentityTools } from "../src/server/agent/tools/identity";
+import { createIdentityTools } from "../src/server/tools/identity";
 import { DEFAULT_TERA_ID, DEFAULT_TERA_IDENTITY, type Store } from "../src/server/data/store";
 import { makeStore } from "./support";
 

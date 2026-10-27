@@ -1,9 +1,9 @@
 import type { ToolSet } from "ai";
 import { tool } from "ai";
 import { z } from "zod";
-import { IDENTITY_TOOL } from "../../../shared/tools";
-import type { TeraIdentity } from "../../data/store";
-import { MAX_IDENTITY_CHARS, normalizeIdentity, type IdentityStore } from "../identity";
+import { IDENTITY_TOOL } from "../../shared/tools";
+import type { TeraIdentity } from "../data/store";
+import { MAX_IDENTITY_CHARS, normalizeIdentity, type IdentityStore } from "../agent/identity";
 
 /**
  * Tera が自分の identity（役割と必要な知識）を読む・書き換えるツール。

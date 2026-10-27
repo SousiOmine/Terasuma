@@ -11,7 +11,7 @@ import type {
   TokenUsage,
 } from "../../shared/api/message";
 import type { Compaction } from "./compaction";
-import type { AgentEngine } from "./engine";
+import type { AgentEngine } from "../agent/engine";
 import { toMessageView } from "./message-view";
 import type { TeraContext } from "./prompt";
 import { createStepMessages } from "./step-messages";

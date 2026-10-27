@@ -11,10 +11,10 @@ import { createFileStore, type FileStore } from "../src/server/computer/files";
 import { createEnvRequests, type EnvRequests } from "../src/server/computer/env";
 import { createHandover, type Handover } from "../src/server/computer/handover";
 import { createImageStore, type ImageStore } from "../src/server/computer/images";
-import { createConversationBroadcast } from "../src/server/agent/broadcast";
-import { createTurns } from "../src/server/agent/turns";
+import { createConversationBroadcast } from "../src/server/conversation/broadcast";
+import { createTurns } from "../src/server/conversation/turns";
 import type { McpManager } from "../src/server/mcp/manager";
-import type { WebSearchManager } from "../src/server/websearch-manager";
+import type { WebSearchManager } from "../src/server/websearch/manager";
 import type { RoutineScheduler } from "../src/server/routine/scheduler";
 import { CATALOG_FILE_NAME, createCatalog, type Catalog } from "../src/server/provider/catalog";
 import {

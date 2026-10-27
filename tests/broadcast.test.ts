@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { createConversationBroadcast } from "../src/server/agent/broadcast";
+import { createConversationBroadcast } from "../src/server/conversation/broadcast";
 import type { ConversationEvent } from "../src/shared/api/events";
 import type { ChatEvent, ChatMessageView } from "../src/shared/api/message";
 

@@ -1,12 +1,12 @@
 import type { ToolSet } from "ai";
 import { tool } from "ai";
 import { z } from "zod";
-import { isTeraId } from "../../../shared/ids";
-import { TERA_CREATE_TOOL_NAME } from "../../../shared/tools";
-import type { TeraDirectory } from "../../data/store";
-import { ensureTeraWorkspace } from "../../computer/workspaces";
-import type { TeraToolsetProvider } from "../contracts";
-import { composeTeraIdentity, MAX_IDENTITY_CHARS } from "../identity";
+import { isTeraId } from "../../shared/ids";
+import { TERA_CREATE_TOOL_NAME } from "../../shared/tools";
+import type { TeraDirectory } from "../data/store";
+import { ensureTeraWorkspace } from "../computer/workspaces";
+import type { TeraToolsetProvider } from "../agent/contracts";
+import { composeTeraIdentity, MAX_IDENTITY_CHARS } from "../agent/identity";
 
 /**
  * 新しい Tera を作るツール。

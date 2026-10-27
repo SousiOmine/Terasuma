@@ -7,7 +7,7 @@ import { checkPi, setupPi, type PiRuntime, type PiStatus } from "./pi";
 import { createProgramStore, type ProgramStore } from "./program-store";
 import { createTokenStore, type TokenStore } from "./token-store";
 import { createWaiterQueue } from "../wait/waiters";
-import { waitEndedText } from "../agent/tools/context";
+import { waitEndedText } from "../tools/context";
 
 /**
  * コネクタの状態。

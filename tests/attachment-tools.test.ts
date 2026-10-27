@@ -7,7 +7,7 @@ import {
   createAttachmentTools,
   type AttachmentContainer,
   type AttachmentToolset,
-} from "../src/server/agent/tools/attachments";
+} from "../src/server/tools/attachments";
 import { createFileStore, type FileStore } from "../src/server/computer/files";
 import { createImageStore, type ImageStore } from "../src/server/computer/images";
 import { MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES } from "../src/shared/attachments";

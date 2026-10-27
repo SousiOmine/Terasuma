@@ -1,8 +1,8 @@
 import { asSchema, type ToolSet } from "ai";
-import { truncateText } from "../../../shared/text";
-import { splitToolName } from "../../../shared/tools";
-import { describeToolFailure } from "../tool-failure";
-import { clampInt } from "../../../shared/numbers";
+import { truncateText } from "../../shared/text";
+import { splitToolName } from "../../shared/tools";
+import { describeToolFailure } from "../agent/tool-failure";
+import { clampInt } from "../../shared/numbers";
 
 /**
  * モデルのツール一覧に載せないツールの置き場。

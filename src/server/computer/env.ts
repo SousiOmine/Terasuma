@@ -4,7 +4,7 @@ import { describeError } from "../../shared/errors";
 import type { SettingsStore } from "../data/settings";
 import { SettingsWriteError } from "../errors";
 import { createPendingRegistry } from "../wait/pending";
-import { waitEndedText } from "../agent/tools/context";
+import { waitEndedText } from "../tools/context";
 
 /**
  * エージェントが秘密（API キーなど）を必要としたときの、チャットからの入力待ち。

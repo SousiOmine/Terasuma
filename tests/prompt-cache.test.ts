@@ -10,10 +10,10 @@ import {
   replyLanguageInstruction,
   turnTail,
   type TeraContext,
-} from "../src/server/agent/prompt";
+} from "../src/server/conversation/prompt";
 import { BUILTIN_SKILLS } from "../src/server/agent/skills";
 import type { Skill } from "../src/server/agent/skill-types";
-import { readContext } from "../src/server/agent/compaction";
+import { readContext } from "../src/server/conversation/compaction";
 import { teraWorkspaceInContainer } from "../src/server/computer/workspaces";
 import { DEFAULT_TERA_ID, DEFAULT_TERA_IDENTITY } from "../src/server/data/store";
 import type { ImageRef } from "../src/shared/api/message";

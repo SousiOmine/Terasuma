@@ -2,15 +2,15 @@ import { posix } from "node:path";
 import type { ToolSet } from "ai";
 import { tool } from "ai";
 import { z } from "zod";
-import { MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS_TOTAL_BYTES } from "../../../shared/attachments";
-import { throwIfAborted } from "../../../shared/async";
-import { formatBytes } from "../../../shared/text";
-import { ATTACH_TOOL_NAME } from "../../../shared/tools";
-import type { SentAttachment } from "../../../shared/api/message";
-import type { ImageStore } from "../../computer/images";
-import { imageUrl } from "../../computer/images";
-import type { FileStore } from "../../computer/files";
-import { safeFileName } from "../../computer/uploads";
+import { MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS_TOTAL_BYTES } from "../../shared/attachments";
+import { throwIfAborted } from "../../shared/async";
+import { formatBytes } from "../../shared/text";
+import { ATTACH_TOOL_NAME } from "../../shared/tools";
+import type { SentAttachment } from "../../shared/api/message";
+import type { ImageStore } from "../computer/images";
+import { imageUrl } from "../computer/images";
+import type { FileStore } from "../computer/files";
+import { safeFileName } from "../computer/uploads";
 import { resolveToolPath } from "./coding";
 
 /**

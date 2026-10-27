@@ -1,8 +1,8 @@
 import { describeError } from "../../shared/errors";
 import type { ChatEvent } from "../../shared/api/message";
 import type { RoutineStatus } from "../../shared/api/routine";
-import type { ConversationBroadcast } from "../agent/broadcast";
-import type { Turns } from "../agent/turns";
+import type { ConversationBroadcast } from "../conversation/broadcast";
+import type { Turns } from "../conversation/turns";
 import type { RoutineRecord, RoutineStore } from "../data/store";
 import type { SettingsStore } from "../data/settings";
 import type { Catalog } from "../provider/catalog";

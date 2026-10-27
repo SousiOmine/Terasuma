@@ -16,20 +16,20 @@ import type {
   ToolsetProvider,
   WebSearchToolsetProvider,
 } from "../contracts";
-import type { AgentEngine, CatalogReader, SettingsReader } from "./index";
+import type { AgentEngine, CatalogReader, SettingsReader } from "./contract";
 import { createLanguageModel } from "../../provider/adapters";
 import { toolResultTakesImages } from "../../provider/kinds";
 import { reasoningProviderOptions } from "../../provider/reasoning";
 import { type ResolvedModel, resolveModel } from "../../provider/routing";
 import { teraWorkspaceInContainer } from "../../computer/workspaces";
-import { buildSystemPrompt, imagesMessage, toModelMessages, type PendingImages } from "../prompt";
-import { userContentForModel } from "../model-content";
-import { createChatUiTools } from "../tools/ui";
-import { createDiscoveryTools } from "../tools/discovery";
-import { createToolRegistry } from "../tools/registry";
-import { createSkillTools } from "../tools/skill";
-import { createSkillManageTools, type SkillChange } from "../tools/skill-manage";
-import { createIdentityTools } from "../tools/identity";
+import { buildSystemPrompt, imagesMessage, toModelMessages, type PendingImages } from "../../conversation/prompt";
+import { userContentForModel } from "../../conversation/model-content";
+import { createChatUiTools } from "../../tools/ui";
+import { createDiscoveryTools } from "../../tools/discovery";
+import { createToolRegistry } from "../../tools/registry";
+import { createSkillTools } from "../../tools/skill";
+import { createSkillManageTools, type SkillChange } from "../../tools/skill-manage";
+import { createIdentityTools } from "../../tools/identity";
 import { createSkillLibrary } from "../skills";
 import { describeToolFailure } from "../tool-failure";
 import { toEngineStream } from "./stream";

@@ -1,9 +1,9 @@
 import type { ToolSet } from "ai";
 import { tool } from "ai";
 import { z } from "zod";
-import { SKILL_MANAGE_TOOL_NAME } from "../../../shared/tools";
-import { BUILTIN_SKILLS } from "../skills";
-import type { SkillFileStore, SkillLibrary } from "../skill-types";
+import { SKILL_MANAGE_TOOL_NAME } from "../../shared/tools";
+import { BUILTIN_SKILLS } from "../agent/skills";
+import type { SkillFileStore, SkillLibrary } from "../agent/skill-types";
 
 /**
  * スキルを作成、更新、削除、一覧するツール。

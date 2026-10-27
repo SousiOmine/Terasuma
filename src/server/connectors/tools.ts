@@ -9,7 +9,7 @@ import { ConnectorNotFound } from "../errors";
 import { COMPOSIO_CONNECTOR_ID, createComposioTools } from "./composio";
 import type { ConnectorsManager } from "./manager";
 import type { ConnectorProvider } from "./providers";
-import { reasonInputSchema, requireSignal, type ToolContext } from "../agent/tools/context";
+import { reasonInputSchema, requireSignal, type ToolContext } from "../tools/context";
 
 /**
  * コネクタを扱うツール。

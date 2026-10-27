@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { createWebSearchManager } from "../src/server/websearch-manager";
+import { createWebSearchManager } from "../src/server/websearch/manager";
 import type { FetchLike } from "../src/server/websearch/index";
 import { withTempSettings } from "./support";
 

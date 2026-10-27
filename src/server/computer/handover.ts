@@ -1,5 +1,5 @@
 import { createPendingRegistry } from "../wait/pending";
-import { waitEndedText } from "../agent/tools/context";
+import { waitEndedText } from "../tools/context";
 
 /**
  * エージェントからユーザーへ画面を渡す（引き受け）。

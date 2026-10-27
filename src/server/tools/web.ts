@@ -6,11 +6,11 @@
  */
 
 import type { ToolSet } from "ai";
-import type { WebSearchToolsetProvider } from "../contracts";
+import type { WebSearchToolsetProvider } from "../agent/contracts";
 import { tool } from "ai";
 import { z } from "zod";
-import { describeError } from "../../../shared/errors";
-import { WEB_FETCH_TOOL_NAME, WEB_SEARCH_TOOL_NAME } from "../../../shared/tools";
+import { describeError } from "../../shared/errors";
+import { WEB_FETCH_TOOL_NAME, WEB_SEARCH_TOOL_NAME } from "../../shared/tools";
 import {
   DEFAULT_FETCH_CHARS,
   DEFAULT_SEARCH_LIMIT,
@@ -21,9 +21,9 @@ import {
   type SearchResponse,
   WEB_SEARCH_FAILURE_TEXT,
   WebSearchError,
-} from "../../websearch/index";
-import { truncateText } from "../../../shared/text";
-import type { WebSearchManager } from "../../websearch-manager";
+} from "../websearch/index";
+import { truncateText } from "../../shared/text";
+import type { WebSearchManager } from "../websearch/manager";
 
 /** 検索結果の本文全体の上限（文字数）。1 件ずつの抜粋では、結果が増えたときに膨らむ。 */
 const MAX_SEARCH_RESULT_CHARS = 20_000;

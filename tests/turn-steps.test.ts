@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { createStepMessages } from "../src/server/agent/step-messages";
+import { createStepMessages } from "../src/server/conversation/step-messages";
 import { DEFAULT_TERA_ID, type Store } from "../src/server/data/store";
 import { CHAT_SERVER_ID, UI_TOOL } from "../src/shared/tools";
 import type { MessagePart } from "../src/shared/api/message";
