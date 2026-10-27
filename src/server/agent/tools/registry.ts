@@ -1,7 +1,7 @@
 import { asSchema, type ToolSet } from "ai";
-import { messageOf } from "../../../shared/errors";
 import { truncateText } from "../../../shared/text";
 import { splitToolName } from "../../../shared/tools";
+import { describeToolFailure } from "../tool-failure";
 
 /**
  * モデルのツール一覧に載せないツールの置き場。
@@ -125,7 +125,7 @@ export async function createToolRegistry(tools: ToolSet): Promise<ToolRegistry> 
 
       if (entry.validate !== null) {
         const result = (await entry.validate(args)) as { success: boolean; error?: unknown };
-        if (!result.success) throw new Error(`Invalid arguments for "${name}": ${describeValidation(result.error)}`);
+        if (!result.success) throw new Error(describeToolFailure(name, result.error));
       }
       if (entry.execute === undefined) throw new Error(`"${name}" cannot be called through tool_call`);
 
@@ -230,11 +230,6 @@ function groupOf(name: string): string {
 function executableOf(definition: ToolSet[string]): ((input: never, options: never) => unknown) | undefined {
   const execute = (definition as { execute?: unknown }).execute;
   return typeof execute === "function" ? (execute as (input: never, options: never) => unknown) : undefined;
-}
-
-/** 検証の失敗から、モデルが読める 1 文を取り出す。 */
-function describeValidation(error: unknown): string {
-  return messageOf(error) ?? String(error);
 }
 
 /**

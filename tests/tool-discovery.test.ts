@@ -145,6 +145,20 @@ describe("ツールのレジストリ", () => {
     expect(failure).toBeInstanceOf(Error);
     expect((failure as Error).message).toContain('Invalid arguments for "local_echo"');
   });
+
+  test("tool_call で引数が合わないときは、モデルが直せる短い本文にする", async () => {
+    const tools = await discoveryTools();
+    const failure = await runTool(tools, TOOL_CALL_TOOL_NAME, {
+      name: "local_echo",
+      args: { text: 1 },
+    }).catch((error: unknown) => error);
+
+    expect(failure).toBeInstanceOf(Error);
+    const message = (failure as Error).message;
+    expect(message.startsWith('Invalid arguments for "local_echo"')).toBe(true);
+    expect(message).not.toContain("AI_");
+    expect(message.length).toBeLessThan(300);
+  });
 });
 
 describe("tool_search と tool_call", () => {
@@ -210,10 +224,12 @@ describe("tool_search と tool_call", () => {
     expect(readToolOutput(output)).toEqual({ text: "[computer_screenshot]\n撮りました", images: [REF] });
   });
 
-  test("知らない名前は、実行の失敗として返る", async () => {
+  test("知らない名前は、検索へ戻る短い理由で失敗する", async () => {
     const tools = await discoveryTools();
 
-    await expect(runTool(tools, TOOL_CALL_TOOL_NAME, { name: "nope" })).rejects.toThrow('Unknown tool "nope"');
+    await expect(runTool(tools, TOOL_CALL_TOOL_NAME, { name: "nope" })).rejects.toThrow(
+      'No tool named "nope". Use tool_search to find the name, then call it with tool_call.',
+    );
   });
 
   test("getter は実行のたびに引き直され、差し替えたレジストリが見える", async () => {

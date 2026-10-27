@@ -335,6 +335,23 @@ describe("ツール検索（AI SDK 経由）", () => {
     }
   });
 
+  test("引数がスキーマに合わないツールの失敗は、Zod のダンプではなく短い理由をモデルへ渡す", async () => {
+    const fake = startScriptedProvider([
+      { tool: "skill", args: JSON.stringify({ name: 123 }) },
+      { text: "直しました" },
+    ]);
+
+    try {
+      await run(createMcpStub(), settingsFor(portOf(fake.server)));
+
+      const body = JSON.stringify(fake.bodies[1]);
+      expect(body).not.toContain('"expected": "string"');
+      expect(body).toContain('Invalid arguments for \\"skill\\"');
+    } finally {
+      await fake.server.stop(true);
+    }
+  });
+
   test("tool_call の args は JSON 文字列でも受け付ける", async () => {
     const fake = startScriptedProvider([
       {
@@ -534,7 +551,7 @@ describe("ツール検索（AI SDK 経由）", () => {
 
       const result = resultOf(events, call.part.id);
       expect(result.part.failed).toBe(true);
-      expect(result.part.output).toContain('Unknown tool "nope_nope"');
+      expect(result.part.output).toContain('No tool named "nope_nope"');
       expect(result.part.output).toContain("tool_search");
     } finally {
       await fake.server.stop(true);

@@ -1,7 +1,8 @@
 import type { LanguageModelUsage, TextStreamPart, ToolSet } from "ai";
-import { describeError, messageOf } from "../../../shared/errors";
+import { describeError } from "../../../shared/errors";
 import { splitToolName } from "../../../shared/tools";
 import type { MessagePart, TokenUsage } from "../../../shared/api/message";
+import { describeToolFailure } from "../tool-failure";
 import { readToolOutput } from "../tool-output";
 import type { EngineEvent, EngineStream } from "./index";
 
@@ -102,10 +103,8 @@ function toolResultPart(
   failed: boolean,
   value: unknown,
 ): Extract<MessagePart, { type: "tool-result" }> {
-  // 失敗した呼び出しは、例外の message を本文にする（JSON の包装を見せない）。
-  const output = failed
-    ? { text: toolErrorMessage(value) ?? readToolOutput(value).text, images: [] }
-    : readToolOutput(value);
+  // 失敗した呼び出しは、モデルが直せる短い文を本文にする（長いダンプを履歴に残さない）。
+  const output = failed ? { text: describeToolFailure(tool, value), images: [] } : readToolOutput(value);
 
   return {
     type: "tool-result",
@@ -116,14 +115,6 @@ function toolResultPart(
     output: output.text,
     ...(output.images.length === 0 ? {} : { images: output.images }),
   };
-}
-
-/**
- * 失敗した呼び出しの戻り値から、モデルへ見せるエラー本文を取り出す。
- * 取り出せない形は null を返し、通常の本文の組み立てに任せる。
- */
-function toolErrorMessage(value: unknown): string | null {
-  return messageOf(value);
 }
 
 function normalizeUsage(raw: LanguageModelUsage): TokenUsage | null {

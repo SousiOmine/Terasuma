@@ -3,6 +3,7 @@ import { tool } from "ai";
 import { z } from "zod";
 import { TOOL_CALL_TOOL_NAME, TOOL_SEARCH_TOOL_NAME } from "../../../shared/tools";
 import { isRecord } from "../../../shared/guards";
+import { describeToolFailure } from "../tool-failure";
 import { readToolOutput } from "../tool-output";
 import { DEFAULT_SEARCH_LIMIT, MAX_SEARCH_LIMIT, type ToolRegistry } from "./registry";
 
@@ -61,7 +62,7 @@ export function createDiscoveryTools(registry: () => ToolRegistry): ToolSet {
       description: [
         "Run a tool found with tool_search, by its exact name, with the arguments its search result describes.",
         "The result is prefixed with `[<tool name>]` so the output stays attributed.",
-        "An unknown name fails with `Unknown tool <name>. Use tool_search to find available tools.`",
+        "An unknown name fails with `No tool named <name>. Use tool_search to find the name, then call it with tool_call.`",
       ].join(" "),
       inputSchema: z.object({
         name: z.string().min(1).describe("Exact name of the tool to run (returned by tool_search)"),
@@ -74,7 +75,7 @@ export function createDiscoveryTools(registry: () => ToolRegistry): ToolSet {
         { name, args }: { name: string; args?: Record<string, unknown> | string },
         context: { toolCallId: string; abortSignal?: AbortSignal },
       ) => {
-        const output = await registry().call(name, argumentsOf(args), {
+        const output = await callTool(registry(), name, args, {
           toolCallId: context.toolCallId,
           ...(context.abortSignal === undefined ? {} : { abortSignal: context.abortSignal }),
         });
@@ -104,4 +105,20 @@ function argumentsOf(args: Record<string, unknown> | string | undefined): Record
   }
   if (!isRecord(parsed)) throw new Error('args must be a JSON object, for example {"name":"..."}.');
   return parsed;
+}
+
+/** ツールを実行し、中断以外の失敗はモデルが直せる短い文に置き換える。 */
+async function callTool(
+  registry: ToolRegistry,
+  name: string,
+  args: Record<string, unknown> | string | undefined,
+  options: { toolCallId: string; abortSignal?: AbortSignal },
+): Promise<unknown> {
+  try {
+    return await registry.call(name, argumentsOf(args), options);
+  } catch (error) {
+    if (options.abortSignal?.aborted === true) throw error;
+    if (error instanceof Error && error.name === "AbortError") throw error;
+    throw new Error(describeToolFailure(name, error));
+  }
 }

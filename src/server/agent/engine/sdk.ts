@@ -1,5 +1,5 @@
-import { generateText, stepCountIs, streamText } from "ai";
-import type { ModelMessage, ToolSet } from "ai";
+import { asSchema, generateText, jsonSchema, stepCountIs, streamText } from "ai";
+import type { ModelMessage, Schema, ToolSet } from "ai";
 import type { ConnectorToolsetProvider } from "../../connectors/tools";
 import type { DiscordToolsetProvider } from "../../discord/tools";
 import type { ImageStore } from "../../computer/images";
@@ -31,6 +31,7 @@ import { createSkillTools } from "../tools/skill";
 import { createSkillManageTools, type SkillChange } from "../tools/skill-manage";
 import { createIdentityTools } from "../tools/identity";
 import { createSkillLibrary } from "../skills";
+import { describeToolFailure } from "../tool-failure";
 import { toEngineStream } from "./stream";
 import { withToolModelOutput } from "./output";
 
@@ -170,7 +171,7 @@ export function createAiSdkEngine(options: AiSdkEngineOptions): AgentEngine {
       // MCP のツールだけは、ターンの途中で設定が変わると中身が入れ替わる。
       // prepareStep で参照が変わったときだけ、この一式を組み直す。
       let mcpTools = initialMcpTools;
-      let registry = await createToolRegistry({
+      const hiddenTools = () => ({
         ...mcpTools,
         ...computerTools,
         ...connectorTools,
@@ -179,6 +180,7 @@ export function createAiSdkEngine(options: AiSdkEngineOptions): AgentEngine {
         ...routineTools,
         ...mcpManageTools,
       });
+      let registry = await createToolRegistry(await withShortToolErrors(hiddenTools()));
 
       // ターンの途中で MCP のツールが変わったら、スキルと同じく次のモデル呼び出しの前に知らせる。
       const mcpNotices: string[] = [];
@@ -195,23 +197,25 @@ export function createAiSdkEngine(options: AiSdkEngineOptions): AgentEngine {
       // Web 検索は既定のプロバイダが設定されているときだけ 2 つのツールになる。
       const webTools = webSearch.toolset();
 
-      const tools = withToolModelOutput(
-        {
-          ...codingTools,
-          ...attachmentTools,
-          ...chatUiTools,
-          ...historyTools,
-          ...webTools,
-          ...createDiscoveryTools(() => registry),
-          ...skillTools,
-          ...skillManageTools,
-          ...createIdentityTools({ store: identity, teraId }),
-        },
-        {
-          includeImages: toolResultImages,
-          images,
-          onImages: (entry) => pendingImages.push(entry),
-        },
+      const tools = await withShortToolErrors(
+        withToolModelOutput(
+          {
+            ...codingTools,
+            ...attachmentTools,
+            ...chatUiTools,
+            ...historyTools,
+            ...webTools,
+            ...createDiscoveryTools(() => registry),
+            ...skillTools,
+            ...skillManageTools,
+            ...createIdentityTools({ store: identity, teraId }),
+          },
+          {
+            includeImages: toolResultImages,
+            images,
+            onImages: (entry) => pendingImages.push(entry),
+          },
+        ),
       );
 
       // 上限で止まったかどうかを、finish のときに知れるようにする。
@@ -240,15 +244,7 @@ export function createAiSdkEngine(options: AiSdkEngineOptions): AgentEngine {
           if (registryNeedsRebuild(mcpTools, refreshedMcpTools)) {
             const previous = mcpTools;
             mcpTools = refreshedMcpTools;
-            registry = await createToolRegistry({
-              ...mcpTools,
-              ...computerTools,
-              ...connectorTools,
-              ...discordTools,
-              ...teraTools,
-              ...routineTools,
-              ...mcpManageTools,
-            });
+            registry = await createToolRegistry(await withShortToolErrors(hiddenTools()));
             mcpNotices.push(mcpChangeNotice(previous, mcpTools));
           }
 
@@ -301,6 +297,33 @@ export function createAiSdkEngine(options: AiSdkEngineOptions): AgentEngine {
  */
 export function registryNeedsRebuild(previous: ToolSet, next: ToolSet): boolean {
   return previous !== next;
+}
+
+/**
+ * 引数の検証に失敗したときの理由を短くする。
+ * AI SDK は検証の例外の message をそのままモデルへ渡すので、Zod のダンプが届いてしまう。
+ */
+async function withShortToolErrors(tools: ToolSet): Promise<ToolSet> {
+  const wrapped: ToolSet = {};
+
+  for (const [name, definition] of Object.entries(tools)) {
+    const schema = asSchema(definition.inputSchema);
+    const validate = schema.validate;
+    if (validate === undefined) {
+      wrapped[name] = definition;
+      continue;
+    }
+
+    const shortSchema: Schema<unknown> = jsonSchema(await schema.jsonSchema, {
+      validate: async (value) => {
+        const result = await validate(value);
+        return result.success ? result : { success: false, error: new Error(describeToolFailure(name, result.error)) };
+      },
+    });
+    wrapped[name] = { ...definition, inputSchema: shortSchema };
+  }
+
+  return wrapped;
 }
 
 /** 1 つの notice に名前を並べる上限。多すぎるときは件数だけを伝える。 */
