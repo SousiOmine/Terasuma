@@ -131,7 +131,17 @@
 html,
 body,
 #root {
+  /* dvh を知らないブラウザでは、この行が使われる（ページ全体が縦に伸びるのを防ぐ）。 */
+  height: 100%;
+  /* biome-ignore lint/suspicious/noDuplicateProperties: dvh 非対応のブラウザ向けの控え。 */
   height: 100dvh;
+}
+
+/* 画面全体は固定の枠。スクロールは中の要素（会話の一覧、設定の本文）が持つ。
+   絶対配置の取りこぼしでページごと動かないように、文書側では動かさない。 */
+html,
+body {
+  overflow: hidden;
 }
 
 body {

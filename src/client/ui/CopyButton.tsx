@@ -37,7 +37,7 @@ export function CopyButton({ text }: { text: string }) {
       onClick={() => void handleClick()}
       title={label}
       aria-label={label}
-      class={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-tertiary transition hover:bg-soft hover:text-primary active:scale-95 ${
+      class={`relative flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-tertiary transition hover:bg-soft hover:text-primary active:scale-95 ${
         state === "copied" ? "text-[var(--app-success)]" : state === "failed" ? "text-[var(--app-danger)]" : ""
       }`}
     >
