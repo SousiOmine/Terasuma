@@ -14,6 +14,7 @@ export const ja: Record<MessageKey, string> = {
   "common.saving": "保存しています…",
   "common.default": "既定",
   "common.loading": "読み込み中…",
+  "common.reload": "再読み込み",
 
   "tera.empty": "まだ Tera がありません",
   "tera.deleteTitle": "Tera を削除しますか？",
@@ -123,6 +124,7 @@ export const ja: Record<MessageKey, string> = {
   "settings.teras.id": "作業フォルダ名：{id}",
   "settings.teras.routines.description": "この Tera が決まった時刻に自分から動くルーチンです。",
   "settings.teras.routines.empty": "まだありません。チャットで「毎朝 8 時に〜」と頼むと作れます。",
+  "settings.teras.routines.unavailable": "ルーチンを読み込めませんでした",
   "settings.language.label": "言語",
   "settings.language.description": "画面の表示と、エージェントの返事に使う言語",
 

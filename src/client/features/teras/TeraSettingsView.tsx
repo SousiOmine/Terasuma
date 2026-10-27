@@ -7,7 +7,6 @@ import { focusTeraId } from "../../state/route";
 import {
   clearRoutinesError,
   isLoadingRoutines,
-  loadRoutines,
   removeRoutine,
   routines,
   routinesError,
@@ -49,9 +48,16 @@ export function TeraSettingsView() {
   useEffect(() => {
     // チャットを開かずに設定へ来た場合に備えて、一覧を読み直す。
     void refreshTeras().catch(showTeraError);
-    // ルーチンも、まだ読めていなければここで読む。
-    if (routines.value !== null || isLoadingRoutines.value) return;
-    void loadRoutines().catch(showRoutinesError);
+    // ルーチンはチャットから作られるので、開くたびに読み直す（前回の一覧を残さない）。
+    void refreshRoutines().catch(showRoutinesError);
+
+    // 画面を開いたままチャットで作った場合に備えて、戻ってきたときにも読み直す。
+    const onFocus = () => {
+      void refreshTeras().catch(showTeraError);
+      void refreshRoutines().catch(showRoutinesError);
+    };
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
   }, []);
 
   useEffect(() => {
@@ -124,6 +130,7 @@ function TeraCard({
   const all = routines.value?.routines ?? [];
   const items = all.filter((routine) => routine.teraId === tera.id);
   const loading = routines.value === null && isLoadingRoutines.value;
+  const unavailable = routines.value === null && !isLoadingRoutines.value;
   const error = routinesError.value;
 
   return (
@@ -145,6 +152,17 @@ function TeraCard({
 
         {loading ? (
           <p class="text-xs text-secondary">{t("common.loading")}</p>
+        ) : unavailable ? (
+          <div class="flex flex-wrap items-center gap-2">
+            <p class="text-xs text-secondary">{t("settings.teras.routines.unavailable")}</p>
+            <button
+              type="button"
+              onClick={() => void refreshRoutines().catch(showRoutinesError)}
+              class={CARD_ACTION_CLASS}
+            >
+              {t("common.reload")}
+            </button>
+          </div>
         ) : items.length === 0 ? (
           <p class="text-xs text-secondary">{t("settings.teras.routines.empty")}</p>
         ) : (

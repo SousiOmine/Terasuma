@@ -15,6 +15,7 @@ export const en = {
   "common.saving": "Saving…",
   "common.default": "Default",
   "common.loading": "Loading…",
+  "common.reload": "Reload",
 
   "tera.empty": "No Teras yet",
   "tera.deleteTitle": "Delete this Tera?",
@@ -125,6 +126,7 @@ export const en = {
   "settings.teras.id": "Workspace folder: {id}",
   "settings.teras.routines.description": "Routines that let this Tera start on its own at set times.",
   "settings.teras.routines.empty": "None yet. Ask in chat, for example “every morning at 8”, to create one.",
+  "settings.teras.routines.unavailable": "Could not load routines",
   "settings.language.label": "Language",
   "settings.language.description": "Language used in the interface and in the agent's replies.",
 
