@@ -3,7 +3,8 @@ import type { ToolSet } from "ai";
 import { tool } from "ai";
 import { throwIfAborted } from "../../shared/async";
 import type { ToolContext } from "./context";
-import { formatBytes, truncateBytesFromEnd } from "../../shared/text";
+import { formatBytes } from "../../shared/text";
+import { appendStatus, formatBashOutput } from "./bash-output";
 import { z } from "zod";
 import type { ShellResult } from "../computer/container";
 import { WORKDIR_IN_CONTAINER } from "../computer/contract";
@@ -358,7 +359,7 @@ async function runBash(
     workdir,
   });
 
-  const output = formatBashOutput(result);
+  const output = formatBashOutput(result, { maxLines: BASH_MAX_LINES, maxBytes: BASH_MAX_BYTES });
 
   if (signal?.aborted === true) throw new Error(appendStatus(output, "Command aborted"));
   if (result.timedOut) {
@@ -371,82 +372,3 @@ async function runBash(
   return output;
 }
 
-/**
- * 標準出力と標準エラーを 1 つの本文にし、末尾 2,000 行 / 50 KB へ詰める。
- * 先頭を落としたときは、そのことを結果に残す（結果が途中であることをモデルが説明できるように）。
- */
-function formatBashOutput(result: ShellResult): string {
-  // stderr は exec 2>&1 で stdout に寄るが、シェル自体を起動できなかった場合は stderr に残る。
-  const combined = result.stdout + result.stderr;
-  const tail = truncateTail(combined, BASH_MAX_LINES, BASH_MAX_BYTES);
-  const text = tail.content.length === 0 ? "(no output)" : tail.content;
-  if (!tail.truncated) return text;
-
-  const limitNote = tail.truncatedBy === "bytes" ? ` (${formatSize(BASH_MAX_BYTES)} limit)` : "";
-  return `${text}\n\n[Showing lines ${tail.startLine}-${tail.endLine} of ${tail.totalLines}${limitNote}. The beginning was omitted.]`;
-}
-
-/** pi の bash と同じく、終了コードや打ち切りは本文の末尾に添える。 */
-function appendStatus(text: string, status: string): string {
-  return text.length === 0 ? status : `${text}\n\n${status}`;
-}
-
-type TailTruncation = {
-  content: string;
-  truncated: boolean;
-  truncatedBy: "lines" | "bytes" | null;
-  totalLines: number;
-  startLine: number;
-  endLine: number;
-};
-
-/** 末尾から行とバイト数の上限まで残す。1 行だけで上限を超える場合は、その行の末尾を残す。 */
-function truncateTail(content: string, maxLines: number, maxBytes: number): TailTruncation {
-  if (content.length === 0) {
-    return { content: "", truncated: false, truncatedBy: null, totalLines: 0, startLine: 0, endLine: 0 };
-  }
-
-  const trailingNewline = content.endsWith("\n");
-  const lines = content.split("\n");
-  if (trailingNewline) lines.pop();
-
-  const totalLines = lines.length;
-  const kept: string[] = [];
-  let bytes = 0;
-  let truncatedBy: "lines" | "bytes" | null = null;
-
-  for (let index = lines.length - 1; index >= 0; index -= 1) {
-    if (kept.length >= maxLines) {
-      truncatedBy = "lines";
-      break;
-    }
-
-    const line = lines[index];
-    if (line === undefined) continue;
-
-    const size = Buffer.byteLength(line, "utf-8") + (kept.length === 0 ? 0 : 1);
-    if (bytes + size > maxBytes) {
-      if (kept.length === 0) {
-        const tail = truncateBytesFromEnd(line, maxBytes);
-        kept.unshift(tail);
-        bytes = Buffer.byteLength(tail, "utf-8");
-        truncatedBy = "bytes";
-      } else {
-        truncatedBy = "bytes";
-      }
-      break;
-    }
-
-    kept.unshift(line);
-    bytes += size;
-  }
-
-  return {
-    content: kept.join("\n"),
-    truncated: truncatedBy !== null,
-    truncatedBy,
-    totalLines,
-    startLine: totalLines - kept.length + 1,
-    endLine: totalLines,
-  };
-}

@@ -1,5 +1,5 @@
-import { asSchema, generateText, jsonSchema, stepCountIs, streamText } from "ai";
-import type { ModelMessage, Schema, ToolSet } from "ai";
+import { generateText, stepCountIs, streamText } from "ai";
+import type { ModelMessage, ToolSet } from "ai";
 import type { ConnectorToolsetProvider } from "../../connectors/tools";
 import type { DiscordToolsetProvider } from "../../discord/tools";
 import type { ImageStore } from "../../computer/images";
@@ -31,8 +31,8 @@ import { createSkillTools } from "../../tools/skill";
 import { createSkillManageTools, type SkillChange } from "../../tools/skill-manage";
 import { createIdentityTools } from "../../tools/identity";
 import { createSkillLibrary } from "../skills";
-import { describeToolFailure } from "../tool-failure";
 import { toEngineStream } from "./stream";
+import { withShortToolErrors } from "./turn-tools";
 import { withToolModelOutput } from "./output";
 
 /** AI SDK でモデルを呼ぶエンジン。 */
@@ -299,32 +299,6 @@ export function registryNeedsRebuild(previous: ToolSet, next: ToolSet): boolean 
   return previous !== next;
 }
 
-/**
- * 引数の検証に失敗したときの理由を短くする。
- * AI SDK は検証の例外の message をそのままモデルへ渡すので、Zod のダンプが届いてしまう。
- */
-async function withShortToolErrors(tools: ToolSet): Promise<ToolSet> {
-  const wrapped: ToolSet = {};
-
-  for (const [name, definition] of Object.entries(tools)) {
-    const schema = asSchema(definition.inputSchema);
-    const validate = schema.validate;
-    if (validate === undefined) {
-      wrapped[name] = definition;
-      continue;
-    }
-
-    const shortSchema: Schema<unknown> = jsonSchema(await schema.jsonSchema, {
-      validate: async (value) => {
-        const result = await validate(value);
-        return result.success ? result : { success: false, error: new Error(describeToolFailure(name, result.error)) };
-      },
-    });
-    wrapped[name] = { ...definition, inputSchema: shortSchema };
-  }
-
-  return wrapped;
-}
 
 /** 1 つの notice に名前を並べる上限。多すぎるときは件数だけを伝える。 */
 const MAX_NOTICE_MCP_TOOLS = 5;

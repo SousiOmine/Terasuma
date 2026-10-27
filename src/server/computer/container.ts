@@ -5,13 +5,9 @@ import type { ContainerStatusView } from "../../shared/api/settings";
 import { AppError } from "../errors";
 import { runCommand, runCommandBytes, type CommandByteRunner, type CommandResult, type CommandRunner } from "./command";
 import { podmanExec } from "./podman";
-import {
-  CONTAINER_DISPLAY,
-  CONTAINER_GID,
-  CONTAINER_UID,
-  VNC_PORT_IN_CONTAINER,
-  WORKDIR_IN_CONTAINER,
-} from "./contract";
+import { createPodmanQuery } from "./podman-query";
+import { verifyImageContract } from "./image-contract";
+import { CONTAINER_GID, CONTAINER_UID, VNC_PORT_IN_CONTAINER, WORKDIR_IN_CONTAINER } from "./contract";
 
 /**
  * podman で動かす Debian コンテナの面倒を見る。
@@ -49,8 +45,6 @@ export function containerHomeDir(dataDir: string): string {
  */
 const MANAGED_LABEL = "terasuma.managed=1";
 
-const VERSION_TIMEOUT_MS = 10_000;
-const INSPECT_TIMEOUT_MS = 30_000;
 const BUILD_TIMEOUT_MS = 15 * 60_000;
 const RUN_TIMEOUT_MS = 60_000;
 const REMOVE_TIMEOUT_MS = 60_000;
@@ -149,54 +143,14 @@ export function createContainerManager(options: ContainerManagerOptions): Contai
   const homeDir = join(options.dataDir, HOME_DIR_NAME);
   const containerfilePath = join(options.containerDir, "desktop.Containerfile");
 
+  /** podman への問い合わせ。状態は Terasuma 側に持たず、毎回ここへ聞く。 */
+  const podman = createPodmanQuery({ run, containerName: CONTAINER_NAME, imageName: IMAGE_NAME });
+
   /** 直近に読んだ状態と、その時刻。画面の中継のように短い間に何度も聞かれるため。 */
   let cachedStatus: { at: number; view: ContainerStatusView } | null = null;
 
   function fail(code: ContainerErrorCode, result: CommandResult): ContainerError {
     return new ContainerError(code, describeFailure(result));
-  }
-
-  async function podmanVersion(): Promise<string | null> {
-    const result = await run(["podman", "--version"], { timeoutMs: VERSION_TIMEOUT_MS });
-    if (result.timedOut || result.code !== 0) return null;
-
-    const version = result.stdout.trim();
-    return version.length === 0 ? null : version;
-  }
-
-  async function imageExists(): Promise<boolean> {
-    const result = await run(["podman", "image", "exists", IMAGE_NAME], { timeoutMs: INSPECT_TIMEOUT_MS });
-    return result.code === 0;
-  }
-
-  async function containerExists(): Promise<boolean> {
-    const result = await run(["podman", "container", "exists", CONTAINER_NAME], { timeoutMs: INSPECT_TIMEOUT_MS });
-    return result.code === 0;
-  }
-
-  async function containerStatus(): Promise<string | null> {
-    const result = await run(["podman", "inspect", "--format", "{{.State.Status}}", CONTAINER_NAME], {
-      timeoutMs: INSPECT_TIMEOUT_MS,
-    });
-    if (result.code !== 0) return null;
-
-    const state = result.stdout.trim();
-    return state.length === 0 ? null : state;
-  }
-
-  /** 実際に publish されているポートを podman から読む（Terasuma 側で覚えない）。 */
-  async function publishedVncPort(): Promise<number | null> {
-    const result = await run(["podman", "port", CONTAINER_NAME, `${VNC_PORT_IN_CONTAINER}`], {
-      timeoutMs: INSPECT_TIMEOUT_MS,
-    });
-    if (result.code !== 0) return null;
-
-    // 出力は "127.0.0.1:34567" の形。番号だけを取り出す。
-    const match = /:(\d+)\s*$/.exec(result.stdout.trim());
-    if (match === null) return null;
-
-    const port = Number(match[1]);
-    return Number.isInteger(port) && port > 0 ? port : null;
   }
 
   async function buildImage(): Promise<void> {
@@ -255,29 +209,8 @@ export function createContainerManager(options: ContainerManagerOptions): Contai
   }
 
   /** podman に聞き直して、いまどこまで準備できているかを返す（使い回さない）。 */
-  async function readStatus(): Promise<ContainerStatusView> {
-    if ((await podmanVersion()) === null) {
-      return { state: "podman_missing", vncPort: null, detail: null };
-    }
-    if (!(await imageExists())) {
-      return { state: "image_missing", vncPort: null, detail: null };
-    }
-    if (!(await containerExists())) {
-      return { state: "container_missing", vncPort: null, detail: null };
-    }
-
-    const state = await containerStatus();
-    if (state !== "running") {
-      return { state: "stopped", vncPort: null, detail: state === null ? "Could not read the computer status" : null };
-    }
-
-    const vncPort = await publishedVncPort();
-    return {
-      state: "running",
-      vncPort,
-      // 動いているのに中継先が読めないのは、この機能が使えない状態。黙って空の画面を出さない。
-      detail: vncPort === null ? "Could not read the screen relay port from podman" : null,
-    };
+  function readStatus(): Promise<ContainerStatusView> {
+    return podman.status();
   }
 
   /** 動いていなければ、どの操作でも同じ理由で失敗させる。 */
@@ -319,45 +252,11 @@ export function createContainerManager(options: ContainerManagerOptions): Contai
 
   /**
    * イメージの中の契約値（DISPLAY・uid・gid・作業ディレクトリ）を確かめる。
-   * Containerfile と entry.sh の値がこことずれたら、起動したことにする前に止める。
+   * 突き合わせの中身は image-contract.ts が持つ（値の正典は contract.ts）。
    */
   async function verifyContract(): Promise<void> {
-    const result = await run(
-      podmanExec({
-        container: CONTAINER_NAME,
-        workdir: WORKDIR_IN_CONTAINER,
-        command: [
-          "sh",
-          "-c",
-          'printf "%s\\n" "$DISPLAY"; id -u; id -g; pwd; test -d "$1" && echo ok',
-          "sh",
-          WORKDIR_IN_CONTAINER,
-        ],
-      }),
-      { timeoutMs: INSPECT_TIMEOUT_MS },
-    );
-
-    if (result.code !== 0) {
-      throw new ContainerError(
-        "container_start_failed",
-        `コンテナの契約を確かめられませんでした: ${result.stderr.trim() || `exit code ${result.code}`}`,
-      );
-    }
-
-    const [display, uid, gid, workdir, dirOk] = result.stdout.trim().split("\n");
-    const problems: string[] = [];
-    if (display !== CONTAINER_DISPLAY) problems.push(`DISPLAY=${display ?? "(none)"}`);
-    if (uid !== String(CONTAINER_UID)) problems.push(`uid=${uid ?? "(none)"}`);
-    if (gid !== String(CONTAINER_GID)) problems.push(`gid=${gid ?? "(none)"}`);
-    if (workdir !== WORKDIR_IN_CONTAINER) problems.push(`workdir=${workdir ?? "(none)"}`);
-    if (dirOk !== "ok") problems.push(`${WORKDIR_IN_CONTAINER} がありません`);
-
-    if (problems.length > 0) {
-      throw new ContainerError(
-        "container_start_failed",
-        `コンテナの契約がイメージと食い違っています（${problems.join(", ")}）。イメージを作り直してください`,
-      );
-    }
+    const failure = await verifyImageContract(run, CONTAINER_NAME);
+    if (failure !== null) throw new ContainerError("container_start_failed", failure.message);
   }
 
   /** 操作の後で状態を読み直し、使い回している分も入れ替える。 */

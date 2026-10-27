@@ -1,4 +1,3 @@
-import { isRecord } from "../../shared/guards";
 import { randomUUID } from "node:crypto";
 import {
   existsSync,
@@ -11,9 +10,11 @@ import {
   writeFileSync,
 } from "node:fs";
 import type { Dirent } from "node:fs";
-import { dirname, join, posix, relative, sep } from "node:path";
+import { dirname, join, posix } from "node:path";
 import { describeError } from "../../shared/errors";
 import { oneLine } from "../../shared/text";
+import { formatSkillFile, readFrontmatter } from "./frontmatter";
+import { listSkillResources } from "./skill-scan";
 import { containerHomeDir, SKILLS_DIR_IN_CONTAINER } from "../computer/container";
 import type {
   LoadedSkill,
@@ -45,12 +46,6 @@ const TEMP_SKILL_FILE_PREFIX = `.${SKILL_FILE_NAME}.`;
 const SKILLS_DIR_NAME = join(".agents", "skills");
 /** 1 回の走査で読むスキルの上限。 */
 const MAX_SKILLS = 200;
-/** 本文を読み込むときに並べる同梱ファイルの上限。 */
-const MAX_RESOURCES = 50;
-/** 同梱ファイルを探す深さの上限。 */
-const MAX_RESOURCE_DEPTH = 4;
-/** 同梱ファイルを探すときに見るディレクトリの上限。 */
-const MAX_RESOURCE_DIRS = 500;
 /** スキル名の長さの上限。 */
 const MAX_NAME_CHARS = 64;
 /** 説明の長さの上限。 */
@@ -144,7 +139,7 @@ function readLoadedSkill(skillsDir: string, name: string): LoadedSkill | null {
   const result = readSkillFile(dir, name);
   if (result.kind !== "skill") return null;
 
-  const resources = listResources(dir);
+  const resources = listSkillResources(dir);
   return {
     ...result.skill,
     dir: posix.join(SKILLS_DIR_IN_CONTAINER, name),
@@ -169,17 +164,9 @@ function readSkillFile(dir: string, name: string): ReadResult {
     return { kind: "problem", reason: `cannot read ${SKILL_FILE_NAME}: ${describeError(error)}` };
   }
 
-  const split = splitFrontmatter(text);
-  if (split === null) return { kind: "problem", reason: `${SKILL_FILE_NAME} has no complete YAML frontmatter` };
-
-  let data: Record<string, unknown>;
-  try {
-    const parsed = Bun.YAML.parse(split.yaml);
-    if (!isRecord(parsed)) return { kind: "problem", reason: "frontmatter is not a mapping" };
-    data = parsed;
-  } catch (error) {
-    return { kind: "problem", reason: `invalid YAML frontmatter: ${describeError(error)}` };
-  }
+  const parsed = readFrontmatter(text, SKILL_FILE_NAME);
+  if (parsed.kind === "problem") return parsed;
+  const { data, body } = parsed;
 
   const rawDescription = data["description"];
   if (typeof rawDescription !== "string" || rawDescription.trim().length === 0) {
@@ -199,7 +186,7 @@ function readSkillFile(dir: string, name: string): ReadResult {
     skill: {
       name,
       description: oneLine(rawDescription),
-      content: split.body,
+      content: body,
     },
   };
 }
@@ -269,22 +256,11 @@ function updateSkill(skillsDir: string, name: string, patch: SkillPatch): Loaded
     throw new Error(`Cannot read ${name}/${SKILL_FILE_NAME}: ${describeError(error)}`, { cause: error });
   }
 
-  const split = splitFrontmatter(text);
-  if (split === null) {
-    throw new Error(`Skill "${name}" has no complete YAML frontmatter. Use write to repair ${SKILL_FILE_NAME}.`);
+  const parsed = readFrontmatter(text, SKILL_FILE_NAME);
+  if (parsed.kind === "problem") {
+    throw new Error(`Skill "${name}": ${parsed.reason}. Use write to repair ${SKILL_FILE_NAME}.`);
   }
-
-  let data: Record<string, unknown>;
-  try {
-    const parsed = Bun.YAML.parse(split.yaml);
-    if (!isRecord(parsed)) throw new Error("frontmatter is not a mapping");
-    data = parsed;
-  } catch (error) {
-    throw new Error(
-      `Skill "${name}" has invalid YAML frontmatter: ${describeError(error)}. Use write to repair ${SKILL_FILE_NAME}.`,
-      { cause: error },
-    );
-  }
+  const { data, body } = parsed;
 
   if (patch.description === undefined) {
     const current = data["description"];
@@ -295,7 +271,7 @@ function updateSkill(skillsDir: string, name: string, patch: SkillPatch): Loaded
     data["description"] = normalizeDescription(patch.description);
   }
 
-  const content = patch.content === undefined ? split.body : normalizeContent(patch.content);
+  const content = patch.content === undefined ? body : normalizeContent(patch.content);
   data["name"] = name;
 
   writeSkillFile(dir, data, content);
@@ -324,92 +300,13 @@ function deleteSkill(skillsDir: string, name: string): boolean {
  * 本文は 1 つの改行で区切る。
  */
 function writeSkillFile(dir: string, frontmatter: Record<string, unknown>, content: string): void {
-  const yaml = Bun.YAML.stringify(frontmatter, null, 2).trimEnd();
-  const text = `---\n${yaml}\n---\n\n${content.trim()}\n`;
+  const text = formatSkillFile(frontmatter, content);
   const target = join(dir, SKILL_FILE_NAME);
   const temporary = join(dir, `${TEMP_SKILL_FILE_PREFIX}${randomUUID()}.tmp`);
 
   // wx で新しく作る。既にある名前（シンボリックリンクを含む）は追わない。
   writeFileSync(temporary, text, { encoding: "utf8", flag: "wx" });
   renameSync(temporary, target);
-}
-
-/** スキルのディレクトリの中のファイルを、相対パスで並べる。 */
-function listResources(dir: string): { files: string[]; truncated: boolean } {
-  const files: string[] = [];
-  let truncated = false;
-  let directories = 0;
-  const stack: { path: string; depth: number }[] = [{ path: dir, depth: 0 }];
-
-  while (stack.length > 0) {
-    const current = stack.pop();
-    if (current === undefined) break;
-
-    if (current.depth > MAX_RESOURCE_DEPTH) {
-      truncated = true;
-      continue;
-    }
-
-    directories += 1;
-    if (directories > MAX_RESOURCE_DIRS) {
-      truncated = true;
-      break;
-    }
-
-    let entries: Dirent[];
-    try {
-      entries = readdirSync(current.path, { withFileTypes: true });
-    } catch {
-      truncated = true;
-      continue;
-    }
-
-    for (const entry of entries) {
-      if (entry.isSymbolicLink()) continue;
-
-      const path = join(current.path, entry.name);
-      if (entry.isDirectory()) {
-        stack.push({ path, depth: current.depth + 1 });
-        continue;
-      }
-      if (!entry.isFile()) continue;
-
-      const relativePath = relative(dir, path).split(sep).join("/");
-      if (relativePath === SKILL_FILE_NAME || relativePath.startsWith(TEMP_SKILL_FILE_PREFIX)) continue;
-
-      if (files.length >= MAX_RESOURCES) {
-        truncated = true;
-        break;
-      }
-      files.push(relativePath);
-    }
-
-    if (truncated && files.length >= MAX_RESOURCES) break;
-  }
-
-  files.sort((left, right) => left.localeCompare(right));
-  return { files, truncated };
-}
-
-/** frontmatter を、先頭の `---` と次の `---` で分ける。 */
-function splitFrontmatter(text: string): { yaml: string; body: string } | null {
-  const normalized = text.replace(/^\uFEFF/, "").replace(/\r\n?/g, "\n");
-  const lines = normalized.split("\n");
-
-  if (lines[0]?.trimEnd() !== "---") return null;
-
-  for (let index = 1; index < lines.length; index += 1) {
-    if (lines[index]?.trimEnd() !== "---") continue;
-    return {
-      yaml: lines.slice(1, index).join("\n"),
-      body: lines
-        .slice(index + 1)
-        .join("\n")
-        .trim(),
-    };
-  }
-
-  return null;
 }
 
 /** スキル名を検証する。先頭と末尾の空白は落とす。 */
