@@ -20,7 +20,6 @@ export const ja: Record<MessageKey, string> = {
   "tera.deleteTitle": "Tera を削除しますか？",
   "tera.deleteMessage":
     "会話・アイデンティティ・Discord のウェブフック・作業フォルダの中身が消えます。取り消せません。最後の 1 体を消したときは、既定の Tera を作り直します。",
-  "tera.deleteWithName": "{name} を削除",
   "tera.menu": "{name} の操作",
 
   "routine.title": "ルーチン",

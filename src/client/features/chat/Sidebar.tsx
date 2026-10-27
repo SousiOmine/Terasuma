@@ -85,7 +85,6 @@ export function Sidebar() {
                 return (
                   <li
                     key={tera.id}
-                    class="relative"
                     onContextMenu={(event) => {
                       // ブラウザのメニューではなく、この Tera の操作を出す。
                       event.preventDefault();
@@ -100,22 +99,13 @@ export function Sidebar() {
                         closeSidebar();
                         void openTera(tera.id);
                       }}
-                      class={`w-full truncate rounded-2xl py-2.5 pl-3.5 pr-11 text-left text-sm transition ${
+                      class={`w-full truncate rounded-2xl py-2.5 pl-3.5 pr-3.5 text-left text-sm transition ${
                         active
                           ? "bg-[var(--app-accent-soft)] font-medium text-[var(--app-accent-ink)]"
                           : "text-secondary hover:bg-soft hover:text-primary"
                       }`}
                     >
                       {tera.name}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => deleting.open(tera)}
-                      title={t("tera.deleteWithName", { name: tera.name })}
-                      aria-label={t("tera.deleteWithName", { name: tera.name })}
-                      class="absolute right-1.5 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-tertiary transition hover:bg-[var(--app-soft-strong)] hover:text-[var(--app-danger)]"
-                    >
-                      <IconTrash size={15} stroke={1.7} />
                     </button>
                   </li>
                 );

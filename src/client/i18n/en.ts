@@ -21,7 +21,6 @@ export const en = {
   "tera.deleteTitle": "Delete this Tera?",
   "tera.deleteMessage":
     "Its conversation, identity, Discord webhook and everything in its working folder are deleted. This cannot be undone. If this is the last Tera, a default one is created again.",
-  "tera.deleteWithName": "Delete {name}",
   "tera.menu": "{name} actions",
 
   "routine.title": "Routines",
