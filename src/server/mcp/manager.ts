@@ -1,8 +1,6 @@
 import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/client";
-import type { ToolSet } from "ai";
 import type { McpHttpServerSettings, McpServerSettings, McpServersSettings } from "../data/settings";
-import { toolNameFor } from "../../shared/tools";
 import { AppError } from "../errors";
 import type { McpAuthorizationView, McpServerStatusView, McpTestView } from "../../shared/api/settings";
 import {
@@ -14,13 +12,14 @@ import {
 } from "./oauth";
 import type { ConnectionMaterial, ServerConnection } from "./connection";
 import { connectionMaterial } from "./transport";
-import { sameServer, toolEntries } from "./tools";
+import { sameServer, type McpToolset } from "./tools";
+import { rebuildRegistry } from "./registry-map";
 import type { ImageStore } from "../computer/images";
 import type { SettingsStore } from "../data/settings";
 import { describeError } from "../../shared/errors";
 
 /** モデルへ渡すツール。キーは "<サーバー id>_<ツール名>"。 */
-export type McpToolset = ToolSet;
+export type { McpToolset } from "./tools";
 
 /** 設定に無い MCP サーバーを触ろうとしたときの失敗。 */
 export class McpServerNotFound extends AppError {
@@ -213,7 +212,9 @@ export function createMcpManager(options: McpManagerOptions): McpManager {
       }
     }
 
-    rebuild(servers);
+    const rebuilt = rebuildRegistry({ servers, connections, previous: statuses, images: options.images });
+    statuses = rebuilt.statuses;
+    tools = rebuilt.tools;
     discovered = true;
   }
 
@@ -222,57 +223,6 @@ export function createMcpManager(options: McpManagerOptions): McpManager {
    * ツール名は "<サーバー id>_<ツール名>" としてモデルへ渡す。同じ名前になる組み合わせが
    * あると、どちらのサーバーのツールか決められない。決められないまま渡さず、両方を失敗にする。
    */
-  function rebuild(servers: McpServersSettings): void {
-    const claimed = new Map<string, string>();
-    const conflicted = new Map<string, string>();
-    for (const [serverId, connection] of connections) {
-      for (const definition of connection.tools) {
-        const namespaced = toolNameFor(serverId, definition.name);
-        const owner = claimed.get(namespaced);
-        if (owner === undefined) {
-          claimed.set(namespaced, serverId);
-        } else if (owner !== serverId) {
-          conflicted.set(serverId, namespaced);
-          conflicted.set(owner, namespaced);
-        }
-      }
-    }
-
-    const nextStatuses = new Map<string, McpServerStatusView>();
-    const nextTools: McpToolset = {};
-
-    for (const serverId of Object.keys(servers)) {
-      const connection = connections.get(serverId);
-      if (connection === undefined) {
-        // 接続に失敗した理由は refresh() が書いている。まだ何も分からないサーバーは unknown。
-        nextStatuses.set(serverId, statuses.get(serverId) ?? { state: "unknown", tools: [], detail: null });
-        continue;
-      }
-
-      const conflict = conflicted.get(serverId);
-      if (conflict !== undefined) {
-        nextStatuses.set(serverId, {
-          state: "failed",
-          tools: [],
-          detail: `ツール名 ${conflict} が別のサーバーのツールと衝突しています（どちらかのサーバー名かツール名を変えてください）`,
-        });
-        continue;
-      }
-
-      nextStatuses.set(serverId, {
-        state: "connected",
-        tools: connection.tools.map((definition) => definition.name),
-        detail: null,
-      });
-      for (const [namespaced, definition] of toolEntries(serverId, connection, options.images)) {
-        nextTools[namespaced] = definition;
-      }
-    }
-
-    statuses = nextStatuses;
-    tools = nextTools;
-  }
-
   /** 設定から MCP サーバー 1 件を取り出す。無ければ失敗させる。 */
   function requireServer(serverId: string): McpServerSettings {
     const server = settings.read().mcpServers[serverId];
@@ -383,7 +333,14 @@ export function createMcpManager(options: McpManagerOptions): McpManager {
 
       // 次のツール取得を待たず、設定から消えたサーバーのツールを外す。
       // settingsKey は触らない（次の syncSettings が差分を見て他の接続を揃える）。
-      rebuild(settings.read().mcpServers);
+      const rebuilt = rebuildRegistry({
+        servers: settings.read().mcpServers,
+        connections,
+        previous: statuses,
+        images: options.images,
+      });
+      statuses = rebuilt.statuses;
+      tools = rebuilt.tools;
     },
 
     async authorize(serverId) {

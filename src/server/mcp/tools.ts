@@ -20,6 +20,8 @@ export const MAX_MCP_RESULT_CHARS = 50_000;
  * 名前は "<サーバー id>_<ツール名>" にし、サーバーをまたいだ衝突は呼び出し側が断る。
  */
 
+export type McpToolset = ToolSet;
+
 export function toolEntries(
   serverId: string,
   connection: ServerConnection,

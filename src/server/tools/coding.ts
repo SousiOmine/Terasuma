@@ -6,7 +6,7 @@ import type { ToolContext } from "./context";
 import { formatBytes } from "../../shared/text";
 import { appendStatus, formatBashOutput } from "./bash-output";
 import { z } from "zod";
-import type { ShellResult } from "../computer/container";
+import type { ShellResult } from "../computer/exec";
 import { WORKDIR_IN_CONTAINER } from "../computer/contract";
 
 /**

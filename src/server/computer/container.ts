@@ -1,12 +1,28 @@
 import { mkdirSync, rmSync } from "node:fs";
-import { createServer } from "node:net";
 import { join, posix } from "node:path";
 import type { ContainerStatusView } from "../../shared/api/settings";
-import { AppError } from "../errors";
 import { runCommand, runCommandBytes, type CommandByteRunner, type CommandResult, type CommandRunner } from "./command";
 import { podmanExec } from "./podman";
 import { createPodmanQuery } from "./podman-query";
 import { verifyImageContract } from "./image-contract";
+import { ContainerError, type ContainerErrorCode } from "./container-error";
+import {
+  captureScreen,
+  describeFailure,
+  FILE_MAX_BASE64_CHARS,
+  FILE_MAX_BYTES,
+  FILE_TIMEOUT_MS,
+  fileFailure,
+  findFreePort,
+  toShellResult,
+  type ShellResult,
+} from "./exec";
+
+// ツール側は container.ts から ShellResult を読む（置き場を意識させない）。
+export type { ShellResult };
+
+// 失敗の型も、コンテナを扱う側からは container.ts で引けるようにする。
+export { ContainerError, type ContainerErrorCode } from "./container-error";
 import { CONTAINER_GID, CONTAINER_UID, VNC_PORT_IN_CONTAINER, WORKDIR_IN_CONTAINER } from "./contract";
 
 /**
@@ -48,19 +64,6 @@ const MANAGED_LABEL = "terasuma.managed=1";
 const BUILD_TIMEOUT_MS = 15 * 60_000;
 const RUN_TIMEOUT_MS = 60_000;
 const REMOVE_TIMEOUT_MS = 60_000;
-/** 画面の撮影に許す時間。podman が返らないままターンが終わらなくなるのを防ぐ。 */
-const SCREENSHOT_TIMEOUT_MS = 15_000;
-/** 画面の PNG として受け取る上限。1280x800 の PNG には十分な大きさ。 */
-const SCREENSHOT_MAX_BYTES = 16 * 1024 * 1024;
-/** ファイルの読み書きに許す時間。 */
-const FILE_TIMEOUT_MS = 60_000;
-/**
- * 1 回の readFile で受け取るファイルの上限。
- * これを超えるファイルは、bash ツールで head / sed / awk を使って部分を読む。
- */
-const FILE_MAX_BYTES = 16 * 1024 * 1024;
-/** FILE_MAX_BYTES を base64 にしたときの文字数（末尾の改行の分も足す）。 */
-const FILE_MAX_BASE64_CHARS = Math.ceil(FILE_MAX_BYTES / 3) * 4 + 4;
 
 /**
  * 状態の問い合わせを使い回す時間。
@@ -68,29 +71,6 @@ const FILE_MAX_BASE64_CHARS = Math.ceil(FILE_MAX_BYTES / 3) * 4 + 4;
  * 使う側（起動・リセット）は、操作の前後でこのキャッシュを使わない。
  */
 const STATUS_CACHE_MS = 1_000;
-
-/** コンテナを操作できなかった理由。画面の文言はクライアント側の i18n が決める。 */
-export type ContainerErrorCode = "container_build_failed" | "container_start_failed" | "container_not_running";
-
-export class ContainerError extends AppError {
-  constructor(
-    override readonly code: ContainerErrorCode,
-    message: string,
-  ) {
-    // 操作の前提（動いていること）が満たされていない場合だけ 409。
-    // イメージの作成や起動の失敗は、接続先（podman）側の問題として 502 にする。
-    super(code, message);
-  }
-}
-
-/** コンテナの中でコマンドを実行した結果。 */
-export type ShellResult = {
-  exitCode: number;
-  stdout: string;
-  stderr: string;
-  truncated: boolean;
-  timedOut: boolean;
-};
 
 export type ContainerManager = {
   /** podman に問い合わせて、いまどこまで準備できているかを返す。 */
@@ -371,97 +351,8 @@ export function createContainerManager(options: ContainerManagerOptions): Contai
 
     async screenshot(signal) {
       await requireRunning();
-      return captureScreen(runBytes, signal);
+      return captureScreen(runBytes, CONTAINER_NAME, signal);
     },
   };
 }
 
-/** コマンドの結果を、ツールへ返す形に整える。 */
-function toShellResult(result: CommandResult): ShellResult {
-  return {
-    exitCode: result.code,
-    stdout: result.stdout,
-    stderr: result.stderr,
-    truncated: result.truncated,
-    timedOut: result.timedOut,
-  };
-}
-
-/** ファイル操作の失敗を、そのままモデルへ見せられる理由にする。成功なら null。 */
-function fileFailure(action: "read" | "write", path: string, result: CommandResult): Error | null {
-  if (result.timedOut) {
-    return new Error(
-      `Could not ${action} ${path}: the container did not respond within ${FILE_TIMEOUT_MS / 1000} seconds`,
-    );
-  }
-  if (result.code !== 0) {
-    return new Error(result.stderr.trim() || `Could not ${action} ${path} (podman exec exit code ${result.code})`);
-  }
-  return null;
-}
-
-/**
- * 画面を PNG で撮る。画像は文字列にせず、バイト列のまま受け取る。
- * DISPLAY はイメージの ENV で入っているので、ここでは渡さなくてよい。
- *
- * X のカーソルは root ウィンドウの画素に含まれない（X サーバーが別に描く）ので、
- * import で撮るとカーソルの無い画像になる。エージェントはポインタの位置も形も
- * 確かめられなくなるため、XFixes でカーソルを重ねる scrot を使う。
- */
-async function captureScreen(runBytes: CommandByteRunner, signal?: AbortSignal): Promise<Uint8Array> {
-  const result = await runBytes(
-    podmanExec({
-      container: CONTAINER_NAME,
-      workdir: WORKDIR_IN_CONTAINER,
-      // scrot は既存のファイルを避けて別名に書くので、/dev/stdout へ出すには --overwrite が要る。
-      command: ["scrot", "--pointer", "--overwrite", "--silent", "/dev/stdout"],
-    }),
-    { timeoutMs: SCREENSHOT_TIMEOUT_MS, signal, maxOutputBytes: SCREENSHOT_MAX_BYTES },
-  );
-
-  if (result.timedOut) {
-    throw new ContainerError(
-      "container_not_running",
-      `Taking a screenshot took more than ${SCREENSHOT_TIMEOUT_MS / 1000} seconds`,
-    );
-  }
-  if (result.code !== 0) {
-    throw new ContainerError(
-      "container_not_running",
-      result.stderr.trim() || `Could not take a screenshot (podman exec exit code ${result.code})`,
-    );
-  }
-  if (result.stdout.byteLength === 0) {
-    throw new ContainerError("container_not_running", "The screenshot was empty");
-  }
-  if (result.truncated) {
-    throw new Error(`The screenshot is larger than ${SCREENSHOT_MAX_BYTES / (1024 * 1024)}MB`);
-  }
-
-  return result.stdout;
-}
-
-/** publish に使う空きポートを 1 つ選ぶ。実際に使われた値は podman から読み直す。 */
-async function findFreePort(): Promise<number> {
-  const server = createServer();
-
-  try {
-    await new Promise<void>((resolve, reject) => {
-      server.once("error", reject);
-      server.listen(0, "127.0.0.1", resolve);
-    });
-
-    const address = server.address();
-    const port = typeof address === "object" && address !== null ? address.port : null;
-    if (port === null) throw new Error("Could not find a free port");
-    return port;
-  } finally {
-    await new Promise<void>((resolve) => server.close(() => resolve()));
-  }
-}
-
-/** 失敗した理由を、そのまま画面とモデルに見せられる文字列にする。 */
-function describeFailure(result: CommandResult): string {
-  const detail = result.stderr.trim() || result.stdout.trim() || `podman failed with exit code ${result.code}`;
-  return result.timedOut ? `${detail} (did not finish in time)` : detail;
-}

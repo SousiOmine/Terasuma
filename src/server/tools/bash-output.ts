@@ -1,5 +1,5 @@
 import { formatBytes, truncateBytesFromEnd } from "../../shared/text";
-import type { ShellResult } from "../computer/container";
+import type { ShellResult } from "../computer/exec";
 
 /**
  * bash の出力を、モデルが読める形に整える。
