@@ -21,10 +21,6 @@ export const webSearchError = failure.error;
 export const showWebSearchError = failure.show;
 export const clearWebSearchError = failure.clear;
 
-/** 設定画面を開いたときに読む（まだ読めていなければ）。 */
-export const loadWebSearchSettings = webSearchResource.load;
-/** 設定を読み直す。 */
-export const refreshWebSearchSettings = webSearchResource.refresh;
 
 /** 保存する前に、入力されたキーで検索できるか確かめる。設定には書かない。 */
 export async function testWebSearchProvider(form: WebSearchProviderForm): Promise<WebSearchTestView> {

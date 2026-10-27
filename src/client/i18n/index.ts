@@ -61,11 +61,30 @@ export function setLocale(next: Locale): void {
 export type MessageParams = Record<string, string | number>;
 
 /**
+ * その文言が要求する差し込みの名前。
+ * 辞書（en）の文面から `{name}` を抜き出して型にするので、足りない名前・余計な名前は型エラーになる。
+ */
+export type ParamsOf<K extends MessageKey> = keyof {
+  [P in (typeof en)[K] extends `${string}{${infer Name}}${infer Rest}`
+    ? Name | keyof { [Q in Rest extends `${string}{${infer More}}${string}` ? More : never]: true }
+    : never]: true;
+};
+
+/** 差し込みを持つキーかどうか（持たないキーに params を渡せないようにする）。 */
+type HasParams<K extends MessageKey> = ParamsOf<K> extends never ? false : true;
+
+/** 差し込みを持つキーの params は必須、持たないキーは渡せない。 */
+export type TranslationArgs<K extends MessageKey> = HasParams<K> extends true
+  ? [params: Record<ParamsOf<K>, string | number>]
+  : [params?: undefined];
+
+/**
  * 現在のロケールで文言を引く。ロケール signal を読むので、切り替えると再描画される。
  * "{count}" のような差し込みは params で置き換える。語順は辞書側で決められる。
  */
-export function t(key: MessageKey, params?: MessageParams): string {
+export function t<K extends MessageKey>(key: K, ...args: TranslationArgs<K>): string {
   const template = dictionaries[locale.value][key];
+  const params = args[0] as MessageParams | undefined;
   if (params === undefined) return template;
 
   return template.replace(/\{(\w+)\}/g, (match, name: string) => {

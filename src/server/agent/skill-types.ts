@@ -54,8 +54,13 @@ export type SkillScan = {
 
 /** スキルのファイルを読み書きするストア。 */
 export type SkillFileStore = {
-  /** 標準の置き場を走査する。 */
+  /** 標準の置き場を走査する（本文も読む）。 */
   scan(): SkillScan;
+  /**
+   * 名前と説明だけを走査する。本文は空になる。
+   * system プロンプトの一覧は、これで足りる（本文は skill ツールで読んだときだけ要る）。
+   */
+  scanCatalog(): SkillScan;
   /** 名前で 1 件読む。無ければ null。 */
   get(name: string): LoadedSkill | null;
   /** 新しいスキルを作る。 */

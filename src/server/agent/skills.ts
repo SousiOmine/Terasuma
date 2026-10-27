@@ -126,7 +126,7 @@ export function createSkillLibrary(store: SkillFileStore, extra: () => readonly 
 
   return {
     all() {
-      return [...available(), ...store.scan().skills];
+      return [...available(), ...store.scanCatalog().skills];
     },
     get(name) {
       const builtin = available().find((skill) => skill.name === name);

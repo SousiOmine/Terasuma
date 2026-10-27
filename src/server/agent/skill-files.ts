@@ -64,6 +64,10 @@ export function createSkillFileStore(options: { dataDir: string }): SkillFileSto
     scan() {
       return scanSkills(skillsDir);
     },
+    scanCatalog() {
+      // 一覧（system プロンプト）に要るのは名前と説明だけ。本文は get() で読む。
+      return scanSkills(skillsDir, { withContent: false });
+    },
     get(name) {
       return readLoadedSkill(skillsDir, name);
     },
@@ -79,8 +83,14 @@ export function createSkillFileStore(options: { dataDir: string }): SkillFileSto
   };
 }
 
-/** 置き場の直下を走査し、読めたスキルと読めなかった理由を返す。 */
-function scanSkills(skillsDir: string): SkillScan {
+/**
+ * 置き場の直下を走査し、読めたスキルと読めなかった理由を返す。
+ *
+ * 一覧に要るのは名前と説明だけなので、本文は読まない（withContent を渡したときだけ読む）。
+ * ターンのたびに全 SKILL.md の本文を読むと、スキルが増えるほど待ちが積み上がる
+ * （本文が要るのは、モデルが skill ツールで読んだときだけ）。
+ */
+function scanSkills(skillsDir: string, options: { withContent?: boolean } = {}): SkillScan {
   const directoryProblem = skillsDirProblem(skillsDir);
   if (directoryProblem !== null) {
     return { skills: [], problems: [{ name: "(skills directory)", reason: directoryProblem }] };
@@ -108,7 +118,7 @@ function scanSkills(skillsDir: string): SkillScan {
       continue;
     }
 
-    const result = readSkillFile(join(skillsDir, name), name);
+    const result = readSkillFile(join(skillsDir, name), name, options);
     if (result.kind === "missing") continue;
     if (result.kind === "problem") {
       problems.push({ name, reason: result.reason });
@@ -150,8 +160,8 @@ function readLoadedSkill(skillsDir: string, name: string): LoadedSkill | null {
 
 type ReadResult = { kind: "missing" } | { kind: "problem"; reason: string } | { kind: "skill"; skill: Skill };
 
-/** SKILL.md を読み、frontmatter と本文を分ける。 */
-function readSkillFile(dir: string, name: string): ReadResult {
+/** SKILL.md を読み、frontmatter と本文を分ける。withContent が false なら本文は空にする。 */
+function readSkillFile(dir: string, name: string, options: { withContent?: boolean } = {}): ReadResult {
   const path = join(dir, SKILL_FILE_NAME);
   const info = lstatSync(path, { throwIfNoEntry: false });
   if (info === undefined) return { kind: "missing" };
@@ -186,7 +196,8 @@ function readSkillFile(dir: string, name: string): ReadResult {
     skill: {
       name,
       description: oneLine(rawDescription),
-      content: body,
+      // 一覧にだけ使うときは本文を運ばない（呼ばれたときに読み直す）。
+      content: options.withContent === false ? "" : body,
     },
   };
 }

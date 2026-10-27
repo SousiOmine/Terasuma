@@ -106,7 +106,7 @@ export function TeraSettingsView() {
         <ConfirmDialog
           title={t("routine.deleteTitle")}
           subject={deletingRoutine.target.name}
-          message={t("routine.deleteMessage", { name: deletingRoutine.target.name })}
+          message={t("routine.deleteMessage")}
           confirmLabel={t("common.delete")}
           cancelLabel={t("common.cancel")}
           danger

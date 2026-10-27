@@ -15,6 +15,9 @@ import type { ChatEvent } from "../../shared/api/message";
 /** 1 つの購読のために溜めておけるイベントの数。読み手が追いつかない購読は、ここで打ち切る。 */
 const MAX_QUEUED_EVENTS = 1_000;
 
+/** 走っているターンの控えに残すイベントの数。 */
+const MAX_LIVE_EVENTS = 200;
+
 type Subscriber = {
   /** 購読している画面（タブ）の id。送った画面と同じなら、その出来事は配らない。 */
   clientId: string;
@@ -25,6 +28,18 @@ type Subscriber = {
   /** 配るのをやめた（あふれた、または購読を畳んだ）。 */
   closed: boolean;
 };
+
+/**
+ * 走っているターンの控えに 1 つ足し、上限を超えたら古いものから捨てる。
+ *
+ * ツールの結果は 1 件で数万文字になる。控えに上限を置かないと、長いターンの間ずっと
+ * メモリに積み上がり、終わりの合図が来ないまま終わったときに残り続ける。
+ * 捨てたときは、途中から購読した画面が sync で履歴を読み直す（本文は保存されている）。
+ */
+function pushLive(live: ChatEvent[], event: ChatEvent): void {
+  live.push(event);
+  if (live.length > MAX_LIVE_EVENTS) live.splice(0, live.length - MAX_LIVE_EVENTS);
+}
 
 type Channel = {
   subscribers: Set<Subscriber>;
@@ -85,9 +100,9 @@ export function createConversationBroadcast(): ConversationBroadcast {
     if (event.type === "assistant-start") {
       // ステップごとに応答の行が分かれるので、ターンの途中で何度も来る。
       if (channel.live === null) channel.live = [];
-      channel.live.push(event);
+      pushLive(channel.live, event);
     } else if (isTurnEnd(event)) channel.live = null;
-    else channel.live?.push(event);
+    else if (channel.live !== null) pushLive(channel.live, event);
 
     for (const subscriber of channel.subscribers) {
       if (subscriber.clientId === exceptClientId) continue;

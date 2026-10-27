@@ -29,10 +29,6 @@ export const savingToken = signal<string | null>(null);
 /** program コネクタを確かめている最中の id。操作中の表示に使う。 */
 export const connecting = signal<string | null>(null);
 
-/** 設定画面を開いたときに読む（まだ読めていなければ）。 */
-export const loadConnectors = connectorsResource.load;
-/** 一覧を読み直す（読み込み中でも始め直す）。 */
-export const refreshConnectors = connectorsResource.refresh;
 
 /** トークンを保存する。受け付けられなければ、サーバーが理由を返す。 */
 export async function saveConnectorToken(id: string, token: string): Promise<void> {

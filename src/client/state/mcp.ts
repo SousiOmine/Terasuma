@@ -31,10 +31,6 @@ export const AUTHORIZATION_POLL_MS = 2_000;
 /** 認可を待つ上限。待ち続けて画面が固まったように見えるのを避ける。 */
 export const AUTHORIZATION_TIMEOUT_MS = 5 * 60 * 1_000;
 
-/** 設定画面を開いたときに読む（まだ読めていなければ）。 */
-export const loadMcpServers = mcpServersResource.load;
-/** 一覧を読み直す（読み込み中でも始め直す）。 */
-export const refreshMcpServers = mcpServersResource.refresh;
 
 /** 保存する前に、入力された設定で繋がるか確かめる。設定には書かない。 */
 export async function testMcpServer(form: McpServerForm): Promise<McpTestView> {

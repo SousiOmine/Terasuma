@@ -25,6 +25,11 @@ export type PodmanQuery = {
   publishedVncPort(): Promise<number | null>;
   /** いまどこまで準備できているか。 */
   status(): Promise<ContainerStatusView>;
+  /**
+   * 動いているかだけを、podman 1 回で聞く。
+   * ツールを呼ぶたびに 5 回問い合わせると、続けて使うときに待ちが積み上がる。
+   */
+  isRunning(): Promise<boolean>;
 };
 
 export function createPodmanQuery(options: {
@@ -96,5 +101,9 @@ export function createPodmanQuery(options: {
     };
   }
 
-  return { version, imageExists, containerExists, state, publishedVncPort, status };
+  async function isRunning(): Promise<boolean> {
+    return (await state()) === "running";
+  }
+
+  return { version, imageExists, containerExists, state, publishedVncPort, status, isRunning };
 }

@@ -177,15 +177,31 @@ function dayKey(at: number): string {
   return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
 }
 
+/**
+ * 日付と時刻の書式。
+ *
+ * Intl.DateTimeFormat の組み立ては重い。メッセージ 1 件ごとに作ると、履歴を描くたびに
+ * 何百個も作ることになるので、言語と種類ごとに 1 つを使い回す。
+ */
+const formatters = new Map<string, Intl.DateTimeFormat>();
+
+function formatterOf(tag: string, kind: "date" | "time"): Intl.DateTimeFormat {
+  const key = `${tag}:${kind}`;
+  const existing = formatters.get(key);
+  if (existing !== undefined) return existing;
+
+  const created =
+    kind === "date"
+      ? new Intl.DateTimeFormat(tag, { year: "numeric", month: "long", day: "numeric", weekday: "short" })
+      : new Intl.DateTimeFormat(tag, { hour: "2-digit", minute: "2-digit" });
+  formatters.set(key, created);
+  return created;
+}
+
 function formatDate(at: number, tag: string): string {
-  return new Intl.DateTimeFormat(tag, {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-    weekday: "short",
-  }).format(at);
+  return formatterOf(tag, "date").format(at);
 }
 
 export function formatTime(at: number, tag: string): string {
-  return new Intl.DateTimeFormat(tag, { hour: "2-digit", minute: "2-digit" }).format(at);
+  return formatterOf(tag, "time").format(at);
 }

@@ -3,7 +3,6 @@ import {
   CONTAINER_DISPLAY,
   CONTAINER_GID,
   CONTAINER_UID,
-  VNC_PORT_IN_CONTAINER,
   WORKDIR_IN_CONTAINER,
 } from "./contract";
 import type { CommandRunner } from "./command";
@@ -63,6 +62,3 @@ export async function verifyImageContract(run: CommandRunner, containerName: str
     message: `コンテナの契約がイメージと食い違っています（${problems.join(", ")}）。イメージを作り直してください`,
   };
 }
-
-/** VNC のポート（コンテナの中）。起動時の確認と、中継の接続先の両方が使う。 */
-export const CONTAINER_VNC_PORT = VNC_PORT_IN_CONTAINER;

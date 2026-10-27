@@ -6,6 +6,7 @@ import { envRequestActive } from "../../state/env-request";
 import { chatError, clearChatError } from "../../state/failure";
 import { t } from "../../i18n";
 import { screenTokenProtocol } from "../../../shared/screen";
+import { Button } from "../../ui/Button";
 import { ErrorNotice } from "../../ui/ErrorNotice";
 import {
   answerHandover,
@@ -207,13 +208,11 @@ export function ComputerPane() {
             <p class="text-xs leading-relaxed whitespace-pre-wrap text-primary">
               {question ?? t("chat.computer.yourTurn")}
             </p>
-            <button
-              type="button"
-              onClick={() => void answerHandover({ kind: "done" })}
-              class="mt-2 rounded-full bg-[var(--app-accent-fill)] px-3 py-1.5 text-xs font-medium text-[var(--app-on-accent)] transition hover:bg-[var(--app-accent-hover)]"
-            >
-              {t("chat.computer.done")}
-            </button>
+            <div class="mt-2">
+              <Button variant="primary" size="sm" onClick={() => void answerHandover({ kind: "done" })}>
+                {t("chat.computer.done")}
+              </Button>
+            </div>
 
             {/* 全画面で開く狭い画面ではチャットの入力欄に触れないので、ここでも返事を書けるようにする。 */}
             <form

@@ -47,9 +47,11 @@ export function prepareQueries(db: Database) {
      ORDER BY seq DESC
      LIMIT ?`,
   );
-  const selectMessagesSince = db.query<MessageRow, [string, number]>(
+  // 畳む対象を読む。件数の上限を置き、履歴が伸びても 1 回の読み込みが膨らまないようにする
+  // （畳みは何回かに分けて進む。1 回で全部読もうとすると、長い会話で待ちが跳ね上がる）。
+  const selectMessagesSince = db.query<MessageRow, [string, number, number]>(
     `SELECT ${MESSAGE_COLUMNS}
-     FROM messages WHERE tera_id = ? AND seq > ? ORDER BY seq ASC`,
+     FROM messages WHERE tera_id = ? AND seq > ? ORDER BY seq ASC LIMIT ?`,
   );
   // 画面が履歴を取り直すべきかを決めるための、最新の連番。1 件も無ければ 0 が返る。
   const selectLastSeq = db.query<{ seq: number }, [string]>(

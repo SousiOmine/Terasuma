@@ -1,8 +1,5 @@
 import { z } from "zod";
 
-/** 「理由」の引数の型。ツールの inputSchema と、execute の引数の型で同じものを使う。 */
-export type ReasonInput = { reason: string };
-
 /**
  * ツールの定義で繰り返す小さな部品。
  *
@@ -38,7 +35,3 @@ export const reasonInputSchema = z.object({ reason: reasonSchema });
 export function waitEndedText(what: string): string {
   return `The turn ended before ${what}`;
 }
-
-/** 環境変数名として渡せる形（シェルがそのまま読める名前に揃える）。 */
-export const ENV_NAME_ARGUMENT =
-  "Use letters, digits and underscores, starting with a letter or underscore";

@@ -7,7 +7,6 @@ import { t } from "../../i18n";
 import {
   clearWebSearchError,
   isLoadingWebSearch,
-  refreshWebSearchSettings,
   removeWebSearchProvider,
   setDefaultWebSearchProvider,
   showWebSearchError,
@@ -44,7 +43,7 @@ export function WebSearchProviderSection() {
   // 設定画面を直接開いた場合に備えて、まだ読めていなければここで読む。
   useResourceOnce(webSearchResource);
 
-  const reload = () => void refreshWebSearchSettings().catch(showWebSearchError);
+  const reload = () => void webSearchResource.refresh().catch(showWebSearchError);
 
   const makeDefault = async (providerId: string) => {
     setMakingDefault(providerId);
@@ -152,14 +151,9 @@ function WebSearchProviderCard({
 
       <div class="flex shrink-0 flex-wrap items-center gap-1">
         {!provider.isDefault && (
-          <button
-            type="button"
-            disabled={makingDefault}
-            onClick={onMakeDefault}
-            class="rounded-full bg-[var(--app-accent-fill)] px-3 py-1.5 text-xs font-medium text-[var(--app-on-accent)] transition hover:bg-[var(--app-accent-hover)] disabled:opacity-50"
-          >
+          <Button variant="primary" size="sm" disabled={makingDefault} onClick={onMakeDefault}>
             {t("settings.webSearch.makeDefault")}
-          </button>
+          </Button>
         )}
         <EditAction onClick={onEdit} />
         <DeleteAction onClick={onDelete} />

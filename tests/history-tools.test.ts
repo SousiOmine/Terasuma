@@ -275,3 +275,13 @@ describe("history_search", () => {
     expect(await search(store, {})).toContain("No messages have been saved");
   });
 });
+
+describe("検索語の安全確認", () => {
+  test("入れ子の量指定子は、組み立てる前に断る", async () => {
+    const { store } = createClockStore();
+    appendUser(store, "m1", "aaaa");
+
+    // (a+)+ は当たらない入力で後戻りが指数的に増える。断りの文には直し方が入る。
+    await expect(search(store, { query: "(a+)+$" })).rejects.toThrow(/backtrack/);
+  });
+});

@@ -11,13 +11,14 @@ import {
   saveProgramConnector,
   savingConnectorRequest,
 } from "../../state/connector-request";
-import { connectors, isLoadingConnectors, loadConnectors } from "../../state/connectors";
-import { discord, isLoadingDiscord, loadDiscord } from "../../state/discord";
+import { connectorsResource } from "../../state/connectors";
+import { discordResource } from "../../state/discord";
 import { showChatError } from "../../state/failure";
 import { ProgramSetupForm, type ProgramSetupInput } from "../connectors/ProgramSetupForm";
 import { Button } from "../../ui/Button";
 import { Field } from "../../ui/Field";
 import { INPUT_CLASS } from "../../ui/styles";
+import { useResourceOnce } from "../../hooks/useResourceOnce";
 
 /**
  * コネクタのカード。
@@ -34,14 +35,9 @@ export function ConnectorRequestPanel() {
   const [token, setToken] = useState("");
 
   // 設定画面を開いていなくても、表示名と貼り付け欄の説明を出せるようにする。
-  useEffect(() => {
-    if (connectors.value === null && !isLoadingConnectors.value) {
-      void loadConnectors().catch(showChatError);
-    }
-    if (discord.value === null && !isLoadingDiscord.value) {
-      void loadDiscord().catch(showChatError);
-    }
-  }, []);
+  // load は「読めていなければ読む」を自分で持つので、画面側の分岐は要らない。
+  useResourceOnce(connectorsResource);
+  useResourceOnce(discordResource);
 
   // 新しいカードが出たら、入力欄を空に戻す。
   useEffect(() => {
@@ -169,10 +165,10 @@ export function ConnectorRequestPanel() {
 function appNameOf(provider: string): string {
   if (provider === DISCORD_SERVER_ID) return "Discord";
 
-  return connectors.value?.providers.find((entry) => entry.id === provider)?.name ?? provider;
+  return connectorsResource.data.value?.providers.find((entry) => entry.id === provider)?.name ?? provider;
 }
 
 /** コンピュータの中で確かめるコネクタか。入力欄ではなく確認中の文を出す。 */
 function isProgramConnector(provider: string): boolean {
-  return connectors.value?.providers.find((entry) => entry.id === provider)?.kind === "program";
+  return connectorsResource.data.value?.providers.find((entry) => entry.id === provider)?.kind === "program";
 }

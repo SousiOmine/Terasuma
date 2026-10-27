@@ -193,15 +193,21 @@ export function createContainerManager(options: ContainerManagerOptions): Contai
     return podman.status();
   }
 
-  /** 動いていなければ、どの操作でも同じ理由で失敗させる。 */
+  /**
+   * 動いていなければ、どの操作でも同じ理由で失敗させる。
+   *
+   * ツールは read → edit → bash と続けて呼ばれる。そのたびに状態を 5 回問い合わせると
+   * 待ちが積み上がるので、まず 1 回だけ聞き、動いていなければ詳しい理由を調べる。
+   */
   async function requireRunning(): Promise<void> {
-    const current = await status();
-    if (current.state !== "running") {
-      throw new ContainerError(
-        "container_not_running",
-        `The computer is not running (state: ${current.state}). Start it from Settings > Computer.`,
-      );
-    }
+    if (await podman.isRunning()) return;
+
+    // 動いていない理由（podman が無い・イメージが無い・止まっている）を、画面と同じ形で返す。
+    const current = await readStatus();
+    throw new ContainerError(
+      "container_not_running",
+      `The computer is not running (state: ${current.state}). Start it from Settings > Computer.`,
+    );
   }
 
   async function start(): Promise<ContainerStatusView> {

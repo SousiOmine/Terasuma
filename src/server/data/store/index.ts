@@ -45,6 +45,12 @@ export type {
   UpdateRoutineInput,
 } from "./types";
 
+/**
+ * 1 回に畳む対象として読む履歴の上限。
+ * これを超える分は次の畳みで読む（要約は少しずつ育つ）。
+ */
+const MAX_MESSAGES_SINCE = 2_000;
+
 export function createStore(dbPath: string, options: CreateStoreOptions = {}): Store {
   const now = options.now ?? Date.now;
   const db = new Database(dbPath, { create: true });
@@ -86,7 +92,9 @@ export function createStore(dbPath: string, options: CreateStoreOptions = {}): S
     }
     const seq = inserted.seq;
 
-    q.touchTera.run(at, input.teraId);
+    // サイドバーの並びは「利用者が最後に話しかけた順」にする。応答の追記では動かさない
+    // （同じターンで何度も書くので、書き込みが増えるうえ、並びが応答のたびに動いて見える）。
+    if (input.role === "user") q.touchTera.run(at, input.teraId);
 
     return {
       id: input.id,
@@ -241,7 +249,7 @@ export function createStore(dbPath: string, options: CreateStoreOptions = {}): S
     },
 
     listMessagesSince(teraId, seq) {
-      return q.selectMessagesSince.all(teraId, seq).map(toMessage);
+      return q.selectMessagesSince.all(teraId, seq, MAX_MESSAGES_SINCE).map(toMessage);
     },
 
     lastSeq(teraId) {

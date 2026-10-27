@@ -1,4 +1,5 @@
 import { IconLayoutSidebarRight, IconMenu2 } from "@tabler/icons-preact";
+import { memo } from "preact/compat";
 import { useMemo } from "preact/hooks";
 import { t } from "../../i18n";
 import {
@@ -142,7 +143,7 @@ export function ChatView() {
             {isLoadingOlderMessages.value && (
               <p class="text-center text-[11px] text-tertiary">{t("chat.history.loadingOlder")}</p>
             )}
-            {items.map((item) => renderItem(item))}
+            <ChatTimeline items={items} tag={tag} />
             {streaming && !handover && !envWaiting && <TypingBubble />}
             {loading && <p class="text-center text-sm text-secondary">{t("common.loading")}</p>}
           </div>
@@ -214,9 +215,17 @@ export function ChatView() {
   );
 }
 
-function renderItem(item: ChatItem) {
-  const tag = localeTag();
+/**
+ * タイムラインの描画。
+ *
+ * memo() で包むのは、右ペインの開閉や失敗の表示のように、履歴と関係のない状態が変わっても
+ * 何百件もの Markdown を組み直さないため（items と tag が変わらなければ描き直さない）。
+ */
+const ChatTimeline = memo(function ChatTimeline({ items, tag }: { items: readonly ChatItem[]; tag: string }) {
+  return <>{items.map((item) => renderItem(item, tag))}</>;
+});
 
+function renderItem(item: ChatItem, tag: string) {
   switch (item.kind) {
     case "date":
       return (

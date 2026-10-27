@@ -150,6 +150,11 @@ export function createSkillFileStoreStub(initial: readonly Skill[] = []): SkillF
 
   return {
     scan: () => ({ skills: [...skills.values()], problems: [] }),
+    // 一覧は本文を運ばない（本物の置き場と同じ形にする）。
+    scanCatalog: () => ({
+      skills: [...skills.values()].map((skill) => ({ ...skill, content: "" })),
+      problems: [],
+    }),
     get: (name) => {
       const skill = skills.get(name);
       return skill === undefined ? null : loaded(skill);

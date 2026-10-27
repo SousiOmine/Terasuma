@@ -40,6 +40,11 @@ const MAX_QUERY_CHARS = 200;
 
 /** 1 つの検索語（正規表現）の上限（文字数）。長すぎるパターンは、探す費用が読めない。 */
 const MAX_PATTERN_CHARS = 500;
+/**
+ * 1 件の本文で、正規表現をかける長さの上限。
+ * 検索は本文の全体像を探すものなので、溢れた分は切ってから照合する（計算量を有界にする）。
+ */
+const MAX_SEARCH_TEXT_CHARS = 200_000;
 
 /** 添付名を並べる数の上限。 */
 const MAX_ATTACHMENT_NAMES = 5;
@@ -198,9 +203,15 @@ function termsOf(query: string): string[] {
   return query.split(WHITESPACE).filter((term) => term.length > 0);
 }
 
-/** すべての語の正規表現が当たるかどうか。 */
+/**
+ * すべての語の正規表現が当たるかどうか。
+ *
+ * 照合する前に本文を上限で切る。長い本文をまるごと正規表現にかけると、
+ * 破滅的な後戻りをする検索語（(a+)+$ など）で 1 件あたりの計算量が跳ね上がる。
+ * 切った分は検索の対象から外れるが、切り詰めたことは結果の本文にも残している。
+ */
 function containsAll(message: ChatMessage, patterns: readonly RegExp[]): boolean {
-  const text = searchableText(message);
+  const text = truncateText(searchableText(message), MAX_SEARCH_TEXT_CHARS, "marked");
   return patterns.every((pattern) => pattern.test(text));
 }
 
@@ -219,8 +230,26 @@ function patternOf(term: string, wholeWord: boolean): RegExp {
   return compilePattern(`(?<![\\p{L}\\p{N}_])(?:${term})(?![\\p{L}\\p{N}_])`, term);
 }
 
+/**
+ * 入れ子の量指定子（(a+)+ や (a*)* など）を含むかどうか。
+ *
+ * この形は、当たらない入力に対して後戻りが指数的に増える（ReDoS）。
+ * 検索語はモデルが作るので、危険な形は組み立てる前に断る。
+ * 完全な判定ではないが、実際に問題になる形の多くはここで止まる。
+ */
+function hasNestedQuantifier(source: string): boolean {
+  return /\([^()]*[+*][^()]*\)\s*[+*{]/.test(source);
+}
+
 /** 正規表現を組み立てる。壊れていれば、直し方の分かる理由で止める。 */
 function compilePattern(source: string, term: string): RegExp {
+  if (hasNestedQuantifier(source)) {
+    throw new Error(
+      `Query term "${term}" repeats a group that already repeats ((a+)+ and similar). ` +
+        "Rewrite it so the match does not have to backtrack.",
+    );
+  }
+
   try {
     return new RegExp(source, "iu");
   } catch (error) {

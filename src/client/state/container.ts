@@ -38,8 +38,6 @@ export const computerEnv = computerEnvResource.data;
 /** 名前の一覧を読めなかった理由。「読み込み中」と区別して画面に出す。 */
 export const computerEnvLoadError = computerEnvResource.error;
 
-/** 設定されている環境変数の名前を読む（まだ読めていなければ）。 */
-export const loadComputerEnv = computerEnvResource.load;
 /** 名前の一覧を読み直す（読み込み中でも始め直す）。 */
 export const refreshComputerEnv = computerEnvResource.refresh;
 

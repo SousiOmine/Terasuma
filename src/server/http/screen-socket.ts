@@ -4,6 +4,9 @@ import { screenTokenFromProtocols } from "../../shared/screen";
 import type { ContainerManager } from "../computer/container";
 import { jsonError } from "./respond";
 
+/** 中継が繋がるまでに貯めるメッセージの上限。 */
+const MAX_QUEUED_MESSAGES = 100;
+
 /**
  * 画面の WebSocket 中継で、ブラウザ 1 つとコンテナを結ぶ分。
  * noVNC はバイナリで RFB を話すので、そのまま転送する。
@@ -75,6 +78,12 @@ export function createScreenSocket(container: ContainerManager, vncToken: string
       message(ws, message) {
         if (ws.data.upstream === null) {
           // 最初の挨拶を落とすと繋がらないので、繋がるまで貯める。
+          // 繋がらないまま溜まり続けると、こちらが抱える分が際限なくなるので、上限で切る。
+          if (ws.data.queue.length >= MAX_QUEUED_MESSAGES) {
+            console.warn("[screen] dropped a message: the relay did not connect in time");
+            ws.close();
+            return;
+          }
           ws.data.queue.push(typeof message === "string" ? message : new Uint8Array(message));
           return;
         }

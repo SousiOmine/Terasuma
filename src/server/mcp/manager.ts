@@ -123,6 +123,8 @@ export function createMcpManager(options: McpManagerOptions): McpManager {
   let discovered = false;
   /** 最後に接続を作ったときの設定（JSON）。変わったサーバーだけ繋ぎ直すための比較用。 */
   let settingsKey: string | null = null;
+  /** 走っている繋ぎ直し。同時に 2 本走らせない。 */
+  let refreshing: Promise<void> | null = null;
   /** 認可を待っているサーバー（id → 認可画面の URL）。 */
   const pending = new Map<string, string>();
   /** 保存前の確認で認可を待っているサーバー（id → 確かめている設定と、認可画面の URL）。 */
@@ -157,13 +159,28 @@ export function createMcpManager(options: McpManagerOptions): McpManager {
     }
   }
 
-  /** 設定が変わっていれば、変わったサーバーだけ繋ぎ直す（他の接続はそのまま使う）。 */
+  /**
+   * 設定が変わっていれば、変わったサーバーだけ繋ぎ直す（他の接続はそのまま使う）。
+   *
+   * ターンの開始時（toolset）と、ターンの途中の prepareStep から同時に呼ばれる。
+   * 走っている繋ぎ直しがあれば、それを待つ（2 つが connections を同時に書き換えないように）。
+   */
   async function syncSettings(servers: McpServersSettings): Promise<void> {
     const key = JSON.stringify(servers);
     if (key === settingsKey && discovered) return;
 
+    // 走っている繋ぎ直しがあれば、それが終わるのを待つ（設定の反映は 1 本に絞る）。
+    if (refreshing !== null) {
+      await refreshing;
+      if (key === settingsKey && discovered) return;
+    }
+
     settingsKey = key;
-    await refresh(servers);
+    const job = refresh(servers).finally(() => {
+      if (refreshing === job) refreshing = null;
+    });
+    refreshing = job;
+    await job;
   }
 
   /**

@@ -50,14 +50,25 @@ export function statusLabel(status: RoutineStatus | null): string {
   return status === null ? "" : t(STATUS_KEYS[status]);
 }
 
-/** 次回の時刻（例: "10/25 08:30"）。null は空文字。 */
-export function nextRunLabel(at: number | null): string {
-  if (at === null) return "";
+/** 次回の時刻の書式。組み立てが重いので、言語ごとに使い回す。 */
+const nextRunFormatters = new Map<string, Intl.DateTimeFormat>();
 
-  return new Intl.DateTimeFormat(localeTag(), {
+function nextRunFormatter(tag: string): Intl.DateTimeFormat {
+  const existing = nextRunFormatters.get(tag);
+  if (existing !== undefined) return existing;
+
+  const created = new Intl.DateTimeFormat(tag, {
     month: "numeric",
     day: "numeric",
     hour: "2-digit",
     minute: "2-digit",
-  }).format(at);
+  });
+  nextRunFormatters.set(tag, created);
+  return created;
+}
+
+/** 次回の時刻（例: "10/25 08:30"）。null は空文字。 */
+export function nextRunLabel(at: number | null): string {
+  if (at === null) return "";
+  return nextRunFormatter(localeTag()).format(at);
 }

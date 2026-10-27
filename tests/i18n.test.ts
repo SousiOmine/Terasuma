@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
-import { setLocale, t } from "../src/client/i18n";
+import { setLocale, t, type ParamsOf } from "../src/client/i18n";
 import { en } from "../src/client/i18n/en";
 import { ja } from "../src/client/i18n/ja";
 import { CLIENT_ERROR_CODES } from "../src/client/lib/http";
@@ -135,6 +135,17 @@ describe("i18n", () => {
     const referenced = referencedKeys();
     const unused = Object.keys(en).filter((key) => !referenced.has(key));
     expect(unused).toEqual([]);
+  });
+
+  test("差し込みの名前は型で導ける（足りない名前・余計な名前は型エラーになる）", () => {
+    // 辞書の文面から名前を導いている。ここがずれたら、型の導出が壊れている。
+    // （代入が通ること自体が検査。実行時の値は、辞書の文面と突き合わせる）
+    const names: readonly ParamsOf<"settings.discord.badge">[] = ["connected", "total"];
+    const sorted = [...names].sort();
+    expect(sorted).toEqual(["connected", "total"]);
+
+    // 差し込みを持たないキーは、params を取らない（渡すと型エラーになる）。
+    expect(t("routine.deleteMessage").length).toBeGreaterThan(0);
   });
 
   test("ロケールを切り替えると文言が変わる", () => {
