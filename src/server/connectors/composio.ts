@@ -41,7 +41,6 @@ const SEARCH_LIMIT = 20;
 /** 1 つの引数の説明の上限（文字数）。 */
 const MAX_ARGUMENT_CHARS = 120;
 
-
 /** 検索の引数。 */
 type SearchInput = { query: string; toolkit?: string };
 

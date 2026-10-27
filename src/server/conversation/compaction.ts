@@ -364,4 +364,3 @@ function isEmptyAssistant(message: ChatMessage): boolean {
     (message.parts === null || message.parts.length === 0)
   );
 }
-

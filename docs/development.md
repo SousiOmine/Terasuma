@@ -84,7 +84,7 @@ bun run test:live  # 実際のプロバイダに繋ぐ確認（API キーと pod
 - フローチャートの位置は `client/ui/flow-layout.ts` が決める。DOM を使わないので、テストで重なりを確かめられる。
 - 表のセルや図のノード数には上限がある（`UI_MARKUP_LIMITS`）。マークアップ全体は 20,000 文字まで。
 - ツール呼び出しの引数は履歴に残るので、圧縮の要約に見せるときは 600 文字で切り詰める
-  （`server/agent/compaction-text.ts`）。
+  （`server/conversation/compaction-text.ts`）。
 
 ## 画面の動き
 
@@ -133,7 +133,7 @@ user メッセージとして文脈の末尾へ足される。
 「前のステップ → 追加の発言 → 次のステップ」の順になる。ステップの行は、そのステップの
 開始時に連番を予約して作る（終わってから作ると、割り込んだ発言のほうが先の連番になる）。
 tool-call と tool-result は画面に出さないので、分けずにそのステップの記録へ残す。
-何も出なかったステップの行は消す。行の面倒は `server/agent/step-messages.ts` が見る。
+何も出なかったステップの行は消す。行の面倒は `server/conversation/step-messages.ts` が見る。
 画面は、伸びている応答の seq を境に保存済みの履歴を前と後ろへ分けて描く（`splitAroundLive`）。
 
 - 発言の並びは保存した時点の seq で決まる。画面も末尾ではなく seq の位置へ挿すので、
@@ -256,7 +256,7 @@ MCP サーバーは `config.json` の `mcpServers` に置く。足す・消す�
 エージェントが作ったスキルは、コンピュータのホームの中の `.agents/skills/<name>/SKILL.md` に置く。
 これは Agent Skills のユーザー領域の慣例で、ホスト側では `~/.local/share/terasuma/container/home/.agents/skills/`、コンテナの中では `/home/agent/.agents/skills/` になる。
 `SKILL.md` は YAML frontmatter と Markdown 本文を持つ。frontmatter の `name` と `description` を一覧に使い、本文は `skill` ツールで読んだときだけ渡す。
-`skill_manage` が作成、更新、削除、一覧を受け持つ。読み書きは `server/agent/skill-files.ts`、frontmatter の解析は `Bun.YAML` を使う。
+`skill_manage` が作成、更新、削除、一覧を受け持つ。読み書きは `server/agent/skill-files.ts`（frontmatter は `frontmatter.ts`）、frontmatter の解析は `Bun.YAML` を使う。
 スキルの一覧は system プロンプトに載る。ターンの途中でスキルが変わったときは、そのターンの system プロンプトを組み直さず、次のモデル呼び出しの前に user メッセージで知らせる。
 スキルはコンテナのホームの中にあるので、ホームを消すリセットでは一緒に消える。
 
@@ -269,7 +269,7 @@ Tera は自分の identity（役割と、必要な知識）を持つ。identity 
 - `applied`: system プロンプトに載っている版
 
 system プロンプトは `applied` だけを読む。書いただけでは変わらず、圧縮が要約を書き換えたときに
-`applied` が `content` へ切り替わる（`server/agent/compaction.ts`）。
+`applied` が `content` へ切り替わる（`server/conversation/compaction.ts`）。
 書き換え直後にプロンプトを組み直さないのは、先頭が変わるとプロンプトキャッシュが外れるため。
 圧縮はもともと要約を書き換えてキャッシュを切るので、identity も同じ瞬間に切り替える。
 
@@ -400,7 +400,7 @@ Discord はトークンではなく、Tera ごとの **webhook URL** で送る�
 - 送った画面の購読には配らない。同じ出来事を、送信の応答として受け取っているため。
   どの画面かを示すのが `x-terasuma-client` ヘッダで、`POST /api/teras/:id/messages`・
   `POST /api/teras/:id/steer`・`GET /api/teras/:id/events` のすべてに付ける（無ければ 400）。
-- 配り口はプロセスの中だけに持つ（`server/agent/broadcast.ts`）。再起動で購読は切れるが、
+- 配り口はプロセスの中だけに持つ（`server/conversation/broadcast.ts`）。再起動で購読は切れるが、
   繋ぎ直したときの `sync` から揃う。
 
 変更系の API は、`x-terasuma-client` をすべて必須にする（`server/http/client-id.ts`）。
@@ -434,7 +434,9 @@ src/
   index.ts            起動と停止
   app.ts              依存の組み立て（合成ルート。overrides で一部だけ差し替えられる）
   server/http         ルート表・ハンドラ・SSE・外部 HTTP の共通処理
-  server/agent        ターン・プロンプト・圧縮・ツール（engine/ に分かれる）
+  server/conversation 会話の進行（ターン・イベントの流し方・圧縮・プロンプト）
+  server/tools        エージェントの道具立て（read / bash / computer_ / skill など）
+  server/agent        スキルと、LLM 呼び出しのエンジン（engine/）
   server/provider     種別表・呼び出し・カタログ・疎通確認
   server/mcp          MCP の接続（connection / transport / tools）と OAuth
   server/connectors  コネクタ（トークン保存・検証・ツール）
@@ -444,14 +446,38 @@ src/
   server/wait         中断で片付く待ち
   client/lib          通信・失敗・待ち
   client/state        signal の状態（resource.ts が読み込みの共通形）
+  client/hooks        画面をまたいで同じ形になる手順（確かめて保存する、読み込み直す）
   client/ui           見た目の部品（SecretInput・SectionHeader・ResourceList など）
   client/features     画面ごとの実装（通信は state 経由）
   shared/api          client/server で共有する API の型（message・events・settings・error）
   shared              client/server 共通の純関数（ほかに依存しない）
 ```
 
+ファイルを分けるときの目安は次のとおり。
+
+- ファイルは 400 行を超えたら、役割ごとに分ける（定数・変換・入出力・整形を混ぜない）。
+  `container.ts`（podman-query / exec / image-contract）、`turns.ts`（turn-stream / turn-types）、
+  `skill-files.ts`（frontmatter / skill-scan）がその例。
+- 組み込みスキルの本文は `server/agent/skills/*.md` に置く。名前と説明は `skills.ts` の表が持つ。
+- Markdown の解釈は `client/features/chat/markdown/` に分ける（block / inline / url / types）。
+
 依存の向きは `tests/architecture.test.ts` が機械的に検査する。
 新しい層を足すときは、このテストに規則を 1 行足す。
+
+同じ処理が 2 か所に出たら、共通の置き場へ寄せる。置き場の目安は次のとおり。
+
+| 種類 | 置き場 |
+| --- | --- |
+| 文字列の整形・切り詰め | `shared/text.ts` |
+| 数値の丸め | `shared/numbers.ts` |
+| id と環境変数名の規則 | `shared/ids.ts`・`shared/env.ts` |
+| タイムアウトと中断の合成 | `shared/async.ts` |
+| 外部 HTTP の問い合わせ | `server/http/client.ts`（sendRequestOrThrow） |
+| 秘密の JSON の読み書き | `server/data/secret-file.ts`・`private-store.ts` |
+| 失敗のコードと HTTP の状態 | `server/errors.ts`・`shared/api/error.ts` の ERROR_STATUS |
+| ツールの引数の共通部品 | `server/tools/context.ts` |
+| 「読み込み中／失敗／空」の出し分け | `client/ui/ResourceList.tsx`・`LoadOrError.tsx` |
+| 「確かめてから保存する」ダイアログ | `client/hooks/useVerifiedForm.ts` |
 
 コンテナの契約値（DISPLAY、uid、gid、作業ディレクトリ、VNC のポート）は
 `server/computer/contract.ts` を正典にする。イメージを作り直したときに値がずれていないかは、

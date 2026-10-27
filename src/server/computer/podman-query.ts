@@ -89,7 +89,11 @@ export function createPodmanQuery(options: {
 
     const current = await state();
     if (current !== "running") {
-      return { state: "stopped", vncPort: null, detail: current === null ? "Could not read the computer status" : null };
+      return {
+        state: "stopped",
+        vncPort: null,
+        detail: current === null ? "Could not read the computer status" : null,
+      };
     }
 
     const vncPort = await publishedVncPort();

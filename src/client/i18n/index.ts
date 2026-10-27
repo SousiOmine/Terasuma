@@ -74,9 +74,8 @@ export type ParamsOf<K extends MessageKey> = keyof {
 type HasParams<K extends MessageKey> = ParamsOf<K> extends never ? false : true;
 
 /** 差し込みを持つキーの params は必須、持たないキーは渡せない。 */
-export type TranslationArgs<K extends MessageKey> = HasParams<K> extends true
-  ? [params: Record<ParamsOf<K>, string | number>]
-  : [params?: undefined];
+export type TranslationArgs<K extends MessageKey> =
+  HasParams<K> extends true ? [params: Record<ParamsOf<K>, string | number>] : [params?: undefined];
 
 /**
  * 現在のロケールで文言を引く。ロケール signal を読むので、切り替えると再描画される。

@@ -171,11 +171,8 @@ export function startApp(config: AppConfig, overrides: AppOverrides = {}): App {
       dataDir: config.dataDir,
       images,
       callbackUrl: () =>
-        listening.port === null
-          ? null
-          : new URL(`http://${config.host}:${listening.port}${OAUTH_CALLBACK_PATH}`),
+        listening.port === null ? null : new URL(`http://${config.host}:${listening.port}${OAUTH_CALLBACK_PATH}`),
     });
-
 
   // エージェントがユーザーへ画面を渡すときの待ち（ログインや二段階認証）。
   const handover = createHandover();

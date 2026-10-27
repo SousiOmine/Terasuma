@@ -246,7 +246,6 @@ function messageText(message: Record<string, unknown>): string {
   return parts.join("").trim();
 }
 
-
 /** 出力の最後の空でない行。無ければ null。 */
 function lastNonEmptyLine(text: string): string | null {
   const lines = text

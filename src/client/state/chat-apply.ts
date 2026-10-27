@@ -47,7 +47,8 @@ export function applyEvent(state: ChatState, event: ChatEvent, teraId: string): 
   switch (effect.kind) {
     case "message":
       // 保存された内容で置き換わるので、いま伸びていたターンは畳む。
-      if (effect.message.role === "assistant" && state.liveTurn.value?.id === effect.message.id) state.liveTurn.value = null;
+      if (effect.message.role === "assistant" && state.liveTurn.value?.id === effect.message.id)
+        state.liveTurn.value = null;
       state.upsert(effect.message);
       break;
     case "assistant-start":

@@ -54,7 +54,6 @@ export async function* runTurn(
   }
 }
 
-
 /**
  * 1 区切り分のイベント列。
  *

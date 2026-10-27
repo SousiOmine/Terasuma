@@ -371,4 +371,3 @@ async function runBash(
 
   return output;
 }
-

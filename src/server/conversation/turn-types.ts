@@ -80,4 +80,3 @@ export type RunningTurn = {
   /** done を解決する。ターンの finally から呼ぶ。 */
   finish(): void;
 };
-

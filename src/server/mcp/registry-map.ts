@@ -24,51 +24,51 @@ export function rebuildRegistry(options: {
   images: ImageStore;
 }): Rebuilt {
   const { servers, connections, previous, images } = options;
-    const claimed = new Map<string, string>();
-    const conflicted = new Map<string, string>();
-    for (const [serverId, connection] of connections) {
-      for (const definition of connection.tools) {
-        const namespaced = toolNameFor(serverId, definition.name);
-        const owner = claimed.get(namespaced);
-        if (owner === undefined) {
-          claimed.set(namespaced, serverId);
-        } else if (owner !== serverId) {
-          conflicted.set(serverId, namespaced);
-          conflicted.set(owner, namespaced);
-        }
+  const claimed = new Map<string, string>();
+  const conflicted = new Map<string, string>();
+  for (const [serverId, connection] of connections) {
+    for (const definition of connection.tools) {
+      const namespaced = toolNameFor(serverId, definition.name);
+      const owner = claimed.get(namespaced);
+      if (owner === undefined) {
+        claimed.set(namespaced, serverId);
+      } else if (owner !== serverId) {
+        conflicted.set(serverId, namespaced);
+        conflicted.set(owner, namespaced);
       }
     }
+  }
 
-    const nextStatuses = new Map<string, McpServerStatusView>();
-    const nextTools: McpToolset = {};
+  const nextStatuses = new Map<string, McpServerStatusView>();
+  const nextTools: McpToolset = {};
 
-    for (const serverId of Object.keys(servers)) {
-      const connection = connections.get(serverId);
-      if (connection === undefined) {
-        // 接続に失敗した理由は refresh() が書いている。まだ何も分からないサーバーは unknown。
-        nextStatuses.set(serverId, previous.get(serverId) ?? { state: "unknown", tools: [], detail: null });
-        continue;
-      }
+  for (const serverId of Object.keys(servers)) {
+    const connection = connections.get(serverId);
+    if (connection === undefined) {
+      // 接続に失敗した理由は refresh() が書いている。まだ何も分からないサーバーは unknown。
+      nextStatuses.set(serverId, previous.get(serverId) ?? { state: "unknown", tools: [], detail: null });
+      continue;
+    }
 
-      const conflict = conflicted.get(serverId);
-      if (conflict !== undefined) {
-        nextStatuses.set(serverId, {
-          state: "failed",
-          tools: [],
-          detail: `ツール名 ${conflict} が別のサーバーのツールと衝突しています（どちらかのサーバー名かツール名を変えてください）`,
-        });
-        continue;
-      }
-
+    const conflict = conflicted.get(serverId);
+    if (conflict !== undefined) {
       nextStatuses.set(serverId, {
-        state: "connected",
-        tools: connection.tools.map((definition) => definition.name),
-        detail: null,
+        state: "failed",
+        tools: [],
+        detail: `ツール名 ${conflict} が別のサーバーのツールと衝突しています（どちらかのサーバー名かツール名を変えてください）`,
       });
-      for (const [namespaced, definition] of toolEntries(serverId, connection, images)) {
-        nextTools[namespaced] = definition;
-      }
+      continue;
     }
 
-    return { statuses: nextStatuses, tools: nextTools };
+    nextStatuses.set(serverId, {
+      state: "connected",
+      tools: connection.tools.map((definition) => definition.name),
+      detail: null,
+    });
+    for (const [namespaced, definition] of toolEntries(serverId, connection, images)) {
+      nextTools[namespaced] = definition;
+    }
+  }
+
+  return { statuses: nextStatuses, tools: nextTools };
 }

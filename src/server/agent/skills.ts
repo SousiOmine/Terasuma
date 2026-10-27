@@ -43,47 +43,56 @@ const BUILTIN: readonly { name: string; file: string; description: string }[] = 
   {
     name: "computer-use",
     file: "computer-use",
-    description: "Driving the desktop container's screen, mouse and keyboard: screenshots, clicks, typing, keys, windows and applications. The computer_ tools are not preloaded — find them with tool_search and run them with tool_call.",
+    description:
+      "Driving the desktop container's screen, mouse and keyboard: screenshots, clicks, typing, keys, windows and applications. The computer_ tools are not preloaded — find them with tool_search and run them with tool_call.",
   },
   {
     name: "connectors",
     file: "connectors",
-    description: "Connecting an app before you use it (its API, or a program inside the computer): how to find that connector's connect tool with tool_search, and how the user fills in the card.",
+    description:
+      "Connecting an app before you use it (its API, or a program inside the computer): how to find that connector's connect tool with tool_search, and how the user fills in the card.",
   },
   {
     name: "skill-create",
     file: "skill-create",
-    description: "Creating and maintaining skills: the Agent Skills format, where SKILL.md lives under /home/agent/.agents/skills, the name and description rules, supporting files, and how to update or delete a skill.",
+    description:
+      "Creating and maintaining skills: the Agent Skills format, where SKILL.md lives under /home/agent/.agents/skills, the name and description rules, supporting files, and how to update or delete a skill.",
   },
   {
     name: "discord",
     file: "discord",
-    description: "Posting messages to one Discord channel per Tera through a webhook: when to send, the 2000-character and embed limits, rate limits, and how to connect a webhook.",
+    description:
+      "Posting messages to one Discord channel per Tera through a webhook: when to send, the 2000-character and embed limits, rate limits, and how to connect a webhook.",
   },
   {
     name: "tera-create",
     file: "tera-create",
-    description: "Creating another Tera: when a task needs a separate assistant with its own role and history, asking the user for its name, role and behavior policy in a form, then creating it with the tera_create tool.",
+    description:
+      "Creating another Tera: when a task needs a separate assistant with its own role and history, asking the user for its name, role and behavior policy in a form, then creating it with the tera_create tool.",
   },
   {
     name: "routine",
     file: "routine",
-    description: "Scheduled work (routines) that runs at a set local time or interval: when to create one, what the user needs to decide first, the schedule forms, and how to list, change, delete or run it.",
+    description:
+      "Scheduled work (routines) that runs at a set local time or interval: when to create one, what the user needs to decide first, the schedule forms, and how to list, change, delete or run it.",
   },
   {
     name: "mcp",
     file: "mcp",
-    description: "MCP servers: using their tools through tool_search and tool_call, adding a server from the chat, and removing one.",
+    description:
+      "MCP servers: using their tools through tool_search and tool_call, adding a server from the chat, and removing one.",
   },
   {
     name: "pi-coding",
     file: "pi-coding",
-    description: "Writing or changing code with pi-coding-agent (pi) inside the computer through tmux: how to call it, wait for it, and check the result. Load it before you edit code yourself.",
+    description:
+      "Writing or changing code with pi-coding-agent (pi) inside the computer through tmux: how to call it, wait for it, and check the result. Load it before you edit code yourself.",
   },
   {
     name: "composio",
     file: "composio",
-    description: "Reaching apps through Composio (Gmail, Slack, Notion, Linear and over 1,600 others): searching the catalog with app_composio_search and running a tool with app_composio_execute.",
+    description:
+      "Reaching apps through Composio (Gmail, Slack, Notion, Linear and over 1,600 others): searching the catalog with app_composio_search and running a tool with app_composio_execute.",
   },
 ];
 

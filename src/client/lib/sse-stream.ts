@@ -37,4 +37,3 @@ export async function* readEvents<T>(
     reader.releaseLock();
   }
 }
-

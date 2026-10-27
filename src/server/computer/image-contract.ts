@@ -1,10 +1,5 @@
 import { podmanExec } from "./podman";
-import {
-  CONTAINER_DISPLAY,
-  CONTAINER_GID,
-  CONTAINER_UID,
-  WORKDIR_IN_CONTAINER,
-} from "./contract";
+import { CONTAINER_DISPLAY, CONTAINER_GID, CONTAINER_UID, WORKDIR_IN_CONTAINER } from "./contract";
 import type { CommandRunner } from "./command";
 
 /**

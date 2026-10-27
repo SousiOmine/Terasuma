@@ -32,7 +32,6 @@ export const clearDiscordError = failure.clear;
 /** URL を保存している最中か。まとめて保存するので、どの Tera かは持たない。 */
 export const savingDiscord = signal(false);
 
-
 /** 入力された URL をまとめて保存する。1 つ失敗しても残りは試し、失敗した分をまとめて投げる。 */
 export async function saveWebhooks(entries: readonly { teraId: string; url: string }[]): Promise<void> {
   savingDiscord.value = true;

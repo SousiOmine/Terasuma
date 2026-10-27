@@ -30,7 +30,11 @@ export type TokenStore = {
 };
 
 export function createTokenStore(path: string): TokenStore {
-  const store = createPrivateJsonStore<StoredToken>({ path, is: isStoredToken, what: "コネクタの記録として読めません" });
+  const store = createPrivateJsonStore<StoredToken>({
+    path,
+    is: isStoredToken,
+    what: "コネクタの記録として読めません",
+  });
 
   return {
     read() {

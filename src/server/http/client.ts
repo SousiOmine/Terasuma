@@ -110,5 +110,4 @@ function findMessage(value: unknown): string | null {
   return null;
 }
 
-
 /** 通信そのものができなかった理由を、短い 1 文にする。 */

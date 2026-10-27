@@ -123,7 +123,10 @@ async function probeModels(fetchImpl: FetchLike, request: ProviderRequest): Prom
             `${target.url} から ${CONNECTION_TIMEOUT_MS / 1000} 秒以内に応答がありません`,
           );
         }
-        return new ProviderRequestError("provider_unreachable", `${target.url} に接続できません: ${describeError(_error)}`);
+        return new ProviderRequestError(
+          "provider_unreachable",
+          `${target.url} に接続できません: ${describeError(_error)}`,
+        );
       },
     },
   );

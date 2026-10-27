@@ -35,7 +35,6 @@ const API_TIMEOUT_MS = 30_000;
 /** モデルへ返す応答の上限（文字数）。 */
 const MAX_RESPONSE_CHARS = 20_000;
 
-
 /** API の引数。method はスキーマの列挙より広い string として受ける。 */
 type AppRequestInput = {
   provider: string;

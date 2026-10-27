@@ -70,4 +70,3 @@ export function cleanDay(value: string | undefined): string | null {
   const text = value?.trim() ?? "";
   return text.length === 0 ? null : text;
 }
-

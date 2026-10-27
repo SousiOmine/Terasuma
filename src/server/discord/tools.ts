@@ -32,7 +32,6 @@ const MAX_USERNAME_CHARS = 80;
 /** 1 回に付けられる埋め込みの上限（Discord の制限）。 */
 const MAX_EMBEDS = 10;
 
-
 /** discord_connect の引数。reason は画面に出すためだけに使う。 */
 type ConnectInput = { reason: string };
 

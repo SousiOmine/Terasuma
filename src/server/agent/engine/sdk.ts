@@ -299,7 +299,6 @@ export function registryNeedsRebuild(previous: ToolSet, next: ToolSet): boolean 
   return previous !== next;
 }
 
-
 /** 1 つの notice に名前を並べる上限。多すぎるときは件数だけを伝える。 */
 const MAX_NOTICE_MCP_TOOLS = 5;
 

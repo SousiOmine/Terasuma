@@ -22,7 +22,6 @@ const SCREENSHOT_TIMEOUT_MS = 15_000;
 /** 画面の PNG として受け取る上限。 */
 const SCREENSHOT_MAX_BYTES = 16 * 1024 * 1024;
 
-
 /** コマンドの結果を、ツールへ返す形に整える。 */
 export function toShellResult(result: CommandResult): ShellResult {
   return {
