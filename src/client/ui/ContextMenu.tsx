@@ -50,14 +50,10 @@ export function ContextMenu({ label, point, items, onClose }: ContextMenuProps) 
     element.focus();
   }, [point]);
 
-  // 外側の押下・Escape・スクロールで閉じる。
+  // Escape・スクロール・画面の大きさの変化で閉じる。
   useEffect(() => {
     const close = (): void => onClose();
 
-    const handlePointerDown = (event: PointerEvent) => {
-      if (event.target instanceof Node && ref.current?.contains(event.target) === true) return;
-      close();
-    };
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       event.preventDefault();
@@ -66,12 +62,10 @@ export function ContextMenu({ label, point, items, onClose }: ContextMenuProps) 
     };
     const handleViewportChange = (): void => close();
 
-    window.addEventListener("pointerdown", handlePointerDown, true);
     window.addEventListener("keydown", handleKeyDown, true);
     window.addEventListener("scroll", handleViewportChange, true);
     window.addEventListener("resize", handleViewportChange);
     return () => {
-      window.removeEventListener("pointerdown", handlePointerDown, true);
       window.removeEventListener("keydown", handleKeyDown, true);
       window.removeEventListener("scroll", handleViewportChange, true);
       window.removeEventListener("resize", handleViewportChange);
@@ -79,31 +73,45 @@ export function ContextMenu({ label, point, items, onClose }: ContextMenuProps) 
   }, [onClose]);
 
   return (
-    <div
-      ref={ref}
-      role="menu"
-      aria-label={label}
-      tabIndex={-1}
-      style={{ left: `${position.x}px`, top: `${position.y}px` }}
-      class="fixed z-50 min-w-44 rounded-[18px] border border-stroke bg-surface p-1 shadow-[var(--app-shadow-16)] outline-none"
-    >
-      {items.map((item) => (
-        <button
-          key={item.label}
-          type="button"
-          role="menuitem"
-          onClick={() => {
-            onClose();
-            item.onSelect();
-          }}
-          class={`flex w-full items-center gap-2 rounded-[12px] px-3 py-2 text-left text-sm transition ${
-            item.danger ? "text-[var(--app-danger)] hover:bg-[var(--app-danger-soft)]" : "text-primary hover:bg-soft"
-          }`}
-        >
-          {item.icon}
-          {item.label}
-        </button>
-      ))}
-    </div>
+    <>
+      {/* メニューの外の押下はこの受け皿で受ける。下の要素へ届かせない。
+          pointerdown で閉じると、受け皿が消えたあとの click が下へ抜けるので click で閉じる。 */}
+      <div
+        class="fixed inset-0 z-50"
+        aria-hidden="true"
+        onClick={onClose}
+        onContextMenu={(event) => {
+          event.preventDefault();
+          onClose();
+        }}
+      />
+
+      <div
+        ref={ref}
+        role="menu"
+        aria-label={label}
+        tabIndex={-1}
+        style={{ left: `${position.x}px`, top: `${position.y}px` }}
+        class="fixed z-50 min-w-44 rounded-[18px] border border-stroke bg-surface p-1 shadow-[var(--app-shadow-16)] outline-none"
+      >
+        {items.map((item) => (
+          <button
+            key={item.label}
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              onClose();
+              item.onSelect();
+            }}
+            class={`flex w-full items-center gap-2 rounded-[12px] px-3 py-2 text-left text-sm transition ${
+              item.danger ? "text-[var(--app-danger)] hover:bg-[var(--app-danger-soft)]" : "text-primary hover:bg-soft"
+            }`}
+          >
+            {item.icon}
+            {item.label}
+          </button>
+        ))}
+      </div>
+    </>
   );
 }
