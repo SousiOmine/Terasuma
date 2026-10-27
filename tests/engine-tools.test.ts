@@ -335,6 +335,31 @@ describe("ツール検索（AI SDK 経由）", () => {
     }
   });
 
+  test("tool_call の args は JSON 文字列でも受け付ける", async () => {
+    const fake = startScriptedProvider([
+      {
+        tool: "tool_call",
+        args: JSON.stringify({ name: "local_echo", args: JSON.stringify({ text: "hi" }) }),
+      },
+      { text: "呼び出しました" },
+    ]);
+    const provider = createToolsetProvider();
+
+    try {
+      const events = await run(provider, settingsFor(portOf(fake.server)));
+
+      expect(provider.executed).toEqual(["hi"]);
+      const call = callsOf(events, "tool", "call")[0];
+      if (call === undefined) throw new Error("tool_call がモデルへ渡らなかった");
+
+      const result = resultOf(events, call.part.id);
+      expect(result.part.failed).toBe(false);
+      expect(result.part.output).toBe("[local_echo]\necho: hi");
+    } finally {
+      await fake.server.stop(true);
+    }
+  });
+
   test("ターンの途中で MCP のツール一式が変わると、その場でレジストリを組み直す", async () => {
     const fake = startScriptedProvider([
       { tool: "tool_call", args: JSON.stringify({ name: "local_switch", args: {} }) },

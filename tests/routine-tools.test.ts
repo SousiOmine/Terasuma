@@ -70,6 +70,35 @@ describe("routine_create", () => {
     expect(String(output)).toContain("Settings > Tera");
   });
 
+  test("時刻が 0 埋めでなくても作り、08:30 で保存して結果に載せる", async () => {
+    const store = makeStore();
+    const create = definitionOf(toolsFor(store, createRoutineSchedulerStub()), "routine_create");
+
+    const output = String(
+      await create.execute({ ...MORNING, schedule: { kind: "daily", time: "8:30" } } as never, OPTIONS),
+    );
+
+    const created = store.listRoutinesOf("default")[0];
+    expect(created?.schedule).toEqual({ kind: "daily", time: "08:30" });
+    expect(output).toContain("Schedule: daily at 08:30 (local time).");
+  });
+
+  test("schedule が JSON 文字列でも作れる", async () => {
+    const store = makeStore();
+    const create = definitionOf(toolsFor(store, createRoutineSchedulerStub()), "routine_create");
+
+    const output = String(
+      await create.execute(
+        { ...MORNING, schedule: JSON.stringify({ kind: "daily", time: "8時30分" }) } as never,
+        OPTIONS,
+      ),
+    );
+
+    const created = store.listRoutinesOf("default")[0];
+    expect(created?.schedule).toEqual({ kind: "daily", time: "08:30" });
+    expect(output).toContain("Schedule: daily at 08:30 (local time).");
+  });
+
   test("同じ名前は作れない", async () => {
     const store = makeStore();
     const create = definitionOf(toolsFor(store, createRoutineSchedulerStub()), "routine_create");

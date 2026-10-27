@@ -2,6 +2,7 @@ import type { ToolSet } from "ai";
 import { tool } from "ai";
 import { z } from "zod";
 import { TOOL_CALL_TOOL_NAME, TOOL_SEARCH_TOOL_NAME } from "../../../shared/tools";
+import { isRecord } from "../../../shared/guards";
 import { readToolOutput } from "../tool-output";
 import { DEFAULT_SEARCH_LIMIT, MAX_SEARCH_LIMIT, type ToolRegistry } from "./registry";
 
@@ -65,15 +66,15 @@ export function createDiscoveryTools(registry: () => ToolRegistry): ToolSet {
       inputSchema: z.object({
         name: z.string().min(1).describe("Exact name of the tool to run (returned by tool_search)"),
         args: z
-          .record(z.string(), z.unknown())
+          .union([z.record(z.string(), z.unknown()), z.string()])
           .optional()
           .describe("Tool arguments as described by tool_search (omit when the tool takes none)"),
       }),
       execute: async (
-        { name, args }: { name: string; args?: Record<string, unknown> },
+        { name, args }: { name: string; args?: Record<string, unknown> | string },
         context: { toolCallId: string; abortSignal?: AbortSignal },
       ) => {
-        const output = await registry().call(name, args ?? {}, {
+        const output = await registry().call(name, argumentsOf(args), {
           toolCallId: context.toolCallId,
           ...(context.abortSignal === undefined ? {} : { abortSignal: context.abortSignal }),
         });
@@ -85,4 +86,22 @@ export function createDiscoveryTools(registry: () => ToolRegistry): ToolSet {
       },
     }),
   };
+}
+
+/** tool_call の args を、実行に渡すオブジェクトにする。JSON 文字列も受ける。 */
+function argumentsOf(args: Record<string, unknown> | string | undefined): Record<string, unknown> {
+  if (args === undefined) return {};
+  if (typeof args !== "string") return args;
+
+  const text = args.trim();
+  if (text.length === 0) return {};
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text) as unknown;
+  } catch {
+    throw new Error('args must be a JSON object, for example {"name":"..."}.');
+  }
+  if (!isRecord(parsed)) throw new Error('args must be a JSON object, for example {"name":"..."}.');
+  return parsed;
 }

@@ -29,6 +29,41 @@ export function parseSchedule(value: unknown): RoutineSchedule | null {
   }
 }
 
+/**
+ * 画面・ツール・API から来た値を、こちらの形へ寄せる。
+ * 寄せられなければ null（理由は scheduleProblem が返す）。
+ */
+export function normalizeSchedule(value: unknown): RoutineSchedule | null {
+  let raw = value;
+  if (typeof value === "string") {
+    try {
+      raw = JSON.parse(value) as unknown;
+    } catch {
+      return null;
+    }
+  }
+  if (!isRecord(raw)) return null;
+
+  const kind = typeof raw.kind === "string" ? raw.kind.trim().toLowerCase() : "";
+  switch (kind) {
+    case "daily": {
+      const time = normalizeTime(raw.time);
+      return time === null ? null : { kind: "daily", time };
+    }
+    case "weekly": {
+      const time = normalizeTime(raw.time);
+      const days = normalizeDays(raw.days);
+      return time === null || days === null ? null : { kind: "weekly", days, time };
+    }
+    case "every": {
+      const minutes = normalizeMinutes(raw.minutes);
+      return minutes === null ? null : { kind: "every", minutes };
+    }
+    default:
+      return null;
+  }
+}
+
 /** 画面と API の入力を検証する。受け付けられない理由を返す（使えるなら null）。 */
 export function scheduleProblem(value: unknown): string | null {
   if (!isRecord(value)) return "schedule はオブジェクトで指定してください";
@@ -94,6 +129,88 @@ function timeParts(time: string): [hours: number, minutes: number] {
 function timeProblem(): string {
   return "時刻は HH:MM（00:00〜23:59）で指定してください";
 }
+
+/** 時刻の揺れ（全角数字・コロン、時分、秒）を "HH:MM" に寄せる。 */
+function normalizeTime(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+
+  const text = foldWidth(value).trim();
+  const colon = /^(\d{1,2}):(\d{1,2})(?::[0-5]\d)?$/.exec(text);
+  if (colon !== null) return `${pad2(colon[1]!)}:${pad2(colon[2]!)}`;
+
+  const japanese = /^(\d{1,2})時(?:(\d{1,2})分)?$/.exec(text);
+  if (japanese !== null) return `${pad2(japanese[1]!)}:${pad2(japanese[2] ?? "0")}`;
+
+  return null;
+}
+
+/** 分の揺れ（数字だけの文字列）を数値に寄せる。範囲の検証はしない。 */
+function normalizeMinutes(value: unknown): number | null {
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value !== "string") return null;
+
+  const text = value.trim();
+  if (!/^\d+$/.test(text)) return null;
+
+  const minutes = Number(text);
+  return Number.isFinite(minutes) ? minutes : null;
+}
+
+/** 曜日の揺れ（数字の文字列、英語・日本語の名前）を数値に寄せる。範囲の検証はしない。 */
+function normalizeDays(value: unknown): number[] | null {
+  if (!Array.isArray(value)) return null;
+
+  const days: number[] = [];
+  for (const day of value) {
+    const normalized = normalizeDay(day);
+    if (normalized === null) return null;
+    days.push(normalized);
+  }
+  return days;
+}
+
+function normalizeDay(value: unknown): number | null {
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value !== "string") return null;
+
+  const text = value.trim().toLowerCase();
+  if (/^\d+$/.test(text)) return Number(text);
+  return WEEKDAY_NAMES[text] ?? null;
+}
+
+/** 全角の数字とコロンを半角にする。 */
+function foldWidth(text: string): string {
+  return text.replace(/[０-９]/g, (char) => String.fromCharCode(char.charCodeAt(0) - 0xfee0)).replace(/：/g, ":");
+}
+
+function pad2(value: string): string {
+  return value.padStart(2, "0");
+}
+
+/** 曜日の名前。1 = 月 … 7 = 日。 */
+const WEEKDAY_NAMES: Record<string, number> = {
+  mon: 1,
+  monday: 1,
+  tue: 2,
+  tuesday: 2,
+  wed: 3,
+  wednesday: 3,
+  thu: 4,
+  thursday: 4,
+  fri: 5,
+  friday: 5,
+  sat: 6,
+  saturday: 6,
+  sun: 7,
+  sunday: 7,
+  月: 1,
+  火: 2,
+  水: 3,
+  木: 4,
+  金: 5,
+  土: 6,
+  日: 7,
+};
 
 function daysProblem(value: unknown): string | null {
   if (!Array.isArray(value) || value.length === 0) {

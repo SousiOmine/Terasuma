@@ -18,7 +18,7 @@ import {
 } from "../../shared/tools";
 import type { RoutineRecord, RoutineStore } from "../data/store";
 import type { RoutineToolset, RoutineToolsetProvider } from "../agent/contracts";
-import { nextRunAt, scheduleProblem } from "./schedule";
+import { nextRunAt, normalizeSchedule, scheduleProblem } from "./schedule";
 import type { RoutineScheduler } from "./scheduler";
 
 /**
@@ -43,42 +43,37 @@ export function createRoutineToolset(options: {
 }
 
 /** ルーチンの実行時刻の決め方。画面と API の入力と同じ形にする。 */
-const scheduleSchema = z.discriminatedUnion("kind", [
-  z.object({
-    kind: z.literal("daily"),
-    time: z.string().describe('Local time of day, 24-hour "HH:MM" (for example "08:30")'),
-  }),
-  z.object({
-    kind: z.literal("weekly"),
-    days: z.array(z.number().int().min(1).max(7)).min(1).describe("Weekdays: 1 = Monday … 7 = Sunday"),
-    time: z.string().describe('Local time of day, 24-hour "HH:MM"'),
-  }),
-  z.object({
-    kind: z.literal("every"),
-    minutes: z
-      .number()
-      .int()
-      .min(MIN_EVERY_MINUTES)
-      .max(MAX_EVERY_MINUTES)
-      .describe(`Interval in minutes (${MIN_EVERY_MINUTES} or more)`),
-  }),
-]);
+const scheduleSchema = z.union([z.string(), z.record(z.string(), z.unknown())]);
 
 type CreateInput = {
   name: string;
   prompt: string;
-  schedule: RoutineSchedule;
+  schedule: unknown;
 };
 
 type UpdateInput = {
   id: string;
   name?: string;
   prompt?: string;
-  schedule?: RoutineSchedule;
+  schedule?: unknown;
   enabled?: boolean;
 };
 
 type IdInput = { id: string };
+
+/** 受け取ったスケジュールを保存できる形に寄せる。寄せられなければ例つきで断る。 */
+function usableSchedule(value: unknown): RoutineSchedule {
+  const schedule = normalizeSchedule(value);
+  // 寄せられなかったときも、いままでと同じ理由（時刻の形式など）を返す。
+  const problem = scheduleProblem(schedule ?? value);
+  if (schedule === null || problem !== null) {
+    throw new Error(
+      `The schedule cannot be used (${problem ?? "the value is not a schedule"}); ` +
+        'use {"kind":"daily","time":"08:30"}, {"kind":"weekly","days":[1,5],"time":"18:00"}, or {"kind":"every","minutes":30}.',
+    );
+  }
+  return schedule;
+}
 
 function createRoutineTools(options: {
   store: RoutineStore;
@@ -105,6 +100,7 @@ function createRoutineTools(options: {
         "Create a routine: a saved instruction that this Tera runs by itself at a fixed local time or interval.",
         `name is 1-${ROUTINE_NAME_MAX_CHARS} characters; prompt is the instruction sent as the user's message when it runs (1-${ROUTINE_PROMPT_MAX_CHARS} characters).`,
         `schedule is {"kind":"daily","time":"HH:MM"}, {"kind":"weekly","days":[1,3,5],"time":"HH:MM"} (1 = Monday … 7 = Sunday), or {"kind":"every","minutes":30} (${MIN_EVERY_MINUTES}-${MAX_EVERY_MINUTES}).`,
+        'Times like "8:30" or "8時30分" are accepted; they are stored as "08:30".',
         `Call this only when the user asked for something to happen on a schedule. A Tera can have at most ${ROUTINES_PER_TERA_MAX} routines.`,
       ].join(" "),
       inputSchema: z.object({
@@ -126,13 +122,7 @@ function createRoutineTools(options: {
           throw new Error(`The name must not be empty; write 1-${ROUTINE_NAME_MAX_CHARS} characters.`);
         }
 
-        const problem = scheduleProblem(schedule);
-        if (problem !== null) {
-          throw new Error(
-            `The schedule cannot be used (${problem}); ` +
-              'use {"kind":"daily","time":"08:30"}, {"kind":"weekly","days":[1,5],"time":"18:00"}, or {"kind":"every","minutes":30}.',
-          );
-        }
+        const normalized = usableSchedule(schedule);
 
         const current = store.listRoutinesOf(teraId);
         if (current.length >= ROUTINES_PER_TERA_MAX) {
@@ -148,7 +138,7 @@ function createRoutineTools(options: {
           );
         }
 
-        const created = store.createRoutine({ teraId, name: displayName, prompt, schedule, enabled: true });
+        const created = store.createRoutine({ teraId, name: displayName, prompt, schedule: normalized, enabled: true });
         if (created === null) {
           throw new Error(
             `A routine named ${JSON.stringify(displayName)} already exists for this Tera; choose another name.`,
@@ -156,11 +146,12 @@ function createRoutineTools(options: {
         }
 
         // 作った時点から次に走る時刻を持たせる（作ったのに走らない、を防ぐ）。
-        const next = nextRunAt(schedule, Date.now());
+        const next = nextRunAt(normalized, Date.now());
         store.updateRoutine(created.id, { nextRunAt: next });
 
         return [
           `Created routine ${JSON.stringify(created.name)} (id ${JSON.stringify(created.id)}).`,
+          `Schedule: ${scheduleText(normalized)} (local time).`,
           `Next run: ${formatLocalTime(next)} (local time).`,
           "You can disable, delete, or run it now from Settings > Tera, or by right-clicking the Tera in the sidebar.",
         ].join("\n");
@@ -192,6 +183,7 @@ function createRoutineTools(options: {
       description: [
         "Change one of this Tera's routines; pass id and only the fields to change: name, prompt, schedule, enabled.",
         "Changing the schedule recomputes the next run. Setting enabled to false clears the next run; setting it to true schedules it again from now.",
+        'Times like "8:30" or "8時30分" are accepted; they are stored as "08:30".',
         "Use routine_list first when you do not have the id.",
       ].join(" "),
       inputSchema: z.object({
@@ -229,30 +221,22 @@ function createRoutineTools(options: {
           }
         }
 
-        if (schedule !== undefined) {
-          const problem = scheduleProblem(schedule);
-          if (problem !== null) {
-            throw new Error(
-              `The schedule cannot be used (${problem}); ` +
-                'use {"kind":"daily","time":"08:30"}, {"kind":"weekly","days":[1,5],"time":"18:00"}, or {"kind":"every","minutes":30}.',
-            );
-          }
-        }
+        const normalized = schedule === undefined ? undefined : usableSchedule(schedule);
 
         // 次に走る時刻は、有効/無効とスケジュールの変更に合わせて決め直す。
-        const updatedSchedule = schedule ?? current.schedule;
+        const updatedSchedule = normalized ?? current.schedule;
         const updatedEnabled = enabled ?? current.enabled;
         let nextRun: number | null | undefined;
         if (enabled === false) nextRun = null;
         else if (enabled === true) nextRun = nextRunAt(updatedSchedule, Date.now());
-        else if (schedule !== undefined) {
+        else if (normalized !== undefined) {
           nextRun = current.enabled ? nextRunAt(updatedSchedule, Date.now()) : null;
         }
 
         const updated = store.updateRoutine(id, {
           ...(displayName === undefined ? {} : { name: displayName }),
           ...(prompt === undefined ? {} : { prompt }),
-          ...(schedule === undefined ? {} : { schedule }),
+          ...(normalized === undefined ? {} : { schedule: normalized }),
           ...(enabled === undefined ? {} : { enabled }),
           ...(nextRun === undefined ? {} : { nextRunAt: nextRun }),
         });

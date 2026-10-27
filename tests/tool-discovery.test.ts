@@ -179,6 +179,30 @@ describe("tool_search と tool_call", () => {
     expect(readToolOutput(output)).toEqual({ text: "[local_echo]\necho: hi", images: [] });
   });
 
+  test("args が JSON 文字列でも実行でき、空白だけなら引数なしとして扱う", async () => {
+    const tools = await discoveryTools();
+    const output = await runTool(tools, TOOL_CALL_TOOL_NAME, {
+      name: "local_echo",
+      args: JSON.stringify({ text: "hi" }),
+    });
+
+    expect(readToolOutput(output)).toEqual({ text: "[local_echo]\necho: hi", images: [] });
+
+    const shot = await runTool(tools, TOOL_CALL_TOOL_NAME, { name: "computer_screenshot", args: "   " });
+    expect(readToolOutput(shot)).toEqual({ text: "[computer_screenshot]\n撮りました", images: [REF] });
+  });
+
+  test("args がオブジェクトでない JSON 文字列なら、短い理由で失敗する", async () => {
+    const tools = await discoveryTools();
+
+    await expect(runTool(tools, TOOL_CALL_TOOL_NAME, { name: "local_echo", args: "[1,2]" })).rejects.toThrow(
+      'args must be a JSON object, for example {"name":"..."}.',
+    );
+    await expect(runTool(tools, TOOL_CALL_TOOL_NAME, { name: "local_echo", args: "not json" })).rejects.toThrow(
+      "args must be a JSON object",
+    );
+  });
+
   test("ツールが返した画像は、tool_call 越しでもそのまま残る", async () => {
     const tools = await discoveryTools();
     const output = await runTool(tools, TOOL_CALL_TOOL_NAME, { name: "computer_screenshot" });

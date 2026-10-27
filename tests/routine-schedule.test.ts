@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { RoutineSchedule } from "../src/shared/api/routine";
-import { nextRunAt, parseSchedule, scheduleProblem } from "../src/server/routine/schedule";
+import { nextRunAt, normalizeSchedule, parseSchedule, scheduleProblem } from "../src/server/routine/schedule";
 
 /** ローカル時刻で Date を作る（タイムゾーンはサーバのローカル時刻に合わせる）。 */
 function at(year: number, month: number, day: number, hours: number, minutes: number): number {
@@ -70,5 +70,54 @@ describe("スケジュールの検証", () => {
     expect(parseSchedule({ kind: "every", minutes: 15 })).toEqual({ kind: "every", minutes: 15 });
     expect(parseSchedule({ kind: "daily", time: "9:00" })).toBeNull();
     expect(parseSchedule({ kind: "every", minutes: 4 })).toBeNull();
+  });
+});
+
+describe("スケジュールの揺れを寄せる", () => {
+  test("時刻・間隔・曜日・JSON 文字列を RoutineSchedule にする", () => {
+    const cases: { input: unknown; expected: RoutineSchedule }[] = [
+      { input: { kind: "daily", time: "8:30" }, expected: { kind: "daily", time: "08:30" } },
+      { input: { kind: "daily", time: "08:30" }, expected: { kind: "daily", time: "08:30" } },
+      { input: { kind: "daily", time: "8：30" }, expected: { kind: "daily", time: "08:30" } },
+      { input: { kind: "daily", time: "０８：３０" }, expected: { kind: "daily", time: "08:30" } },
+      { input: { kind: "daily", time: "8時30分" }, expected: { kind: "daily", time: "08:30" } },
+      { input: { kind: "daily", time: "8時" }, expected: { kind: "daily", time: "08:00" } },
+      { input: { kind: "daily", time: "08:30:00" }, expected: { kind: "daily", time: "08:30" } },
+      { input: { kind: " DAILY ", time: "8:30" }, expected: { kind: "daily", time: "08:30" } },
+      { input: { kind: "every", minutes: "30" }, expected: { kind: "every", minutes: 30 } },
+      { input: { kind: "every", minutes: 30 }, expected: { kind: "every", minutes: 30 } },
+      {
+        input: { kind: "weekly", days: ["1", "5"], time: "18:00" },
+        expected: { kind: "weekly", days: [1, 5], time: "18:00" },
+      },
+      {
+        input: { kind: "Weekly", days: ["mon", "FRIDAY", "日"], time: "8時30分" },
+        expected: { kind: "weekly", days: [1, 5, 7], time: "08:30" },
+      },
+      {
+        input: JSON.stringify({ kind: "daily", time: "8:30" }),
+        expected: { kind: "daily", time: "08:30" },
+      },
+    ];
+
+    for (const { input, expected } of cases) expect(normalizeSchedule(input)).toEqual(expected);
+  });
+
+  test("寄せられない値は null", () => {
+    const inputs: unknown[] = [
+      null,
+      {},
+      { kind: "monthly", time: "08:30" },
+      { kind: "daily" },
+      { kind: "daily", time: "八時" },
+      { kind: "weekly", days: "mon", time: "08:30" },
+      { kind: "weekly", days: [1, "休み"], time: "08:30" },
+      { kind: "every", minutes: "30分" },
+      { kind: "every" },
+      "not json",
+      "[]",
+    ];
+
+    for (const input of inputs) expect(normalizeSchedule(input)).toBeNull();
   });
 });
