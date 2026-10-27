@@ -1,13 +1,12 @@
-import { useEffect, useRef, useState } from "preact/hooks";
+import { useState } from "preact/hooks";
 import { trimOrNull } from "../../../shared/strings";
 import type {
   WebSearchAvailableProviderView,
   WebSearchProviderForm,
   WebSearchProviderView,
 } from "../../../shared/api/settings";
-import { useInFlight } from "../../hooks/useInFlight";
+import { useVerifiedForm } from "../../hooks/useVerifiedForm";
 import { t } from "../../i18n";
-import { type ErrorState, toErrorState } from "../../lib/errors";
 import { addWebSearchProvider, testWebSearchProvider, updateWebSearchProvider } from "../../state/websearch";
 import { Button } from "../../ui/Button";
 import { ErrorNotice } from "../../ui/ErrorNotice";
@@ -41,91 +40,55 @@ export function WebSearchProviderDialog({ mode, onClose }: { mode: WebSearchDial
 
   const [providerId, setProviderId] = useState(editing ? mode.provider.id : (mode.available[0]?.id ?? ""));
   const [apiKey, setApiKey] = useState("");
-  const [busy, setBusy] = useState<"checking" | "saving" | null>(null);
-  const [checked, setChecked] = useState<Checked | null>(null);
   /** 確かめたが検索できなかった理由。 */
   const [failureDetail, setFailureDetail] = useState<string | null>(null);
-  const [error, setError] = useState<ErrorState | null>(null);
-
-  /** 送信中の要求。素早く二度押しされると busy が立つ前に 2 回目が走るので、押した瞬間に閉じる門を置く。 */
-  const inFlight = useInFlight();
-  /** 走っている確認の番号。入力が変わったときと閉じたときに進めて、その結果を捨てる。 */
-  const run = useRef(0);
 
   const selected = editing ? provider : (choices.find((choice) => choice.id === providerId) ?? null);
-  /** 入力そのもの。確かめた結果が今の入力に対するものかを比べるのにも使う。 */
+  /**
+   * 入力そのもの。確かめた結果が今の入力に対するものかを比べるのにも使う。
+   * 入力が変わると、useVerifiedForm が確認結果を捨てる。
+   */
   const signature = JSON.stringify({ id: providerId, apiKey: apiKey.trim() });
-  const checkedNow = checked !== null && checked.signature === signature ? checked : null;
-
-  useEffect(
-    () => () => {
-      run.current += 1;
-    },
-    [],
-  );
+  const form = useVerifiedForm<Checked>(signature);
+  const { busy, error, checked: checkedNow } = form;
 
   /** 入力が変わったら、確かめた結果は捨てる（別のプロバイダ・別のキーを確かめることになるため）。 */
   const change = <T,>(set: (value: T) => void, value: T): void => {
     set(value);
-    setChecked(null);
+    form.invalidate();
     setFailureDetail(null);
-    setError(null);
-    run.current += 1;
   };
 
   /** いまの入力で検索できるか確かめる。設定には何も書かない。 */
-  const check = () => {
-    if (inFlight.isRunning()) return;
-
+  const check = async (): Promise<void> => {
     const key = apiKey.trim();
     if (key.length === 0) {
-      setError({ code: "input", detail: t("settings.webSearch.form.needKey") });
+      form.setError({ code: "input", detail: t("settings.webSearch.form.needKey") });
       return;
     }
 
-    inFlight.run(async () => {
-      setBusy("checking");
-      setError(null);
-      setChecked(null);
-      setFailureDetail(null);
-      const current = run.current + 1;
-      run.current = current;
+    setFailureDetail(null);
+    await form.check(async () => {
+      const result = await testWebSearchProvider({ id: providerId, apiKey: key });
+      if (result.ok) return { signature, results: result.results };
 
-      try {
-        const result = await testWebSearchProvider({ id: providerId, apiKey: key });
-        if (run.current !== current) return;
-
-        if (result.ok) {
-          setChecked({ signature, results: result.results });
-        } else {
-          setFailureDetail(result.detail ?? t("settings.webSearch.form.failed"));
-        }
-      } catch (failure) {
-        if (run.current !== current) return;
-        setError(toErrorState(failure));
-      } finally {
-        setBusy(null);
-      }
+      // 検索できなかった理由は、失敗ではなく「確かめた結果」として出す（キーの誤りとは限らない）。
+      setFailureDetail(result.detail ?? t("settings.webSearch.form.failed"));
+      throw new Error(result.detail ?? t("settings.webSearch.form.failed"));
     });
   };
 
-  const submit = () => {
-    if (inFlight.isRunning()) return;
+  const submit = async (): Promise<void> => {
     if (!editing && checkedNow === null) return;
 
-    const form: WebSearchProviderForm = { id: providerId, apiKey: editing ? trimOrNull(apiKey) : apiKey.trim() };
-
-    inFlight.run(async () => {
-      setBusy("saving");
-      setError(null);
-      try {
-        if (editing) await updateWebSearchProvider(form);
-        else await addWebSearchProvider(form);
-        onClose();
-      } catch (failure) {
-        setError(toErrorState(failure));
-        setBusy(null);
-      }
+    const input: WebSearchProviderForm = {
+      id: providerId,
+      apiKey: editing ? trimOrNull(apiKey) : apiKey.trim(),
+    };
+    await form.save(async () => {
+      if (editing) await updateWebSearchProvider(input);
+      else await addWebSearchProvider(input);
+      onClose();
     });
   };
 
@@ -139,15 +102,15 @@ export function WebSearchProviderDialog({ mode, onClose }: { mode: WebSearchDial
           <Button onClick={onClose}>{t("common.cancel")}</Button>
 
           {editing ? (
-            <Button variant="primary" disabled={busy !== null} onClick={submit}>
+            <Button variant="primary" disabled={busy !== null} onClick={() => void submit()}>
               {t(busy === "saving" ? "common.saving" : "settings.webSearch.form.save")}
             </Button>
           ) : (
             <>
-              <Button disabled={busy !== null || apiKey.trim().length === 0} onClick={check}>
+              <Button disabled={busy !== null || apiKey.trim().length === 0} onClick={() => void check()}>
                 {t(busy === "checking" ? "common.checking" : "common.check")}
               </Button>
-              <Button variant="primary" disabled={checkedNow === null || busy !== null} onClick={submit}>
+              <Button variant="primary" disabled={checkedNow === null || busy !== null} onClick={() => void submit()}>
                 {t(busy === "saving" ? "common.adding" : "common.add")}
               </Button>
             </>

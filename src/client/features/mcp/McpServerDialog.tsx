@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 import type { McpServerForm, McpServerView, McpTestView } from "../../../shared/api/settings";
-import { useInFlight } from "../../hooks/useInFlight";
+import { useVerifiedForm } from "../../hooks/useVerifiedForm";
 import { t } from "../../i18n";
-import { type ErrorState, toErrorState } from "../../lib/errors";
+import { toErrorState } from "../../lib/errors";
 import { cancelMcpTest, saveMcpServer, testMcpServer, waitForTestAuthorization } from "../../state/mcp";
 import { Button } from "../../ui/Button";
 import { ErrorNotice } from "../../ui/ErrorNotice";
@@ -47,33 +47,32 @@ export function McpServerDialog({
   const [args, setArgs] = useState(server?.args.join("\n") ?? "");
   const [env, setEnv] = useState(() => envToText(server?.env ?? {}));
   const [url, setUrl] = useState(server?.url ?? "");
-  const [busy, setBusy] = useState<"checking" | "saving" | null>(null);
-  const [checked, setChecked] = useState<Checked | null>(null);
   /** 認可を待っているときの、ブラウザで開く画面の URL。 */
   const [authorizing, setAuthorizing] = useState<string | null>(null);
-  const [error, setError] = useState<ErrorState | null>(null);
 
-  /** 送信中の要求。素早く二度押しされると busy が立つ前に 2 回目が走るので、押した瞬間に閉じる門を置く。 */
-  const inFlight = useInFlight();
-  /** 走っている確認の番号。入力が変わったときと閉じたときに進めて、その結果を捨てる。 */
-  const run = useRef(0);
+  const inputs: McpFormFields = { id, type, command, args, env, url };
+  /** 入力そのもの。確かめた結果が今の入力に対するものかを比べるのにも使う。 */
+  const signature = JSON.stringify(inputs);
+
+  /**
+   * 「入力を確かめる → 保存する」の状態（走っている操作・確認結果・失敗・世代番号）。
+   * 認可の待ちは、この世代番号が変わったら諦める。
+   */
+  const verified = useVerifiedForm<Checked>(signature);
+  const { busy, error, checked: checkedNow } = verified;
   /** 一度開いた認可画面。同じタブを開き直さないための控え。 */
   const opened = useRef<string | null>(null);
   /** いまの id。ダイアログを閉じたとき、待っている認可を片付けるのに使う。 */
   const currentId = useRef(id);
   currentId.current = id;
 
-  const inputs: McpFormFields = { id, type, command, args, env, url };
-  /** 入力そのもの。確かめた結果が今の入力に対するものかを比べるのにも使う。 */
-  const signature = JSON.stringify(inputs);
-  const checkedNow = checked !== null && checked.signature === signature ? checked : null;
   /** 追加のときだけ名前の重複を見る（変更では名前を変えられない）。 */
   const takenIds = editing ? [] : existingIds;
 
   useEffect(
     () => () => {
       // 閉じたら、走っている確認の結果は捨てる。
-      run.current += 1;
+      verified.cancelPending();
 
       // 保存前の確認で認可を待っていたら、サーバ側の待ちも片付ける。
       // 残すと、同じ設定でやり直しても古い URL が返り続ける。
@@ -96,62 +95,48 @@ export function McpServerDialog({
   /** 入力が変わったら、確かめた結果と待っている認可は捨てる（別の接続先を確かめることになるため）。 */
   const change = <T,>(set: (value: T) => void, value: T): void => {
     set(value);
-    setChecked(null);
+    verified.invalidate();
     setAuthorizing(null);
-    run.current += 1;
   };
 
   /** いまの入力で接続を確かめる。認可が要る場合は、終わるまで待つ。 */
-  const check = () => {
-    if (inFlight.isRunning() || authorizing !== null) return;
+  const check = async (): Promise<void> => {
+    if (authorizing !== null) return;
 
     const parsed = buildForm(inputs, takenIds);
     if (parsed.kind === "error") {
-      setError({ code: "input", detail: t(parsed.message) });
+      verified.setError({ code: "input", detail: t(parsed.message) });
       return;
     }
 
-    inFlight.run(async () => {
-      setBusy("checking");
-      setError(null);
-      setChecked(null);
-      const current = run.current + 1;
-      run.current = current;
-      await probe(parsed.form, signature, current);
+    // 認可が要る場合は probe が待ちを続けるので、結果はここでは返さない（待ちの中で置く）。
+    await verified.check(async () => {
+      await probe(parsed.form, signature, verified.generation() + 1);
+      return null;
     });
   };
 
-  const submit = () => {
-    if (inFlight.isRunning()) return;
-
+  const submit = async (): Promise<void> => {
     const parsed = buildForm(inputs, takenIds);
     if (parsed.kind === "error") {
-      setError({ code: "input", detail: t(parsed.message) });
+      verified.setError({ code: "input", detail: t(parsed.message) });
       return;
     }
 
-    inFlight.run(async () => {
-      setBusy("saving");
-      setError(null);
-
-      try {
-        await saveMcpServer(parsed.form, editing ? "edit" : "add");
-        onClose(parsed.form.id);
-      } catch (failure) {
-        setError(toErrorState(failure));
-        setBusy(null);
-      }
+    await verified.save(async () => {
+      await saveMcpServer(parsed.form, editing ? "edit" : "add");
+      onClose(parsed.form.id);
     });
   };
 
   /** 1 回分の接続確認。 */
-  async function probe(form: McpServerForm, signature: string, current: number): Promise<void> {
+  async function probe(input: McpServerForm, sig: string, current: number): Promise<void> {
     try {
-      apply(await testMcpServer(form), form, signature, current);
+      apply(await testMcpServer(input), input, sig, current);
     } catch (failure) {
-      if (run.current !== current) return;
-      setError(toErrorState(failure));
-      setBusy(null);
+      if (verified.generation() !== current) return;
+      verified.setError(toErrorState(failure));
+      verified.cancelPending();
     }
   }
 
@@ -162,9 +147,9 @@ export function McpServerDialog({
   async function waitForAuthorization(form: McpServerForm, signature: string, current: number): Promise<void> {
     const outcome = await waitForTestAuthorization({
       form,
-      cancelled: () => run.current !== current,
+      cancelled: () => verified.generation() !== current,
       onProbe: (status) => {
-        if (run.current === current) setAuthorizing(status.authorizationUrl);
+        if (verified.generation() === current) setAuthorizing(status.authorizationUrl);
       },
     });
 
@@ -175,44 +160,44 @@ export function McpServerDialog({
       return;
     }
     if (outcome.kind === "error") {
-      if (run.current !== current) return;
-      setError(toErrorState(outcome.error));
+      if (verified.generation() !== current) return;
+      verified.setError(toErrorState(outcome.error));
       setAuthorizing(null);
       return;
     }
 
-    if (run.current !== current) return;
+    if (verified.generation() !== current) return;
 
     // 待つのをやめたら、サーバ側もやり直せる状態に戻す。
     void cancelMcpTest(form.id).catch(() => undefined);
-    setError({ code: "mcp_unreachable", detail: t("settings.mcp.form.authorizationTimeout") });
+    verified.setError({ code: "mcp_unreachable", detail: t("settings.mcp.form.authorizationTimeout") });
     setAuthorizing(null);
   }
 
   /** 確かめた結果を画面に反映する。入力が変わっていたら何もしない。 */
   function apply(result: McpTestView, form: McpServerForm, signature: string, current: number): void {
-    if (run.current !== current) return;
+    if (verified.generation() !== current) return;
 
     if (result.state === "connected") {
-      setChecked({ signature, tools: result.tools });
+      verified.setChecked({ signature, tools: result.tools });
       setAuthorizing(null);
-      setError(null);
-      setBusy(null);
+      verified.clearError();
+      verified.cancelPending();
       return;
     }
 
     if (result.state === "failed") {
-      setChecked(null);
+      verified.invalidate();
       setAuthorizing(null);
-      setError({ code: "mcp_unreachable", detail: result.detail });
-      setBusy(null);
+      verified.setError({ code: "mcp_unreachable", detail: result.detail });
+      verified.cancelPending();
       return;
     }
 
     // サーバーが認可を求めている。画面を開いて、認可が終わるまで待つ。
-    setChecked(null);
-    setError(null);
-    setBusy(null);
+    verified.invalidate();
+    verified.clearError();
+    verified.cancelPending();
     setAuthorizing(result.authorizationUrl);
     openAuthorization(result.authorizationUrl);
     void waitForAuthorization(form, signature, current);

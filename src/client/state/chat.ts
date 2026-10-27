@@ -1,17 +1,19 @@
 import { signal } from "@preact/signals";
 import type { ConversationEvent, ConversationSync } from "../../shared/api/events";
-import type { ChatEvent, ChatMessageView, MessagePart } from "../../shared/api/message";
+import type { ChatEvent, ChatMessageView } from "../../shared/api/message";
 import { locale } from "../i18n";
 import * as api from "../lib/api";
 import { ApiError } from "../lib/http";
-import { interpretEvent } from "./chat-events";
+import { applyEvent, type ChatState, type LiveTurn } from "./chat-apply";
 import { openConversationSubscription } from "./chat-subscription";
-import { beginConnectorRequest, endConnectorRequest, resetConnectorRequest } from "./connector-request";
-import { beginEnvRequest, endEnvRequest, resetEnvRequest } from "./env-request";
+import { resetConnectorRequest } from "./connector-request";
+import { resetEnvRequest } from "./env-request";
 import { clearChatError, showChatError } from "./failure";
-import { answerHandover, beginHandover, endHandover, handoverActive } from "./handover";
+import { answerHandover, handoverActive } from "./handover";
 import { mergeLatestPage, mergeSaved, newestSavedSeq } from "./history";
 import { activeTeraId, refreshTeras } from "./session";
+
+export type { LiveTurn };
 
 /**
  * チャットの状態と、1 ターンの送信。
@@ -25,19 +27,6 @@ import { activeTeraId, refreshTeras } from "./session";
  */
 
 export const messages = signal<readonly ChatMessageView[]>([]);
-
-/** いま届いているターンの、画面に出す本文・添付・注記と、UI のカードの呼び出し。 */
-export type LiveTurn = {
-  id: string;
-  createdAt: number;
-  /**
-   * この応答に予約された連番。開始の合図（assistant-start）を受け取っていれば入る。
-   * 途中から購読したときなど、合図が無いまま部分だけが届くと null になる。
-   * null のときは、保存済みの履歴を前後に分けず、末尾に並べる。
-   */
-  seq: number | null;
-  parts: readonly MessagePart[];
-};
 
 export const liveTurn = signal<LiveTurn | null>(null);
 export const isStreaming = signal(false);
@@ -83,6 +72,15 @@ let current: CurrentTurn | null = null;
  * 成功した結果が届いたら、サイドバーの一覧を読み直す。
  */
 const teraCreateCalls = new Set<string>();
+
+/** イベントの反映に渡す口。反映の手順は chat-apply.ts が持つ。 */
+const chatState: ChatState = {
+  liveTurn,
+  upsert: (message) => upsertSaved(message),
+  settle: (teraId) => settleLiveTurn(teraId),
+  teraCreateCalls,
+  refreshTeras: () => refreshTeras(),
+};
 
 /** 同じ Tera を開いている、ほかの画面からの更新の購読。 */
 let subscription: AbortController | null = null;
@@ -173,7 +171,7 @@ function applyConversationEvent(teraId: string, event: ConversationEvent): void 
     return;
   }
 
-  applyEvent(event, teraId);
+  applyEvent(chatState, event, teraId);
 
   // ほかの画面のターンが始まった。ここから終わりまで、応答中として扱う。
   if (current === null && (event.type === "user-message" || event.type === "assistant-start")) {
@@ -402,7 +400,7 @@ async function runTurn(
   let ended = false;
   try {
     for await (const event of request(controller.signal)) {
-      applyEvent(event, teraId);
+      applyEvent(chatState, event, teraId);
       if (event.type === "assistant-done" || event.type === "error") ended = true;
     }
   } catch (error) {
@@ -496,71 +494,3 @@ export async function stopStreaming(): Promise<void> {
   }
 }
 
-/** イベントを状態へ反映する。解釈は chat-events.ts が持つ。 */
-function applyEvent(event: ChatEvent, teraId: string): void {
-  const effect = interpretEvent(event);
-  if (effect === null) return;
-
-  switch (effect.kind) {
-    case "message":
-      // 保存された内容で置き換わるので、いま伸びていたターンは畳む。
-      if (effect.message.role === "assistant" && liveTurn.value?.id === effect.message.id) liveTurn.value = null;
-      upsertSaved(effect.message);
-      break;
-    case "assistant-start":
-      // ステップが変わった。いまの吹き出しを確定させ、次の吹き出しを開く。
-      settleLiveTurn(teraId);
-      liveTurn.value = { id: effect.id, createdAt: effect.createdAt, seq: effect.seq, parts: [] };
-      break;
-    case "assistant-part": {
-      const live = liveTurn.value;
-      // 応答の途中から購読したときなど、開始の合図が無いまま部分が届くことがある。
-      // その場合は捨てずに新しいターンとして開く（黙って消すと、本文が欠けて見える）。
-      if (live === null) {
-        liveTurn.value = { id: effect.id, createdAt: effect.part.at, seq: null, parts: [effect.part] };
-        break;
-      }
-      liveTurn.value = { ...live, parts: [...live.parts, effect.part] };
-      break;
-    }
-    case "chat-ui": {
-      // カードの材料（ツール呼び出し）は、そのままターンの記録に積む。
-      // 画面はここからマークアップを解釈して描く（保存する形は増やさない）。
-      const live = liveTurn.value;
-      if (live === null) {
-        liveTurn.value = { id: effect.id, createdAt: Date.now(), seq: null, parts: [effect.part] };
-        break;
-      }
-      liveTurn.value = { ...live, parts: [...live.parts, effect.part] };
-      break;
-    }
-    case "handover-start":
-      beginHandover(effect.callId, effect.question);
-      break;
-    case "env-request-start":
-      beginEnvRequest(effect.callId, effect.name, effect.description);
-      break;
-    case "connector-request-start":
-      // Discord は Tera ごとの webhook なので、カードを出した時点の Tera を覚えておく。
-      beginConnectorRequest(effect.callId, effect.provider, effect.reason, activeTeraId.value);
-      break;
-    case "tera-create-call":
-      // 結果が成功で届いたときに、一覧を読み直す。
-      teraCreateCalls.add(effect.callId);
-      break;
-    case "tool-result": {
-      // 画面の引き受けは、成功したときだけ終える（失敗した呼び出しでは待ちが続いている）。
-      if (!effect.failed) endHandover(effect.callId);
-      // 環境変数の入力は、取り消しや失敗でも終える（入力を待ち続けない）。
-      endEnvRequest(effect.callId);
-      // 認証カードは、成功なら畳み、失敗は理由を残して導線を消さない。
-      endConnectorRequest(effect.callId, effect.failed);
-      // 新しい Tera ができたら、サイドバーへ出す（一覧を読み直す）。
-      if (teraCreateCalls.delete(effect.callId) && !effect.failed) void refreshTeras().catch(showChatError);
-      break;
-    }
-    case "error":
-      showChatError(new ApiError(effect.code, effect.detail));
-      break;
-  }
-}
